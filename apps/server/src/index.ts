@@ -13,16 +13,17 @@ const logger = pino({ level: process.env.LOG_LEVEL || 'info' });
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
 const CORS_ORIGIN = process.env.CORS_ORIGIN || 'http://localhost:3000';
+const corsOrigins = CORS_ORIGIN.split(',').map(o => o.trim());
 
 // Express
 const app = express();
-app.use(cors({ origin: CORS_ORIGIN }));
+app.use(cors({ origin: corsOrigins }));
 
 // HTTP + Socket.IO
 const httpServer = createServer(app);
 const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   cors: {
-    origin: CORS_ORIGIN,
+    origin: corsOrigins,
     methods: ['GET', 'POST'],
   },
   pingTimeout: 20000,

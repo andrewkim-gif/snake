@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/index.ts",
-    "build": "tsc",
-    "start": "node dist/index.js",
+    "build": "echo 'using tsx runtime'",
+    "start": "tsx src/index.ts",
     "typecheck": "tsc --noEmit",
     "lint": "echo 'no lint configured'"
   },
@@ -15,13 +15,13 @@
     "cors": "^2.8.5",
     "nanoid": "^5.0.0",
     "pino": "^9.0.0",
+    "tsx": "^4.19.0",
     "@snake-arena/shared": "*"
   },
   "devDependencies": {
     "@types/express": "^5.0.0",
     "@types/cors": "^2.8.0",
     "@types/node": "^22.0.0",
-    "tsx": "^4.19.0",
     "typescript": "^5.7.0"
   }
 }
