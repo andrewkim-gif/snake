@@ -48,8 +48,39 @@ export const ORB = {
   DEATH_VALUE_MAX: 5,
   /** natural orb 스폰 패딩 (경계에서 떨어진 거리) */
   SPAWN_PADDING: 200,
-  /** natural orb 색상 수 */
+  /** natural orb 색상 수 (자연 오브용) */
   COLOR_COUNT: 12,
+} as const;
+
+// ─── 파워업 효과 설정 ───
+
+export const EFFECT_CONFIG = {
+  magnet: {
+    durationTicks: 100,   // 5초 @ 20Hz
+    cooldownTicks: 0,
+    pullRadius: 200,
+    pullSpeed: 3,
+    spawnChance: 0.05,
+    orbColor: 12,
+  },
+  speed: {
+    durationTicks: 80,    // 4초 @ 20Hz
+    cooldownTicks: 0,
+    spawnChance: 0.08,
+    orbColor: 13,
+  },
+  ghost: {
+    durationTicks: 60,    // 3초 @ 20Hz
+    cooldownTicks: 200,   // 10초 쿨다운
+    spawnChance: 0.03,
+    orbColor: 14,
+  },
+  mega: {
+    value: 30,
+    spawnChance: 0.02,
+    orbColor: 15,
+    lifetime: 600,        // 30초 후 소멸
+  },
 } as const;
 
 // ─── Network ───
@@ -75,18 +106,32 @@ export const NETWORK = {
 
 // ─── Default Skins ───
 
-/** Brawl Stars 스타일 비비드 스킨 — 강렬한 포화 컬러 */
+/** Brawl Stars 스타일 비비드 스킨 — 24종 (12 solid + 12 patterned) */
 export const DEFAULT_SKINS: SnakeSkin[] = [
-  { id: 0, primaryColor: '#FF4444', secondaryColor: '#CC0000', pattern: 'solid', eyeStyle: 'angry' },   // 파이어 레드
-  { id: 1, primaryColor: '#00D4FF', secondaryColor: '#0099CC', pattern: 'solid', eyeStyle: 'cool' },    // 일렉트릭 블루
-  { id: 2, primaryColor: '#39FF14', secondaryColor: '#00CC00', pattern: 'solid', eyeStyle: 'default' }, // 네온 그린
-  { id: 3, primaryColor: '#FF1493', secondaryColor: '#CC1177', pattern: 'solid', eyeStyle: 'cute' },    // 핫 핑크
-  { id: 4, primaryColor: '#FFD700', secondaryColor: '#CC9900', pattern: 'solid', eyeStyle: 'default' }, // 골드 옐로
-  { id: 5, primaryColor: '#FF6B00', secondaryColor: '#CC5500', pattern: 'solid', eyeStyle: 'angry' },   // 브라이트 오렌지
-  { id: 6, primaryColor: '#9B59B6', secondaryColor: '#7D3C98', pattern: 'solid', eyeStyle: 'cool' },    // 비비드 퍼플
-  { id: 7, primaryColor: '#00FFFF', secondaryColor: '#00CCCC', pattern: 'solid', eyeStyle: 'cute' },    // 사이안
-  { id: 8, primaryColor: '#FF6B6B', secondaryColor: '#CC4444', pattern: 'solid', eyeStyle: 'default' }, // 코랄
-  { id: 9, primaryColor: '#00CED1', secondaryColor: '#009999', pattern: 'solid', eyeStyle: 'cool' },    // 틸
-  { id: 10, primaryColor: '#FF00FF', secondaryColor: '#CC00CC', pattern: 'solid', eyeStyle: 'angry' },  // 마젠타
-  { id: 11, primaryColor: '#ADFF2F', secondaryColor: '#7FCC00', pattern: 'solid', eyeStyle: 'cute' },   // 라임
+  // 0-11: 기존 solid 스킨 유지
+  { id: 0, primaryColor: '#FF4444', secondaryColor: '#CC0000', pattern: 'solid', eyeStyle: 'angry' },
+  { id: 1, primaryColor: '#00D4FF', secondaryColor: '#0099CC', pattern: 'solid', eyeStyle: 'cool' },
+  { id: 2, primaryColor: '#39FF14', secondaryColor: '#00CC00', pattern: 'solid', eyeStyle: 'default' },
+  { id: 3, primaryColor: '#FF1493', secondaryColor: '#CC1177', pattern: 'solid', eyeStyle: 'cute' },
+  { id: 4, primaryColor: '#FFD700', secondaryColor: '#CC9900', pattern: 'solid', eyeStyle: 'default' },
+  { id: 5, primaryColor: '#FF6B00', secondaryColor: '#CC5500', pattern: 'solid', eyeStyle: 'angry' },
+  { id: 6, primaryColor: '#9B59B6', secondaryColor: '#7D3C98', pattern: 'solid', eyeStyle: 'cool' },
+  { id: 7, primaryColor: '#00FFFF', secondaryColor: '#00CCCC', pattern: 'solid', eyeStyle: 'cute' },
+  { id: 8, primaryColor: '#FF6B6B', secondaryColor: '#CC4444', pattern: 'solid', eyeStyle: 'default' },
+  { id: 9, primaryColor: '#00CED1', secondaryColor: '#009999', pattern: 'solid', eyeStyle: 'cool' },
+  { id: 10, primaryColor: '#FF00FF', secondaryColor: '#CC00CC', pattern: 'solid', eyeStyle: 'angry' },
+  { id: 11, primaryColor: '#ADFF2F', secondaryColor: '#7FCC00', pattern: 'solid', eyeStyle: 'cute' },
+  // 12-23: 패턴 + 머리 모양 + 꼬리 이펙트
+  { id: 12, primaryColor: '#FF4444', secondaryColor: '#FF6B00', pattern: 'striped', eyeStyle: 'angry', headShape: 'diamond', tailEffect: 'spark' },
+  { id: 13, primaryColor: '#00D4FF', secondaryColor: '#00FFFF', pattern: 'striped', eyeStyle: 'cool', headShape: 'arrow', tailEffect: 'trail' },
+  { id: 14, primaryColor: '#39FF14', secondaryColor: '#ADFF2F', pattern: 'gradient', eyeStyle: 'default', headShape: 'diamond', tailEffect: 'fade' },
+  { id: 15, primaryColor: '#FF1493', secondaryColor: '#FF00FF', pattern: 'gradient', eyeStyle: 'cute', tailEffect: 'spark' },
+  { id: 16, primaryColor: '#FFD700', secondaryColor: '#FF6B00', pattern: 'dotted', eyeStyle: 'default', headShape: 'arrow', tailEffect: 'trail' },
+  { id: 17, primaryColor: '#9B59B6', secondaryColor: '#FF1493', pattern: 'dotted', eyeStyle: 'cool', headShape: 'diamond', tailEffect: 'fade' },
+  { id: 18, primaryColor: '#00FFFF', secondaryColor: '#00D4FF', pattern: 'striped', eyeStyle: 'cute', tailEffect: 'spark' },
+  { id: 19, primaryColor: '#FF6B6B', secondaryColor: '#FF4444', pattern: 'gradient', eyeStyle: 'angry', headShape: 'arrow', tailEffect: 'trail' },
+  { id: 20, primaryColor: '#00CED1', secondaryColor: '#39FF14', pattern: 'dotted', eyeStyle: 'cool', tailEffect: 'fade' },
+  { id: 21, primaryColor: '#FF00FF', secondaryColor: '#9B59B6', pattern: 'striped', eyeStyle: 'angry', headShape: 'diamond', tailEffect: 'trail' },
+  { id: 22, primaryColor: '#ADFF2F', secondaryColor: '#39FF14', pattern: 'gradient', eyeStyle: 'default', headShape: 'diamond', tailEffect: 'spark' },
+  { id: 23, primaryColor: '#FF6B00', secondaryColor: '#FFD700', pattern: 'dotted', eyeStyle: 'cute', headShape: 'arrow', tailEffect: 'fade' },
 ];

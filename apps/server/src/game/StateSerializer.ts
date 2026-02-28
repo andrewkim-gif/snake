@@ -5,13 +5,19 @@
 
 import type {
   LeaderboardEntry, SnakeNetworkData, OrbNetworkData,
-  StatePayload, MinimapPayload,
+  StatePayload, MinimapPayload, OrbType,
 } from '@snake-arena/shared';
 import { NETWORK } from '@snake-arena/shared';
 import type { SnakeEntity } from './Snake';
 import type { OrbManager } from './OrbManager';
 
 export class StateSerializer {
+  private static readonly ORB_TYPE_MAP: Record<OrbType, number> = {
+    natural: 0, death: 1, boost_trail: 2,
+    magnet: 3, speed: 4, ghost: 5, mega: 6,
+  };
+
+  private static readonly EFFECT_TYPE_MAP = { magnet: 0, speed: 1, ghost: 2 } as const;
   /** 플레이어별 뷰포트 기반 state 생성 */
   getStateForPlayer(
     playerId: string,
@@ -36,7 +42,7 @@ export class StateSerializer {
       if (!other.isAlive) continue;
       if (Math.abs(other.head.x - center.x) < halfW + 500 &&
           Math.abs(other.head.y - center.y) < halfH + 500) {
-        visibleSnakes.push(this.serializeSnake(other));
+        visibleSnakes.push(this.serializeSnake(other, tick));
       }
     }
 
@@ -50,7 +56,7 @@ export class StateSerializer {
           y: Math.round(orb.position.y),
           v: orb.value,
           c: orb.color,
-          t: orb.type === 'natural' ? 0 : orb.type === 'death' ? 1 : 2,
+          t: StateSerializer.ORB_TYPE_MAP[orb.type],
         });
       }
     }
@@ -104,8 +110,8 @@ export class StateSerializer {
     };
   }
 
-  private serializeSnake(snake: SnakeEntity): SnakeNetworkData {
-    return {
+  private serializeSnake(snake: SnakeEntity, tick: number): SnakeNetworkData {
+    const data: SnakeNetworkData = {
       i: snake.data.id,
       n: snake.data.name,
       h: Math.round(snake.data.heading * 100) / 100,
@@ -117,5 +123,14 @@ export class StateSerializer {
         Math.round(s.y * 10) / 10,
       ] as [number, number]),
     };
+
+    if (snake.data.activeEffects.length > 0) {
+      data.e = snake.data.activeEffects.flatMap(e => [
+        StateSerializer.EFFECT_TYPE_MAP[e.type],
+        Math.max(0, e.expiresAt - tick),
+      ]);
+    }
+
+    return data;
   }
 }

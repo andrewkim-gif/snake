@@ -3,7 +3,7 @@
  * 연속 이동, 각도 기반, mass 시스템
  */
 
-import type { Snake, Position, SnakeSkin, ArenaConfig } from '@snake-arena/shared';
+import type { Snake, Position, SnakeSkin, ArenaConfig, EffectType } from '@snake-arena/shared';
 import {
   normalizeAngle, angleDiff, angleToVector,
   randomPositionInCircle, clamp, getDynamicSpacing,
@@ -42,6 +42,8 @@ export class SnakeEntity {
       boosting: false,
       alive: true,
       skin,
+      activeEffects: [],
+      effectCooldowns: [],
       score: 0,
       kills: 0,
       bestScore: 0,
@@ -80,10 +82,13 @@ export class SnakeEntity {
       );
     }
 
-    // 2. 부스트 처리
-    if (this.data.boosting && this.data.mass > config.minBoostMass) {
+    // 2. 부스트 처리 (speed 효과: mass 소모 없이 부스트)
+    const hasSpeedEffect = this.hasEffect('speed');
+    if (this.data.boosting && (this.data.mass > config.minBoostMass || hasSpeedEffect)) {
       this.data.speed = config.boostSpeed;
-      this.data.mass -= config.boostCostPerTick;
+      if (!hasSpeedEffect) {
+        this.data.mass -= config.boostCostPerTick;
+      }
       this.trailCounter++;
     } else {
       this.data.speed = config.baseSpeed;
@@ -137,6 +142,35 @@ export class SnakeEntity {
     this.data.mass += value;
   }
 
+  // ─── 효과 시스템 ───
+
+  addEffect(type: EffectType, durationTicks: number, currentTick: number): void {
+    this.data.activeEffects = this.data.activeEffects.filter(e => e.type !== type);
+    this.data.activeEffects.push({ type, expiresAt: currentTick + durationTicks });
+  }
+
+  removeExpiredEffects(currentTick: number): void {
+    const expired = this.data.activeEffects.filter(e => e.expiresAt <= currentTick);
+    for (const e of expired) {
+      const cooldownMap: Record<EffectType, number> = { magnet: 0, speed: 0, ghost: 200 };
+      const cd = cooldownMap[e.type];
+      if (cd > 0) {
+        this.data.effectCooldowns = this.data.effectCooldowns.filter(c => c.type !== e.type);
+        this.data.effectCooldowns.push({ type: e.type, availableAt: currentTick + cd });
+      }
+    }
+    this.data.activeEffects = this.data.activeEffects.filter(e => e.expiresAt > currentTick);
+    this.data.effectCooldowns = this.data.effectCooldowns.filter(c => c.availableAt > currentTick);
+  }
+
+  hasEffect(type: EffectType): boolean {
+    return this.data.activeEffects.some(e => e.type === type);
+  }
+
+  canPickupEffect(type: EffectType, currentTick: number): boolean {
+    return !this.data.effectCooldowns.some(c => c.type === type && c.availableAt > currentTick);
+  }
+
   /** 사망 처리 */
   die(): void {
     this.data.alive = false;
@@ -169,6 +203,8 @@ export class SnakeEntity {
     this.data.mass = config.initialMass;
     this.data.boosting = false;
     this.data.alive = true;
+    this.data.activeEffects = [];
+    this.data.effectCooldowns = [];
     this.data.score = 0;
     this.data.kills = 0;
     this.trailCounter = 0;

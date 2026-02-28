@@ -48,6 +48,7 @@ export interface SnakeNetworkData {
   b: boolean;             // boosting
   k: number;              // skin id
   p: [number, number][];  // segments [[x,y],...]
+  e?: number[];           // activeEffects [type, remainingTicks, ...] (0=magnet,1=speed,2=ghost)
 }
 
 /** 압축된 Orb 네트워크 데이터 */
@@ -56,7 +57,7 @@ export interface OrbNetworkData {
   y: number;
   v: number;    // value
   c: number;    // color index
-  t: 0 | 1 | 2; // type: natural|death|trail
+  t: number;    // type: 0=natural|1=death|2=trail|3=magnet|4=speed|5=ghost|6=mega
 }
 
 export interface StatePayload {

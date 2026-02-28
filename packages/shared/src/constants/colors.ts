@@ -3,20 +3,24 @@
  * Brawl Stars 스타일 — Bold, Vivid, Cartoon (thick outlines + saturated colors)
  */
 
-/** Orb 색상 (12색 — Brawl Stars 스타일 비비드 팔레트) */
+/** Orb 색상 (16색 — 12 natural + 4 special) */
 export const ORB_COLORS = [
-  '#FFD700', // gold yellow
-  '#00D4FF', // electric blue
-  '#FF1493', // hot pink
-  '#39FF14', // neon green
-  '#FF6B00', // bright orange
-  '#9B59B6', // vivid purple
-  '#FF4444', // bright red
-  '#00FFFF', // cyan
-  '#FF6B6B', // coral
-  '#ADFF2F', // lime
-  '#FF00FF', // magenta
-  '#00CED1', // teal
+  '#FFD700', // 0: gold yellow
+  '#00D4FF', // 1: electric blue
+  '#FF1493', // 2: hot pink
+  '#39FF14', // 3: neon green
+  '#FF6B00', // 4: bright orange
+  '#9B59B6', // 5: vivid purple
+  '#FF4444', // 6: bright red
+  '#00FFFF', // 7: cyan
+  '#FF6B6B', // 8: coral
+  '#ADFF2F', // 9: lime
+  '#FF00FF', // 10: magenta
+  '#00CED1', // 11: teal
+  '#9333EA', // 12: magnet (보라)
+  '#FACC15', // 13: speed (노란)
+  '#06B6D4', // 14: ghost (청록)
+  '#F59E0B', // 15: mega (골드)
 ] as const;
 
 /** 게임 UI 색상 (Brawl Stars — Bold Cartoon Style) */

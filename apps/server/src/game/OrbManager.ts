@@ -5,7 +5,7 @@
 
 import type { Orb, OrbType, Position, ArenaConfig } from '@snake-arena/shared';
 import { randomPositionInCircle } from '@snake-arena/shared';
-import { ORB } from '@snake-arena/shared';
+import { ORB, EFFECT_CONFIG } from '@snake-arena/shared';
 
 export class OrbManager {
   private orbs: Map<number, Orb> = new Map();
@@ -16,33 +16,77 @@ export class OrbManager {
     this.config = config;
   }
 
-  /** 초기 natural orb 스폰 */
+  /** 초기 orb 스폰 */
   initialize(): void {
     for (let i = 0; i < this.config.naturalOrbTarget; i++) {
-      this.spawnNaturalOrb();
+      this.spawnOrb();
     }
   }
 
-  /** natural orb 하나 생성 */
-  private spawnNaturalOrb(): Orb {
+  /** 오브 생성 (확률적 특수 오브 포함) */
+  private spawnOrb(): Orb {
+    const roll = Math.random();
+    let type: OrbType = 'natural';
+    if (roll < EFFECT_CONFIG.mega.spawnChance) {
+      type = 'mega';
+    } else if (roll < EFFECT_CONFIG.mega.spawnChance + EFFECT_CONFIG.ghost.spawnChance) {
+      type = 'ghost';
+    } else if (roll < EFFECT_CONFIG.mega.spawnChance + EFFECT_CONFIG.ghost.spawnChance + EFFECT_CONFIG.magnet.spawnChance) {
+      type = 'magnet';
+    } else if (roll < EFFECT_CONFIG.mega.spawnChance + EFFECT_CONFIG.ghost.spawnChance + EFFECT_CONFIG.magnet.spawnChance + EFFECT_CONFIG.speed.spawnChance) {
+      type = 'speed';
+    }
+
+    const isSpecial = type !== 'natural';
     const orb: Orb = {
       id: this.nextId++,
-      position: randomPositionInCircle(this.config.radius, ORB.SPAWN_PADDING),
-      value: ORB.NATURAL_VALUE_MIN + Math.floor(Math.random() * (ORB.NATURAL_VALUE_MAX - ORB.NATURAL_VALUE_MIN + 1)),
-      color: Math.floor(Math.random() * ORB.COLOR_COUNT),
-      type: 'natural',
+      position: this.weightedRandomPosition(),
+      value: this.getOrbValue(type),
+      color: this.getOrbColor(type),
+      type,
       createdAt: 0,
+      lifetime: isSpecial ? (EFFECT_CONFIG as Record<string, { lifetime?: number }>)[type]?.lifetime ?? 600 : undefined,
     };
     this.orbs.set(orb.id, orb);
     return orb;
   }
 
-  /** natural orb 수 유지 (매 틱) */
+  private getOrbValue(type: OrbType): number {
+    if (type === 'mega') return EFFECT_CONFIG.mega.value;
+    if (type === 'magnet' || type === 'speed' || type === 'ghost') return 0;
+    return ORB.NATURAL_VALUE_MIN + Math.floor(Math.random() * (ORB.NATURAL_VALUE_MAX - ORB.NATURAL_VALUE_MIN + 1));
+  }
+
+  private getOrbColor(type: OrbType): number {
+    if (type === 'magnet') return EFFECT_CONFIG.magnet.orbColor;
+    if (type === 'speed') return EFFECT_CONFIG.speed.orbColor;
+    if (type === 'ghost') return EFFECT_CONFIG.ghost.orbColor;
+    if (type === 'mega') return EFFECT_CONFIG.mega.orbColor;
+    return Math.floor(Math.random() * ORB.COLOR_COUNT);
+  }
+
+  /** 존 기반 가중 랜덤 위치 (외곽에 더 많은 오브) */
+  private weightedRandomPosition(): Position {
+    const roll = Math.random();
+    let radius: number;
+    if (roll < 0.2) {
+      radius = Math.random() * this.config.radius * 0.35;
+    } else if (roll < 0.6) {
+      radius = this.config.radius * 0.35 + Math.random() * this.config.radius * 0.4;
+    } else {
+      radius = this.config.radius * 0.75 + Math.random() * this.config.radius * 0.25;
+    }
+    radius = Math.max(0, radius - ORB.SPAWN_PADDING);
+    const angle = Math.random() * Math.PI * 2;
+    return { x: Math.cos(angle) * radius, y: Math.sin(angle) * radius };
+  }
+
+  /** orb 수 유지 (매 틱) */
   maintainNaturalOrbs(currentTick: number): void {
     const naturalCount = this.countByType('natural');
     const deficit = this.config.naturalOrbTarget - naturalCount;
     for (let i = 0; i < Math.min(deficit, 10); i++) {
-      const orb = this.spawnNaturalOrb();
+      const orb = this.spawnOrb();
       orb.createdAt = currentTick;
     }
   }

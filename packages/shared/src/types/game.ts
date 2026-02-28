@@ -18,6 +18,9 @@ export interface SnakeSkin {
   secondaryColor: string;
   pattern: 'solid' | 'striped' | 'gradient' | 'dotted';
   eyeStyle: 'default' | 'angry' | 'cute' | 'cool';
+  accentColor?: string;
+  headShape?: 'round' | 'diamond' | 'arrow';
+  tailEffect?: 'none' | 'spark' | 'trail' | 'fade';
 }
 
 export interface Snake {
@@ -38,6 +41,10 @@ export interface Snake {
   // 비주얼
   skin: SnakeSkin;
 
+  // 파워업 효과
+  activeEffects: ActiveEffect[];
+  effectCooldowns: EffectCooldown[];
+
   // 점수
   score: number;
   kills: number;
@@ -50,7 +57,21 @@ export interface Snake {
 
 // ─── Orb Entity ───
 
-export type OrbType = 'natural' | 'death' | 'boost_trail';
+export type OrbType = 'natural' | 'death' | 'boost_trail' | 'magnet' | 'speed' | 'ghost' | 'mega';
+
+// ─── Effect System ───
+
+export type EffectType = 'magnet' | 'speed' | 'ghost';
+
+export interface ActiveEffect {
+  type: EffectType;
+  expiresAt: number;
+}
+
+export interface EffectCooldown {
+  type: EffectType;
+  availableAt: number;
+}
 
 export interface Orb {
   id: number;

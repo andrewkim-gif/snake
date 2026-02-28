@@ -5,7 +5,9 @@
 
 import type {
   ArenaConfig, Position, StatePayload, MinimapPayload,
+  OrbType, EffectType,
 } from '@snake-arena/shared';
+import { EFFECT_CONFIG } from '@snake-arena/shared';
 import { ARENA_CONFIG, NETWORK } from '@snake-arena/shared';
 import { SnakeEntity } from './Snake';
 import { OrbManager } from './OrbManager';
@@ -110,7 +112,9 @@ export class Arena {
     for (const snake of this.snakes.values()) {
       if (!snake.isAlive) continue;
       snake.update(this.config);
-      if (snake.data.boosting && snake.trailCounter % this.config.trailOrbInterval === 0) {
+      // speed 효과 중에는 trail orb 미생성
+      if (snake.data.boosting && !snake.hasEffect('speed') &&
+          snake.trailCounter % this.config.trailOrbInterval === 0) {
         const tail = snake.data.segments[snake.data.segments.length - 1];
         this.orbManager.spawnTrailOrb(tail, this.tick);
       }
@@ -133,6 +137,9 @@ export class Arena {
     this.lastTickDeaths = deaths;
     this.collisionSystem.processDeaths(deaths, this.snakes, this.orbManager, this.tick);
 
+    // 5.5 효과 처리 (magnet pull + 효과 만료)
+    this.processEffects();
+
     // 6. Orb 수집
     this.collectOrbs();
 
@@ -153,15 +160,51 @@ export class Arena {
   private collectOrbs(): void {
     for (const snake of this.snakes.values()) {
       if (!snake.isAlive) continue;
-      const nearbyOrbs = this.spatialHash.queryOrbs(snake.head, this.config.collectRadius);
+      const magnetActive = snake.hasEffect('magnet');
+      const r = magnetActive
+        ? this.config.collectRadius + EFFECT_CONFIG.magnet.pullRadius
+        : this.config.collectRadius;
+      const nearbyOrbs = this.spatialHash.queryOrbs(snake.head, r);
       for (const orb of nearbyOrbs) {
         const dx = snake.head.x - orb.position.x;
         const dy = snake.head.y - orb.position.y;
         const distSq = dx * dx + dy * dy;
-        const r = this.config.collectRadius;
         if (distSq < r * r) {
-          snake.addMass(orb.value);
-          this.orbManager.removeOrb(orb.id);
+          this.processOrbCollection(snake, orb);
+        }
+      }
+    }
+  }
+
+  private processOrbCollection(snake: SnakeEntity, orb: import('@snake-arena/shared').Orb): void {
+    const effectTypes: Record<string, EffectType> = { magnet: 'magnet', speed: 'speed', ghost: 'ghost' };
+    const effectType = effectTypes[orb.type];
+    if (effectType) {
+      if (snake.canPickupEffect(effectType, this.tick)) {
+        const cfg = EFFECT_CONFIG[effectType];
+        snake.addEffect(effectType, cfg.durationTicks, this.tick);
+      }
+    } else {
+      snake.addMass(orb.value);
+    }
+    this.orbManager.removeOrb(orb.id);
+  }
+
+  private processEffects(): void {
+    for (const snake of this.snakes.values()) {
+      if (!snake.isAlive) continue;
+      snake.removeExpiredEffects(this.tick);
+
+      if (snake.hasEffect('magnet')) {
+        const nearbyOrbs = this.spatialHash.queryOrbs(snake.head, EFFECT_CONFIG.magnet.pullRadius);
+        for (const orb of nearbyOrbs) {
+          const dx = snake.head.x - orb.position.x;
+          const dy = snake.head.y - orb.position.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist > 1) {
+            orb.position.x += (dx / dist) * EFFECT_CONFIG.magnet.pullSpeed;
+            orb.position.y += (dy / dist) * EFFECT_CONFIG.magnet.pullSpeed;
+          }
         }
       }
     }
@@ -244,5 +287,57 @@ export class Arena {
       }
     }
     return null;
+  }
+
+  /** 봇 AI용: 근처 뱀 데이터 배열 반환 */
+  getNearbySnakes(excludeId: string, pos: Position, radius: number): import('@snake-arena/shared').Snake[] {
+    const rSq = radius * radius;
+    const result: import('@snake-arena/shared').Snake[] = [];
+    for (const snake of this.snakes.values()) {
+      if (!snake.isAlive || snake.data.id === excludeId) continue;
+      const h = snake.head;
+      const dx = h.x - pos.x;
+      const dy = h.y - pos.y;
+      if (dx * dx + dy * dy < rSq) {
+        result.push(snake.data);
+      }
+    }
+    return result;
+  }
+
+  /** 봇 AI용: 가장 가까운 파워업 오브 위치 */
+  findNearestPowerUpOrb(pos: Position, searchRadius: number): Position | null {
+    const orbs = this.spatialHash.queryOrbs(pos, searchRadius);
+    let nearest: Position | null = null;
+    let minDist = Infinity;
+    for (const orb of orbs) {
+      if (orb.type !== 'magnet' && orb.type !== 'speed' && orb.type !== 'ghost' && orb.type !== 'mega') continue;
+      const dx = orb.position.x - pos.x;
+      const dy = orb.position.y - pos.y;
+      const dist = dx * dx + dy * dy;
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = orb.position;
+      }
+    }
+    return nearest;
+  }
+
+  /** 봇 AI용: 특정 타입의 가장 가까운 오브 */
+  findNearestOrbByType(pos: Position, searchRadius: number, type: OrbType): Position | null {
+    const orbs = this.spatialHash.queryOrbs(pos, searchRadius);
+    let nearest: Position | null = null;
+    let minDist = Infinity;
+    for (const orb of orbs) {
+      if (orb.type !== type) continue;
+      const dx = orb.position.x - pos.x;
+      const dy = orb.position.y - pos.y;
+      const dist = dx * dx + dy * dy;
+      if (dist < minDist) {
+        minDist = dist;
+        nearest = orb.position;
+      }
+    }
+    return nearest;
   }
 }

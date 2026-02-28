@@ -460,4 +460,62 @@ export function drawHUD(
   drawKillFeed(ctx, killFeed, w);
   drawRankBadge(ctx, playerRank, playerCount, rtt, fps);
   drawScorePanel(ctx, mySnake, playerRank, playerCount, w, h);
+  drawEffectHUD(ctx, mySnake, w, h);
+}
+
+// ─── 효과 HUD (하단 중앙) ───
+
+const EFFECT_ICONS: Record<number, { label: string; color: string; maxTicks: number }> = {
+  0: { label: '🧲', color: '#9333EA', maxTicks: 100 },
+  1: { label: '⚡', color: '#FACC15', maxTicks: 80 },
+  2: { label: '👻', color: '#06B6D4', maxTicks: 60 },
+};
+
+function drawEffectHUD(
+  ctx: CanvasRenderingContext2D,
+  mySnake: SnakeNetworkData | null,
+  w: number,
+  h: number,
+): void {
+  if (!mySnake?.e || mySnake.e.length === 0) return;
+
+  const effects: Array<{ type: number; remaining: number }> = [];
+  for (let i = 0; i < mySnake.e.length; i += 2) {
+    effects.push({ type: mySnake.e[i], remaining: mySnake.e[i + 1] });
+  }
+
+  const boxW = 70;
+  const boxH = 28;
+  const gap = 8;
+  const totalW = effects.length * boxW + (effects.length - 1) * gap;
+  const startX = (w - totalW) / 2;
+  const y = h - 60;
+
+  for (let i = 0; i < effects.length; i++) {
+    const e = effects[i];
+    const info = EFFECT_ICONS[e.type];
+    if (!info) continue;
+
+    const x = startX + i * (boxW + gap);
+    const secs = (e.remaining / 20).toFixed(1);
+    const ratio = Math.min(1, e.remaining / info.maxTicks);
+
+    // 배경
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    roundRect(ctx, x, y, boxW, boxH, 6);
+    ctx.fill();
+
+    // 타이머 바
+    ctx.fillStyle = info.color;
+    ctx.globalAlpha = 0.7;
+    roundRect(ctx, x + 2, y + boxH - 5, (boxW - 4) * ratio, 3, 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+
+    // 아이콘 + 시간
+    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillText(`${info.label} ${secs}s`, x + boxW / 2, y + 17);
+  }
 }

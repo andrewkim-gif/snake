@@ -22,7 +22,7 @@ export function render(
   const w = cssW ?? ctx.canvas.width;
   const h = cssH ?? ctx.canvas.height;
 
-  drawBackground(ctx, state.camera, w, h);
+  drawBackground(ctx, state.camera, w, h, state.arenaRadius);
   drawBoundary(ctx, state.camera, state.arenaRadius, w, h);
 
   // 내 뱀 머리 화면 좌표 계산 (orb 흡수 애니메이션용)

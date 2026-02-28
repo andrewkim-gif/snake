@@ -11,17 +11,20 @@ YELLOW='\033[1;33m'
 CYAN='\033[0;36m'
 NC='\033[0m'
 
+WEB_PORT=4005
+SERVER_PORT=4006
+
 stop_all() {
   echo -e "${YELLOW}Stopping Snake Arena...${NC}"
-  lsof -ti:3000 2>/dev/null | xargs kill -9 2>/dev/null
-  lsof -ti:3001 2>/dev/null | xargs kill -9 2>/dev/null
+  lsof -ti:$WEB_PORT 2>/dev/null | xargs kill -9 2>/dev/null
+  lsof -ti:$SERVER_PORT 2>/dev/null | xargs kill -9 2>/dev/null
   sleep 0.5
   echo -e "${GREEN}Stopped.${NC}"
 }
 
 start_all() {
   # 포트 충돌 방지
-  if lsof -ti:3000 >/dev/null 2>&1 || lsof -ti:3001 >/dev/null 2>&1; then
+  if lsof -ti:$WEB_PORT >/dev/null 2>&1 || lsof -ti:$SERVER_PORT >/dev/null 2>&1; then
     echo -e "${YELLOW}Existing processes found, stopping first...${NC}"
     stop_all
   fi
@@ -32,28 +35,28 @@ start_all() {
   echo ""
 
   # 서버 시작 (백그라운드)
-  echo -e "${GREEN}Starting server on :3001...${NC}"
-  npx tsx watch apps/server/src/index.ts > /tmp/snake-server.log 2>&1 &
+  echo -e "${GREEN}Starting server on :$SERVER_PORT...${NC}"
+  PORT=$SERVER_PORT CORS_ORIGIN="http://localhost:$WEB_PORT" npx tsx watch apps/server/src/index.ts > /tmp/snake-server.log 2>&1 &
   SERVER_PID=$!
 
   # 서버 준비 대기
   for i in {1..10}; do
-    if curl -s http://localhost:3001/health >/dev/null 2>&1; then
+    if curl -s http://localhost:$SERVER_PORT/health >/dev/null 2>&1; then
       break
     fi
     sleep 0.5
   done
 
   # 프론트엔드 시작 (백그라운드)
-  echo -e "${GREEN}Starting web on :3000...${NC}"
-  cd apps/web && npx next dev --port 3000 -H 0.0.0.0 > /tmp/snake-web.log 2>&1 &
+  echo -e "${GREEN}Starting web on :$WEB_PORT...${NC}"
+  cd apps/web && NEXT_PUBLIC_SERVER_URL="http://localhost:$SERVER_PORT" npx next dev --port $WEB_PORT -H 0.0.0.0 > /tmp/snake-web.log 2>&1 &
   cd "$ROOT"
   WEB_PID=$!
 
   echo ""
-  echo -e "${GREEN}Server:${NC}  http://localhost:3001  (PID: $SERVER_PID)"
-  echo -e "${GREEN}Web:${NC}     http://localhost:3000  (PID: $WEB_PID)"
-  echo -e "${GREEN}Health:${NC}  http://localhost:3001/health"
+  echo -e "${GREEN}Server:${NC}  http://localhost:$SERVER_PORT  (PID: $SERVER_PID)"
+  echo -e "${GREEN}Web:${NC}     http://localhost:$WEB_PORT  (PID: $WEB_PID)"
+  echo -e "${GREEN}Health:${NC}  http://localhost:$SERVER_PORT/health"
   echo ""
   echo -e "${YELLOW}Logs:${NC}"
   echo "  Server: tail -f /tmp/snake-server.log"
