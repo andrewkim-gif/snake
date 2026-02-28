@@ -12,7 +12,8 @@
     "typecheck": "turbo run typecheck",
     "dev:web": "turbo run dev --filter=web",
     "dev:server": "turbo run dev --filter=server",
-    "dev:all": "turbo run dev --parallel"
+    "dev:all": "turbo run dev --parallel",
+    "start": "cd apps/server && npx tsx src/index.ts"
   },
   "devDependencies": {
     "turbo": "^2.4.0",
