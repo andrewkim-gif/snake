@@ -36,23 +36,23 @@ function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100">
-      {/* 바디 — 플랫 fill + 확실한 아웃라인 stroke */}
+      {/* 바디 — 검은 아웃라인 먼저 (두꺼운) → 색상 fill 위에 (얇은) */}
+      <path
+        d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
+        stroke={outline} strokeWidth="19" fill="none" strokeLinecap="round" strokeLinejoin="round"
+      />
       <path
         d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
         stroke={color} strokeWidth="15" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
-      <path
-        d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
-        stroke={outline} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round"
-      />
 
       {/* 꼬리 끝 */}
+      <circle cx="22" cy="82" r="5.5" fill={outline} />
       <circle cx="22" cy="82" r="4" fill={color} />
-      <circle cx="22" cy="82" r="4" fill="none" stroke={outline} strokeWidth={sw * 0.7} />
 
-      {/* 머리 — r=10 (바디 15에 맞는 비율, headR = thickness * 0.6) */}
+      {/* 머리 — 검은 아웃라인 먼저 → 색상 fill 위에 */}
+      <circle cx="56" cy="30" r="13" fill={outline} />
       <circle cx="56" cy="30" r="11" fill={color} />
-      <circle cx="56" cy="30" r="11" fill="none" stroke={outline} strokeWidth={sw} />
 
       {/* 눈 */}
       {eyeStyle === 'dot' && <>
