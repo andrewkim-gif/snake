@@ -27,79 +27,93 @@ function darkenHex(hex: string, amount: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
-/* 스케치 뱀 캐릭터 — 연필 아웃라인 + 크레용 fill + feTurbulence 워블 */
+/* 스케치 뱀 캐릭터 — 게임 내 렌더링과 일치하는 둥근 세그먼트 체인 + wobbly 아웃라인 */
 function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default' }: {
   color: string; secondaryColor: string; size?: number; eyeStyle?: string;
 }) {
   const outline = darkenHex(color, 0.4);
+  // 게임과 동일한 세그먼트 체인 바디 (둥근 원형 조인트)
+  // S-curve를 따라 배치된 8개 원 + wobbly 머리
+  const bodyPts = [
+    { x: 25, y: 78 }, { x: 28, y: 70 }, { x: 33, y: 63 },
+    { x: 40, y: 57 }, { x: 47, y: 53 }, { x: 53, y: 48 },
+    { x: 57, y: 42 },
+  ];
+  const headCenter = { x: 58, y: 32 };
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100">
-      <defs>
-        <filter id="sketch-wobble" x="-5%" y="-5%" width="110%" height="110%">
-          <feTurbulence type="turbulence" baseFrequency="0.04" numOctaves="2" seed="3" result="turbulence" />
-          <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="2.5" xChannelSelector="R" yChannelSelector="G" />
-        </filter>
-      </defs>
-      <g filter="url(#sketch-wobble)">
-        {/* 바디 — 연필 아웃라인 + 크레용 */}
-        <path
-          d="M 28 70 Q 38 50, 50 52 Q 62 54, 58 40"
-          stroke={outline} strokeWidth="14" fill="none" strokeLinecap="round"
-          opacity="0.5"
-        />
-        <path
-          d="M 28 70 Q 38 50, 50 52 Q 62 54, 58 40"
-          stroke={color} strokeWidth="10" fill="none" strokeLinecap="round"
-          opacity="0.8"
-        />
-        {/* 바디 내부 */}
-        <path
-          d="M 28 70 Q 38 50, 50 52 Q 62 54, 58 40"
-          stroke={secondaryColor} strokeWidth="3" fill="none" strokeLinecap="round" opacity="0.4"
-        />
+      {/* 바디 세그먼트 — 게임과 동일: 아웃라인 원 + 크레용 fill 원 체인 */}
+      {/* Pass 1: 연필 아웃라인 (darken 40%, 게임의 2-pass sketch outline과 동일) */}
+      {bodyPts.map((p, i) => {
+        const r = 7 - i * 0.4; // 꼬리로 갈수록 작아짐
+        const jx = ((Math.sin(i * 9301 + 49297) * 49271) % 1 - 0.5) * 1.5;
+        const jy = ((Math.sin((i+1) * 9301 + 49297) * 49271) % 1 - 0.5) * 1.5;
+        return <circle key={`o${i}`} cx={p.x + jx} cy={p.y + jy} r={r + 1.5}
+          fill={outline} opacity="0.5" />;
+      })}
+      {/* Pass 2: 크레용 fill (opacity 0.85 — 게임과 동일) */}
+      {bodyPts.map((p, i) => {
+        const r = 7 - i * 0.4;
+        return <circle key={`f${i}`} cx={p.x} cy={p.y} r={r}
+          fill={color} opacity="0.85" />;
+      })}
+      {/* 바디 내부 secondary 라인 (게임의 secondary stroke와 동일) */}
+      {bodyPts.map((p, i) => {
+        const r = (7 - i * 0.4) * 0.35;
+        return <circle key={`s${i}`} cx={p.x} cy={p.y} r={r}
+          fill={secondaryColor} opacity="0.4" />;
+      })}
 
-        {/* 꼬리 — 연필 점 */}
-        <circle cx="28" cy="70" r="4" stroke={outline} strokeWidth="1.5" fill={color} opacity="0.8" />
+      {/* 꼬리 끝 — 작은 점 */}
+      <circle cx="22" cy="83" r="3" fill={outline} opacity="0.4" />
+      <circle cx="22" cy="83" r="2" fill={color} opacity="0.7" />
 
-        {/* 머리 — 연필 원 */}
-        <circle cx="58" cy="32" r="15" stroke={outline} strokeWidth="2.5" fill="none" opacity="0.5" />
-        <circle cx="58" cy="32" r="13" fill={color} opacity="0.8" />
+      {/* 머리 — wobbly 8각형 (게임의 wobblyCirclePath와 동일) */}
+      <polygon
+        points="72,30 70,23 64,19 56,20 51,25 50,33 54,40 62,42 69,38"
+        fill={outline} opacity="0.5"
+      />
+      <polygon
+        points="71,30 69,24 64,21 57,22 53,26 52,33 55,39 62,40 68,37"
+        fill={color} opacity="0.85"
+      />
 
-        {/* 해칭 음영 */}
-        <line x1="50" y1="36" x2="53" y2="42" stroke={outline} strokeWidth="0.8" opacity="0.2" />
-        <line x1="52" y1="35" x2="55" y2="41" stroke={outline} strokeWidth="0.8" opacity="0.2" />
-        <line x1="54" y1="34" x2="57" y2="40" stroke={outline} strokeWidth="0.8" opacity="0.2" />
+      {/* 해칭 음영 (게임의 drawHatching과 동일 — 짧은 대각선) */}
+      <line x1="54" y1="35" x2="56" y2="39" stroke={outline} strokeWidth="0.7" opacity="0.2" />
+      <line x1="56" y1="34" x2="58" y2="38" stroke={outline} strokeWidth="0.7" opacity="0.2" />
+      <line x1="58" y1="33" x2="60" y2="37" stroke={outline} strokeWidth="0.7" opacity="0.2" />
+      <line x1="60" y1="32" x2="62" y2="36" stroke={outline} strokeWidth="0.7" opacity="0.2" />
 
-        {/* 눈 */}
-        {eyeStyle === 'dot' && <>
-          <circle cx="54" cy="30" r="2.5" fill={P.pencilDark} />
-          <circle cx="64" cy="30" r="2.5" fill={P.pencilDark} />
-        </>}
-        {(eyeStyle === 'default' || eyeStyle === 'cute') && <>
-          <circle cx="54" cy="30" r="4.5" fill={P.paper} stroke={P.pencilDark} strokeWidth="1.2" />
-          <circle cx="64" cy="30" r="4.5" fill={P.paper} stroke={P.pencilDark} strokeWidth="1.2" />
-          <circle cx="55" cy="30.5" r="2" fill={P.pencilDark} />
-          <circle cx="65" cy="30.5" r="2" fill={P.pencilDark} />
-        </>}
-        {eyeStyle === 'angry' && <>
-          <circle cx="54" cy="30" r="4.5" fill={P.paper} stroke={P.pencilDark} strokeWidth="1.2" />
-          <circle cx="64" cy="30" r="4.5" fill={P.paper} stroke={P.pencilDark} strokeWidth="1.2" />
-          <circle cx="55" cy="31" r="2.2" fill={P.pencilDark} />
-          <circle cx="65" cy="31" r="2.2" fill={P.pencilDark} />
-          <line x1="50" y1="26" x2="57" y2="28" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
-          <line x1="68" y1="28" x2="61" y2="26" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
-        </>}
-        {eyeStyle === 'cool' && <>
-          <rect x="49" y="28" width="10" height="5" rx="1" fill={P.pencilDark} />
-          <rect x="61" y="28" width="10" height="5" rx="1" fill={P.pencilDark} />
-        </>}
-        {eyeStyle === 'wink' && <>
-          <circle cx="54" cy="30" r="4.5" fill={P.paper} stroke={P.pencilDark} strokeWidth="1.2" />
-          <circle cx="55" cy="30.5" r="2" fill={P.pencilDark} />
-          <path d="M 61 31 Q 64 28 67 31" stroke={P.pencilDark} strokeWidth="2" fill="none" strokeLinecap="round" />
-        </>}
-      </g>
+      {/* 눈 — 게임의 drawEyes와 동일한 스타일 */}
+      {eyeStyle === 'dot' && <>
+        <circle cx="58" cy="28" r="2.5" fill={P.pencilDark} />
+        <circle cx="66" cy="28" r="2.5" fill={P.pencilDark} />
+      </>}
+      {(eyeStyle === 'default' || eyeStyle === 'cute') && <>
+        {/* wobbly 원 흰자 + 연필 테두리 (게임의 wobblyCirclePath + PAPER fill) */}
+        <polygon points="55,24 58,23 61,25 61,29 58,31 55,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
+        <polygon points="63,24 66,23 69,25 69,29 66,31 63,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
+        <circle cx="58.5" cy="27.5" r="2" fill={P.pencilDark} />
+        <circle cx="66.5" cy="27.5" r="2" fill={P.pencilDark} />
+      </>}
+      {eyeStyle === 'angry' && <>
+        <polygon points="55,24 58,23 61,25 61,29 58,31 55,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
+        <polygon points="63,24 66,23 69,25 69,29 66,31 63,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
+        <circle cx="58.5" cy="28" r="2.2" fill={P.pencilDark} />
+        <circle cx="66.5" cy="28" r="2.2" fill={P.pencilDark} />
+        <line x1="54" y1="22" x2="60" y2="23" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="70" y1="23" x2="64" y2="22" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
+      </>}
+      {eyeStyle === 'cool' && <>
+        <rect x="54" y="25" width="8" height="4.5" rx="1" fill={P.pencilDark} />
+        <rect x="64" y="25" width="8" height="4.5" rx="1" fill={P.pencilDark} />
+      </>}
+      {eyeStyle === 'wink' && <>
+        <polygon points="55,24 58,23 61,25 61,29 58,31 55,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
+        <circle cx="58.5" cy="27.5" r="2" fill={P.pencilDark} />
+        <path d="M 63 29 Q 66 25.5 69 29" stroke={P.pencilDark} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+      </>}
     </svg>
   );
 }
@@ -293,7 +307,11 @@ export default function Home() {
       minHeight: '100vh', height: '100vh',
       overflow: 'hidden',
       fontFamily: '"Patrick Hand", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
-      background: `${P.paper} url('/images/lobby-bg.png') center/cover no-repeat`,
+      backgroundImage: `url('/images/lobby-bg.png')`,
+      backgroundSize: 'cover',
+      backgroundPosition: 'center',
+      backgroundRepeat: 'no-repeat',
+      backgroundColor: P.paper,
     }}>
       <style dangerouslySetInnerHTML={{ __html: LOBBY_STYLES }} />
 
