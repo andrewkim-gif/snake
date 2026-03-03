@@ -26,10 +26,16 @@ export function behaveSurvive(
 ): BotAction | null {
   const head = snake.segments[0];
   const distFromCenter = Math.sqrt(head.x * head.x + head.y * head.y);
+  const distRatio = distFromCenter / config.radius;
 
-  // 경계 회피 — 85% 이상이면 중앙으로 (좁혀서 맵 활용도 증가)
-  if (distFromCenter > config.radius * 0.85) {
-    return { targetAngle: Math.atan2(-head.y, -head.x), boost: false };
+  // 경계 회피 — 85% 이상이면 중앙 + 랜덤 오프셋으로 우회
+  if (distRatio > 0.85) {
+    const centerAngle = Math.atan2(-head.y, -head.x);
+    const offset = (Math.random() - 0.5) * Math.PI * 0.5;
+    return {
+      targetAngle: centerAngle + offset,
+      boost: distRatio > 0.92,
+    };
   }
 
   // 위협 회피 — 진짜 위험한 경우만 (1.5배 이상 큰 뱀이 80px 이내)
@@ -38,12 +44,14 @@ export function behaveSurvive(
     const otherHead = other.segments[0];
     const dist = distance(head, otherHead);
 
-    // 상대가 나보다 1.5배 이상 크고, 80px 이내이고, 나를 향해 오는 중
     if (dist < 80 && other.mass > snake.mass * 1.5) {
       const angleToMe = Math.atan2(head.y - otherHead.y, head.x - otherHead.x);
-      const headingDiff = Math.abs(other.heading - Math.atan2(otherHead.y - head.y, otherHead.x - head.x));
+      const headingToMe = Math.atan2(otherHead.y - head.y, otherHead.x - head.x);
+      // wrap-around 안전한 각도 차이 계산
+      let headingDiff = other.heading - headingToMe;
+      headingDiff = ((headingDiff + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
       // 상대가 대략 내 방향으로 오는지 체크 (±90도)
-      if (headingDiff < Math.PI / 2 || headingDiff > Math.PI * 1.5) {
+      if (Math.abs(headingDiff) < Math.PI / 2) {
         return {
           targetAngle: angleToMe,
           boost: snake.mass > config.minBoostMass + 5,
@@ -108,24 +116,34 @@ export function behaveGather(
   nearestOrb: Position | null,
   nearestPowerUp: Position | null,
   nearestDeathOrb: Position | null,
+  mapRadius: number,
 ): BotAction | null {
   const head = snake.segments[0];
+  const headDist = Math.sqrt(head.x * head.x + head.y * head.y);
+  const headRatio = headDist / mapRadius;
 
-  if (difficulty === 'hard' && nearestPowerUp) {
+  // 경계 근처 오브 필터: 봇이 70% 밖이고 오브가 80% 밖이면 무시
+  const isOrbTooFar = (orbPos: Position): boolean => {
+    if (headRatio < 0.7) return false;
+    const orbDist = Math.sqrt(orbPos.x * orbPos.x + orbPos.y * orbPos.y);
+    return orbDist / mapRadius > 0.8;
+  };
+
+  if (difficulty === 'hard' && nearestPowerUp && !isOrbTooFar(nearestPowerUp)) {
     return {
       targetAngle: Math.atan2(nearestPowerUp.y - head.y, nearestPowerUp.x - head.x),
       boost: false,
     };
   }
 
-  if (nearestDeathOrb) {
+  if (nearestDeathOrb && !isOrbTooFar(nearestDeathOrb)) {
     return {
       targetAngle: Math.atan2(nearestDeathOrb.y - head.y, nearestDeathOrb.x - head.x),
       boost: false,
     };
   }
 
-  if (nearestOrb) {
+  if (nearestOrb && !isOrbTooFar(nearestOrb)) {
     return {
       targetAngle: Math.atan2(nearestOrb.y - head.y, nearestOrb.x - head.x),
       boost: false,
@@ -136,16 +154,37 @@ export function behaveGather(
 }
 
 /** P3: 배회 — 더 자연스러운 이동 */
-export function behaveWander(wanderAngle: number, wanderTimer: number): { action: BotAction; newAngle: number; newTimer: number } {
+export function behaveWander(
+  wanderAngle: number,
+  wanderTimer: number,
+  headPos: Position,
+  mapRadius: number,
+): { action: BotAction; newAngle: number; newTimer: number } {
   let angle = wanderAngle;
   let timer = wanderTimer + 1;
 
   // 매 틱 아주 미세한 방향 드리프트 (부드러운 곡선 이동)
   angle += (Math.random() - 0.5) * 0.08;
 
+  // 맵 외곽(65% 이상)이면 중심 쪽으로 부드럽게 편향
+  const distRatio = Math.sqrt(headPos.x * headPos.x + headPos.y * headPos.y) / mapRadius;
+  if (distRatio > 0.65) {
+    const centerAngle = Math.atan2(-headPos.y, -headPos.x);
+    const bias = (distRatio - 0.65) * 2.0;
+    const diff = centerAngle - angle;
+    const wrapped = ((diff + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+    angle += wrapped * bias * 0.1;
+  }
+
   // 20~50틱(1~2.5초)마다 큰 방향 전환
   if (timer > 20 + Math.random() * 30) {
-    angle += (Math.random() - 0.5) * Math.PI * 1.2; // ±108도까지 전환
+    if (distRatio > 0.7) {
+      // 외곽이면 중심 ±72도 범위로 전환
+      const centerAngle = Math.atan2(-headPos.y, -headPos.x);
+      angle = centerAngle + (Math.random() - 0.5) * Math.PI * 0.8;
+    } else {
+      angle += (Math.random() - 0.5) * Math.PI * 1.2;
+    }
     timer = 0;
   }
 

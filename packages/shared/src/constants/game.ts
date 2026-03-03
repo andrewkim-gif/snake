@@ -135,3 +135,19 @@ export const DEFAULT_SKINS: SnakeSkin[] = [
   { id: 22, primaryColor: '#6A9B7E', secondaryColor: '#D4C36A', pattern: 'gradient', eyeStyle: 'default', headShape: 'round', tailEffect: 'bubble' },
   { id: 23, primaryColor: '#B8926A', secondaryColor: '#5B8DAD', pattern: 'dotted', eyeStyle: 'dot', headShape: 'round', tailEffect: 'fade' },
 ];
+
+// ─── Room Config ───
+
+export const ROOM_CONFIG = {
+  ROOM_COUNT: 5,
+  MAX_PLAYERS_PER_ROOM: 50,   // 인간 플레이어 최대 (봇 별도)
+  ROUND_DURATION: 300,         // 5분
+  COUNTDOWN_DURATION: 10,      // 카운트다운 10초
+  ENDING_DURATION: 5,          // 결과 화면 5초
+  COOLDOWN_DURATION: 15,       // 다음 라운드 대기 15초
+  MIN_PLAYERS_TO_START: 2,
+  BOTS_PER_ROOM: 15,
+  ROOM_ORB_TARGET: 1000,
+  LOBBY_UPDATE_INTERVAL: 1000, // 1Hz
+  RECENT_WINNERS_COUNT: 10,
+} as const;

@@ -2,6 +2,9 @@
 
 import { useState, useCallback } from 'react';
 import { GameCanvas } from '@/components/game/GameCanvas';
+import { RoomList } from '@/components/lobby/RoomList';
+import { RecentWinnersPanel } from '@/components/lobby/RecentWinnersPanel';
+import { useSocket } from '@/hooks/useSocket';
 import { DEFAULT_SKINS } from '@snake-arena/shared';
 
 /* Crayon Sketch 팔레트 */
@@ -18,41 +21,25 @@ const P = {
   crayonPink: '#C47A8E',
 } as const;
 
-/* 색상 어둡게 */
-function darkenHex(hex: string, amount: number): string {
-  const h = parseInt(hex.slice(1), 16);
-  const r = Math.max(0, Math.round(((h >> 16) & 0xff) * (1 - amount)));
-  const g = Math.max(0, Math.round(((h >> 8) & 0xff) * (1 - amount)));
-  const b = Math.max(0, Math.round((h & 0xff) * (1 - amount)));
-  return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
-}
-
 /* 로비 뱀 캐릭터 — 균형잡힌 비율 + 확실한 아웃라인 stroke */
 function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default' }: {
   color: string; secondaryColor: string; size?: number; eyeStyle?: string;
 }) {
-  const outline = P.pencilDark; // 완전 검은색 아웃라인 — 손그림 느낌
-  const sw = 2.2;
+  const outline = P.pencilDark;
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 70">
-      {/* 바디 — 가로로 기어가는 부드러운 웨이브 */}
-      {/* 아웃라인 (검은색, 두꺼운) */}
       <path
         d="M 8 45 Q 20 30, 35 38 Q 50 46, 62 35 Q 72 27, 75 30"
         stroke={outline} strokeWidth="17" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
-      {/* 색상 fill */}
       <path
         d="M 8 45 Q 20 30, 35 38 Q 50 46, 62 35 Q 72 27, 75 30"
         stroke={color} strokeWidth="13" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
-
-      {/* 머리 — 오른쪽 끝, 진행방향 위를 바라봄 */}
       <circle cx="78" cy="26" r="14" fill={outline} />
       <circle cx="78" cy="26" r="12" fill={color} />
 
-      {/* 눈 */}
       {eyeStyle === 'dot' && <>
         <circle cx="75" cy="23" r="3" fill={P.pencilDark} />
         <circle cx="83" cy="23" r="3" fill={P.pencilDark} />
@@ -88,79 +75,66 @@ function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default
         <path d="M 81 24.5 Q 84 20 87 24.5" stroke={P.pencilDark} strokeWidth="2" fill="none" strokeLinecap="round" />
       </>}
 
-      {/* 혀 */}
       <path d="M 86 30 Q 90 33, 88 36" stroke="#C75B5B" strokeWidth="1.5" fill="none" strokeLinecap="round" />
       <path d="M 88 29 Q 92 32, 92 35" stroke="#C75B5B" strokeWidth="1.5" fill="none" strokeLinecap="round" />
     </svg>
   );
 }
 
-/* 로고 — Patrick Hand 폰트 + 연필 밑줄 + 크레용 악센트 */
+/* 로고 — 큰 사이즈 + 강한 손그림 워블 + 뱀 낙서 장식 */
 function GameLogo() {
   return (
     <div style={{ textAlign: 'center' }}>
-      <svg width="280" height="64" viewBox="0 0 280 64" style={{ maxWidth: '80vw', height: 'auto' }}>
+      <svg width="360" height="100" viewBox="0 0 360 100" style={{ maxWidth: '90vw', height: 'auto' }}>
         <defs>
           <filter id="logo-sketch" x="-5%" y="-5%" width="110%" height="110%">
-            <feTurbulence type="turbulence" baseFrequency="0.02" numOctaves="2" seed="5" result="turbulence" />
-            <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="1.5" xChannelSelector="R" yChannelSelector="G" />
+            <feTurbulence type="turbulence" baseFrequency="0.02" numOctaves="3" seed="5" result="turbulence" />
+            <feDisplacementMap in="SourceGraphic" in2="turbulence" scale="3" xChannelSelector="R" yChannelSelector="G" />
           </filter>
         </defs>
-
-        <g filter="url(#logo-sketch)">
-          {/* 연필 아웃라인 (2 pass) */}
-          <text x="140" y="46" textAnchor="middle"
-            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="44"
-            letterSpacing="1" fill="none" stroke={P.pencilDark} strokeWidth="4" strokeLinejoin="round"
-            opacity="0.3"
-          >
-            CROSNAKE
-          </text>
-
-          <text x="140" y="46" textAnchor="middle"
-            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="44"
-            letterSpacing="1" fill="none" stroke={P.pencilDark} strokeWidth="1.5" strokeLinejoin="round"
-          >
-            CROSNAKE
-          </text>
-
-          {/* 크레용 fill */}
-          <text x="140" y="46" textAnchor="middle"
-            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="44"
-            letterSpacing="1" fill={P.pencilDark} opacity="0.85"
-          >
-            CROSNAKE
-          </text>
-
-          {/* C — 크레용 오렌지 악센트 */}
-          <text x="140" y="46" textAnchor="middle"
-            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="44"
-            letterSpacing="1" fill={P.crayonOrange} opacity="0.7"
-          >
-            C<tspan fill="transparent">ROSNAKE</tspan>
-          </text>
-
-          {/* S — 크레용 핑크 악센트 */}
-          <text x="140" y="46" textAnchor="middle"
-            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="44"
-            letterSpacing="1" fill={P.crayonPink} opacity="0.7"
-          >
-            <tspan fill="transparent">CRO</tspan>S<tspan fill="transparent">NAKE</tspan>
-          </text>
+        {/* 왼쪽 뱀 낙서 장식 */}
+        <g filter="url(#logo-sketch)" opacity="0.5">
+          <path d="M 28 30 Q 18 40, 28 50 Q 38 58, 30 66"
+            fill="none" stroke={P.crayonGreen} strokeWidth="5" strokeLinecap="round" />
+          <circle cx="30" cy="25" r="5" fill={P.crayonGreen} opacity="0.7" />
+          <circle cx="27" cy="23" r="1.5" fill={P.pencilDark} />
+          <circle cx="33" cy="23" r="1.5" fill={P.pencilDark} />
+          <path d="M 35 27 L 39 25 M 35 27 L 39 29" stroke={P.crayonRed} strokeWidth="1" strokeLinecap="round" />
         </g>
-
-        {/* 연필 밑줄 (wobbly) */}
-        <path d="M 55 50 Q 100 52, 140 49 Q 180 46, 225 50"
-          fill="none" stroke={P.pencilDark} strokeWidth="1.5" opacity="0.3"
-          strokeLinecap="round" />
-
-        {/* 서브타이틀 — 연필 텍스트 */}
-        <text x="140" y="62" textAnchor="middle"
-          fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="400" fontSize="9"
-          letterSpacing="3" fill={P.pencilMedium}
-        >
-          SLITHER · GROW · WIN
-        </text>
+        {/* 메인 타이틀 */}
+        <g filter="url(#logo-sketch)">
+          <text x="195" y="62" textAnchor="middle"
+            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="60"
+            letterSpacing="2" fill="none" stroke={P.pencilDark} strokeWidth="5" strokeLinejoin="round"
+            opacity="0.25"
+          >CROSNAKE</text>
+          <text x="195" y="62" textAnchor="middle"
+            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="60"
+            letterSpacing="2" fill="none" stroke={P.pencilDark} strokeWidth="2" strokeLinejoin="round"
+          >CROSNAKE</text>
+          <text x="195" y="62" textAnchor="middle"
+            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="60"
+            letterSpacing="2" fill={P.pencilDark} opacity="0.85"
+          >CROSNAKE</text>
+          <text x="195" y="62" textAnchor="middle"
+            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="60"
+            letterSpacing="2" fill={P.crayonOrange} opacity="0.7"
+          >C<tspan fill="transparent">ROSNAKE</tspan></text>
+          <text x="195" y="62" textAnchor="middle"
+            fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="700" fontSize="60"
+            letterSpacing="2" fill={P.crayonPink} opacity="0.7"
+          ><tspan fill="transparent">CRO</tspan>S<tspan fill="transparent">NAKE</tspan></text>
+        </g>
+        {/* 두꺼운 연필 밑줄 */}
+        <path d="M 72 70 Q 130 73, 195 68 Q 260 63, 318 70"
+          fill="none" stroke={P.pencilDark} strokeWidth="2.5" opacity="0.3" strokeLinecap="round" />
+        <path d="M 78 72 Q 135 74, 195 70 Q 258 66, 312 73"
+          fill="none" stroke={P.pencilDark} strokeWidth="1" opacity="0.15" strokeLinecap="round" />
+        {/* 서브타이틀 */}
+        <text x="195" y="88" textAnchor="middle"
+          fontFamily="'Patrick Hand', 'Inter', sans-serif" fontWeight="400" fontSize="12"
+          letterSpacing="4" fill={P.pencilMedium}
+        >SLITHER · GROW · WIN</text>
       </svg>
     </div>
   );
@@ -182,7 +156,6 @@ function SkinCarousel({ skinId, onSelect }: { skinId: number; onSelect: (id: num
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
-      {/* 캐릭터 프리뷰 + 좌우 화살표 */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
         <button onClick={prevSkin} aria-label="Previous skin" className="arrow-btn"
           style={{
@@ -192,9 +165,7 @@ function SkinCarousel({ skinId, onSelect }: { skinId: number; onSelect: (id: num
             fontSize: '1.2rem', fontWeight: 900, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: '"Patrick Hand", "Inter", sans-serif',
-          }}>
-          &#8249;
-        </button>
+          }}>&#8249;</button>
 
         <div style={{
           width: 120, height: 120,
@@ -216,16 +187,11 @@ function SkinCarousel({ skinId, onSelect }: { skinId: number; onSelect: (id: num
             fontSize: '1.2rem', fontWeight: 900, cursor: 'pointer',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             fontFamily: '"Patrick Hand", "Inter", sans-serif',
-          }}>
-          &#8250;
-        </button>
+          }}>&#8250;</button>
       </div>
 
-      {/* 스킨 도트 — 연필 border + 종이 bg */}
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '4px' }}>
-        <div style={{
-          display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px',
-        }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '6px' }}>
           {pageSkins.map((s, i) => {
             const globalIndex = pageStart + i;
             const isSelected = skinId === globalIndex;
@@ -244,7 +210,6 @@ function SkinCarousel({ skinId, onSelect }: { skinId: number; onSelect: (id: num
           })}
         </div>
 
-        {/* 페이지 인디케이터 */}
         {totalPages > 1 && (
           <div style={{ display: 'flex', gap: '4px', marginTop: '2px' }}>
             {Array.from({ length: totalPages }, (_, i) => (
@@ -262,94 +227,141 @@ function SkinCarousel({ skinId, onSelect }: { skinId: number; onSelect: (id: num
 }
 
 export default function Home() {
-  const [playing, setPlaying] = useState(false);
+  const [mode, setMode] = useState<'lobby' | 'playing'>('lobby');
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
+  const { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, disconnect } = useSocket();
 
-  const handlePlay = useCallback(() => setPlaying(true), []);
+  const handleQuickJoin = useCallback(() => {
+    const name = playerName || `Snake${Math.floor(Math.random() * 9999)}`;
+    joinRoom('quick', name, skinId);
+    setMode('playing');
+  }, [joinRoom, playerName, skinId]);
 
-  if (playing) {
+  const handleJoinRoom = useCallback((roomId: string) => {
+    const name = playerName || `Snake${Math.floor(Math.random() * 9999)}`;
+    joinRoom(roomId, name, skinId);
+    setMode('playing');
+  }, [joinRoom, playerName, skinId]);
+
+  const handleExit = useCallback(() => {
+    leaveRoom();
+    setMode('lobby');
+  }, [leaveRoom]);
+
+  if (mode === 'playing') {
     return (
       <GameCanvas
+        dataRef={dataRef}
+        uiState={uiState}
+        sendInput={sendInput}
+        respawn={respawn}
         playerName={playerName || `Snake${Math.floor(Math.random() * 9999)}`}
         skinId={skinId}
-        onExit={() => setPlaying(false)}
+        onExit={handleExit}
       />
     );
   }
 
   return (
     <main className="lobby-main" style={{
-      display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+      display: 'flex', alignItems: 'center', justifyContent: 'center',
       minHeight: '100vh', height: '100vh',
-      overflow: 'hidden',
+      overflow: 'auto',
       fontFamily: '"Patrick Hand", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
       backgroundColor: P.paper,
       position: 'relative',
     }}>
       <style dangerouslySetInnerHTML={{ __html: LOBBY_STYLES }} />
 
-      {/* 중앙 로비 UI */}
-      <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center',
-        gap: '1.25rem', width: '100%', maxWidth: '360px',
-        padding: '0 1.5rem', boxSizing: 'border-box',
+      {/* 2-Column 래퍼 (모바일: 1-column 스택) */}
+      <div className="lobby-columns" style={{
+        display: 'flex', flexDirection: 'row',
+        gap: '2rem', width: '100%', maxWidth: '960px',
+        padding: '2rem 1.5rem', boxSizing: 'border-box',
+        alignItems: 'flex-start',
       }}>
 
-        {/* 로고 */}
-        <GameLogo />
-
-        {/* 캐릭터 + 스킨 선택 */}
-        <SkinCarousel skinId={skinId} onSelect={setSkinId} />
-
-        {/* 이름 입력 + 플레이 버튼 */}
-        <div style={{
-          width: '100%', display: 'flex', flexDirection: 'column', gap: '0.6rem',
+        {/* ===== 왼쪽 컬럼: 로고 + 캐릭터 + 이름 + 버튼 ===== */}
+        <div className="lobby-left" style={{
+          display: 'flex', flexDirection: 'column', alignItems: 'center',
+          gap: '1rem', flex: '0 0 45%', maxWidth: '380px',
         }}>
-          <input
-            type="text" value={playerName}
-            onChange={(e) => setPlayerName(e.target.value)}
-            placeholder="Enter your name..."
-            maxLength={16}
-            onKeyDown={(e) => { if (e.key === 'Enter') handlePlay(); }}
-            className="name-input"
-            style={{
-              padding: '0.85rem 1rem', fontSize: '1.1rem', width: '100%',
-              backgroundColor: P.paper,
-              border: `1.5px solid ${P.pencilMedium}`,
-              borderRadius: '4px', color: P.pencilDark,
-              outline: 'none',
+          <GameLogo />
+          <SkinCarousel skinId={skinId} onSelect={setSkinId} />
+
+          <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
+            <input
+              type="text" value={playerName}
+              onChange={(e) => setPlayerName(e.target.value)}
+              placeholder="Enter your name..."
+              maxLength={16}
+              onKeyDown={(e) => { if (e.key === 'Enter') handleQuickJoin(); }}
+              className="name-input"
+              style={{
+                padding: '0.85rem 1rem', fontSize: '1.1rem', width: '100%',
+                backgroundColor: P.paper,
+                border: `1.5px solid ${P.pencilMedium}`,
+                borderRadius: '4px', color: P.pencilDark,
+                outline: 'none',
+                fontFamily: '"Patrick Hand", "Inter", sans-serif',
+                fontWeight: 400,
+                boxSizing: 'border-box', textAlign: 'center',
+              }}
+            />
+
+            <button className="play-btn" onClick={handleQuickJoin} style={{
+              padding: '0', fontSize: '1.5rem',
+              backgroundColor: P.crayonOrange, color: P.paper,
+              border: `2px solid ${P.pencilDark}`,
+              borderRadius: '4px', cursor: 'pointer',
+              fontWeight: 700,
               fontFamily: '"Patrick Hand", "Inter", sans-serif',
-              fontWeight: 400,
-              boxSizing: 'border-box', textAlign: 'center',
-            }}
-          />
+              height: '3.4rem', textTransform: 'uppercase',
+              letterSpacing: '0.06em', width: '100%',
+              transition: 'transform 100ms',
+            }}>
+              QUICK PLAY!
+            </button>
+          </div>
 
-          <button className="play-btn" onClick={handlePlay} style={{
-            padding: '0', fontSize: '1.5rem',
-            backgroundColor: P.crayonOrange, color: P.paper,
-            border: `2px solid ${P.pencilDark}`,
-            borderRadius: '4px', cursor: 'pointer',
-            fontWeight: 700,
-            fontFamily: '"Patrick Hand", "Inter", sans-serif',
-            height: '3.4rem', textTransform: 'uppercase',
-            letterSpacing: '0.06em', width: '100%',
-            transition: 'transform 100ms',
-          }}>
-            PLAY!
-          </button>
+          {/* Connection status — 왼쪽 하단 */}
+          {!uiState.connected && (
+            <div style={{
+              fontSize: '0.75rem', color: P.crayonRed, fontWeight: 700,
+              fontFamily: '"Patrick Hand", "Inter", sans-serif',
+            }}>
+              Connecting...
+            </div>
+          )}
         </div>
 
-        {/* 조작법 힌트 */}
-        <div style={{
-          display: 'flex', gap: '1.2rem', justifyContent: 'center',
-          fontSize: '0.8rem', color: P.pencilLight, fontWeight: 400,
-          letterSpacing: '0.03em',
-          fontFamily: '"Patrick Hand", "Inter", sans-serif',
+        {/* ===== 오른쪽 컬럼: 룸 리스트 + 최근 우승자 + 힌트 ===== */}
+        <div className="lobby-right" style={{
+          display: 'flex', flexDirection: 'column',
+          gap: '1rem', flex: '1 1 55%', minWidth: 0,
         }}>
-          <span>Mouse = Steer</span>
-          <span>Click = Boost</span>
+          {/* Room List */}
+          {uiState.rooms.length > 0 && (
+            <RoomList rooms={uiState.rooms} onJoinRoom={handleJoinRoom} />
+          )}
+
+          {/* Recent Winners */}
+          <RecentWinnersPanel winners={uiState.recentWinners} />
+
+          {/* Controls hint */}
+          <div style={{
+            display: 'flex', gap: '1.2rem', justifyContent: 'center',
+            fontSize: '0.8rem', color: P.pencilLight, fontWeight: 400,
+            letterSpacing: '0.03em',
+            fontFamily: '"Patrick Hand", "Inter", sans-serif',
+            marginTop: 'auto',
+          }}>
+            <span>Mouse = Steer</span>
+            <span>Click = Boost</span>
+          </div>
         </div>
+
       </div>
     </main>
   );
@@ -385,7 +397,32 @@ const LOBBY_STYLES = `
   .name-input:focus {
     border-color: #3A3028 !important;
   }
-  @media (max-width: 640px) {
-    main { padding: 0 0.5rem; }
+  /* 모바일: 1-column 스택 */
+  @media (max-width: 768px) {
+    .lobby-main {
+      align-items: flex-start !important;
+    }
+    .lobby-columns {
+      flex-direction: column !important;
+      align-items: center !important;
+      padding: 1.5rem 1rem !important;
+      gap: 1.2rem !important;
+    }
+    .lobby-left {
+      flex: none !important;
+      max-width: 100% !important;
+      width: 100% !important;
+      max-width: 360px !important;
+    }
+    .lobby-right {
+      flex: none !important;
+      width: 100% !important;
+      max-width: 360px !important;
+    }
+  }
+  @media (max-width: 480px) {
+    .lobby-columns {
+      padding: 1rem 0.75rem !important;
+    }
   }
 `;

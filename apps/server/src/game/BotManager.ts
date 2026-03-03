@@ -121,11 +121,12 @@ export class BotManager {
         const gatherAction = behaveGather(
           snake.data, bot.difficulty,
           nearestOrb, nearestPowerUp, nearestDeathOrb,
+          config.radius,
         );
         if (gatherAction) {
           action = gatherAction;
         } else {
-          const wander = behaveWander(bot.wanderAngle, bot.wanderTimer);
+          const wander = behaveWander(bot.wanderAngle, bot.wanderTimer, head, config.radius);
           action = wander.action;
           bot.wanderAngle = wander.newAngle;
           bot.wanderTimer = wander.newTimer;

@@ -29,6 +29,7 @@ export class CollisionSystem {
     config: ArenaConfig,
   ): DeathEvent[] {
     const deaths: DeathEvent[] = [];
+    const deadSet = new Set<string>();
 
     for (const snake of snakes.values()) {
       if (!snake.isAlive) continue;
@@ -37,6 +38,7 @@ export class CollisionSystem {
       // 경계 충돌 — 크기 무관, 무조건 사망
       if (distanceFromOrigin(head) >= config.radius) {
         deaths.push({ snakeId: snake.data.id });
+        deadSet.add(snake.data.id);
         continue;
       }
 
@@ -55,9 +57,11 @@ export class CollisionSystem {
             if (other && snake.data.mass / other.data.mass >= ABSORB_MASS_RATIO) {
               // 내가 1.5배 이상 크다 → 상대가 죽고 내가 흡수
               deaths.push({ snakeId: other.data.id, killerId: snake.data.id, absorbed: true });
+              deadSet.add(other.data.id);
             } else {
               // 비슷하거나 상대가 더 크다 → 기존대로 머리 쪽(나) 사망
               deaths.push({ snakeId: snake.data.id, killerId: entry.snakeId });
+              deadSet.add(snake.data.id);
             }
             break;
           }
@@ -65,27 +69,51 @@ export class CollisionSystem {
       }
     }
 
-    // Head-to-head — mass 비율 기반
-    const aliveSnakes = Array.from(snakes.values()).filter(s => s.isAlive);
-    for (let i = 0; i < aliveSnakes.length; i++) {
-      for (let j = i + 1; j < aliveSnakes.length; j++) {
-        const a = aliveSnakes[i];
-        const b = aliveSnakes[j];
-        const dSq = distanceSq(a.head, b.head);
-        const threshold = config.headRadius * 2;
-        if (dSq < threshold * threshold) {
-          const aAlreadyDead = deaths.some(d => d.snakeId === a.data.id);
-          const bAlreadyDead = deaths.some(d => d.snakeId === b.data.id);
+    // Head-to-head — SpatialHash 기반 근접 쿼리 (O(N²) → O(N*k))
+    const threshold = config.headRadius * 2;
+    const checked = new Set<string>();
+    for (const snake of snakes.values()) {
+      if (!snake.isAlive) continue;
+      checked.add(snake.data.id);
 
-          const ratio = a.data.mass / b.data.mass;
+      const nearby = spatialHash.querySegments(snake.head, threshold);
+      for (const entry of nearby) {
+        if (entry.snakeId === snake.data.id) continue;
+        if (entry.segIndex !== 0) continue; // 머리 세그먼트만
+        if (checked.has(entry.snakeId)) continue;
+
+        const other = snakes.get(entry.snakeId);
+        if (!other || !other.isAlive) continue;
+
+        const dx = snake.head.x - other.head.x;
+        const dy = snake.head.y - other.head.y;
+        const dSq = dx * dx + dy * dy;
+
+        if (dSq < threshold * threshold) {
+          const aAlreadyDead = deadSet.has(snake.data.id);
+          const bAlreadyDead = deadSet.has(other.data.id);
+
+          const ratio = snake.data.mass / other.data.mass;
 
           if (ratio >= ABSORB_MASS_RATIO) {
-            if (!bAlreadyDead) deaths.push({ snakeId: b.data.id, killerId: a.data.id, absorbed: true });
+            if (!bAlreadyDead) {
+              deaths.push({ snakeId: other.data.id, killerId: snake.data.id, absorbed: true });
+              deadSet.add(other.data.id);
+            }
           } else if (1 / ratio >= ABSORB_MASS_RATIO) {
-            if (!aAlreadyDead) deaths.push({ snakeId: a.data.id, killerId: b.data.id, absorbed: true });
+            if (!aAlreadyDead) {
+              deaths.push({ snakeId: snake.data.id, killerId: other.data.id, absorbed: true });
+              deadSet.add(snake.data.id);
+            }
           } else {
-            if (!aAlreadyDead) deaths.push({ snakeId: a.data.id });
-            if (!bAlreadyDead) deaths.push({ snakeId: b.data.id });
+            if (!aAlreadyDead) {
+              deaths.push({ snakeId: snake.data.id });
+              deadSet.add(snake.data.id);
+            }
+            if (!bAlreadyDead) {
+              deaths.push({ snakeId: other.data.id });
+              deadSet.add(other.data.id);
+            }
           }
         }
       }

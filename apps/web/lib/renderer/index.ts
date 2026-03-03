@@ -21,6 +21,7 @@ export function render(
 ): void {
   const w = cssW ?? ctx.canvas.width;
   const h = cssH ?? ctx.canvas.height;
+  const now = performance.now();
 
   drawBackground(ctx, state.camera, w, h, state.arenaRadius);
   drawBoundary(ctx, state.camera, state.arenaRadius, w, h);
@@ -35,8 +36,8 @@ export function render(
     };
   }
 
-  drawOrbs(ctx, state.orbs, state.camera, w, h, myHeadScreen);
-  drawSnakes(ctx, state.snakes, state.camera, w, h, playerId, dt);
+  drawOrbs(ctx, state.orbs, state.camera, w, h, myHeadScreen, undefined, now);
+  drawSnakes(ctx, state.snakes, state.camera, w, h, playerId, dt, now);
 
   // 내 순위 계산
   let playerRank = 0;

@@ -54,71 +54,7 @@ export function useInput(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // ── 마우스 입력 ──
-    const handleMouseMove = (e: MouseEvent) => {
-      const rect = canvas.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const dx = e.clientX - rect.left - centerX;
-      const dy = e.clientY - rect.top - centerY;
-      let angle = Math.atan2(dy, dx);
-      if (angle < 0) angle += Math.PI * 2;
-      angleRef.current = angle;
-      sendInput();
-    };
-
-    const handleMouseDown = (e: MouseEvent) => {
-      if (e.button === 0) {
-        boostRef.current = true;
-        sendInput(true);
-      }
-    };
-
-    const handleMouseUp = (e: MouseEvent) => {
-      if (e.button === 0) {
-        boostRef.current = false;
-        sendInput(true);
-      }
-    };
-
-    // 터치 지원
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      if (!touch) return;
-      const rect = canvas.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const dx = touch.clientX - rect.left - centerX;
-      const dy = touch.clientY - rect.top - centerY;
-      let angle = Math.atan2(dy, dx);
-      if (angle < 0) angle += Math.PI * 2;
-      angleRef.current = angle;
-      sendInput();
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      if (!touch) return;
-      const rect = canvas.getBoundingClientRect();
-      const centerX = rect.width / 2;
-      const centerY = rect.height / 2;
-      const dx = touch.clientX - rect.left - centerX;
-      const dy = touch.clientY - rect.top - centerY;
-      let angle = Math.atan2(dy, dx);
-      if (angle < 0) angle += Math.PI * 2;
-      angleRef.current = angle;
-      boostRef.current = true;
-      sendInput(true);
-    };
-
-    const handleTouchEnd = () => {
-      boostRef.current = false;
-      sendInput(true);
-    };
-
-    // ── 키보드 입력 ──
+    // ── 키보드 방향 계산 ──
     const updateKeyboardAngle = () => {
       const k = keysRef.current;
       let dx = 0;
@@ -174,27 +110,10 @@ export function useInput(
       }
     };
 
-    // 컨텍스트 메뉴 방지
-    const handleContextMenu = (e: Event) => e.preventDefault();
-
-    canvas.addEventListener('mousemove', handleMouseMove);
-    canvas.addEventListener('mousedown', handleMouseDown);
-    canvas.addEventListener('mouseup', handleMouseUp);
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-    canvas.addEventListener('touchend', handleTouchEnd);
-    canvas.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
     return () => {
-      canvas.removeEventListener('mousemove', handleMouseMove);
-      canvas.removeEventListener('mousedown', handleMouseDown);
-      canvas.removeEventListener('mouseup', handleMouseUp);
-      canvas.removeEventListener('touchmove', handleTouchMove);
-      canvas.removeEventListener('touchstart', handleTouchStart);
-      canvas.removeEventListener('touchend', handleTouchEnd);
-      canvas.removeEventListener('contextmenu', handleContextMenu);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };

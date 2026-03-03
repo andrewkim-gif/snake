@@ -30,20 +30,17 @@ const io = new Server<ClientToServerEvents, ServerToClientEvents>(httpServer, {
   pingInterval: 10000,
 });
 
-// Socket.IO + Arena
-const arena = setupSocketHandlers(io, logger);
+// Socket.IO + RoomManager
+const roomManager = setupSocketHandlers(io, logger);
 
 // Health check
 app.get('/health', (_req, res) => {
+  const stats = roomManager.getStats();
   res.json({
     status: 'healthy',
     uptime: Math.floor(process.uptime()),
-    arena: {
-      players: arena.getPlayerCount(),
-      orbs: arena.getOrbCount(),
-      tick: arena.getTick(),
-      tickDuration: arena.getTickDuration().toFixed(1) + 'ms',
-    },
+    rooms: stats.rooms,
+    totalPlayers: stats.totalPlayers,
     memory: {
       mb: Math.floor(process.memoryUsage().heapUsed / 1024 / 1024),
     },

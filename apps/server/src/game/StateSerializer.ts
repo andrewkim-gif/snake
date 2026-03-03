@@ -10,6 +10,7 @@ import type {
 import { NETWORK } from '@snake-arena/shared';
 import type { SnakeEntity } from './Snake';
 import type { OrbManager } from './OrbManager';
+import type { SpatialHash } from './SpatialHash';
 
 export class StateSerializer {
   private static readonly ORB_TYPE_MAP: Record<OrbType, number> = {
@@ -25,6 +26,7 @@ export class StateSerializer {
     viewportHeight: number,
     snakes: Map<string, SnakeEntity>,
     orbManager: OrbManager,
+    spatialHash: SpatialHash,
     leaderboard: LeaderboardEntry[],
     tick: number,
   ): StatePayload | null {
@@ -46,9 +48,11 @@ export class StateSerializer {
       }
     }
 
-    // 뷰포트 내 orb 필터링
+    // 뷰포트 내 orb — SpatialHash 쿼리 (전체 순회 대신)
+    const queryRadius = Math.max(halfW, halfH);
+    const nearbyOrbs = spatialHash.queryOrbs(center, queryRadius);
     const visibleOrbs: OrbNetworkData[] = [];
-    for (const orb of orbManager.getAll()) {
+    for (const orb of nearbyOrbs) {
       if (Math.abs(orb.position.x - center.x) < halfW &&
           Math.abs(orb.position.y - center.y) < halfH) {
         visibleOrbs.push({
@@ -111,6 +115,16 @@ export class StateSerializer {
   }
 
   private serializeSnake(snake: SnakeEntity, tick: number): SnakeNetworkData {
+    // segments.map() 대신 for 루프 — 클로저/중간 배열 생성 감소
+    const segs = snake.data.segments;
+    const points: [number, number][] = new Array(segs.length);
+    for (let i = 0; i < segs.length; i++) {
+      points[i] = [
+        Math.round(segs[i].x * 10) / 10,
+        Math.round(segs[i].y * 10) / 10,
+      ];
+    }
+
     const data: SnakeNetworkData = {
       i: snake.data.id,
       n: snake.data.name,
@@ -118,10 +132,7 @@ export class StateSerializer {
       m: snake.data.mass,
       b: snake.data.boosting,
       k: snake.data.skin.id,
-      p: snake.data.segments.map(s => [
-        Math.round(s.x * 10) / 10,
-        Math.round(s.y * 10) / 10,
-      ] as [number, number]),
+      p: points,
     };
 
     if (snake.data.activeEffects.length > 0) {

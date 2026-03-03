@@ -7,6 +7,9 @@ import { ARENA_CONFIG } from '@snake-arena/shared';
 import { normalizeAngle, angleDiff, angleToVector, getDynamicSpacing } from '@snake-arena/shared';
 import type { SnakeNetworkData } from '@snake-arena/shared';
 
+// 모듈 레벨 Map 재사용 — 매 프레임 new Map 생성 방지
+const _prevMap = new Map<string, SnakeNetworkData>();
+
 /**
  * 서버 상태 보간: prevState와 latestState 사이의 뱀 위치를 보간
  * t: 0 = prevState, 1 = latestState, >1 = latestState 이후 외삽
@@ -18,12 +21,12 @@ export function interpolateSnakes(
 ): SnakeNetworkData[] {
   if (!prevSnakes || t >= 1) return curSnakes;
 
-  // Map 기반 O(1) lookup (O(n²) → O(n))
-  const prevMap = new Map<string, SnakeNetworkData>();
-  for (const s of prevSnakes) prevMap.set(s.i, s);
+  // Map 기반 O(1) lookup — 재사용
+  _prevMap.clear();
+  for (const s of prevSnakes) _prevMap.set(s.i, s);
 
   return curSnakes.map(cur => {
-    const prev = prevMap.get(cur.i);
+    const prev = _prevMap.get(cur.i);
     if (!prev) return cur;
 
     // 세그먼트 수가 달라도 보간 — 공통 길이만큼 보간, 나머지는 현재값 사용

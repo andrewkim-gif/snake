@@ -5,8 +5,8 @@ import { io, Socket } from 'socket.io-client';
 import type {
   ClientToServerEvents, ServerToClientEvents,
   StatePayload, JoinedPayload, DeathPayload,
-  KillPayload, MinimapPayload,
-  LeaderboardEntry,
+  KillPayload, MinimapPayload, RoomInfo, RecentWinner,
+  RoomStatus, RoundEndPayload, LeaderboardEntry,
 } from '@snake-arena/shared';
 
 type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
@@ -26,6 +26,9 @@ export interface GameData {
   deathInfo: DeathPayload | null;
   killFeed: KillPayload[];
   rtt: number;
+  currentRoomId: string | null;
+  roomState: RoomStatus | null;
+  timeRemaining: number;
 }
 
 function createInitialData(): GameData {
@@ -42,25 +45,47 @@ function createInitialData(): GameData {
     deathInfo: null,
     killFeed: [],
     rtt: 0,
+    currentRoomId: null,
+    roomState: null,
+    timeRemaining: 0,
   };
+}
+
+export interface UiState {
+  connected: boolean;
+  alive: boolean;
+  deathInfo: DeathPayload | null;
+  rooms: RoomInfo[];
+  recentWinners: RecentWinner[];
+  currentRoomId: string | null;
+  roomState: RoomStatus | null;
+  roundEnd: RoundEndPayload | null;
+  countdown: number | null;
+  timeRemaining: number;
 }
 
 export function useSocket() {
   const socketRef = useRef<GameSocket | null>(null);
   const dataRef = useRef<GameData>(createInitialData());
 
-  const [uiState, setUiState] = useState({
+  const [uiState, setUiState] = useState<UiState>({
     connected: false,
     alive: false,
-    deathInfo: null as DeathPayload | null,
+    deathInfo: null,
+    rooms: [],
+    recentWinners: [],
+    currentRoomId: null,
+    roomState: null,
+    roundEnd: null,
+    countdown: null,
+    timeRemaining: 0,
   });
 
   useEffect(() => {
-    // 마운트 시 데이터 완전 초기화
     dataRef.current = createInitialData();
 
     const socket: GameSocket = io(SERVER_URL, {
-      transports: ['websocket', 'polling'], // WebSocket 실패 시 polling fallback
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionDelay: 2000,
       reconnectionDelayMax: 10000,
@@ -78,7 +103,12 @@ export function useSocket() {
     socket.on('disconnect', () => {
       dataRef.current.connected = false;
       dataRef.current.alive = false;
-      setUiState(prev => ({ ...prev, connected: false, alive: false }));
+      dataRef.current.currentRoomId = null;
+      dataRef.current.roomState = null;
+      setUiState(prev => ({
+        ...prev, connected: false, alive: false,
+        currentRoomId: null, roomState: null,
+      }));
     });
 
     socket.on('connect_error', () => {
@@ -94,7 +124,14 @@ export function useSocket() {
       dataRef.current.playerId = data.id;
       dataRef.current.alive = true;
       dataRef.current.deathInfo = null;
-      setUiState(prev => ({ ...prev, alive: true, deathInfo: null }));
+      dataRef.current.currentRoomId = data.roomId;
+      dataRef.current.roomState = data.roomState;
+      dataRef.current.timeRemaining = data.timeRemaining;
+      setUiState(prev => ({
+        ...prev, alive: true, deathInfo: null, roundEnd: null,
+        currentRoomId: data.roomId, roomState: data.roomState,
+        timeRemaining: data.timeRemaining,
+      }));
     });
 
     socket.on('state', (data: StatePayload) => {
@@ -132,6 +169,64 @@ export function useSocket() {
       dataRef.current.rtt = Date.now() - data.t;
     });
 
+    // Room events
+    socket.on('rooms_update', (data) => {
+      setUiState(prev => ({
+        ...prev,
+        rooms: data.rooms,
+        recentWinners: data.recentWinners,
+      }));
+      // 현재 룸의 timeRemaining 업데이트
+      if (dataRef.current.currentRoomId) {
+        const myRoom = data.rooms.find(r => r.id === dataRef.current.currentRoomId);
+        if (myRoom) {
+          dataRef.current.timeRemaining = myRoom.timeRemaining;
+          dataRef.current.roomState = myRoom.state;
+          setUiState(prev => ({
+            ...prev,
+            timeRemaining: myRoom.timeRemaining,
+            roomState: myRoom.state,
+          }));
+        }
+      }
+    });
+
+    socket.on('round_start', (data) => {
+      dataRef.current.roomState = data.countdown > 0 ? 'countdown' : 'playing';
+      setUiState(prev => ({
+        ...prev,
+        roomState: data.countdown > 0 ? 'countdown' : 'playing',
+        countdown: data.countdown > 0 ? data.countdown : null,
+        roundEnd: null,
+      }));
+    });
+
+    socket.on('round_end', (data) => {
+      dataRef.current.roomState = 'ending';
+      setUiState(prev => ({
+        ...prev,
+        roomState: 'ending',
+        roundEnd: data,
+        countdown: null,
+      }));
+    });
+
+    socket.on('round_reset', (data) => {
+      dataRef.current.roomState = data.roomState;
+      dataRef.current.alive = false;
+      dataRef.current.latestState = null;
+      dataRef.current.prevState = null;
+      dataRef.current.deathInfo = null;
+      setUiState(prev => ({
+        ...prev,
+        roomState: data.roomState,
+        alive: false,
+        deathInfo: null,
+        roundEnd: null,
+        countdown: null,
+      }));
+    });
+
     const pingInterval = setInterval(() => {
       if (socket.connected) {
         socket.emit('ping', { t: Date.now() });
@@ -146,8 +241,29 @@ export function useSocket() {
     };
   }, []);
 
-  const join = useCallback((name: string, skinId?: number) => {
-    socketRef.current?.emit('join', { name, skinId });
+  const joinRoom = useCallback((roomId: string, name: string, skinId?: number) => {
+    socketRef.current?.emit('join_room', { roomId, name, skinId });
+  }, []);
+
+  const leaveRoom = useCallback(() => {
+    socketRef.current?.emit('leave_room');
+    dataRef.current.currentRoomId = null;
+    dataRef.current.roomState = null;
+    dataRef.current.alive = false;
+    dataRef.current.playerId = null;
+    dataRef.current.latestState = null;
+    dataRef.current.prevState = null;
+    dataRef.current.deathInfo = null;
+    dataRef.current.killFeed = [];
+    setUiState(prev => ({
+      ...prev,
+      currentRoomId: null,
+      roomState: null,
+      alive: false,
+      deathInfo: null,
+      roundEnd: null,
+      countdown: null,
+    }));
   }, []);
 
   const sendInput = useCallback((angle: number, boost: boolean, seq: number) => {
@@ -162,5 +278,5 @@ export function useSocket() {
     socketRef.current?.disconnect();
   }, []);
 
-  return { dataRef, uiState, join, sendInput, respawn, disconnect };
+  return { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, disconnect };
 }

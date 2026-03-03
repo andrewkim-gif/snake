@@ -87,6 +87,8 @@ export class Arena {
   }
 
   getPlayerCount(): number { return this.snakes.size; }
+
+  getPlayerIds(): IterableIterator<string> { return this.snakes.keys(); }
   /** 실제 사람 플레이어 수 (봇 제외) */
   getHumanPlayerCount(): number {
     let count = 0;
@@ -96,6 +98,10 @@ export class Arena {
     return count;
   }
   getOrbCount(): number { return this.orbManager.getCount(); }
+
+  getLeaderboardEntries(): import('@snake-arena/shared').LeaderboardEntry[] {
+    return this.leaderboardManager.getEntries();
+  }
   getTick(): number { return this.tick; }
   getTickDuration(): number { return this.tickDuration; }
 
@@ -215,7 +221,7 @@ export class Arena {
   getStateForPlayer(playerId: string, viewportWidth: number, viewportHeight: number): StatePayload | null {
     return this.serializer.getStateForPlayer(
       playerId, viewportWidth, viewportHeight,
-      this.snakes, this.orbManager,
+      this.snakes, this.orbManager, this.spatialHash,
       this.leaderboardManager.getEntries(), this.tick,
     );
   }

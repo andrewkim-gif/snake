@@ -24,6 +24,48 @@ const PENCIL_DARK = '#3A3028';
 // 타일 상수
 const TILE_SIZE = 80;
 
+// ─── Grain 텍스처 캐시 (OffscreenCanvas) ───
+let grainPattern: CanvasPattern | null = null;
+let grainPatternZoom = -1;
+
+function getGrainPattern(ctx: CanvasRenderingContext2D, zoom: number): CanvasPattern | null {
+  // zoom이 10% 이상 변하면 재생성
+  if (grainPattern && grainPatternZoom > 0 && Math.abs(zoom - grainPatternZoom) / grainPatternZoom < 0.1) {
+    return grainPattern;
+  }
+
+  const tileW = Math.ceil(360 * zoom);
+  const tileH = Math.ceil(360 * zoom);
+  const offscreen = document.createElement('canvas');
+  offscreen.width = tileW;
+  offscreen.height = tileH;
+  const octx = offscreen.getContext('2d');
+  if (!octx) return null;
+
+  // 투명 배경
+  octx.clearRect(0, 0, tileW, tileH);
+
+  // grain 패턴을 타일에 그림
+  const grainSize = 120 * zoom;
+  for (let col = 0; col < 3; col++) {
+    for (let row = 0; row < 3; row++) {
+      if ((col + row) % 3 !== 0) continue;
+      const sx = col * grainSize;
+      const sy = row * grainSize;
+      const seed = col * 1000 + row;
+      const a = seededRandom(seed) * 0.04 + 0.01;
+      octx.fillStyle = `rgba(210, 200, 185, ${a})`;
+      const gw = grainSize * (0.6 + seededRandom(seed + 1) * 0.4);
+      const gh = grainSize * (0.6 + seededRandom(seed + 2) * 0.4);
+      octx.fillRect(sx - gw / 2, sy - gh / 2, gw, gh);
+    }
+  }
+
+  grainPattern = ctx.createPattern(offscreen, 'repeat');
+  grainPatternZoom = zoom;
+  return grainPattern;
+}
+
 // 낙서 장식 — deterministic 위치
 const DOODLE_COUNT = 25;
 let doodlePositions: Array<{
@@ -92,32 +134,13 @@ export function drawBackground(
   ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, w, h);
 
-  // 종이 질감 그레인 (큰 패턴)
-  const grainSize = 120 * cam.zoom;
-  const grainLeft = cam.x - w / 2 / cam.zoom - 120;
-  const grainTop = cam.y - h / 2 / cam.zoom - 120;
-  const grainRight = cam.x + w / 2 / cam.zoom + 120;
-  const grainBottom = cam.y + h / 2 / cam.zoom + 120;
-  const gColStart = Math.floor(grainLeft / 120);
-  const gColEnd = Math.ceil(grainRight / 120);
-  const gRowStart = Math.floor(grainTop / 120);
-  const gRowEnd = Math.ceil(grainBottom / 120);
-
-  for (let col = gColStart; col <= gColEnd; col++) {
-    for (let row = gRowStart; row <= gRowEnd; row++) {
-      if ((col + row) % 3 !== 0) continue;
-      const wx = col * 120;
-      const wy = row * 120;
-      const sx = (wx - cam.x) * cam.zoom + w / 2;
-      const sy = (wy - cam.y) * cam.zoom + h / 2;
-      if (sx < -grainSize || sx > w + grainSize || sy < -grainSize || sy > h + grainSize) continue;
-      const seed = col * 1000 + row;
-      const a = seededRandom(seed) * 0.04 + 0.01;
-      ctx.fillStyle = `rgba(210, 200, 185, ${a})`;
-      const gw = grainSize * (0.6 + seededRandom(seed + 1) * 0.4);
-      const gh = grainSize * (0.6 + seededRandom(seed + 2) * 0.4);
-      ctx.fillRect(sx - gw / 2, sy - gh / 2, gw, gh);
-    }
+  // 종이 질감 그레인 — OffscreenCanvas 패턴 캐시
+  const grain = getGrainPattern(ctx, cam.zoom);
+  if (grain) {
+    ctx.save();
+    ctx.fillStyle = grain;
+    ctx.fillRect(0, 0, w, h);
+    ctx.restore();
   }
 
   // ── 연필 그리드 (wobbly lines) ──
@@ -299,7 +322,7 @@ function drawSketchParticles(
     // 연필깎기 부스러기: 살짝 아래로
     if (p.type === 'shaving') {
       p.y += 0.01;
-      p.angle += Math.sin(performance.now() * 0.001 + p.x) * 0.002;
+      p.angle += Math.sin(p.rotation * 200 + p.x) * 0.002;
     }
 
     const sx = (p.x - cam.x * 0.5) * cam.zoom + w / 2;

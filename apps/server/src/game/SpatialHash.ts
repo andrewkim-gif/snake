@@ -18,6 +18,8 @@ export class SpatialHash {
   private gridDim: number;
   private segmentGrid: Map<number, SegmentEntry[]>;
   private orbGrid: Map<number, Orb[]>;
+  private activeSegmentKeys: number[] = [];
+  private activeOrbKeys: number[] = [];
 
   constructor(arenaRadius: number, cellSize: number = 200) {
     this.cellSize = cellSize;
@@ -28,8 +30,18 @@ export class SpatialHash {
   }
 
   clear(): void {
-    this.segmentGrid.clear();
-    this.orbGrid.clear();
+    // 배열 length=0으로 재사용 (Map.clear() 대신 → GC 감소)
+    for (const key of this.activeSegmentKeys) {
+      const cell = this.segmentGrid.get(key);
+      if (cell) cell.length = 0;
+    }
+    this.activeSegmentKeys.length = 0;
+
+    for (const key of this.activeOrbKeys) {
+      const cell = this.orbGrid.get(key);
+      if (cell) cell.length = 0;
+    }
+    this.activeOrbKeys.length = 0;
   }
 
   private getKey(x: number, y: number): number {
@@ -45,6 +57,7 @@ export class SpatialHash {
       cell = [];
       this.segmentGrid.set(key, cell);
     }
+    if (cell.length === 0) this.activeSegmentKeys.push(key);
     cell.push({ snakeId, segIndex, x: pos.x, y: pos.y });
   }
 
@@ -55,6 +68,7 @@ export class SpatialHash {
       cell = [];
       this.orbGrid.set(key, cell);
     }
+    if (cell.length === 0) this.activeOrbKeys.push(key);
     cell.push(orb);
   }
 

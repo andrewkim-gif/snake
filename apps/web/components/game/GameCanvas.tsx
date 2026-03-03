@@ -3,29 +3,36 @@
 /**
  * GameCanvas — 순수 React 컴포넌트 (조합만)
  * 카메라/보간/예측/렌더러를 서브모듈에 위임
+ * useSocket은 부모(page.tsx)에서 lift — props로 수신
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { useGameLoop } from '@/hooks/useGameLoop';
 import { useInput } from '@/hooks/useInput';
-import { useSocket } from '@/hooks/useSocket';
+import type { GameData, UiState } from '@/hooks/useSocket';
 import { render } from '@/lib/renderer';
 import type { RenderState, KillFeedEntry } from '@/lib/renderer';
 import { drawBackground, drawBoundary } from '@/lib/renderer/background';
 import { createCamera, updateCamera } from '@/lib/camera';
 import { interpolateSnakes, applyClientPrediction } from '@/lib/interpolation';
 import { DeathOverlay } from './DeathOverlay';
+import { RoundTimerHUD } from './RoundTimerHUD';
+import { CountdownOverlay } from './CountdownOverlay';
+import { RoundResultOverlay } from './RoundResultOverlay';
 import { ARENA_CONFIG } from '@snake-arena/shared';
 
 interface GameCanvasProps {
+  dataRef: React.MutableRefObject<GameData>;
+  uiState: UiState;
+  sendInput: (angle: number, boost: boolean, seq: number) => void;
+  respawn: (name?: string, skinId?: number) => void;
   playerName: string;
   skinId: number;
   onExit: () => void;
 }
 
-export function GameCanvas({ playerName, skinId, onExit }: GameCanvasProps) {
+export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, skinId, onExit }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const { dataRef, uiState, join, sendInput, respawn, disconnect } = useSocket();
   const inputSeqRef = useRef(0);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const cameraRef = useRef(createCamera());
@@ -39,13 +46,6 @@ export function GameCanvas({ playerName, skinId, onExit }: GameCanvasProps) {
     inputSeqRef.current++;
     sendInput(state.angle, state.boost, inputSeqRef.current);
   }, () => setMenuOpen(prev => !prev));
-
-  // 조인
-  useEffect(() => {
-    if (uiState.connected && !dataRef.current.playerId) {
-      join(playerName, skinId);
-    }
-  }, [uiState.connected, dataRef, join, playerName, skinId]);
 
   // 캔버스 초기화 + 리사이즈
   useEffect(() => {
@@ -138,21 +138,33 @@ export function GameCanvas({ playerName, skinId, onExit }: GameCanvasProps) {
     };
 
     render(ctx, renderState, data.playerId, w, h, dt);
-  }, []));
+  }, [dataRef, angleRef]));
 
   const handleRespawn = useCallback(() => {
+    // playing/waiting/countdown 중에만 리스폰 허용
+    const rs = uiState.roomState;
+    if (rs === 'ending' || rs === 'cooldown') return;
     respawn(playerName, skinId);
-  }, [respawn, playerName, skinId]);
+  }, [respawn, playerName, skinId, uiState.roomState]);
 
   const handleExitToLobby = useCallback(() => {
-    disconnect();
     onExit();
-  }, [disconnect, onExit]);
+  }, [onExit]);
+
+  const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
+  const showCountdown = uiState.roomState === 'countdown' && uiState.countdown !== null && uiState.countdown > 0;
+  const showRoundResult = uiState.roomState === 'ending' && uiState.roundEnd !== null;
+  const showDeath = uiState.deathInfo && !showRoundResult && uiState.roomState !== 'ending';
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ display: 'block' }} />
-      {uiState.deathInfo && <DeathOverlay deathInfo={uiState.deathInfo} onRespawn={handleRespawn} />}
+
+      {showTimer && <RoundTimerHUD timeRemaining={uiState.timeRemaining} />}
+      {showCountdown && <CountdownOverlay initialCount={uiState.countdown!} />}
+      {showRoundResult && <RoundResultOverlay roundEnd={uiState.roundEnd!} />}
+      {showDeath && <DeathOverlay deathInfo={uiState.deathInfo!} onRespawn={handleRespawn} />}
+
       {menuOpen && (
         <PauseMenu onResume={() => setMenuOpen(false)} onExit={handleExitToLobby} />
       )}
