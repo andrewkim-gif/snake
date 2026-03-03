@@ -36,65 +36,61 @@ function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100">
-      {/* 바디 — 검은 아웃라인 먼저 (두꺼운) → 색상 fill 위에 (얇은) */}
+      {/* 바디 — 귀여운 S자 또아리 포즈, 꼬리가 자연스럽게 가늘어짐 */}
+      {/* 아웃라인 (검은색, 두꺼운) */}
       <path
-        d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
-        stroke={outline} strokeWidth="19" fill="none" strokeLinecap="round" strokeLinejoin="round"
+        d="M 30 88 C 10 78, 12 58, 35 55 C 58 52, 65 65, 45 72 C 30 77, 28 60, 50 48 C 62 42, 58 30, 50 28"
+        stroke={outline} strokeWidth="16" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
+      {/* 색상 fill */}
       <path
-        d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
-        stroke={color} strokeWidth="15" fill="none" strokeLinecap="round" strokeLinejoin="round"
+        d="M 30 88 C 10 78, 12 58, 35 55 C 58 52, 65 65, 45 72 C 30 77, 28 60, 50 48 C 62 42, 58 30, 50 28"
+        stroke={color} strokeWidth="12" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
 
-      {/* 꼬리 끝 */}
-      <circle cx="22" cy="82" r="5.5" fill={outline} />
-      <circle cx="22" cy="82" r="4" fill={color} />
-
-      {/* 머리 — 검은 아웃라인 먼저 → 색상 fill 위에 */}
-      <circle cx="56" cy="30" r="13" fill={outline} />
-      <circle cx="56" cy="30" r="11" fill={color} />
+      {/* 머리 — 아웃라인 → 색상 */}
+      <circle cx="50" cy="24" r="14" fill={outline} />
+      <circle cx="50" cy="24" r="12" fill={color} />
 
       {/* 눈 */}
       {eyeStyle === 'dot' && <>
-        <circle cx="53" cy="28" r="2.5" fill={P.pencilDark} />
-        <circle cx="61" cy="28" r="2.5" fill={P.pencilDark} />
-        <circle cx="52.3" cy="27" r="0.9" fill="#FFF" />
-        <circle cx="60.3" cy="27" r="0.9" fill="#FFF" />
+        <circle cx="45" cy="22" r="3" fill={P.pencilDark} />
+        <circle cx="55" cy="22" r="3" fill={P.pencilDark} />
+        <circle cx="44" cy="20.8" r="1" fill="#FFF" />
+        <circle cx="54" cy="20.8" r="1" fill="#FFF" />
       </>}
       {(eyeStyle === 'default' || eyeStyle === 'cute') && <>
-        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <circle cx="61" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <circle cx="54" cy="28.5" r="2.2" fill={P.pencilDark} />
-        <circle cx="62" cy="28.5" r="2.2" fill={P.pencilDark} />
-        <circle cx="53.2" cy="27.2" r="0.9" fill="#FFF" />
-        <circle cx="61.2" cy="27.2" r="0.9" fill="#FFF" />
+        <circle cx="44" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="56" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="45.5" cy="22.5" r="2.5" fill={P.pencilDark} />
+        <circle cx="57.5" cy="22.5" r="2.5" fill={P.pencilDark} />
+        <circle cx="44.5" cy="21" r="1" fill="#FFF" />
+        <circle cx="56.5" cy="21" r="1" fill="#FFF" />
       </>}
       {eyeStyle === 'angry' && <>
-        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <circle cx="61" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <circle cx="54" cy="29" r="2.2" fill={P.pencilDark} />
-        <circle cx="62" cy="29" r="2.2" fill={P.pencilDark} />
-        <circle cx="53.2" cy="27.5" r="0.9" fill="#FFF" />
-        <circle cx="61.2" cy="27.5" r="0.9" fill="#FFF" />
-        <line x1="50" y1="24" x2="55.5" y2="25.5" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
-        <line x1="64" y1="25.5" x2="58.5" y2="24" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="44" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="56" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="45.5" cy="23" r="2.5" fill={P.pencilDark} />
+        <circle cx="57.5" cy="23" r="2.5" fill={P.pencilDark} />
+        <line x1="41" y1="17" x2="47" y2="19" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
+        <line x1="59" y1="19" x2="53" y2="17" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
       </>}
       {eyeStyle === 'cool' && <>
-        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <circle cx="61" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <rect x="49.5" y="25.5" width="7" height="3.8" rx="1" fill={P.pencilDark} />
-        <rect x="57.5" y="25.5" width="7" height="3.8" rx="1" fill={P.pencilDark} />
-        <line x1="56.3" y1="27" x2="57.7" y2="27" stroke={P.pencilDark} strokeWidth="1.2" />
+        <circle cx="44" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="56" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <rect x="40" y="19" width="8.5" height="4" rx="1.5" fill={P.pencilDark} />
+        <rect x="52" y="19" width="8.5" height="4" rx="1.5" fill={P.pencilDark} />
       </>}
       {eyeStyle === 'wink' && <>
-        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
-        <circle cx="54" cy="28.5" r="2.2" fill={P.pencilDark} />
-        <circle cx="53.2" cy="27.2" r="0.9" fill="#FFF" />
-        <path d="M 58 29 Q 61 25.5 64 29" stroke={P.pencilDark} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="44" cy="22" r="4.5" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="45.5" cy="22.5" r="2.5" fill={P.pencilDark} />
+        <circle cx="44.5" cy="21" r="1" fill="#FFF" />
+        <path d="M 53 23.5 Q 56 19 59 23.5" stroke={P.pencilDark} strokeWidth="2" fill="none" strokeLinecap="round" />
       </>}
 
-      {/* 입 — 작은 미소 */}
-      <path d="M 53.5 34 Q 56.5 36.5 59.5 34" stroke={P.pencilDark} strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.5" />
+      {/* 혀 — 귀엽게 내민 빨간 혀 */}
+      <path d="M 48 31 Q 50 36, 48 38" stroke="#C75B5B" strokeWidth="1.5" fill="none" strokeLinecap="round" />
+      <path d="M 52 31 Q 50 36, 52 38" stroke="#C75B5B" strokeWidth="1.5" fill="none" strokeLinecap="round" />
     </svg>
   );
 }
