@@ -302,16 +302,13 @@ export default function Home() {
   }
 
   return (
-    <main style={{
+    <main className="lobby-main" style={{
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       minHeight: '100vh', height: '100vh',
       overflow: 'hidden',
       fontFamily: '"Patrick Hand", "Inter", -apple-system, BlinkMacSystemFont, sans-serif',
-      backgroundImage: `url('/images/lobby-bg.png')`,
-      backgroundSize: 'cover',
-      backgroundPosition: 'center',
-      backgroundRepeat: 'no-repeat',
       backgroundColor: P.paper,
+      position: 'relative',
     }}>
       <style dangerouslySetInnerHTML={{ __html: LOBBY_STYLES }} />
 
@@ -382,6 +379,19 @@ export default function Home() {
 }
 
 const LOBBY_STYLES = `
+  .lobby-main::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: url('/images/lobby-bg.png') center/cover no-repeat;
+    opacity: 0.5;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .lobby-main > * {
+    position: relative;
+    z-index: 1;
+  }
   .play-btn:hover {
     transform: translateY(-2px) !important;
     opacity: 0.9;
