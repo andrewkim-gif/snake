@@ -27,93 +27,75 @@ function darkenHex(hex: string, amount: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
-/* 스케치 뱀 캐릭터 — 게임 내 렌더링과 일치하는 둥근 세그먼트 체인 + wobbly 아웃라인 */
+/* 로비 뱀 캐릭터 — 게임 렌더링과 동일: 플랫 fill + 손그림 stroke 아웃라인 + 큰 귀여운 눈 */
 function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default' }: {
   color: string; secondaryColor: string; size?: number; eyeStyle?: string;
 }) {
   const outline = darkenHex(color, 0.4);
-  // 게임과 동일한 세그먼트 체인 바디 (둥근 원형 조인트)
-  // S-curve를 따라 배치된 8개 원 + wobbly 머리
-  const bodyPts = [
-    { x: 25, y: 78 }, { x: 28, y: 70 }, { x: 33, y: 63 },
-    { x: 40, y: 57 }, { x: 47, y: 53 }, { x: 53, y: 48 },
-    { x: 57, y: 42 },
-  ];
-  const headCenter = { x: 58, y: 32 };
+  const sw = 1.8; // stroke width
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100">
-      {/* 바디 세그먼트 — 게임과 동일: 아웃라인 원 + 크레용 fill 원 체인 */}
-      {/* Pass 1: 연필 아웃라인 (darken 40%, 게임의 2-pass sketch outline과 동일) */}
-      {bodyPts.map((p, i) => {
-        const r = 7 - i * 0.4; // 꼬리로 갈수록 작아짐
-        const jx = ((Math.sin(i * 9301 + 49297) * 49271) % 1 - 0.5) * 1.5;
-        const jy = ((Math.sin((i+1) * 9301 + 49297) * 49271) % 1 - 0.5) * 1.5;
-        return <circle key={`o${i}`} cx={p.x + jx} cy={p.y + jy} r={r + 1.5}
-          fill={outline} opacity="0.5" />;
-      })}
-      {/* Pass 2: 크레용 fill (opacity 0.85 — 게임과 동일) */}
-      {bodyPts.map((p, i) => {
-        const r = 7 - i * 0.4;
-        return <circle key={`f${i}`} cx={p.x} cy={p.y} r={r}
-          fill={color} opacity="0.85" />;
-      })}
-      {/* 바디 내부 secondary 라인 (게임의 secondary stroke와 동일) */}
-      {bodyPts.map((p, i) => {
-        const r = (7 - i * 0.4) * 0.35;
-        return <circle key={`s${i}`} cx={p.x} cy={p.y} r={r}
-          fill={secondaryColor} opacity="0.4" />;
-      })}
-
-      {/* 꼬리 끝 — 작은 점 */}
-      <circle cx="22" cy="83" r="3" fill={outline} opacity="0.4" />
-      <circle cx="22" cy="83" r="2" fill={color} opacity="0.7" />
-
-      {/* 머리 — wobbly 8각형 (게임의 wobblyCirclePath와 동일) */}
-      <polygon
-        points="72,30 70,23 64,19 56,20 51,25 50,33 54,40 62,42 69,38"
-        fill={outline} opacity="0.5"
+      {/* 바디 — 플랫 fill S-curve + 손그림 stroke 아웃라인 위에 */}
+      <path
+        d="M 24 78 Q 30 65, 38 58 Q 46 51, 54 46 Q 58 43, 58 38"
+        stroke={color} strokeWidth="14" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
-      <polygon
-        points="71,30 69,24 64,21 57,22 53,26 52,33 55,39 62,40 68,37"
-        fill={color} opacity="0.85"
+      {/* 손그림 아웃라인 stroke (게임의 drawHanddrawnStroke와 동일) */}
+      <path
+        d="M 24 78 Q 30 65, 38 58 Q 46 51, 54 46 Q 58 43, 58 38"
+        stroke={outline} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round"
+        opacity="0.85"
       />
+      {/* 꼬리 끝 점 */}
+      <circle cx="24" cy="78" r="3.5" fill={color} />
+      <circle cx="24" cy="78" r="3.5" fill="none" stroke={outline} strokeWidth={sw * 0.8} opacity="0.85" />
 
-      {/* 해칭 음영 (게임의 drawHatching과 동일 — 짧은 대각선) */}
-      <line x1="54" y1="35" x2="56" y2="39" stroke={outline} strokeWidth="0.7" opacity="0.2" />
-      <line x1="56" y1="34" x2="58" y2="38" stroke={outline} strokeWidth="0.7" opacity="0.2" />
-      <line x1="58" y1="33" x2="60" y2="37" stroke={outline} strokeWidth="0.7" opacity="0.2" />
-      <line x1="60" y1="32" x2="62" y2="36" stroke={outline} strokeWidth="0.7" opacity="0.2" />
+      {/* 머리 — 플랫 원 fill + 손그림 stroke (게임의 round head와 동일) */}
+      <circle cx="60" cy="30" r="15" fill={color} />
+      <circle cx="60" cy="30" r="15" fill="none" stroke={outline} strokeWidth={sw} opacity="0.85" />
 
-      {/* 눈 — 게임의 drawEyes와 동일한 스타일 */}
+      {/* 눈 — 게임과 동일: 큰 흰자 + 동공 + 하이라이트 */}
       {eyeStyle === 'dot' && <>
-        <circle cx="58" cy="28" r="2.5" fill={P.pencilDark} />
-        <circle cx="66" cy="28" r="2.5" fill={P.pencilDark} />
+        <circle cx="56" cy="27" r="3.5" fill={P.pencilDark} />
+        <circle cx="66" cy="27" r="3.5" fill={P.pencilDark} />
+        <circle cx="55" cy="25.8" r="1.2" fill="#FFF" />
+        <circle cx="65" cy="25.8" r="1.2" fill="#FFF" />
       </>}
       {(eyeStyle === 'default' || eyeStyle === 'cute') && <>
-        {/* wobbly 원 흰자 + 연필 테두리 (게임의 wobblyCirclePath + PAPER fill) */}
-        <polygon points="55,24 58,23 61,25 61,29 58,31 55,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
-        <polygon points="63,24 66,23 69,25 69,29 66,31 63,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
-        <circle cx="58.5" cy="27.5" r="2" fill={P.pencilDark} />
-        <circle cx="66.5" cy="27.5" r="2" fill={P.pencilDark} />
+        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <circle cx="66" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <circle cx="57" cy="27.5" r="2.8" fill={P.pencilDark} />
+        <circle cx="67" cy="27.5" r="2.8" fill={P.pencilDark} />
+        <circle cx="56" cy="26" r="1.1" fill="#FFF" />
+        <circle cx="66" cy="26" r="1.1" fill="#FFF" />
       </>}
       {eyeStyle === 'angry' && <>
-        <polygon points="55,24 58,23 61,25 61,29 58,31 55,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
-        <polygon points="63,24 66,23 69,25 69,29 66,31 63,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
-        <circle cx="58.5" cy="28" r="2.2" fill={P.pencilDark} />
-        <circle cx="66.5" cy="28" r="2.2" fill={P.pencilDark} />
-        <line x1="54" y1="22" x2="60" y2="23" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
-        <line x1="70" y1="23" x2="64" y2="22" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
+        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <circle cx="66" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <circle cx="57" cy="28" r="2.8" fill={P.pencilDark} />
+        <circle cx="67" cy="28" r="2.8" fill={P.pencilDark} />
+        <circle cx="56" cy="26.5" r="1.1" fill="#FFF" />
+        <circle cx="66" cy="26.5" r="1.1" fill="#FFF" />
+        <line x1="52" y1="22" x2="59" y2="24" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
+        <line x1="70" y1="24" x2="63" y2="22" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
       </>}
       {eyeStyle === 'cool' && <>
-        <rect x="54" y="25" width="8" height="4.5" rx="1" fill={P.pencilDark} />
-        <rect x="64" y="25" width="8" height="4.5" rx="1" fill={P.pencilDark} />
+        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <circle cx="66" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <rect x="51" y="23" width="10" height="5" rx="1.5" fill={P.pencilDark} />
+        <rect x="61" y="23" width="10" height="5" rx="1.5" fill={P.pencilDark} />
+        <line x1="60.5" y1="25" x2="61.5" y2="25" stroke={P.pencilDark} strokeWidth="1.5" />
       </>}
       {eyeStyle === 'wink' && <>
-        <polygon points="55,24 58,23 61,25 61,29 58,31 55,30" fill={P.paper} stroke={P.pencilDark} strokeWidth="1" />
-        <circle cx="58.5" cy="27.5" r="2" fill={P.pencilDark} />
-        <path d="M 63 29 Q 66 25.5 69 29" stroke={P.pencilDark} strokeWidth="1.8" fill="none" strokeLinecap="round" />
+        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
+        <circle cx="57" cy="27.5" r="2.8" fill={P.pencilDark} />
+        <circle cx="56" cy="26" r="1.1" fill="#FFF" />
+        <path d="M 62 28 Q 66 24 70 28" stroke={P.pencilDark} strokeWidth="2" fill="none" strokeLinecap="round" />
       </>}
+
+      {/* 입 — 귀여운 작은 미소 */}
+      <path d="M 57 35 Q 61 38 65 35" stroke={P.pencilDark} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.6" />
     </svg>
   );
 }
