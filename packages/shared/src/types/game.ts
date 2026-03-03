@@ -1,6 +1,6 @@
 /**
- * Snake Arena — Game Types v2.0
- * snake.io/slither.io 스타일 (연속 이동, 각도 기반)
+ * Snake Arena — Game Types v3.0
+ * Whoop or Plop 파스텔 카툰 스타일
  */
 
 // ─── Core Types ───
@@ -17,10 +17,10 @@ export interface SnakeSkin {
   primaryColor: string;
   secondaryColor: string;
   pattern: 'solid' | 'striped' | 'gradient' | 'dotted';
-  eyeStyle: 'default' | 'angry' | 'cute' | 'cool';
+  eyeStyle: 'default' | 'angry' | 'cute' | 'cool' | 'dot' | 'wink';
   accentColor?: string;
   headShape?: 'round' | 'diamond' | 'arrow';
-  tailEffect?: 'none' | 'spark' | 'trail' | 'fade';
+  tailEffect?: 'none' | 'spark' | 'trail' | 'fade' | 'bubble';
 }
 
 export interface Snake {

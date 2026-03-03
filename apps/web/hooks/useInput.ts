@@ -10,38 +10,36 @@ interface InputState {
 type InputCallback = (state: InputState) => void;
 
 /**
- * 마우스/터치 → 각도 + 부스트 입력 훅
- * 캔버스 중심 기준으로 마우스 방향의 각도를 계산
+ * 마우스 + 키보드 입력 훅
+ * 마우스 이동 = 방향, 클릭 = 부스트
+ * WASD/방향키 = 방향, Space = 부스트, ESC = 메뉴
  */
 export function useInput(
   canvasRef: React.RefObject<HTMLCanvasElement | null>,
   onInput: InputCallback,
+  onEscape?: () => void,
 ) {
   const callbackRef = useRef(onInput);
   callbackRef.current = onInput;
+  const escapeRef = useRef(onEscape);
+  escapeRef.current = onEscape;
 
   const angleRef = useRef(0);
   const boostRef = useRef(false);
   const seqRef = useRef(0);
 
-  // 키보드 방향키 상태 (동시 입력 지원)
   const keysRef = useRef({ up: false, down: false, left: false, right: false });
-  // 마우스 vs 키보드 입력 모드 (마지막 사용 입력 우선)
-  const inputModeRef = useRef<'mouse' | 'keyboard'>('mouse');
 
-  // 50Hz throttle (20ms)
   const lastSendRef = useRef(0);
   const lastSentAngleRef = useRef(0);
   const lastSentBoostRef = useRef(false);
 
   const sendInput = useCallback((force?: boolean) => {
     const now = Date.now();
-    // 각도 변화(π/8 = 22.5도 이상) 또는 부스트 토글 시 쓰로틀 우회
     const angleDelta = Math.abs(angleRef.current - lastSentAngleRef.current);
     const boostChanged = boostRef.current !== lastSentBoostRef.current;
     const significantChange = angleDelta > Math.PI / 8 || boostChanged;
 
-    // 20ms 쓰로틀 (50Hz) — 서버 20Hz보다 빠르지만 반응성 확보
     if (!force && !significantChange && now - lastSendRef.current < 20) return;
     lastSendRef.current = now;
     lastSentAngleRef.current = angleRef.current;
@@ -56,20 +54,19 @@ export function useInput(
     const canvas = canvasRef.current;
     if (!canvas) return;
 
-    // 마우스 이동 → 각도 계산
+    // ── 마우스 입력 ──
     const handleMouseMove = (e: MouseEvent) => {
-      inputModeRef.current = 'mouse';
       const rect = canvas.getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      const dx = e.clientX - rect.left - cx;
-      const dy = e.clientY - rect.top - cy;
-      angleRef.current = Math.atan2(dy, dx);
-      if (angleRef.current < 0) angleRef.current += Math.PI * 2;
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const dx = e.clientX - rect.left - centerX;
+      const dy = e.clientY - rect.top - centerY;
+      let angle = Math.atan2(dy, dx);
+      if (angle < 0) angle += Math.PI * 2;
+      angleRef.current = angle;
       sendInput();
     };
 
-    // 마우스 클릭 → 부스트 (즉시 전송)
     const handleMouseDown = (e: MouseEvent) => {
       if (e.button === 0) {
         boostRef.current = true;
@@ -84,7 +81,44 @@ export function useInput(
       }
     };
 
-    // 키보드 → 방향 + 부스트
+    // 터치 지원
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (!touch) return;
+      const rect = canvas.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const dx = touch.clientX - rect.left - centerX;
+      const dy = touch.clientY - rect.top - centerY;
+      let angle = Math.atan2(dy, dx);
+      if (angle < 0) angle += Math.PI * 2;
+      angleRef.current = angle;
+      sendInput();
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      const touch = e.touches[0];
+      if (!touch) return;
+      const rect = canvas.getBoundingClientRect();
+      const centerX = rect.width / 2;
+      const centerY = rect.height / 2;
+      const dx = touch.clientX - rect.left - centerX;
+      const dy = touch.clientY - rect.top - centerY;
+      let angle = Math.atan2(dy, dx);
+      if (angle < 0) angle += Math.PI * 2;
+      angleRef.current = angle;
+      boostRef.current = true;
+      sendInput(true);
+    };
+
+    const handleTouchEnd = () => {
+      boostRef.current = false;
+      sendInput(true);
+    };
+
+    // ── 키보드 입력 ──
     const updateKeyboardAngle = () => {
       const k = keysRef.current;
       let dx = 0;
@@ -93,11 +127,11 @@ export function useInput(
       if (k.left) dx -= 1;
       if (k.down) dy += 1;
       if (k.up) dy -= 1;
-      if (dx === 0 && dy === 0) return; // 키 없으면 각도 유지
+      if (dx === 0 && dy === 0) return;
       let angle = Math.atan2(dy, dx);
       if (angle < 0) angle += Math.PI * 2;
       angleRef.current = angle;
-      sendInput(true); // 키보드 방향 전환은 항상 즉시 전송
+      sendInput(true);
     };
 
     const directionKeys: Record<string, keyof typeof keysRef.current> = {
@@ -108,16 +142,20 @@ export function useInput(
     };
 
     const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.code === 'Escape') {
+        e.preventDefault();
+        escapeRef.current?.();
+        return;
+      }
       if (e.code === 'Space') {
         e.preventDefault();
         boostRef.current = true;
-        sendInput(true); // 부스트 토글 즉시 전송
+        sendInput(true);
         return;
       }
       const dir = directionKeys[e.code];
       if (dir) {
         e.preventDefault();
-        inputModeRef.current = 'keyboard';
         keysRef.current[dir] = true;
         updateKeyboardAngle();
       }
@@ -126,7 +164,7 @@ export function useInput(
     const handleKeyUp = (e: KeyboardEvent) => {
       if (e.code === 'Space') {
         boostRef.current = false;
-        sendInput(true); // 부스트 해제 즉시 전송
+        sendInput(true);
         return;
       }
       const dir = directionKeys[e.code];
@@ -136,64 +174,29 @@ export function useInput(
       }
     };
 
-    // 터치 → 각도 + 부스트
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      const dx = touch.clientX - rect.left - cx;
-      const dy = touch.clientY - rect.top - cy;
-      angleRef.current = Math.atan2(dy, dx);
-      if (angleRef.current < 0) angleRef.current += Math.PI * 2;
-      sendInput();
-    };
-
-    // 더블탭 → 부스트
-    let lastTap = 0;
-    const handleTouchStart = (e: TouchEvent) => {
-      const now = Date.now();
-      if (now - lastTap < 300) {
-        boostRef.current = true;
-        sendInput();
-      }
-      lastTap = now;
-
-      // 첫 터치도 각도 계산
-      const touch = e.touches[0];
-      const rect = canvas.getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      const dx = touch.clientX - rect.left - cx;
-      const dy = touch.clientY - rect.top - cy;
-      angleRef.current = Math.atan2(dy, dx);
-      if (angleRef.current < 0) angleRef.current += Math.PI * 2;
-    };
-
-    const handleTouchEnd = () => {
-      boostRef.current = false;
-      sendInput();
-    };
+    // 컨텍스트 메뉴 방지
+    const handleContextMenu = (e: Event) => e.preventDefault();
 
     canvas.addEventListener('mousemove', handleMouseMove);
     canvas.addEventListener('mousedown', handleMouseDown);
     canvas.addEventListener('mouseup', handleMouseUp);
+    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+    canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+    canvas.addEventListener('touchend', handleTouchEnd);
+    canvas.addEventListener('contextmenu', handleContextMenu);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
-    canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
-    canvas.addEventListener('touchstart', handleTouchStart, { passive: true });
-    canvas.addEventListener('touchend', handleTouchEnd);
 
     return () => {
       canvas.removeEventListener('mousemove', handleMouseMove);
       canvas.removeEventListener('mousedown', handleMouseDown);
       canvas.removeEventListener('mouseup', handleMouseUp);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
       canvas.removeEventListener('touchmove', handleTouchMove);
       canvas.removeEventListener('touchstart', handleTouchStart);
       canvas.removeEventListener('touchend', handleTouchEnd);
+      canvas.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
     };
   }, [canvasRef, sendInput]);
 

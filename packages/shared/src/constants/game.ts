@@ -1,6 +1,6 @@
 /**
- * Snake Arena — Game Constants v2.0
- * snake.io 스타일 아레나 설정값
+ * Snake Arena — Game Constants v4.0
+ * Crayon / Pencil Sketch 스타일
  */
 
 import type { ArenaConfig, SnakeSkin } from '../types/game';
@@ -11,9 +11,9 @@ export const ARENA_CONFIG: ArenaConfig = {
   radius: 6000,
   maxPlayers: 100,
   tickRate: 20,
-  baseSpeed: 200,        // px/s
-  boostSpeed: 400,       // px/s (2x)
-  turnRate: 0.15,        // rad/tick (3.0 rad/s @ 20Hz — 90도 전환 ~0.5s)
+  baseSpeed: 150,        // px/s
+  boostSpeed: 300,       // px/s (2x)
+  turnRate: 0.25,        // rad/tick (5.0 rad/s @ 20Hz — 90도 전환 ~0.3s)
   segmentSpacing: 8,     // units
   initialMass: 10,
   minBoostMass: 15,
@@ -104,34 +104,34 @@ export const NETWORK = {
   RECONNECT_ATTEMPTS: 5,
 } as const;
 
-// ─── Default Skins ───
+// ─── Default Skins (Crayon Sketch) ───
 
-/** Brawl Stars 스타일 비비드 스킨 — 24종 (12 solid + 12 patterned) */
+/** 크레용 스케치 스킨 — 24종 (12 solid + 12 patterned) */
 export const DEFAULT_SKINS: SnakeSkin[] = [
-  // 0-11: 기존 solid 스킨 유지
-  { id: 0, primaryColor: '#FF4444', secondaryColor: '#CC0000', pattern: 'solid', eyeStyle: 'angry' },
-  { id: 1, primaryColor: '#00D4FF', secondaryColor: '#0099CC', pattern: 'solid', eyeStyle: 'cool' },
-  { id: 2, primaryColor: '#39FF14', secondaryColor: '#00CC00', pattern: 'solid', eyeStyle: 'default' },
-  { id: 3, primaryColor: '#FF1493', secondaryColor: '#CC1177', pattern: 'solid', eyeStyle: 'cute' },
-  { id: 4, primaryColor: '#FFD700', secondaryColor: '#CC9900', pattern: 'solid', eyeStyle: 'default' },
-  { id: 5, primaryColor: '#FF6B00', secondaryColor: '#CC5500', pattern: 'solid', eyeStyle: 'angry' },
-  { id: 6, primaryColor: '#9B59B6', secondaryColor: '#7D3C98', pattern: 'solid', eyeStyle: 'cool' },
-  { id: 7, primaryColor: '#00FFFF', secondaryColor: '#00CCCC', pattern: 'solid', eyeStyle: 'cute' },
-  { id: 8, primaryColor: '#FF6B6B', secondaryColor: '#CC4444', pattern: 'solid', eyeStyle: 'default' },
-  { id: 9, primaryColor: '#00CED1', secondaryColor: '#009999', pattern: 'solid', eyeStyle: 'cool' },
-  { id: 10, primaryColor: '#FF00FF', secondaryColor: '#CC00CC', pattern: 'solid', eyeStyle: 'angry' },
-  { id: 11, primaryColor: '#ADFF2F', secondaryColor: '#7FCC00', pattern: 'solid', eyeStyle: 'cute' },
-  // 12-23: 패턴 + 머리 모양 + 꼬리 이펙트
-  { id: 12, primaryColor: '#FF4444', secondaryColor: '#FF6B00', pattern: 'striped', eyeStyle: 'angry', headShape: 'diamond', tailEffect: 'spark' },
-  { id: 13, primaryColor: '#00D4FF', secondaryColor: '#00FFFF', pattern: 'striped', eyeStyle: 'cool', headShape: 'arrow', tailEffect: 'trail' },
-  { id: 14, primaryColor: '#39FF14', secondaryColor: '#ADFF2F', pattern: 'gradient', eyeStyle: 'default', headShape: 'diamond', tailEffect: 'fade' },
-  { id: 15, primaryColor: '#FF1493', secondaryColor: '#FF00FF', pattern: 'gradient', eyeStyle: 'cute', tailEffect: 'spark' },
-  { id: 16, primaryColor: '#FFD700', secondaryColor: '#FF6B00', pattern: 'dotted', eyeStyle: 'default', headShape: 'arrow', tailEffect: 'trail' },
-  { id: 17, primaryColor: '#9B59B6', secondaryColor: '#FF1493', pattern: 'dotted', eyeStyle: 'cool', headShape: 'diamond', tailEffect: 'fade' },
-  { id: 18, primaryColor: '#00FFFF', secondaryColor: '#00D4FF', pattern: 'striped', eyeStyle: 'cute', tailEffect: 'spark' },
-  { id: 19, primaryColor: '#FF6B6B', secondaryColor: '#FF4444', pattern: 'gradient', eyeStyle: 'angry', headShape: 'arrow', tailEffect: 'trail' },
-  { id: 20, primaryColor: '#00CED1', secondaryColor: '#39FF14', pattern: 'dotted', eyeStyle: 'cool', tailEffect: 'fade' },
-  { id: 21, primaryColor: '#FF00FF', secondaryColor: '#9B59B6', pattern: 'striped', eyeStyle: 'angry', headShape: 'diamond', tailEffect: 'trail' },
-  { id: 22, primaryColor: '#ADFF2F', secondaryColor: '#39FF14', pattern: 'gradient', eyeStyle: 'default', headShape: 'diamond', tailEffect: 'spark' },
-  { id: 23, primaryColor: '#FF6B00', secondaryColor: '#FFD700', pattern: 'dotted', eyeStyle: 'cute', headShape: 'arrow', tailEffect: 'fade' },
+  // 0-11: solid 스킨 — 크레용 팔레트
+  { id: 0, primaryColor: '#C75B5B', secondaryColor: '#D48A8A', pattern: 'solid', eyeStyle: 'dot' },
+  { id: 1, primaryColor: '#D4914A', secondaryColor: '#DFB07A', pattern: 'solid', eyeStyle: 'default' },
+  { id: 2, primaryColor: '#5B8DAD', secondaryColor: '#8AB4CC', pattern: 'solid', eyeStyle: 'cute' },
+  { id: 3, primaryColor: '#7BA868', secondaryColor: '#9FC490', pattern: 'solid', eyeStyle: 'dot' },
+  { id: 4, primaryColor: '#8B72A8', secondaryColor: '#AE9AC4', pattern: 'solid', eyeStyle: 'wink' },
+  { id: 5, primaryColor: '#D4C36A', secondaryColor: '#E0D494', pattern: 'solid', eyeStyle: 'default' },
+  { id: 6, primaryColor: '#C47A8E', secondaryColor: '#D4A0AE', pattern: 'solid', eyeStyle: 'angry' },
+  { id: 7, primaryColor: '#7DB89A', secondaryColor: '#A0D0B8', pattern: 'solid', eyeStyle: 'cool' },
+  { id: 8, primaryColor: '#82ADC8', secondaryColor: '#A8C8DA', pattern: 'solid', eyeStyle: 'cute' },
+  { id: 9, primaryColor: '#B8926A', secondaryColor: '#D0B090', pattern: 'solid', eyeStyle: 'dot' },
+  { id: 10, primaryColor: '#A89070', secondaryColor: '#C0AC94', pattern: 'solid', eyeStyle: 'wink' },
+  { id: 11, primaryColor: '#6A9B7E', secondaryColor: '#90B8A0', pattern: 'solid', eyeStyle: 'default' },
+  // 12-23: 패턴 + 머리 모양 + 꼬리 이펙트 — 크레용 컬러
+  { id: 12, primaryColor: '#C75B5B', secondaryColor: '#D4C36A', pattern: 'striped', eyeStyle: 'cute', headShape: 'round', tailEffect: 'bubble' },
+  { id: 13, primaryColor: '#D4914A', secondaryColor: '#C47A8E', pattern: 'striped', eyeStyle: 'angry', headShape: 'arrow', tailEffect: 'trail' },
+  { id: 14, primaryColor: '#5B8DAD', secondaryColor: '#8B72A8', pattern: 'gradient', eyeStyle: 'dot', headShape: 'round', tailEffect: 'bubble' },
+  { id: 15, primaryColor: '#7BA868', secondaryColor: '#D4C36A', pattern: 'gradient', eyeStyle: 'wink', tailEffect: 'spark' },
+  { id: 16, primaryColor: '#8B72A8', secondaryColor: '#C75B5B', pattern: 'dotted', eyeStyle: 'cute', headShape: 'diamond', tailEffect: 'bubble' },
+  { id: 17, primaryColor: '#D4C36A', secondaryColor: '#D4914A', pattern: 'dotted', eyeStyle: 'cool', headShape: 'round', tailEffect: 'fade' },
+  { id: 18, primaryColor: '#7DB89A', secondaryColor: '#5B8DAD', pattern: 'striped', eyeStyle: 'dot', tailEffect: 'bubble' },
+  { id: 19, primaryColor: '#C47A8E', secondaryColor: '#8B72A8', pattern: 'gradient', eyeStyle: 'angry', headShape: 'arrow', tailEffect: 'trail' },
+  { id: 20, primaryColor: '#82ADC8', secondaryColor: '#7BA868', pattern: 'dotted', eyeStyle: 'wink', tailEffect: 'bubble' },
+  { id: 21, primaryColor: '#A89070', secondaryColor: '#D4914A', pattern: 'striped', eyeStyle: 'cute', headShape: 'diamond', tailEffect: 'trail' },
+  { id: 22, primaryColor: '#6A9B7E', secondaryColor: '#D4C36A', pattern: 'gradient', eyeStyle: 'default', headShape: 'round', tailEffect: 'bubble' },
+  { id: 23, primaryColor: '#B8926A', secondaryColor: '#5B8DAD', pattern: 'dotted', eyeStyle: 'dot', headShape: 'round', tailEffect: 'fade' },
 ];

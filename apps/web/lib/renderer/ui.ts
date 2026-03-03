@@ -1,66 +1,79 @@
 /**
- * UI 렌더링 — Brawl Stars 스타일 Bold Cartoon HUD
- * 두꺼운 블랙 아웃라인 + 비비드 컬러 + 텍스트 스트로크 + 카툰 패널
+ * UI 렌더링 — Crayon / Pencil Sketch HUD
+ * 손그림 패널 + 연필 텍스트 + 워블 미니맵
  */
 
 import type { SnakeNetworkData, MinimapPayload, LeaderboardEntry } from '@snake-arena/shared';
 import { COLORS, ARENA_CONFIG } from '@snake-arena/shared';
 import type { KillFeedEntry } from './types';
 
-// ─── 헬퍼 ───
+// ─── Seeded Random ───
 
-function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
-  ctx.beginPath();
-  ctx.moveTo(x + r, y);
-  ctx.lineTo(x + w - r, y);
-  ctx.quadraticCurveTo(x + w, y, x + w, y + r);
-  ctx.lineTo(x + w, y + h - r);
-  ctx.quadraticCurveTo(x + w, y + h, x + w - r, y + h);
-  ctx.lineTo(x + r, y + h);
-  ctx.quadraticCurveTo(x, y + h, x, y + h - r);
-  ctx.lineTo(x, y + r);
-  ctx.quadraticCurveTo(x, y, x + r, y);
-  ctx.closePath();
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 9301 + 49297) * 49271;
+  return x - Math.floor(x);
 }
 
-/** Brawl Stars 카툰 패널: 두꺼운 블랙 아웃라인 + 솔리드 배경 + 드롭 섀도우 */
-function drawBrawlPanel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, radius = 14): void {
-  // 드롭 섀도우 (하단 오른쪽)
-  roundRect(ctx, x + 3, y + 3, w, h, radius);
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-  ctx.fill();
+// ─── 상수 ───
 
-  // 블랙 아웃라인 (두꺼운)
-  roundRect(ctx, x - 2, y - 2, w + 4, h + 4, radius + 2);
-  ctx.fillStyle = '#000000';
-  ctx.fill();
+const PENCIL_DARK = '#3A3028';
+const PENCIL_MEDIUM = '#6B5E52';
+const PAPER = '#F5F0E8';
+const CRAYON_ORANGE = '#D4914A';
+const CRAYON_RED = '#C75B5B';
+const CRAYON_BLUE = '#5B8DAD';
+const CRAYON_GREEN = '#7BA868';
+const CRAYON_YELLOW = '#D4C36A';
 
-  // 메인 배경
-  roundRect(ctx, x, y, w, h, radius);
+// ─── 헬퍼 ───
+
+/** 스케치 패널: 워블 사각형 + 연필 테두리 */
+function drawSketchPanel(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, seed = 0): void {
+  const j = 2; // jitter amount
+
+  // 종이 배경
   ctx.fillStyle = COLORS.HUD_PANEL_BG;
+  ctx.beginPath();
+  ctx.moveTo(x + (seededRandom(seed) - 0.5) * j, y + (seededRandom(seed + 1) - 0.5) * j);
+  ctx.lineTo(x + w + (seededRandom(seed + 2) - 0.5) * j, y + (seededRandom(seed + 3) - 0.5) * j);
+  ctx.lineTo(x + w + (seededRandom(seed + 4) - 0.5) * j, y + h + (seededRandom(seed + 5) - 0.5) * j);
+  ctx.lineTo(x + (seededRandom(seed + 6) - 0.5) * j, y + h + (seededRandom(seed + 7) - 0.5) * j);
+  ctx.closePath();
   ctx.fill();
 
-  // 내부 하이라이트 보더
-  roundRect(ctx, x + 1, y + 1, w - 2, h - 2, radius - 1);
-  ctx.strokeStyle = COLORS.HUD_PANEL_INNER;
-  ctx.lineWidth = 1;
+  // 연필 테두리 — 2 pass
+  ctx.strokeStyle = `rgba(107, 94, 82, 0.25)`;
+  ctx.lineWidth = 2.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  ctx.moveTo(x + (seededRandom(seed + 10) - 0.5) * j, y + (seededRandom(seed + 11) - 0.5) * j);
+  ctx.lineTo(x + w + (seededRandom(seed + 12) - 0.5) * j, y + (seededRandom(seed + 13) - 0.5) * j);
+  ctx.lineTo(x + w + (seededRandom(seed + 14) - 0.5) * j, y + h + (seededRandom(seed + 15) - 0.5) * j);
+  ctx.lineTo(x + (seededRandom(seed + 16) - 0.5) * j, y + h + (seededRandom(seed + 17) - 0.5) * j);
+  ctx.closePath();
+  ctx.stroke();
+
+  ctx.strokeStyle = PENCIL_DARK;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(x + (seededRandom(seed + 20) - 0.5) * j * 0.8, y + (seededRandom(seed + 21) - 0.5) * j * 0.8);
+  ctx.lineTo(x + w + (seededRandom(seed + 22) - 0.5) * j * 0.8, y + (seededRandom(seed + 23) - 0.5) * j * 0.8);
+  ctx.lineTo(x + w + (seededRandom(seed + 24) - 0.5) * j * 0.8, y + h + (seededRandom(seed + 25) - 0.5) * j * 0.8);
+  ctx.lineTo(x + (seededRandom(seed + 26) - 0.5) * j * 0.8, y + h + (seededRandom(seed + 27) - 0.5) * j * 0.8);
+  ctx.closePath();
   ctx.stroke();
 }
 
-/** 텍스트 아웃라인 + 채우기 (Brawl Stars 두꺼운 텍스트) */
-function drawBoldText(
+/** 텍스트 그리기 */
+function drawText(
   ctx: CanvasRenderingContext2D,
   text: string,
   x: number,
   y: number,
   fillColor: string,
-  strokeWidth = 3,
-  strokeColor = '#000000',
+  _hasShadow = false,
 ): void {
-  ctx.lineWidth = strokeWidth;
-  ctx.strokeStyle = strokeColor;
-  ctx.lineJoin = 'round';
-  ctx.strokeText(text, x, y);
   ctx.fillStyle = fillColor;
   ctx.fillText(text, x, y);
 }
@@ -71,7 +84,7 @@ function formatNumber(n: number): string {
   return String(Math.floor(n));
 }
 
-// ─── Minimap (사각형 + 두꺼운 아웃라인) ───
+// ─── Minimap (워블 원 + 연필 점) ───
 
 export function drawMinimap(ctx: CanvasRenderingContext2D, minimap: MinimapPayload | null, w: number, h: number): void {
   if (!minimap) return;
@@ -80,13 +93,19 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, minimap: MinimapPaylo
   const mx = w - size - pad;
   const my = h - size - pad;
 
-  // 카툰 패널
-  drawBrawlPanel(ctx, mx, my, size, size, 12);
+  drawSketchPanel(ctx, mx, my, size, size, 100);
 
-  // "MAP" 라벨
-  ctx.font = 'bold 10px "Inter", sans-serif';
+  // "MAP" 라벨 — 연필 밑줄
+  ctx.font = 'bold 10px "Patrick Hand", "Inter", sans-serif';
   ctx.textAlign = 'center';
-  drawBoldText(ctx, 'MAP', mx + size / 2, my + 12, '#00D4FF', 2);
+  drawText(ctx, 'MAP', mx + size / 2, my + 13, PENCIL_MEDIUM);
+  // 밑줄
+  ctx.strokeStyle = PENCIL_MEDIUM;
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(mx + size / 2 - 12, my + 15);
+  ctx.lineTo(mx + size / 2 + 12, my + 15);
+  ctx.stroke();
 
   const innerPad = 8;
   const innerSize = size - innerPad * 2;
@@ -94,58 +113,65 @@ export function drawMinimap(ctx: CanvasRenderingContext2D, minimap: MinimapPaylo
   const innerX = mx + innerPad;
   const innerY = my + innerPad + 6;
 
-  // 내부 아레나 원
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
+  // 내부 아레나 — 워블 원
+  ctx.strokeStyle = 'rgba(107, 94, 82, 0.2)';
   ctx.lineWidth = 1;
+  const cx = innerX + innerSize / 2;
+  const cy = innerY + innerSize / 2;
+  const cr = innerSize / 2 - 2;
   ctx.beginPath();
-  ctx.arc(innerX + innerSize / 2, innerY + innerSize / 2, innerSize / 2 - 2, 0, Math.PI * 2);
+  const segs = 16;
+  for (let i = 0; i <= segs; i++) {
+    const a = (i / segs) * Math.PI * 2;
+    const jitter = (seededRandom(i * 7 + 200) - 0.5) * 2;
+    const px = cx + Math.cos(a) * (cr + jitter);
+    const py = cy + Math.sin(a) * (cr + jitter);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
   ctx.stroke();
 
-  // 다른 뱀 — 레드 점
+  // 내부 종이 fill
+  ctx.fillStyle = 'rgba(237, 231, 219, 0.4)';
+  ctx.fill();
+
+  // 다른 뱀 — 연필 점
   for (const s of minimap.snakes) {
     if (s.me) continue;
     const dx = innerX + s.x * scale + innerSize / 2;
     const dy = innerY + s.y * scale + innerSize / 2;
-    const dotR = Math.max(2.5, Math.min(5, Math.sqrt(s.m) * 0.35));
+    const dotR = Math.max(2, Math.min(4, Math.sqrt(s.m) * 0.35));
 
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(dx, dy, dotR + 1, 0, Math.PI * 2);
-    ctx.fill();
-
-    ctx.fillStyle = COLORS.MINIMAP_OTHER;
+    ctx.fillStyle = PENCIL_MEDIUM;
     ctx.beginPath();
     ctx.arc(dx, dy, dotR, 0, Math.PI * 2);
     ctx.fill();
   }
 
-  // 내 위치 — 네온 그린 + 글로우
+  // 내 위치 — 크레용 오렌지 + 연필 원
   for (const s of minimap.snakes) {
     if (!s.me) continue;
     const dx = innerX + s.x * scale + innerSize / 2;
     const dy = innerY + s.y * scale + innerSize / 2;
 
-    // 글로우
-    ctx.fillStyle = 'rgba(57, 255, 20, 0.4)';
+    // 연필 원 표시
+    ctx.strokeStyle = PENCIL_DARK;
+    ctx.lineWidth = 1.2;
     ctx.beginPath();
-    ctx.arc(dx, dy, 8, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(dx, dy, 6, 0, Math.PI * 2);
+    ctx.stroke();
 
-    // 아웃라인
-    ctx.fillStyle = '#000000';
-    ctx.beginPath();
-    ctx.arc(dx, dy, 5, 0, Math.PI * 2);
-    ctx.fill();
-
-    // 코어
-    ctx.fillStyle = COLORS.MINIMAP_PLAYER;
+    ctx.fillStyle = CRAYON_ORANGE;
+    ctx.globalAlpha = 0.7;
     ctx.beginPath();
     ctx.arc(dx, dy, 4, 0, Math.PI * 2);
     ctx.fill();
+    ctx.globalAlpha = 1;
   }
 }
 
-// ─── Leaderboard (Brawl Stars 스타일 랭킹) ───
+// ─── Leaderboard (TOP PLAYERS) ───
 
 export function drawLeaderboard(ctx: CanvasRenderingContext2D, entries: LeaderboardEntry[], playerId: string | null, w: number): void {
   if (entries.length === 0) return;
@@ -157,60 +183,80 @@ export function drawLeaderboard(ctx: CanvasRenderingContext2D, entries: Leaderbo
   const lx = w - lw - pad;
   const ly = pad;
 
-  drawBrawlPanel(ctx, lx, ly, lw, lh);
+  drawSketchPanel(ctx, lx, ly, lw, lh, 300);
 
-  // 타이틀
-  ctx.font = 'bold 13px "Inter", sans-serif';
+  // 타이틀 — 연필 밑줄
+  ctx.font = 'bold 13px "Patrick Hand", "Inter", sans-serif';
   ctx.textAlign = 'center';
-  drawBoldText(ctx, 'TOP PLAYERS', lx + lw / 2, ly + 24, '#FFD700', 3);
-
-  // 구분선
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.12)';
-  ctx.lineWidth = 2;
+  drawText(ctx, 'TOP PLAYERS', lx + lw / 2, ly + 24, PENCIL_DARK);
+  // 밑줄
+  ctx.strokeStyle = PENCIL_MEDIUM;
+  ctx.lineWidth = 0.8;
   ctx.beginPath();
-  ctx.moveTo(lx + 12, ly + 32);
-  ctx.lineTo(lx + lw - 12, ly + 32);
+  const titleW = ctx.measureText('TOP PLAYERS').width;
+  ctx.moveTo(lx + lw / 2 - titleW / 2, ly + 27);
+  ctx.lineTo(lx + lw / 2 + titleW / 2, ly + 27);
   ctx.stroke();
 
-  // 순위 메달 색상
-  const rankColors = ['#FFD700', '#C0C0C0', '#CD7F32'];
-  const rankBgs = ['rgba(255, 215, 0, 0.15)', 'rgba(192, 192, 192, 0.1)', 'rgba(205, 127, 50, 0.1)'];
+  // 연필 구분선
+  ctx.strokeStyle = 'rgba(107, 94, 82, 0.2)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  const jx1 = (seededRandom(310) - 0.5) * 2;
+  const jx2 = (seededRandom(311) - 0.5) * 2;
+  ctx.moveTo(lx + 12 + jx1, ly + 32);
+  ctx.lineTo(lx + lw - 12 + jx2, ly + 32);
+  ctx.stroke();
+
+  // 크레용 메달 색상
+  const rankColors = [CRAYON_ORANGE, '#A8A098', '#B8926A'];
 
   for (let i = 0; i < maxEntries; i++) {
     const e = entries[i];
     const ey = ly + 52 + i * lineH;
     const isMe = e.id === playerId;
 
-    // 내 행 하이라이트
     if (isMe) {
-      roundRect(ctx, lx + 6, ey - 14, lw - 12, lineH - 2, 6);
-      ctx.fillStyle = 'rgba(255, 215, 0, 0.12)';
-      ctx.fill();
-    } else if (i < 3) {
-      roundRect(ctx, lx + 6, ey - 14, lw - 12, lineH - 2, 6);
-      ctx.fillStyle = rankBgs[i];
-      ctx.fill();
+      // 연필 밑줄 강조
+      ctx.strokeStyle = CRAYON_ORANGE;
+      ctx.lineWidth = 1;
+      ctx.globalAlpha = 0.3;
+      ctx.beginPath();
+      ctx.moveTo(lx + 10, ey + 4);
+      ctx.lineTo(lx + lw - 10, ey + 4);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
     }
 
-    // 순위 번호
-    ctx.font = 'bold 14px "Inter", sans-serif';
+    // 순위 — 크레용 색상
+    ctx.font = 'bold 14px "Patrick Hand", "Inter", sans-serif';
     ctx.textAlign = 'left';
-    const rankColor = i < 3 ? rankColors[i] : 'rgba(255, 255, 255, 0.5)';
-    drawBoldText(ctx, `${i + 1}`, lx + 14, ey, rankColor, 2);
+    const rankColor = i < 3 ? rankColors[i] : PENCIL_MEDIUM;
+    drawText(ctx, `${i + 1}`, lx + 14, ey, rankColor);
 
     // 이름
-    ctx.font = isMe ? 'bold 13px "Inter", sans-serif' : '13px "Inter", sans-serif';
-    const nameText = e.name.length > 9 ? e.name.slice(0, 8) + '…' : e.name;
-    drawBoldText(ctx, nameText, lx + 34, ey, isMe ? '#FFD700' : '#FFFFFF', 2);
+    ctx.font = isMe ? 'bold 13px "Patrick Hand", "Inter", sans-serif' : '13px "Patrick Hand", "Inter", sans-serif';
+    const nameText = e.name.length > 9 ? e.name.slice(0, 8) + '\u2026' : e.name;
+    drawText(ctx, nameText, lx + 34, ey, isMe ? CRAYON_ORANGE : PENCIL_DARK);
 
     // 점수
     ctx.textAlign = 'right';
-    ctx.font = 'bold 12px "Inter", sans-serif';
-    drawBoldText(ctx, formatNumber(e.score), lx + lw - 14, ey, isMe ? '#FFD700' : '#B0BEC5', 2);
+    ctx.font = 'bold 12px "Patrick Hand", "Inter", sans-serif';
+    drawText(ctx, formatNumber(e.score), lx + lw - 14, ey, isMe ? CRAYON_ORANGE : PENCIL_MEDIUM);
+
+    // 순위 간 연필 구분선
+    if (i < maxEntries - 1) {
+      ctx.strokeStyle = 'rgba(168, 152, 136, 0.15)';
+      ctx.lineWidth = 0.5;
+      ctx.beginPath();
+      ctx.moveTo(lx + 12, ey + lineH / 2 + 2);
+      ctx.lineTo(lx + lw - 12, ey + lineH / 2 + 2);
+      ctx.stroke();
+    }
   }
 }
 
-// ─── Kill Feed (상단 중앙 — 볼드 텍스트) ───
+// ─── Kill Feed (상단 중앙) ───
 
 export function drawKillFeed(ctx: CanvasRenderingContext2D, killFeed: KillFeedEntry[], w: number): void {
   if (killFeed.length === 0) return;
@@ -233,20 +279,24 @@ export function drawKillFeed(ctx: CanvasRenderingContext2D, killFeed: KillFeedEn
     ctx.save();
     ctx.globalAlpha = alpha;
 
-    // 배경 바
-    ctx.font = 'bold 14px "Inter", sans-serif';
+    ctx.font = 'bold 14px "Patrick Hand", "Inter", sans-serif';
     const textW = ctx.measureText(entry.text).width;
-    roundRect(ctx, centerX - textW / 2 - 12, y - 14, textW + 24, 22, 11);
-    ctx.fillStyle = entry.isMe ? 'rgba(57, 255, 20, 0.25)' : 'rgba(0, 0, 0, 0.5)';
-    ctx.fill();
-    ctx.strokeStyle = entry.isMe ? 'rgba(57, 255, 20, 0.5)' : 'rgba(255, 255, 255, 0.2)';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
 
-    // 텍스트
-    drawBoldText(
+    // 종이 배경 + 연필 테두리
+    const bgX = centerX - textW / 2 - 12;
+    const bgY = y - 14;
+    const bgW = textW + 24;
+    const bgH = 22;
+
+    ctx.fillStyle = entry.isMe ? 'rgba(212, 145, 74, 0.12)' : 'rgba(245, 240, 232, 0.9)';
+    ctx.fillRect(bgX, bgY, bgW, bgH);
+    ctx.strokeStyle = entry.isMe ? 'rgba(212, 145, 74, 0.4)' : 'rgba(107, 94, 82, 0.25)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(bgX, bgY, bgW, bgH);
+
+    drawText(
       ctx, entry.text, centerX, y,
-      entry.isMe ? COLORS.HUD_KILL_HIGHLIGHT : '#FFFFFF', 3,
+      entry.isMe ? CRAYON_ORANGE : PENCIL_DARK,
     );
 
     ctx.restore();
@@ -274,79 +324,80 @@ export function drawScorePanel(
   const px = pad;
   const py = h - panelH - pad;
 
-  drawBrawlPanel(ctx, px, py, panelW, panelH);
+  drawSketchPanel(ctx, px, py, panelW, panelH, 500);
 
   const score = Math.floor(mySnake.m);
   const length = mySnake.p.length;
 
-  // 스코어 아이콘 (별 모양)
-  drawStarIcon(ctx, px + 22, py + 28, 10, '#FFD700');
+  // 연필 별 아이콘
+  drawSketchStar(ctx, px + 22, py + 28, 10, CRAYON_ORANGE);
 
   // 점수 (대형)
-  ctx.font = 'bold 32px "Inter", sans-serif';
+  ctx.font = 'bold 32px "Patrick Hand", "Inter", sans-serif';
   ctx.textAlign = 'left';
-  drawBoldText(ctx, formatNumber(score), px + 38, py + 36, '#FFFFFF', 4);
+  drawText(ctx, formatNumber(score), px + 38, py + 36, PENCIL_DARK);
 
   // SCORE 레이블
-  ctx.font = 'bold 10px "Inter", sans-serif';
-  drawBoldText(ctx, 'SCORE', px + 38, py + 50, '#B0BEC5', 2);
+  ctx.font = 'bold 10px "Patrick Hand", "Inter", sans-serif';
+  drawText(ctx, 'SCORE', px + 38, py + 50, PENCIL_MEDIUM);
 
   // Length (우측 상단)
   ctx.textAlign = 'right';
-  ctx.font = 'bold 14px "Inter", sans-serif';
-  drawBoldText(ctx, `${length}`, px + panelW - 14, py + 28, '#00D4FF', 3);
+  ctx.font = 'bold 14px "Patrick Hand", "Inter", sans-serif';
+  drawText(ctx, `${length}`, px + panelW - 14, py + 28, CRAYON_BLUE);
 
-  ctx.font = 'bold 9px "Inter", sans-serif';
-  drawBoldText(ctx, 'LEN', px + panelW - 14, py + 40, '#B0BEC5', 2);
+  ctx.font = 'bold 9px "Patrick Hand", "Inter", sans-serif';
+  drawText(ctx, 'LEN', px + panelW - 14, py + 40, PENCIL_MEDIUM);
 
-  // ─── Boost Gauge (두꺼운 바) ───
+  // ─── Boost Gauge — rough 사각형 + 크레용 fill ───
   const barX = px + 14;
   const barY = py + 62;
   const barW = panelW - 28;
   const barH = 14;
   const boostMin = ARENA_CONFIG.minBoostMass;
 
-  // 배경 바 (블랙 아웃라인 + 다크 fill)
-  roundRect(ctx, barX - 2, barY - 2, barW + 4, barH + 4, 6);
-  ctx.fillStyle = '#000000';
+  // 바 배경 — rough 사각형
+  ctx.strokeStyle = PENCIL_MEDIUM;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  const bj = 1.5;
+  ctx.moveTo(barX + (seededRandom(700) - 0.5) * bj, barY + (seededRandom(701) - 0.5) * bj);
+  ctx.lineTo(barX + barW + (seededRandom(702) - 0.5) * bj, barY + (seededRandom(703) - 0.5) * bj);
+  ctx.lineTo(barX + barW + (seededRandom(704) - 0.5) * bj, barY + barH + (seededRandom(705) - 0.5) * bj);
+  ctx.lineTo(barX + (seededRandom(706) - 0.5) * bj, barY + barH + (seededRandom(707) - 0.5) * bj);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(58, 48, 40, 0.04)';
   ctx.fill();
+  ctx.stroke();
 
-  roundRect(ctx, barX, barY, barW, barH, 4);
-  ctx.fillStyle = COLORS.HUD_BOOST_BG;
-  ctx.fill();
-
-  // 채움 바
   const maxDisplayMass = Math.max(100, score * 1.2);
   const fillRatio = Math.min(1, score / maxDisplayMass);
   const fillW = barW * fillRatio;
 
   if (fillW > 3) {
-    roundRect(ctx, barX, barY, fillW, barH, 4);
+    ctx.save();
+    ctx.globalAlpha = 0.6;
     if (score < boostMin) {
-      ctx.fillStyle = COLORS.HUD_BOOST_LOW;
+      ctx.fillStyle = CRAYON_RED;
     } else if (mySnake.b) {
-      const pulse = 0.7 + Math.sin(performance.now() * 0.01) * 0.3;
-      ctx.fillStyle = `rgba(57, 255, 20, ${pulse})`;
+      const pulse = 0.5 + Math.sin(performance.now() * 0.01) * 0.3;
+      ctx.fillStyle = CRAYON_ORANGE;
+      ctx.globalAlpha = pulse;
     } else {
-      ctx.fillStyle = COLORS.HUD_BOOST_BAR;
+      ctx.fillStyle = CRAYON_ORANGE;
     }
-    ctx.fill();
-
-    // 바 내부 하이라이트 (상단 광택)
-    roundRect(ctx, barX + 1, barY + 1, fillW - 2, barH * 0.4, 3);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-    ctx.fill();
+    ctx.fillRect(barX + 1, barY + 1, fillW - 2, barH - 2);
+    ctx.restore();
   }
 
-  // BOOST 레이블
-  ctx.font = 'bold 10px "Inter", sans-serif';
+  ctx.font = 'bold 10px "Patrick Hand", "Inter", sans-serif';
   ctx.textAlign = 'left';
-  const boostColor = score < boostMin ? COLORS.HUD_BOOST_LOW : mySnake.b ? COLORS.HUD_BOOST_BAR : '#B0BEC5';
-  const boostLabel = score < boostMin ? 'BOOST · LOW' : mySnake.b ? 'BOOST · ON' : 'BOOST';
-  drawBoldText(ctx, boostLabel, barX, barY + barH + 14, boostColor, 2);
+  const boostColor = score < boostMin ? CRAYON_RED : mySnake.b ? CRAYON_ORANGE : PENCIL_MEDIUM;
+  const boostLabel = score < boostMin ? 'BOOST \u00b7 LOW' : mySnake.b ? 'BOOST \u00b7 ON' : 'BOOST';
+  drawText(ctx, boostLabel, barX, barY + barH + 14, boostColor);
 }
 
-// ─── 순위 뱃지 (상단 좌측 — 골드 방패 스타일) ───
+// ─── 순위 뱃지 (상단 좌측 — 연필 밑줄 텍스트) ───
 
 export function drawRankBadge(
   ctx: CanvasRenderingContext2D,
@@ -361,86 +412,63 @@ export function drawRankBadge(
 
   if (playerRank > 0) {
     const rankText = `#${playerRank}`;
-    ctx.font = 'bold 20px "Inter", sans-serif';
+    ctx.font = 'bold 24px "Patrick Hand", "Inter", sans-serif';
+    ctx.textAlign = 'left';
+
+    // 크레용 오렌지 텍스트
+    ctx.globalAlpha = 0.75;
+    ctx.fillStyle = CRAYON_ORANGE;
+    ctx.fillText(rankText, x, y + 22);
+    ctx.globalAlpha = 1;
+
+    // 연필 밑줄
     const textW = ctx.measureText(rankText).width;
-    const badgeW = textW + 28;
-    const badgeH = 34;
-
-    // 드롭 섀도우
-    roundRect(ctx, x + 2, y + 2, badgeW, badgeH, 17);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.4)';
-    ctx.fill();
-
-    // 블랙 아웃라인
-    roundRect(ctx, x - 2, y - 2, badgeW + 4, badgeH + 4, 19);
-    ctx.fillStyle = '#000000';
-    ctx.fill();
-
-    // 골드 그라디언트 배경
-    const grad = ctx.createLinearGradient(x, y, x, y + badgeH);
-    grad.addColorStop(0, '#FFD700');
-    grad.addColorStop(1, '#FF8C00');
-    roundRect(ctx, x, y, badgeW, badgeH, 17);
-    ctx.fillStyle = grad;
-    ctx.fill();
-
-    // 내부 하이라이트
-    roundRect(ctx, x + 2, y + 2, badgeW - 4, badgeH * 0.45, 12);
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.fill();
-
-    // 순위 텍스트
-    ctx.font = 'bold 20px "Inter", sans-serif';
-    ctx.textAlign = 'center';
-    drawBoldText(ctx, rankText, x + badgeW / 2, y + 23, '#1A0A00', 0);
+    ctx.strokeStyle = PENCIL_DARK;
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(x, y + 26);
+    ctx.lineTo(x + textW + (seededRandom(800) - 0.5) * 3, y + 26 + (seededRandom(801) - 0.5) * 1.5);
+    ctx.stroke();
 
     // 총 인원
-    ctx.font = 'bold 13px "Inter", sans-serif';
-    ctx.textAlign = 'left';
-    drawBoldText(ctx, `/ ${playerCount}`, x + badgeW + 8, y + 23, '#B0BEC5', 2);
+    ctx.font = 'bold 13px "Patrick Hand", "Inter", sans-serif';
+    drawText(ctx, `/ ${playerCount}`, x + textW + 8, y + 22, PENCIL_MEDIUM);
   }
 
   // 네트워크 정보
-  const infoY = y + (playerRank > 0 ? 52 : 19);
-  ctx.font = 'bold 12px "Inter", sans-serif';
+  const infoY = y + (playerRank > 0 ? 46 : 19);
+  ctx.font = 'bold 12px "Patrick Hand", "Inter", sans-serif';
   ctx.textAlign = 'left';
 
-  const netColor = rtt < 50 ? '#39FF14' : rtt < 100 ? '#FFD700' : '#FF3B3B';
-  drawBoldText(ctx, `${rtt}ms`, pad, infoY, netColor, 2);
-  drawBoldText(ctx, `${fps}fps`, pad + 55, infoY, 'rgba(255, 255, 255, 0.4)', 2);
+  const netColor = rtt < 50 ? CRAYON_GREEN : rtt < 100 ? CRAYON_ORANGE : CRAYON_RED;
+  drawText(ctx, `${rtt}ms`, pad, infoY, netColor);
+  drawText(ctx, `${fps}fps`, pad + 55, infoY, 'rgba(58, 48, 40, 0.3)');
 }
 
 // ─── 아이콘 헬퍼 ───
 
-/** 별 아이콘 (5각형 별) */
-function drawStarIcon(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string): void {
+/** 스케치 별 아이콘 (연필 선) */
+function drawSketchStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, color: string): void {
   ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = 0.7;
   ctx.beginPath();
   for (let i = 0; i < 5; i++) {
-    const angle = (i * 4 * Math.PI) / 5 - Math.PI / 2;
-    const x = cx + Math.cos(angle) * r;
-    const y = cy + Math.sin(angle) * r;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
+    const a = (i * Math.PI * 2) / 5 - Math.PI / 2;
+    const outerX = cx + Math.cos(a) * r + (seededRandom(900 + i) - 0.5) * 1.5;
+    const outerY = cy + Math.sin(a) * r + (seededRandom(910 + i) - 0.5) * 1.5;
+    const innerA = a + Math.PI / 5;
+    const innerX = cx + Math.cos(innerA) * r * 0.45;
+    const innerY = cy + Math.sin(innerA) * r * 0.45;
+    if (i === 0) ctx.moveTo(outerX, outerY);
+    else ctx.lineTo(outerX, outerY);
+    ctx.lineTo(innerX, innerY);
   }
   ctx.closePath();
-
-  // 아웃라인
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 3;
-  ctx.lineJoin = 'round';
   ctx.stroke();
-
-  // 채우기
-  ctx.fillStyle = color;
-  ctx.fill();
-
-  // 하이라이트
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.beginPath();
-  ctx.arc(cx - r * 0.15, cy - r * 0.15, r * 0.3, 0, Math.PI * 2);
-  ctx.fill();
-
   ctx.restore();
 }
 
@@ -463,12 +491,12 @@ export function drawHUD(
   drawEffectHUD(ctx, mySnake, w, h);
 }
 
-// ─── 효과 HUD (하단 중앙) ───
+// ─── 효과 HUD (하단 중앙) — 스케치 ───
 
 const EFFECT_ICONS: Record<number, { label: string; color: string; maxTicks: number }> = {
-  0: { label: '🧲', color: '#9333EA', maxTicks: 100 },
-  1: { label: '⚡', color: '#FACC15', maxTicks: 80 },
-  2: { label: '👻', color: '#06B6D4', maxTicks: 60 },
+  0: { label: '\uD83E\uDDF2', color: CRAYON_YELLOW, maxTicks: 100 },
+  1: { label: '\u26A1', color: CRAYON_BLUE, maxTicks: 80 },
+  2: { label: '\uD83D\uDC7B', color: '#A8A098', maxTicks: 60 },
 };
 
 function drawEffectHUD(
@@ -500,22 +528,22 @@ function drawEffectHUD(
     const secs = (e.remaining / 20).toFixed(1);
     const ratio = Math.min(1, e.remaining / info.maxTicks);
 
-    // 배경
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    roundRect(ctx, x, y, boxW, boxH, 6);
-    ctx.fill();
+    // 종이 배경 + 연필 테두리
+    ctx.fillStyle = 'rgba(245, 240, 232, 0.9)';
+    ctx.fillRect(x, y, boxW, boxH);
+    ctx.strokeStyle = info.color;
+    ctx.lineWidth = 1.2;
+    ctx.strokeRect(x, y, boxW, boxH);
 
-    // 타이머 바
+    // 진행 바 — 크레용 fill
     ctx.fillStyle = info.color;
-    ctx.globalAlpha = 0.7;
-    roundRect(ctx, x + 2, y + boxH - 5, (boxW - 4) * ratio, 3, 2);
-    ctx.fill();
+    ctx.globalAlpha = 0.3;
+    ctx.fillRect(x + 2, y + boxH - 5, (boxW - 4) * ratio, 3);
     ctx.globalAlpha = 1;
 
-    // 아이콘 + 시간
-    ctx.font = 'bold 13px "Inter", sans-serif';
+    ctx.font = 'bold 13px "Patrick Hand", "Inter", sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillStyle = '#FFFFFF';
+    ctx.fillStyle = PENCIL_DARK;
     ctx.fillText(`${info.label} ${secs}s`, x + boxW / 2, y + 17);
   }
 }

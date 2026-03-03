@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * DeathOverlay — 사망 화면 UI (Brawl Stars 스타일 Bold Cartoon)
+ * DeathOverlay — 사망 화면 UI (Crayon / Pencil Sketch 스타일)
  */
 
 import type { DeathPayload } from '@snake-arena/shared';
@@ -21,91 +21,95 @@ export function DeathOverlay({ deathInfo, onRespawn }: DeathOverlayProps) {
         flexDirection: 'column',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(0, 0, 0, 0.85)',
-        backdropFilter: 'blur(6px)',
-        color: '#FFFFFF',
+        backgroundColor: 'rgba(245, 240, 232, 0.94)',
+        color: '#3A3028',
         gap: '1rem',
+        fontFamily: '"Patrick Hand", "Inter", sans-serif',
       }}
     >
-      {/* 타이틀 — 두꺼운 텍스트 */}
+      {/* 타이틀 — 크레용 레드 + 연필 밑줄 */}
       <h2
         style={{
           fontSize: '3rem',
           margin: 0,
-          color: '#FF3B3B',
+          color: '#C75B5B',
           fontWeight: 900,
-          letterSpacing: '0.05em',
-          textShadow: '0 0 20px rgba(255,59,59,0.5), 3px 3px 0 #000, -1px -1px 0 #000, 1px -1px 0 #000, -1px 1px 0 #000',
+          letterSpacing: '0.03em',
           textTransform: 'uppercase',
+          position: 'relative',
         }}
       >
-        YOU DIED!
+        Oh No!
+        <span style={{
+          position: 'absolute',
+          bottom: '-4px',
+          left: '10%',
+          width: '80%',
+          height: '3px',
+          backgroundColor: '#3A3028',
+          opacity: 0.25,
+          transform: 'rotate(-1deg)',
+        }} />
       </h2>
 
       {deathInfo.killer && (
-        <p style={{ margin: 0, color: '#B0BEC5', fontSize: '1.2rem', textShadow: '2px 2px 0 #000' }}>
-          Killed by{' '}
-          <span style={{ color: '#FF6B00', fontWeight: 800 }}>{deathInfo.killer}</span>
+        <p style={{ margin: 0, color: '#6B5E52', fontSize: '1.2rem' }}>
+          Eaten by{' '}
+          <span style={{ color: '#D4914A', fontWeight: 800 }}>{deathInfo.killer}</span>
         </p>
       )}
 
-      {/* 스탯 카드 — 카툰 스타일 */}
+      {/* 스탯 카드 — 종이 패널 + 연필 테두리 */}
       <div
         style={{
           display: 'flex',
           gap: '1.5rem',
           fontSize: '1rem',
           fontWeight: 700,
-          color: '#FFFFFF',
-          backgroundColor: 'rgba(25, 20, 60, 0.9)',
+          color: '#3A3028',
+          backgroundColor: 'rgba(245, 240, 232, 0.95)',
           padding: '1rem 2rem',
-          borderRadius: '14px',
-          border: '3px solid #000',
-          boxShadow: '4px 4px 0 rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.1)',
-          textShadow: '2px 2px 0 #000',
+          borderRadius: '4px',
+          border: '1.5px solid #6B5E52',
         }}
       >
         <span>
           Score:{' '}
-          <span style={{ color: '#FFD700' }}>{deathInfo.score}</span>
+          <span style={{ color: '#D4914A' }}>{deathInfo.score}</span>
         </span>
         <span>
           Kills:{' '}
-          <span style={{ color: '#FF3B3B' }}>{deathInfo.kills}</span>
+          <span style={{ color: '#C75B5B' }}>{deathInfo.kills}</span>
         </span>
         <span>
           Time:{' '}
-          <span style={{ color: '#00D4FF' }}>{deathInfo.duration}s</span>
+          <span style={{ color: '#5B8DAD' }}>{deathInfo.duration}s</span>
         </span>
       </div>
 
-      {/* 버튼 — Brawl Stars 3D 카툰 버튼 */}
+      {/* 버튼 — 크레용 오렌지 + 연필 아웃라인 */}
       <button
         onClick={onRespawn}
         style={{
           marginTop: '0.5rem',
           padding: '0.8rem 3rem',
-          fontSize: '1.2rem',
-          backgroundColor: '#39FF14',
-          color: '#000000',
-          border: '3px solid #000',
-          borderRadius: '16px',
+          fontSize: '1.3rem',
+          backgroundColor: '#D4914A',
+          color: '#F5F0E8',
+          border: '2px solid #3A3028',
+          borderRadius: '4px',
           cursor: 'pointer',
           fontWeight: 900,
-          fontFamily: 'inherit',
+          fontFamily: '"Patrick Hand", "Inter", sans-serif',
           textTransform: 'uppercase',
           letterSpacing: '0.05em',
-          boxShadow: '0 6px 0 #1A8A0A, 0 8px 8px rgba(0,0,0,0.4), inset 0 2px 0 rgba(255,255,255,0.3)',
-          transition: 'transform 100ms, box-shadow 100ms',
-          textShadow: 'none',
+          transition: 'transform 100ms',
         }}
         onMouseDown={(e) => {
-          (e.target as HTMLElement).style.transform = 'translateY(3px)';
-          (e.target as HTMLElement).style.boxShadow = '0 3px 0 #1A8A0A, 0 4px 4px rgba(0,0,0,0.4), inset 0 2px 0 rgba(255,255,255,0.3)';
+          (e.target as HTMLElement).style.transform = 'translateY(2px)';
         }}
         onMouseUp={(e) => {
           (e.target as HTMLElement).style.transform = 'translateY(0)';
-          (e.target as HTMLElement).style.boxShadow = '0 6px 0 #1A8A0A, 0 8px 8px rgba(0,0,0,0.4), inset 0 2px 0 rgba(255,255,255,0.3)';
         }}
       >
         PLAY AGAIN

@@ -29,7 +29,7 @@ export function isValidPlayerName(name: unknown): name is string {
 
 /** 유효한 스킨 ID인지 확인 */
 export function isValidSkinId(skinId: unknown): skinId is number {
-  return typeof skinId === 'number' && Number.isInteger(skinId) && skinId >= 0 && skinId < 12;
+  return typeof skinId === 'number' && Number.isInteger(skinId) && skinId >= 0 && skinId < 24;
 }
 
 /** XSS 방지를 위한 이름 sanitize */

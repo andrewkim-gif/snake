@@ -1,60 +1,84 @@
 /**
- * Background + Boundary 렌더링 — Brawl Stars 스타일
- * 헥사곤 타일 + 존 시스템 (Safe/Battle/Danger) + 패럴랙스 파티클
+ * Background + Boundary 렌더링 — Crayon / Pencil Sketch on Paper
+ * 종이 질감 + 연필 그리드 + 낙서 장식 + 손그림 경계선
  */
 
 import { COLORS } from '@snake-arena/shared';
 import type { Camera } from './types';
 
-// 존 색상 정의
-const ZONE_COLORS = {
-  safe:   { bg: '#152230', tile: 'rgba(25, 45, 65, 0.5)',  edge: 'rgba(40, 70, 100, 0.35)', dot: 'rgba(60, 130, 200, 0.08)' },
-  battle: { bg: '#0F1923', tile: 'rgba(20, 35, 50, 0.4)',  edge: 'rgba(30, 55, 80, 0.25)',  dot: 'rgba(50, 100, 160, 0.06)' },
-  danger: { bg: '#1A0A0A', tile: 'rgba(50, 15, 15, 0.5)',  edge: 'rgba(120, 30, 30, 0.25)', dot: 'rgba(255, 60, 60, 0.08)' },
-} as const;
+// ─── Seeded Random (프레임간 일관성 유지) ───
 
-// 헥사곤 타일 상수
-const HEX_SIZE = 52; // 헥사곤 반지름
-const HEX_H = HEX_SIZE * Math.sqrt(3); // 높이
-const HEX_W = HEX_SIZE * 2;            // 폭
-const COL_W = HEX_SIZE * 1.5;          // 열 간격
+function seededRandom(seed: number): number {
+  const x = Math.sin(seed * 9301 + 49297) * 49271;
+  return x - Math.floor(x);
+}
 
-// 패럴랙스 파티클
-interface BgParticle {
+// ─── 종이 질감 색상 ───
+
+const PAPER = '#F5F0E8';
+const PAPER_GRAIN = '#EDE7DB';
+const PENCIL_LIGHT = '#A89888';
+const PENCIL_MEDIUM = '#6B5E52';
+const PENCIL_DARK = '#3A3028';
+
+// 타일 상수
+const TILE_SIZE = 80;
+
+// 낙서 장식 — deterministic 위치
+const DOODLE_COUNT = 25;
+let doodlePositions: Array<{
+  x: number; y: number; type: 'star' | 'swirl' | 'wave' | 'circle' | 'arrow';
+  size: number; rotation: number; seed: number;
+}> | null = null;
+
+function initDoodles(radius: number): typeof doodlePositions {
+  const doodles: NonNullable<typeof doodlePositions> = [];
+  for (let i = 0; i < DOODLE_COUNT; i++) {
+    const seed = i * 137.508;
+    const dist = (Math.abs(Math.sin(seed * 0.7)) * 0.85 + 0.05) * radius;
+    const angle = seed % (Math.PI * 2);
+    const types = ['star', 'swirl', 'wave', 'circle', 'arrow'] as const;
+    doodles.push({
+      x: Math.cos(angle) * dist,
+      y: Math.sin(angle) * dist,
+      type: types[i % types.length],
+      size: 10 + Math.abs(Math.sin(seed * 1.3)) * 15,
+      rotation: seededRandom(seed) * Math.PI * 2,
+      seed: seed,
+    });
+  }
+  return doodles;
+}
+
+// 파티클 (연필깎기 부스러기, 지우개 가루)
+interface SketchParticle {
   x: number; y: number;
   size: number; alpha: number;
   speed: number; angle: number;
+  type: 'shaving' | 'eraser';
+  rotation: number;
 }
 
-let particles: BgParticle[] | null = null;
+let particles: SketchParticle[] | null = null;
 
-function initParticles(radius: number): BgParticle[] {
-  const pts: BgParticle[] = [];
-  for (let i = 0; i < 50; i++) {
+function initParticles(radius: number): SketchParticle[] {
+  const pts: SketchParticle[] = [];
+  for (let i = 0; i < 35; i++) {
     const r = Math.random() * radius;
     const a = Math.random() * Math.PI * 2;
+    const isShaving = Math.random() < 0.6;
     pts.push({
       x: Math.cos(a) * r,
       y: Math.sin(a) * r,
-      size: 1 + Math.random() * 2.5,
-      alpha: 0.06 + Math.random() * 0.18,
-      speed: 0.08 + Math.random() * 0.2,
+      size: isShaving ? 2 + Math.random() * 3 : 1.5 + Math.random() * 2,
+      alpha: 0.1 + Math.random() * 0.15,
+      speed: 0.02 + Math.random() * 0.05,
       angle: Math.random() * Math.PI * 2,
+      type: isShaving ? 'shaving' : 'eraser',
+      rotation: Math.random() * Math.PI * 2,
     });
   }
   return pts;
-}
-
-/** 헥사곤 경로 생성 (flat-top) */
-function hexPath(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number): void {
-  for (let i = 0; i < 6; i++) {
-    const angle = (Math.PI / 3) * i;
-    const hx = cx + r * Math.cos(angle);
-    const hy = cy + r * Math.sin(angle);
-    if (i === 0) ctx.moveTo(hx, hy);
-    else ctx.lineTo(hx, hy);
-  }
-  ctx.closePath();
 }
 
 export function drawBackground(
@@ -64,148 +88,247 @@ export function drawBackground(
   h: number,
   arenaRadius = 6000,
 ): void {
-  // 카메라 중심으로부터의 거리로 존 판별
-  const distFromCenter = Math.sqrt(cam.x * cam.x + cam.y * cam.y);
-  const ratio = distFromCenter / arenaRadius;
-
-  // 존 기반 색상
-  let bgColor: string;
-  let tileColor: string;
-  let edgeColor: string;
-  let dotColor: string;
-  if (ratio < 0.3) {
-    bgColor = ZONE_COLORS.safe.bg;
-    tileColor = ZONE_COLORS.safe.tile;
-    edgeColor = ZONE_COLORS.safe.edge;
-    dotColor = ZONE_COLORS.safe.dot;
-  } else if (ratio < 0.65) {
-    const t = (ratio - 0.3) / 0.35;
-    bgColor = lerpHex(ZONE_COLORS.safe.bg, ZONE_COLORS.battle.bg, t);
-    tileColor = ZONE_COLORS.battle.tile;
-    edgeColor = ZONE_COLORS.battle.edge;
-    dotColor = ZONE_COLORS.battle.dot;
-  } else if (ratio < 0.8) {
-    const t = (ratio - 0.65) / 0.15;
-    bgColor = lerpHex(ZONE_COLORS.battle.bg, ZONE_COLORS.danger.bg, t);
-    tileColor = ZONE_COLORS.danger.tile;
-    edgeColor = ZONE_COLORS.danger.edge;
-    dotColor = ZONE_COLORS.danger.dot;
-  } else {
-    bgColor = ZONE_COLORS.danger.bg;
-    tileColor = ZONE_COLORS.danger.tile;
-    edgeColor = ZONE_COLORS.danger.edge;
-    dotColor = ZONE_COLORS.danger.dot;
-  }
-
-  // 배경 채우기
-  ctx.fillStyle = bgColor;
+  // 종이 배경
+  ctx.fillStyle = PAPER;
   ctx.fillRect(0, 0, w, h);
 
-  // ── 헥사곤 타일 그리드 ──
-  const hexR = HEX_SIZE * cam.zoom;
-  const margin = hexR * 2;
+  // 종이 질감 그레인 (큰 패턴)
+  const grainSize = 120 * cam.zoom;
+  const grainLeft = cam.x - w / 2 / cam.zoom - 120;
+  const grainTop = cam.y - h / 2 / cam.zoom - 120;
+  const grainRight = cam.x + w / 2 / cam.zoom + 120;
+  const grainBottom = cam.y + h / 2 / cam.zoom + 120;
+  const gColStart = Math.floor(grainLeft / 120);
+  const gColEnd = Math.ceil(grainRight / 120);
+  const gRowStart = Math.floor(grainTop / 120);
+  const gRowEnd = Math.ceil(grainBottom / 120);
 
-  // 월드 좌표에서 보이는 범위
-  const worldLeft = cam.x - w / 2 / cam.zoom - HEX_SIZE * 2;
-  const worldTop = cam.y - h / 2 / cam.zoom - HEX_SIZE * 2;
-  const worldRight = cam.x + w / 2 / cam.zoom + HEX_SIZE * 2;
-  const worldBottom = cam.y + h / 2 / cam.zoom + HEX_SIZE * 2;
-
-  // 타일 시작/끝 열/행 계산
-  const colStart = Math.floor(worldLeft / COL_W) - 1;
-  const colEnd = Math.ceil(worldRight / COL_W) + 1;
-  const rowStart = Math.floor(worldTop / HEX_H) - 1;
-  const rowEnd = Math.ceil(worldBottom / HEX_H) + 1;
-
-  // 타일 채우기 (짝수/홀수 열 체커보드)
-  ctx.beginPath();
-  for (let col = colStart; col <= colEnd; col++) {
-    for (let row = rowStart; row <= rowEnd; row++) {
-      const wx = col * COL_W;
-      const wy = row * HEX_H + (col % 2 !== 0 ? HEX_H * 0.5 : 0);
-      // 체커보드: 매 2번째 타일만 채우기
-      if ((col + row) % 2 !== 0) continue;
+  for (let col = gColStart; col <= gColEnd; col++) {
+    for (let row = gRowStart; row <= gRowEnd; row++) {
+      if ((col + row) % 3 !== 0) continue;
+      const wx = col * 120;
+      const wy = row * 120;
       const sx = (wx - cam.x) * cam.zoom + w / 2;
       const sy = (wy - cam.y) * cam.zoom + h / 2;
-      if (sx < -margin || sx > w + margin || sy < -margin || sy > h + margin) continue;
-      hexPath(ctx, sx, sy, hexR * 0.95);
+      if (sx < -grainSize || sx > w + grainSize || sy < -grainSize || sy > h + grainSize) continue;
+      const seed = col * 1000 + row;
+      const a = seededRandom(seed) * 0.04 + 0.01;
+      ctx.fillStyle = `rgba(210, 200, 185, ${a})`;
+      const gw = grainSize * (0.6 + seededRandom(seed + 1) * 0.4);
+      const gh = grainSize * (0.6 + seededRandom(seed + 2) * 0.4);
+      ctx.fillRect(sx - gw / 2, sy - gh / 2, gw, gh);
     }
   }
-  ctx.fillStyle = tileColor;
-  ctx.fill();
 
-  // 타일 엣지 (모든 타일)
-  ctx.beginPath();
+  // ── 연필 그리드 (wobbly lines) ──
+  const tileS = TILE_SIZE * cam.zoom;
+
+  const worldLeft = cam.x - w / 2 / cam.zoom - TILE_SIZE * 2;
+  const worldTop = cam.y - h / 2 / cam.zoom - TILE_SIZE * 2;
+  const worldRight = cam.x + w / 2 / cam.zoom + TILE_SIZE * 2;
+  const worldBottom = cam.y + h / 2 / cam.zoom + TILE_SIZE * 2;
+
+  const colStart = Math.floor(worldLeft / TILE_SIZE) - 1;
+  const colEnd = Math.ceil(worldRight / TILE_SIZE) + 1;
+  const rowStart = Math.floor(worldTop / TILE_SIZE) - 1;
+  const rowEnd = Math.ceil(worldBottom / TILE_SIZE) + 1;
+
+  // 세로선 — wobbly 연필 라인
+  ctx.strokeStyle = `rgba(168, 152, 136, 0.18)`;
+  ctx.lineWidth = 0.8;
   for (let col = colStart; col <= colEnd; col++) {
-    for (let row = rowStart; row <= rowEnd; row++) {
-      const wx = col * COL_W;
-      const wy = row * HEX_H + (col % 2 !== 0 ? HEX_H * 0.5 : 0);
-      const sx = (wx - cam.x) * cam.zoom + w / 2;
-      const sy = (wy - cam.y) * cam.zoom + h / 2;
-      if (sx < -margin || sx > w + margin || sy < -margin || sy > h + margin) continue;
-      hexPath(ctx, sx, sy, hexR);
+    const wx = col * TILE_SIZE;
+    const sx = (wx - cam.x) * cam.zoom + w / 2;
+    if (sx < -5 || sx > w + 5) continue;
+    ctx.beginPath();
+    const segments = 8;
+    for (let s = 0; s <= segments; s++) {
+      const t = s / segments;
+      const py = t * h;
+      const jitter = (seededRandom(col * 100 + s) - 0.5) * 2.5;
+      if (s === 0) ctx.moveTo(sx + jitter, py);
+      else ctx.lineTo(sx + jitter, py);
     }
+    ctx.stroke();
   }
-  ctx.strokeStyle = edgeColor;
-  ctx.lineWidth = 1;
-  ctx.stroke();
-
-  // 타일 중심 도트 (미묘한 장식)
-  ctx.beginPath();
-  for (let col = colStart; col <= colEnd; col++) {
-    for (let row = rowStart; row <= rowEnd; row++) {
-      const wx = col * COL_W;
-      const wy = row * HEX_H + (col % 2 !== 0 ? HEX_H * 0.5 : 0);
-      if ((col + row) % 3 !== 0) continue; // 1/3만 도트
-      const sx = (wx - cam.x) * cam.zoom + w / 2;
-      const sy = (wy - cam.y) * cam.zoom + h / 2;
-      if (sx < -margin || sx > w + margin || sy < -margin || sy > h + margin) continue;
-      ctx.moveTo(sx + 3 * cam.zoom, sy);
-      ctx.arc(sx, sy, 3 * cam.zoom, 0, Math.PI * 2);
+  // 가로선 — wobbly 연필 라인
+  for (let row = rowStart; row <= rowEnd; row++) {
+    const wy = row * TILE_SIZE;
+    const sy = (wy - cam.y) * cam.zoom + h / 2;
+    if (sy < -5 || sy > h + 5) continue;
+    ctx.beginPath();
+    const segments = 8;
+    for (let s = 0; s <= segments; s++) {
+      const t = s / segments;
+      const px = t * w;
+      const jitter = (seededRandom(row * 100 + s + 5000) - 0.5) * 2.5;
+      if (s === 0) ctx.moveTo(px, sy + jitter);
+      else ctx.lineTo(px, sy + jitter);
     }
+    ctx.stroke();
   }
-  ctx.fillStyle = dotColor;
-  ctx.fill();
 
-  // 패럴랙스 파티클
+  // ── 연필 낙서 장식 ──
+  if (!doodlePositions) doodlePositions = initDoodles(arenaRadius);
+  const doodles = doodlePositions!;
+  for (const d of doodles) {
+    const sx = (d.x - cam.x) * cam.zoom + w / 2;
+    const sy = (d.y - cam.y) * cam.zoom + h / 2;
+    const sr = d.size * cam.zoom;
+    if (sx < -sr * 2 || sx > w + sr * 2 || sy < -sr * 2 || sy > h + sr * 2) continue;
+    drawDoodle(ctx, sx, sy, sr, d.type, d.rotation, d.seed);
+  }
+
+  // 파티클 (연필깎기 부스러기)
   if (!particles) particles = initParticles(arenaRadius);
-  drawParticles(ctx, cam, w, h, particles);
+  drawSketchParticles(ctx, cam, w, h, particles);
 }
 
-function drawParticles(
+/** 낙서 장식 그리기 */
+function drawDoodle(
+  ctx: CanvasRenderingContext2D,
+  x: number, y: number, r: number,
+  type: string, rotation: number, seed: number,
+): void {
+  ctx.save();
+  ctx.translate(x, y);
+  ctx.rotate(rotation);
+  ctx.globalAlpha = 0.08 + seededRandom(seed + 10) * 0.06;
+  ctx.strokeStyle = PENCIL_MEDIUM;
+  ctx.lineWidth = 1.2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+
+  switch (type) {
+    case 'star': {
+      // 5각별 낙서
+      ctx.beginPath();
+      for (let i = 0; i < 5; i++) {
+        const a = (i * Math.PI * 2) / 5 - Math.PI / 2;
+        const outerX = Math.cos(a) * r + (seededRandom(seed + i) - 0.5) * 3;
+        const outerY = Math.sin(a) * r + (seededRandom(seed + i + 10) - 0.5) * 3;
+        const innerA = a + Math.PI / 5;
+        const innerX = Math.cos(innerA) * r * 0.4 + (seededRandom(seed + i + 20) - 0.5) * 2;
+        const innerY = Math.sin(innerA) * r * 0.4 + (seededRandom(seed + i + 30) - 0.5) * 2;
+        if (i === 0) ctx.moveTo(outerX, outerY);
+        else ctx.lineTo(outerX, outerY);
+        ctx.lineTo(innerX, innerY);
+      }
+      ctx.closePath();
+      ctx.stroke();
+      break;
+    }
+    case 'swirl': {
+      // 소용돌이 낙서
+      ctx.beginPath();
+      for (let i = 0; i <= 20; i++) {
+        const t = i / 20;
+        const a = t * Math.PI * 4;
+        const rad = t * r;
+        const px = Math.cos(a) * rad + (seededRandom(seed + i) - 0.5) * 2;
+        const py = Math.sin(a) * rad + (seededRandom(seed + i + 50) - 0.5) * 2;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'wave': {
+      // 물결선
+      ctx.beginPath();
+      for (let i = 0; i <= 12; i++) {
+        const t = i / 12;
+        const px = (t - 0.5) * r * 2;
+        const py = Math.sin(t * Math.PI * 3) * r * 0.4 + (seededRandom(seed + i) - 0.5) * 2;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'circle': {
+      // 손그림 원
+      ctx.beginPath();
+      const segs = 16;
+      for (let i = 0; i <= segs; i++) {
+        const a = (i / segs) * Math.PI * 2;
+        const jx = (seededRandom(seed + i) - 0.5) * 3;
+        const jy = (seededRandom(seed + i + 40) - 0.5) * 3;
+        const px = Math.cos(a) * r * 0.7 + jx;
+        const py = Math.sin(a) * r * 0.7 + jy;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.stroke();
+      break;
+    }
+    case 'arrow': {
+      // 화살표 낙서
+      const len = r * 1.2;
+      ctx.beginPath();
+      ctx.moveTo(-len / 2 + (seededRandom(seed) - 0.5) * 2, (seededRandom(seed + 1) - 0.5) * 2);
+      ctx.lineTo(len / 2 + (seededRandom(seed + 2) - 0.5) * 2, (seededRandom(seed + 3) - 0.5) * 2);
+      ctx.stroke();
+      // 화살 머리
+      ctx.beginPath();
+      ctx.moveTo(len / 2, 0);
+      ctx.lineTo(len / 2 - r * 0.4, -r * 0.3);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(len / 2, 0);
+      ctx.lineTo(len / 2 - r * 0.4, r * 0.3);
+      ctx.stroke();
+      break;
+    }
+  }
+  ctx.restore();
+}
+
+function drawSketchParticles(
   ctx: CanvasRenderingContext2D,
   cam: Camera,
   w: number,
   h: number,
-  pts: BgParticle[],
+  pts: SketchParticle[],
 ): void {
   for (const p of pts) {
     p.x += Math.cos(p.angle) * p.speed;
     p.y += Math.sin(p.angle) * p.speed;
+    p.rotation += 0.005;
 
-    // 패럴랙스: 카메라의 50% 속도
+    // 연필깎기 부스러기: 살짝 아래로
+    if (p.type === 'shaving') {
+      p.y += 0.01;
+      p.angle += Math.sin(performance.now() * 0.001 + p.x) * 0.002;
+    }
+
     const sx = (p.x - cam.x * 0.5) * cam.zoom + w / 2;
     const sy = (p.y - cam.y * 0.5) * cam.zoom + h / 2;
     if (sx < -50 || sx > w + 50 || sy < -50 || sy > h + 50) continue;
 
     ctx.globalAlpha = p.alpha;
-    ctx.fillStyle = '#FFFFFF';
-    ctx.beginPath();
-    ctx.arc(sx, sy, p.size * cam.zoom, 0, Math.PI * 2);
-    ctx.fill();
+
+    if (p.type === 'shaving') {
+      // 연필깎기 부스러기: 작은 곡선 조각
+      ctx.save();
+      ctx.translate(sx, sy);
+      ctx.rotate(p.rotation);
+      ctx.strokeStyle = PENCIL_LIGHT;
+      ctx.lineWidth = 0.8;
+      const s = p.size * cam.zoom;
+      ctx.beginPath();
+      ctx.moveTo(-s, 0);
+      ctx.quadraticCurveTo(0, -s * 0.5, s, s * 0.3);
+      ctx.stroke();
+      ctx.restore();
+    } else {
+      // 지우개 가루: 작은 불규칙 점
+      ctx.fillStyle = 'rgba(237, 231, 219, 0.6)';
+      const s = p.size * cam.zoom;
+      ctx.fillRect(sx - s / 2, sy - s / 2, s, s * 0.7);
+    }
   }
   ctx.globalAlpha = 1;
-}
-
-function lerpHex(a: string, b: string, t: number): string {
-  const ah = parseInt(a.slice(1), 16);
-  const bh = parseInt(b.slice(1), 16);
-  const ar = (ah >> 16) & 0xff, ag = (ah >> 8) & 0xff, ab = ah & 0xff;
-  const br = (bh >> 16) & 0xff, bg = (bh >> 8) & 0xff, bb = bh & 0xff;
-  const r = Math.round(ar + (br - ar) * t);
-  const g = Math.round(ag + (bg - ag) * t);
-  const bVal = Math.round(ab + (bb - ab) * t);
-  return `#${((r << 16) | (g << 8) | bVal).toString(16).padStart(6, '0')}`;
 }
 
 export function drawBoundary(ctx: CanvasRenderingContext2D, cam: Camera, radius: number, w: number, h: number): void {
@@ -213,7 +336,7 @@ export function drawBoundary(ctx: CanvasRenderingContext2D, cam: Camera, radius:
   const cy = (0 - cam.y) * cam.zoom + h / 2;
   const r = radius * cam.zoom;
 
-  // 경계 밖: 어두운 오버레이
+  // 경계 밖: 종이 그레인 어둡게
   ctx.save();
   ctx.beginPath();
   ctx.rect(0, 0, w, h);
@@ -222,26 +345,66 @@ export function drawBoundary(ctx: CanvasRenderingContext2D, cam: Camera, radius:
   ctx.fill();
   ctx.restore();
 
-  // 블랙 두꺼운 외곽
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = '#000000';
-  ctx.lineWidth = 8;
-  ctx.stroke();
+  // 손그림 원 경계선 — 2 pass로 연필 느낌
+  const segments = 64;
 
-  // 레드 경고선
-  ctx.beginPath();
-  ctx.arc(cx, cy, r, 0, Math.PI * 2);
-  ctx.strokeStyle = COLORS.BOUNDARY_WARNING;
-  ctx.lineWidth = 4;
-  ctx.stroke();
-
-  // 글로우
+  // Pass 1: 두꺼운 연필 (흐릿한 언더라인)
   ctx.save();
+  ctx.strokeStyle = `rgba(107, 94, 82, 0.3)`;
+  ctx.lineWidth = 5;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
   ctx.beginPath();
-  ctx.arc(cx, cy, r + 2, 0, Math.PI * 2);
-  ctx.strokeStyle = COLORS.BOUNDARY_GLOW;
-  ctx.lineWidth = 12;
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const seed = i * 7 + 1000;
+    const jitter = (seededRandom(seed) - 0.5) * 12 * cam.zoom;
+    const jitterY = (seededRandom(seed + 1) - 0.5) * 12 * cam.zoom;
+    const px = cx + Math.cos(a) * (r + jitter);
+    const py = cy + Math.sin(a) * (r + jitterY);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
   ctx.stroke();
+  ctx.restore();
+
+  // Pass 2: 가는 연필 (선명한 메인 라인)
+  ctx.save();
+  ctx.strokeStyle = PENCIL_DARK;
+  ctx.lineWidth = 2;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.beginPath();
+  for (let i = 0; i <= segments; i++) {
+    const a = (i / segments) * Math.PI * 2;
+    const seed = i * 7 + 2000;
+    const jitter = (seededRandom(seed) - 0.5) * 8 * cam.zoom;
+    const jitterY = (seededRandom(seed + 1) - 0.5) * 8 * cam.zoom;
+    const px = cx + Math.cos(a) * (r + jitter);
+    const py = cy + Math.sin(a) * (r + jitterY);
+    if (i === 0) ctx.moveTo(px, py);
+    else ctx.lineTo(px, py);
+  }
+  ctx.closePath();
+  ctx.stroke();
+  ctx.restore();
+
+  // 경계 해칭 마크 (짧은 대각선 — 위험 표시)
+  ctx.save();
+  ctx.strokeStyle = `rgba(58, 48, 40, 0.12)`;
+  ctx.lineWidth = 1.2;
+  const hashCount = 32;
+  for (let i = 0; i < hashCount; i++) {
+    const a = (i / hashCount) * Math.PI * 2;
+    const px = cx + Math.cos(a) * (r + 10 * cam.zoom);
+    const py = cy + Math.sin(a) * (r + 10 * cam.zoom);
+    if (px < -20 || px > w + 20 || py < -20 || py > h + 20) continue;
+    const hLen = 8 * cam.zoom;
+    ctx.beginPath();
+    ctx.moveTo(px - hLen * 0.5, py - hLen * 0.5);
+    ctx.lineTo(px + hLen * 0.5, py + hLen * 0.5);
+    ctx.stroke();
+  }
   ctx.restore();
 }
