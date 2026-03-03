@@ -27,75 +27,74 @@ function darkenHex(hex: string, amount: number): string {
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
-/* 로비 뱀 캐릭터 — 게임 렌더링과 동일: 플랫 fill + 손그림 stroke 아웃라인 + 큰 귀여운 눈 */
+/* 로비 뱀 캐릭터 — 균형잡힌 비율 + 확실한 아웃라인 stroke */
 function SnakeCharacter({ color, secondaryColor, size = 120, eyeStyle = 'default' }: {
   color: string; secondaryColor: string; size?: number; eyeStyle?: string;
 }) {
-  const outline = darkenHex(color, 0.4);
-  const sw = 1.8; // stroke width
+  const outline = P.pencilDark; // 완전 검은색 아웃라인 — 손그림 느낌
+  const sw = 2.2;
 
   return (
     <svg width={size} height={size} viewBox="0 0 100 100">
-      {/* 바디 — 플랫 fill S-curve + 손그림 stroke 아웃라인 위에 */}
+      {/* 바디 — 플랫 fill + 확실한 아웃라인 stroke */}
       <path
-        d="M 24 78 Q 30 65, 38 58 Q 46 51, 54 46 Q 58 43, 58 38"
-        stroke={color} strokeWidth="14" fill="none" strokeLinecap="round" strokeLinejoin="round"
+        d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
+        stroke={color} strokeWidth="15" fill="none" strokeLinecap="round" strokeLinejoin="round"
       />
-      {/* 손그림 아웃라인 stroke (게임의 drawHanddrawnStroke와 동일) */}
       <path
-        d="M 24 78 Q 30 65, 38 58 Q 46 51, 54 46 Q 58 43, 58 38"
+        d="M 22 82 Q 28 68, 36 60 Q 44 52, 52 47 Q 56 44, 56 38"
         stroke={outline} strokeWidth={sw} fill="none" strokeLinecap="round" strokeLinejoin="round"
-        opacity="0.85"
       />
-      {/* 꼬리 끝 점 */}
-      <circle cx="24" cy="78" r="3.5" fill={color} />
-      <circle cx="24" cy="78" r="3.5" fill="none" stroke={outline} strokeWidth={sw * 0.8} opacity="0.85" />
 
-      {/* 머리 — 플랫 원 fill + 손그림 stroke (게임의 round head와 동일) */}
-      <circle cx="60" cy="30" r="15" fill={color} />
-      <circle cx="60" cy="30" r="15" fill="none" stroke={outline} strokeWidth={sw} opacity="0.85" />
+      {/* 꼬리 끝 */}
+      <circle cx="22" cy="82" r="4" fill={color} />
+      <circle cx="22" cy="82" r="4" fill="none" stroke={outline} strokeWidth={sw * 0.7} />
 
-      {/* 눈 — 게임과 동일: 큰 흰자 + 동공 + 하이라이트 */}
+      {/* 머리 — r=10 (바디 15에 맞는 비율, headR = thickness * 0.6) */}
+      <circle cx="56" cy="30" r="11" fill={color} />
+      <circle cx="56" cy="30" r="11" fill="none" stroke={outline} strokeWidth={sw} />
+
+      {/* 눈 */}
       {eyeStyle === 'dot' && <>
-        <circle cx="56" cy="27" r="3.5" fill={P.pencilDark} />
-        <circle cx="66" cy="27" r="3.5" fill={P.pencilDark} />
-        <circle cx="55" cy="25.8" r="1.2" fill="#FFF" />
-        <circle cx="65" cy="25.8" r="1.2" fill="#FFF" />
+        <circle cx="53" cy="28" r="2.5" fill={P.pencilDark} />
+        <circle cx="61" cy="28" r="2.5" fill={P.pencilDark} />
+        <circle cx="52.3" cy="27" r="0.9" fill="#FFF" />
+        <circle cx="60.3" cy="27" r="0.9" fill="#FFF" />
       </>}
       {(eyeStyle === 'default' || eyeStyle === 'cute') && <>
-        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <circle cx="66" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <circle cx="57" cy="27.5" r="2.8" fill={P.pencilDark} />
-        <circle cx="67" cy="27.5" r="2.8" fill={P.pencilDark} />
-        <circle cx="56" cy="26" r="1.1" fill="#FFF" />
-        <circle cx="66" cy="26" r="1.1" fill="#FFF" />
+        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <circle cx="61" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <circle cx="54" cy="28.5" r="2.2" fill={P.pencilDark} />
+        <circle cx="62" cy="28.5" r="2.2" fill={P.pencilDark} />
+        <circle cx="53.2" cy="27.2" r="0.9" fill="#FFF" />
+        <circle cx="61.2" cy="27.2" r="0.9" fill="#FFF" />
       </>}
       {eyeStyle === 'angry' && <>
-        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <circle cx="66" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <circle cx="57" cy="28" r="2.8" fill={P.pencilDark} />
-        <circle cx="67" cy="28" r="2.8" fill={P.pencilDark} />
-        <circle cx="56" cy="26.5" r="1.1" fill="#FFF" />
-        <circle cx="66" cy="26.5" r="1.1" fill="#FFF" />
-        <line x1="52" y1="22" x2="59" y2="24" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
-        <line x1="70" y1="24" x2="63" y2="22" stroke={P.pencilDark} strokeWidth="2" strokeLinecap="round" />
+        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <circle cx="61" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <circle cx="54" cy="29" r="2.2" fill={P.pencilDark} />
+        <circle cx="62" cy="29" r="2.2" fill={P.pencilDark} />
+        <circle cx="53.2" cy="27.5" r="0.9" fill="#FFF" />
+        <circle cx="61.2" cy="27.5" r="0.9" fill="#FFF" />
+        <line x1="50" y1="24" x2="55.5" y2="25.5" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
+        <line x1="64" y1="25.5" x2="58.5" y2="24" stroke={P.pencilDark} strokeWidth="1.8" strokeLinecap="round" />
       </>}
       {eyeStyle === 'cool' && <>
-        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <circle cx="66" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <rect x="51" y="23" width="10" height="5" rx="1.5" fill={P.pencilDark} />
-        <rect x="61" y="23" width="10" height="5" rx="1.5" fill={P.pencilDark} />
-        <line x1="60.5" y1="25" x2="61.5" y2="25" stroke={P.pencilDark} strokeWidth="1.5" />
+        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <circle cx="61" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <rect x="49.5" y="25.5" width="7" height="3.8" rx="1" fill={P.pencilDark} />
+        <rect x="57.5" y="25.5" width="7" height="3.8" rx="1" fill={P.pencilDark} />
+        <line x1="56.3" y1="27" x2="57.7" y2="27" stroke={P.pencilDark} strokeWidth="1.2" />
       </>}
       {eyeStyle === 'wink' && <>
-        <circle cx="56" cy="27" r="5" fill="#FFF" stroke={P.pencilDark} strokeWidth={sw * 0.8} />
-        <circle cx="57" cy="27.5" r="2.8" fill={P.pencilDark} />
-        <circle cx="56" cy="26" r="1.1" fill="#FFF" />
-        <path d="M 62 28 Q 66 24 70 28" stroke={P.pencilDark} strokeWidth="2" fill="none" strokeLinecap="round" />
+        <circle cx="53" cy="28" r="4" fill="#FFF" stroke={P.pencilDark} strokeWidth="1.3" />
+        <circle cx="54" cy="28.5" r="2.2" fill={P.pencilDark} />
+        <circle cx="53.2" cy="27.2" r="0.9" fill="#FFF" />
+        <path d="M 58 29 Q 61 25.5 64 29" stroke={P.pencilDark} strokeWidth="1.8" fill="none" strokeLinecap="round" />
       </>}
 
-      {/* 입 — 귀여운 작은 미소 */}
-      <path d="M 57 35 Q 61 38 65 35" stroke={P.pencilDark} strokeWidth="1.2" fill="none" strokeLinecap="round" opacity="0.6" />
+      {/* 입 — 작은 미소 */}
+      <path d="M 53.5 34 Q 56.5 36.5 59.5 34" stroke={P.pencilDark} strokeWidth="1" fill="none" strokeLinecap="round" opacity="0.5" />
     </svg>
   );
 }

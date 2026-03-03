@@ -339,7 +339,7 @@ export function drawSnakes(
     }
 
     const tailEffect = skin.tailEffect ?? 'none';
-    const outlineColor = darkenColor(skin.primaryColor, 0.4);
+    const outlineColor = PENCIL_DARK; // 검정 아웃라인 — 손그림 느낌
     const strokeW = Math.max(1.5, 2 * cam.zoom);
 
     // ── 1) 플랫 크레용 바디 (fill 먼저) ──
