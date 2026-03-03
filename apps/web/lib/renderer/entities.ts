@@ -127,11 +127,12 @@ export function drawOrbs(
   h: number,
   myHeadScreen?: { x: number; y: number } | null,
   collectRadius = ARENA_CONFIG.collectRadius,
+  now = performance.now(),
 ): void {
   const groups = new Map<number, Array<{ sx: number; sy: number; r: number; shape: OrbShape; rot: number; seed: number }>>();
   const specialOrbs: Array<{ sx: number; sy: number; r: number; t: number; seed: number }> = [];
   const attractRadius = collectRadius * cam.zoom * 2.5;
-  const tick = performance.now() * 0.001;
+  const tick = now * 0.001;
 
   for (const orb of orbs) {
     let sx = (orb.x - cam.x) * cam.zoom + w / 2;
@@ -174,19 +175,17 @@ export function drawOrbs(
   for (const [colorIdx, orbList] of groups) {
     const color = ORB_COLORS[colorIdx] ?? ORB_COLORS[0];
 
-    // 크레용 fill
+    // 플랫 fill
     ctx.fillStyle = color;
-    ctx.globalAlpha = 0.7;
     ctx.beginPath();
     for (const { sx, sy, r, shape, rot } of orbList) {
       orbShapePath(ctx, shape, sx, sy, r, rot);
     }
     ctx.fill();
-    ctx.globalAlpha = 1;
 
-    // 연필 아웃라인 (wobbly)
+    // 손그림 아웃라인 stroke
     ctx.strokeStyle = PENCIL_DARK;
-    ctx.lineWidth = 1.2;
+    ctx.lineWidth = Math.max(1, 1.2 * cam.zoom);
     for (const { sx, sy, r, shape, rot, seed } of orbList) {
       if (shape === 'circle') {
         wobblyCirclePath(ctx, sx, sy, r, seed, 8);
@@ -200,7 +199,7 @@ export function drawOrbs(
   }
 
   // 특수 오브 — 스케치 스타일
-  const tickFast = performance.now() * 0.06;
+  const tickFast = now * 0.06;
   for (const { sx, sy, r, t, seed } of specialOrbs) {
     const color = ORB_COLORS[t === 3 ? 12 : t === 4 ? 13 : t === 5 ? 14 : 15] ?? '#C9A84C';
 
@@ -208,8 +207,7 @@ export function drawOrbs(
     const baseAlpha = t === 5 ? 0.5 + Math.sin(tickFast * 0.15) * 0.2 : 1;
     ctx.globalAlpha = baseAlpha;
 
-    // 크레용 fill
-    ctx.globalAlpha = baseAlpha * 0.7;
+    // 플랫 fill
     if (t === 6) {
       // mega = 회전 별
       ctx.save();
@@ -236,16 +234,12 @@ export function drawOrbs(
       wobblyCirclePath(ctx, sx, sy, r, seed, 10);
       ctx.fill();
     }
+    // 손그림 아웃라인 stroke
     ctx.globalAlpha = baseAlpha;
-
-    // 연필 아웃라인
     ctx.strokeStyle = PENCIL_DARK;
-    ctx.lineWidth = 1.5;
+    ctx.lineWidth = Math.max(1.2, 1.5 * cam.zoom);
     wobblyCirclePath(ctx, sx, sy, r + 1, seed + 100, 10);
     ctx.stroke();
-
-    // 해칭 음영
-    drawHatching(ctx, sx, sy, r, seed, PENCIL_DARK);
 
     // magnet: 연필 점선 궤도
     if (t === 3) {
@@ -266,31 +260,30 @@ export function drawOrbs(
 
 let boostGlowPhase = 0;
 
-/** 스케치 패스 그리기 — 2-pass wobbly 선 */
-function drawSketchPath(
+/** 손그림 스트로크 아웃라인 — 바디 위에 연필선 */
+function drawHanddrawnStroke(
   ctx: CanvasRenderingContext2D,
   pts: { x: number; y: number }[],
   color: string,
   lineWidth: number,
   seed: number,
-  passes = 2,
 ): void {
-  for (let pass = 0; pass < passes; pass++) {
-    ctx.strokeStyle = color;
-    ctx.lineWidth = pass === 0 ? lineWidth : lineWidth * 0.6;
-    ctx.globalAlpha = pass === 0 ? 0.4 : 0.8;
-    ctx.lineCap = 'round';
-    ctx.lineJoin = 'round';
-    ctx.beginPath();
-    for (let i = 0; i < pts.length; i++) {
-      const jx = (seededRandom(seed + i * 3 + pass * 1000) - 0.5) * 2;
-      const jy = (seededRandom(seed + i * 3 + 1 + pass * 1000) - 0.5) * 2;
-      if (i === 0) ctx.moveTo(pts[i].x + jx, pts[i].y + jy);
-      else ctx.lineTo(pts[i].x + jx, pts[i].y + jy);
-    }
-    ctx.stroke();
+  ctx.save();
+  ctx.strokeStyle = color;
+  ctx.lineWidth = lineWidth;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
+  ctx.globalAlpha = 0.85;
+  // wobbly 선 — 각 점에 살짝 jitter
+  ctx.beginPath();
+  for (let i = 0; i < pts.length; i++) {
+    const jx = (seededRandom(seed + i * 7) - 0.5) * 1.8;
+    const jy = (seededRandom(seed + i * 7 + 3) - 0.5) * 1.8;
+    if (i === 0) ctx.moveTo(pts[i].x + jx, pts[i].y + jy);
+    else ctx.lineTo(pts[i].x + jx, pts[i].y + jy);
   }
-  ctx.globalAlpha = 1;
+  ctx.stroke();
+  ctx.restore();
 }
 
 export function drawSnakes(
@@ -301,6 +294,7 @@ export function drawSnakes(
   h: number,
   myId: string | null,
   dt = 0.016,
+  now = performance.now(),
 ): void {
   boostGlowPhase = (boostGlowPhase + dt * 6) % (Math.PI * 2);
   const halfW = w / 2;
@@ -345,21 +339,20 @@ export function drawSnakes(
     }
 
     const tailEffect = skin.tailEffect ?? 'none';
-
-    // ── 1) 연필 아웃라인 (darken 40% + 2-pass wobbly) ──
     const outlineColor = darkenColor(skin.primaryColor, 0.4);
-    drawSketchPath(ctx, screenPts, outlineColor, outlineWidth, snakeSeed, 2);
+    const strokeW = Math.max(1.5, 2 * cam.zoom);
 
-    // ── 2) 크레용 바디 ──
+    // ── 1) 플랫 크레용 바디 (fill 먼저) ──
     const pattern = skin.pattern ?? 'solid';
     if (pattern === 'striped') {
       for (let i = 0; i < screenPts.length - 1; i++) {
         const color = Math.floor(i / 3) % 2 === 0 ? skin.primaryColor : skin.secondaryColor;
         const alpha = tailEffect === 'fade' ? 1 - (i / screenPts.length) * 0.7 : 1;
         ctx.save();
-        ctx.globalAlpha *= alpha * 0.85;
+        ctx.globalAlpha *= alpha;
         ctx.fillStyle = color;
-        wobblyCirclePath(ctx, screenPts[i].x, screenPts[i].y, thickness * 0.5, snakeSeed + i, 8);
+        ctx.beginPath();
+        ctx.arc(screenPts[i].x, screenPts[i].y, thickness * 0.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
@@ -368,16 +361,16 @@ export function drawSnakes(
         const t = screenPts.length > 1 ? i / (screenPts.length - 1) : 0;
         const alpha = tailEffect === 'fade' ? 1 - t * 0.7 : 1;
         ctx.save();
-        ctx.globalAlpha *= alpha * 0.85;
+        ctx.globalAlpha *= alpha;
         ctx.fillStyle = lerpColor(skin.primaryColor, skin.secondaryColor, t);
-        wobblyCirclePath(ctx, screenPts[i].x, screenPts[i].y, thickness * 0.5, snakeSeed + i, 8);
+        ctx.beginPath();
+        ctx.arc(screenPts[i].x, screenPts[i].y, thickness * 0.5, 0, Math.PI * 2);
         ctx.fill();
         ctx.restore();
       }
     } else {
-      // solid + dotted
-      ctx.save();
-      ctx.globalAlpha = 0.85;
+      // solid + dotted — 플랫 fill
+      ctx.fillStyle = skin.primaryColor;
       ctx.strokeStyle = skin.primaryColor;
       ctx.lineWidth = thickness;
       ctx.lineCap = 'round';
@@ -385,28 +378,18 @@ export function drawSnakes(
       drawSmoothPath(ctx, screenPts);
       ctx.stroke();
 
-      if (snake.p.length > 2) {
-        ctx.strokeStyle = skin.secondaryColor;
-        ctx.lineWidth = thickness * 0.35;
-        drawSmoothPath(ctx, screenPts);
-        ctx.stroke();
-      }
-      ctx.restore();
-
       if (pattern === 'dotted') {
         ctx.fillStyle = skin.secondaryColor;
         for (let i = 0; i < screenPts.length; i += 4) {
-          wobblyCirclePath(ctx, screenPts[i].x, screenPts[i].y, thickness * 0.18, snakeSeed + i, 6);
+          ctx.beginPath();
+          ctx.arc(screenPts[i].x, screenPts[i].y, thickness * 0.18, 0, Math.PI * 2);
           ctx.fill();
         }
       }
     }
 
-    // ── 해칭 음영 (볼터치/하이라이트 대체) ──
-    if (screenPts.length > 3) {
-      const mid = Math.floor(screenPts.length / 2);
-      drawHatching(ctx, screenPts[mid].x, screenPts[mid].y, thickness * 0.6, snakeSeed + 200, darkenColor(skin.primaryColor, 0.3));
-    }
+    // ── 2) 손그림 아웃라인 스트로크 (fill 위에 그려서 선이 보임) ──
+    drawHanddrawnStroke(ctx, screenPts, outlineColor, strokeW, snakeSeed);
 
     // ── 꼬리 이펙트: spark (연필 십자) ──
     if (tailEffect === 'spark' && screenPts.length > 1) {
@@ -448,7 +431,7 @@ export function drawSnakes(
       ctx.restore();
     }
 
-    // ── 꼬리 이펙트: bubble (연필 원) ──
+    // ── 꼬리 이펙트: bubble (연필 원) — now 파라미터 사용 ──
     if (tailEffect === 'bubble' && screenPts.length > 2) {
       ctx.save();
       const tail = screenPts[screenPts.length - 1];
@@ -457,8 +440,8 @@ export function drawSnakes(
       ctx.globalAlpha = 0.15;
       for (let j = 0; j < 4; j++) {
         const seed = snakeSeed + j * 37;
-        const ox = Math.sin(seed + performance.now() * 0.003) * thickness * 0.8;
-        const oy = Math.cos(seed * 1.5 + performance.now() * 0.002) * thickness * 0.6;
+        const ox = Math.sin(seed + now * 0.003) * thickness * 0.8;
+        const oy = Math.cos(seed * 1.5 + now * 0.002) * thickness * 0.6;
         const bubbleR = (2 + seededRandom(seed) * 2) * cam.zoom;
         wobblyCirclePath(ctx, tail.x + ox, tail.y + oy, bubbleR, seed + 500, 6);
         ctx.stroke();
@@ -466,19 +449,16 @@ export function drawSnakes(
       ctx.restore();
     }
 
-    // ── 머리 (8각형 jitter polygon) ──
-    const headR = thickness * 0.55;
+    // ── 머리 (플랫 fill + 손그림 stroke 아웃라인) ──
+    const headR = thickness * 0.6;
     const headShape = skin.headShape ?? 'round';
-
-    // 머리 아웃라인 — 연필
-    const headOutlineColor = darkenColor(skin.primaryColor, 0.4);
 
     if (headShape === 'diamond') {
       ctx.save();
       ctx.translate(head.x, head.y);
       ctx.rotate(snake.h);
-      // 아웃라인
-      ctx.fillStyle = headOutlineColor;
+      // 플랫 fill
+      ctx.fillStyle = skin.primaryColor;
       ctx.beginPath();
       ctx.moveTo(headR * 1.3, 0);
       ctx.quadraticCurveTo(headR * 0.3, headR * 0.8, 0, headR * 0.8);
@@ -487,25 +467,16 @@ export function drawSnakes(
       ctx.quadraticCurveTo(headR * 0.3, -headR * 0.8, headR * 1.3, 0);
       ctx.closePath();
       ctx.fill();
-      // 크레용 fill
-      ctx.globalAlpha = 0.85;
-      ctx.fillStyle = skin.primaryColor;
-      const s = 0.82;
-      ctx.beginPath();
-      ctx.moveTo(headR * 1.3 * s, 0);
-      ctx.quadraticCurveTo(headR * 0.3 * s, headR * 0.8 * s, 0, headR * 0.8 * s);
-      ctx.quadraticCurveTo(-headR * 0.5 * s, headR * 0.3 * s, -headR * 0.4 * s, 0);
-      ctx.quadraticCurveTo(-headR * 0.5 * s, -headR * 0.3 * s, 0, -headR * 0.8 * s);
-      ctx.quadraticCurveTo(headR * 0.3 * s, -headR * 0.8 * s, headR * 1.3 * s, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      // 손그림 stroke
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = strokeW;
+      ctx.stroke();
       ctx.restore();
     } else if (headShape === 'arrow') {
       ctx.save();
       ctx.translate(head.x, head.y);
       ctx.rotate(snake.h);
-      ctx.fillStyle = headOutlineColor;
+      ctx.fillStyle = skin.primaryColor;
       ctx.beginPath();
       ctx.moveTo(headR * 1.5, 0);
       ctx.quadraticCurveTo(headR * 0.2, headR * 0.9, -headR * 0.3, headR * 0.7);
@@ -513,28 +484,23 @@ export function drawSnakes(
       ctx.quadraticCurveTo(headR * 0.2, -headR * 0.9, headR * 1.5, 0);
       ctx.closePath();
       ctx.fill();
-      ctx.globalAlpha = 0.85;
-      ctx.fillStyle = skin.primaryColor;
-      const s = 0.8;
-      ctx.beginPath();
-      ctx.moveTo(headR * 1.5 * s, 0);
-      ctx.quadraticCurveTo(headR * 0.2 * s, headR * 0.9 * s, -headR * 0.3 * s, headR * 0.7 * s);
-      ctx.quadraticCurveTo(headR * 0.1 * s, 0, -headR * 0.3 * s, -headR * 0.7 * s);
-      ctx.quadraticCurveTo(headR * 0.2 * s, -headR * 0.9 * s, headR * 1.5 * s, 0);
-      ctx.closePath();
-      ctx.fill();
-      ctx.globalAlpha = 1;
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = strokeW;
+      ctx.stroke();
       ctx.restore();
     } else {
-      // round — wobbly 8각형
-      ctx.fillStyle = headOutlineColor;
-      wobblyCirclePath(ctx, head.x, head.y, headR + 2 * cam.zoom, snakeSeed + 300, 8);
-      ctx.fill();
-      ctx.globalAlpha = 0.85;
+      // round — 플랫 원 + 손그림 stroke
       ctx.fillStyle = skin.primaryColor;
-      wobblyCirclePath(ctx, head.x, head.y, headR, snakeSeed + 400, 8);
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, headR, 0, Math.PI * 2);
       ctx.fill();
-      ctx.globalAlpha = 1;
+      // 손그림 아웃라인 (wobbly circle stroke)
+      ctx.strokeStyle = outlineColor;
+      ctx.lineWidth = strokeW;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      wobblyCirclePath(ctx, head.x, head.y, headR, snakeSeed + 300, 10);
+      ctx.stroke();
     }
 
     // ── 눈 (연필 스타일 — 반짝 하이라이트 제거) ──
@@ -590,7 +556,7 @@ export function drawSnakes(
   }
 }
 
-/** 연필 스케치 눈 — 심플 점/원 */
+/** 손그림 귀여운 눈 — 큰 흰자 + 동공 + 하이라이트 점 */
 function drawEyes(
   ctx: CanvasRenderingContext2D,
   head: { x: number; y: number },
@@ -598,83 +564,106 @@ function drawEyes(
   angle: number,
   eyeStyle: string,
   zoom: number,
-  snakeSeed: number,
+  _snakeSeed: number,
 ): void {
-  const eyeR = thickness * 0.35;
-  const eyeOff = thickness * 0.28;
+  const eyeR = thickness * 0.38;
+  const eyeOff = thickness * 0.3;
   const perpX = -Math.sin(angle);
   const perpY = Math.cos(angle);
   const fwdX = Math.cos(angle);
   const fwdY = Math.sin(angle);
 
-  const eyeBaseX = head.x + fwdX * thickness * 0.15;
-  const eyeBaseY = head.y + fwdY * thickness * 0.15;
+  const eyeBaseX = head.x + fwdX * thickness * 0.18;
+  const eyeBaseY = head.y + fwdY * thickness * 0.18;
 
   const leftEyeX = eyeBaseX + perpX * eyeOff;
   const leftEyeY = eyeBaseY + perpY * eyeOff;
   const rightEyeX = eyeBaseX - perpX * eyeOff;
   const rightEyeY = eyeBaseY - perpY * eyeOff;
 
-  const pupilDx = fwdX * eyeR * 0.2;
-  const pupilDy = fwdY * eyeR * 0.2;
+  const pupilDx = fwdX * eyeR * 0.15;
+  const pupilDy = fwdY * eyeR * 0.15;
+  const sw = Math.max(1.2, 1.5 * zoom);
 
-  // ── dot 눈: 연필 점 ──
+  // ── dot 눈: 큰 귀여운 점 ──
   if (eyeStyle === 'dot') {
     ctx.fillStyle = PENCIL_DARK;
     ctx.beginPath();
-    ctx.arc(leftEyeX + pupilDx, leftEyeY + pupilDy, eyeR * 0.45, 0, Math.PI * 2);
+    ctx.arc(leftEyeX + pupilDx, leftEyeY + pupilDy, eyeR * 0.55, 0, Math.PI * 2);
     ctx.fill();
     ctx.beginPath();
-    ctx.arc(rightEyeX + pupilDx, rightEyeY + pupilDy, eyeR * 0.45, 0, Math.PI * 2);
+    ctx.arc(rightEyeX + pupilDx, rightEyeY + pupilDy, eyeR * 0.55, 0, Math.PI * 2);
+    ctx.fill();
+    // 하이라이트 점 (귀여움 포인트)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(leftEyeX + pupilDx - eyeR * 0.15, leftEyeY + pupilDy - eyeR * 0.15, eyeR * 0.18, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.beginPath();
+    ctx.arc(rightEyeX + pupilDx - eyeR * 0.15, rightEyeY + pupilDy - eyeR * 0.15, eyeR * 0.18, 0, Math.PI * 2);
     ctx.fill();
     return;
   }
 
-  // ── wink 눈: 왼쪽 원 + 오른쪽 ^자 ──
+  // ── wink 눈: 큰 왼쪽 + ^자 오른쪽 ──
   if (eyeStyle === 'wink') {
-    // 왼쪽: 연필 원
+    // 왼쪽: 큰 흰자 + 동공
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(leftEyeX, leftEyeY, eyeR, 0, Math.PI * 2);
+    ctx.fill();
     ctx.strokeStyle = PENCIL_DARK;
-    ctx.lineWidth = 1.5 * zoom;
-    wobblyCirclePath(ctx, leftEyeX, leftEyeY, eyeR, snakeSeed + 500, 8);
+    ctx.lineWidth = sw;
     ctx.stroke();
     ctx.fillStyle = PENCIL_DARK;
     ctx.beginPath();
-    ctx.arc(leftEyeX + pupilDx, leftEyeY + pupilDy, eyeR * 0.45, 0, Math.PI * 2);
+    ctx.arc(leftEyeX + pupilDx, leftEyeY + pupilDy, eyeR * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(leftEyeX + pupilDx - eyeR * 0.12, leftEyeY + pupilDy - eyeR * 0.15, eyeR * 0.16, 0, Math.PI * 2);
     ctx.fill();
 
-    // 오른쪽: ^자
+    // 오른쪽: ^자 (감은 눈)
     ctx.strokeStyle = PENCIL_DARK;
-    ctx.lineWidth = 2 * zoom;
+    ctx.lineWidth = sw * 1.5;
     ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(rightEyeX - eyeR * 0.5, rightEyeY + eyeR * 0.1);
-    ctx.quadraticCurveTo(rightEyeX, rightEyeY - eyeR * 0.4, rightEyeX + eyeR * 0.5, rightEyeY + eyeR * 0.1);
+    ctx.moveTo(rightEyeX - eyeR * 0.6, rightEyeY + eyeR * 0.15);
+    ctx.quadraticCurveTo(rightEyeX, rightEyeY - eyeR * 0.5, rightEyeX + eyeR * 0.6, rightEyeY + eyeR * 0.15);
     ctx.stroke();
     return;
   }
 
   // ── 기본 눈 (default/angry/cute/cool) ──
   for (const [ex, ey] of [[leftEyeX, leftEyeY], [rightEyeX, rightEyeY]]) {
-    // 흰자 — 종이색 + 연필 원
-    ctx.fillStyle = PAPER;
-    wobblyCirclePath(ctx, ex, ey, eyeR, snakeSeed + 600 + ex, 8);
+    // 큰 흰자
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(ex, ey, eyeR, 0, Math.PI * 2);
     ctx.fill();
+    // 손그림 아웃라인
     ctx.strokeStyle = PENCIL_DARK;
-    ctx.lineWidth = 1.2 * zoom;
+    ctx.lineWidth = sw;
     ctx.stroke();
 
-    // 동공 — 연필 점
+    // 동공
     ctx.fillStyle = PENCIL_DARK;
     ctx.beginPath();
-    ctx.arc(ex + pupilDx, ey + pupilDy, eyeR * 0.45, 0, Math.PI * 2);
+    ctx.arc(ex + pupilDx, ey + pupilDy, eyeR * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 하이라이트 점 (귀여움)
+    ctx.fillStyle = '#FFFFFF';
+    ctx.beginPath();
+    ctx.arc(ex + pupilDx - eyeR * 0.12, ey + pupilDy - eyeR * 0.15, eyeR * 0.16, 0, Math.PI * 2);
     ctx.fill();
   }
 
   // ── 눈 스타일별 추가 ──
   if (eyeStyle === 'angry') {
-    // V자 눈썹 — 연필
     ctx.strokeStyle = PENCIL_DARK;
-    ctx.lineWidth = 2 * zoom;
+    ctx.lineWidth = sw * 1.5;
     ctx.lineCap = 'round';
     for (const [ex, ey, side] of [[leftEyeX, leftEyeY, 1], [rightEyeX, rightEyeY, -1]] as const) {
       ctx.beginPath();
@@ -683,18 +672,31 @@ function drawEyes(
       ctx.stroke();
     }
   } else if (eyeStyle === 'cute') {
-    // 귀여움 — 없음 (하이라이트 제거, 심플 유지)
+    // 더 큰 하이라이트 — 반짝반짝
+    ctx.fillStyle = '#FFFFFF';
+    for (const [ex, ey] of [[leftEyeX, leftEyeY], [rightEyeX, rightEyeY]]) {
+      ctx.beginPath();
+      ctx.arc(ex + pupilDx - eyeR * 0.15, ey + pupilDy - eyeR * 0.2, eyeR * 0.22, 0, Math.PI * 2);
+      ctx.fill();
+    }
   } else if (eyeStyle === 'cool') {
-    // 쿨 — 연필 선글라스
+    // 선글라스 — 반원 덮기
     for (const [ex, ey] of [[leftEyeX, leftEyeY], [rightEyeX, rightEyeY]]) {
       ctx.save();
       ctx.beginPath();
       ctx.arc(ex, ey, eyeR + 1, 0, Math.PI * 2);
       ctx.clip();
       ctx.fillStyle = PENCIL_DARK;
-      ctx.fillRect(ex - eyeR - 2, ey - eyeR - 2, (eyeR + 2) * 2, eyeR * 0.85);
+      ctx.fillRect(ex - eyeR - 2, ey - eyeR - 2, (eyeR + 2) * 2, eyeR * 0.9);
       ctx.restore();
     }
+    // 선글라스 브릿지
+    ctx.strokeStyle = PENCIL_DARK;
+    ctx.lineWidth = sw;
+    ctx.beginPath();
+    ctx.moveTo(leftEyeX + eyeR * 0.3, leftEyeY - eyeR * 0.3);
+    ctx.lineTo(rightEyeX - eyeR * 0.3, rightEyeY - eyeR * 0.3);
+    ctx.stroke();
   }
 }
 
