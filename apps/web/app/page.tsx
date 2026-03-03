@@ -384,7 +384,7 @@ const LOBBY_STYLES = `
     position: absolute;
     inset: 0;
     background: url('/images/lobby-bg.png') center/cover no-repeat;
-    opacity: 0.5;
+    opacity: 0.2;
     pointer-events: none;
     z-index: 0;
   }
