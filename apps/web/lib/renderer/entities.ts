@@ -342,7 +342,16 @@ export function drawSnakes(
     const outlineColor = PENCIL_DARK; // 검정 아웃라인 — 손그림 느낌
     const strokeW = Math.max(1.5, 2 * cam.zoom);
 
-    // ── 1) 플랫 크레용 바디 (fill 먼저) ──
+    // ── 1) 검은 아웃라인 먼저 (두꺼운) ──
+    const outlineThickness = thickness + 4 * cam.zoom;
+    ctx.strokeStyle = outlineColor;
+    ctx.lineWidth = outlineThickness;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
+    drawSmoothPath(ctx, screenPts);
+    ctx.stroke();
+
+    // ── 2) 색상 바디 위에 (아웃라인보다 얇게 → 가장자리에 검은색 보임) ──
     const pattern = skin.pattern ?? 'solid';
     if (pattern === 'striped') {
       for (let i = 0; i < screenPts.length - 1; i++) {
@@ -369,8 +378,7 @@ export function drawSnakes(
         ctx.restore();
       }
     } else {
-      // solid + dotted — 플랫 fill
-      ctx.fillStyle = skin.primaryColor;
+      // solid + dotted
       ctx.strokeStyle = skin.primaryColor;
       ctx.lineWidth = thickness;
       ctx.lineCap = 'round';
@@ -387,9 +395,6 @@ export function drawSnakes(
         }
       }
     }
-
-    // ── 2) 손그림 아웃라인 스트로크 (fill 위에 그려서 선이 보임) ──
-    drawHanddrawnStroke(ctx, screenPts, outlineColor, strokeW, snakeSeed);
 
     // ── 꼬리 이펙트: spark (연필 십자) ──
     if (tailEffect === 'spark' && screenPts.length > 1) {
@@ -457,7 +462,16 @@ export function drawSnakes(
       ctx.save();
       ctx.translate(head.x, head.y);
       ctx.rotate(snake.h);
-      // 플랫 fill
+      const s = 1.15; // 아웃라인 확대 배율
+      ctx.fillStyle = outlineColor;
+      ctx.beginPath();
+      ctx.moveTo(headR * 1.3 * s, 0);
+      ctx.quadraticCurveTo(headR * 0.3 * s, headR * 0.8 * s, 0, headR * 0.8 * s);
+      ctx.quadraticCurveTo(-headR * 0.5 * s, headR * 0.3 * s, -headR * 0.4 * s, 0);
+      ctx.quadraticCurveTo(-headR * 0.5 * s, -headR * 0.3 * s, 0, -headR * 0.8 * s);
+      ctx.quadraticCurveTo(headR * 0.3 * s, -headR * 0.8 * s, headR * 1.3 * s, 0);
+      ctx.closePath();
+      ctx.fill();
       ctx.fillStyle = skin.primaryColor;
       ctx.beginPath();
       ctx.moveTo(headR * 1.3, 0);
@@ -467,15 +481,20 @@ export function drawSnakes(
       ctx.quadraticCurveTo(headR * 0.3, -headR * 0.8, headR * 1.3, 0);
       ctx.closePath();
       ctx.fill();
-      // 손그림 stroke
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = strokeW;
-      ctx.stroke();
       ctx.restore();
     } else if (headShape === 'arrow') {
       ctx.save();
       ctx.translate(head.x, head.y);
       ctx.rotate(snake.h);
+      const s = 1.15;
+      ctx.fillStyle = outlineColor;
+      ctx.beginPath();
+      ctx.moveTo(headR * 1.5 * s, 0);
+      ctx.quadraticCurveTo(headR * 0.2 * s, headR * 0.9 * s, -headR * 0.3 * s, headR * 0.7 * s);
+      ctx.quadraticCurveTo(headR * 0.1 * s, 0, -headR * 0.3 * s, -headR * 0.7 * s);
+      ctx.quadraticCurveTo(headR * 0.2 * s, -headR * 0.9 * s, headR * 1.5 * s, 0);
+      ctx.closePath();
+      ctx.fill();
       ctx.fillStyle = skin.primaryColor;
       ctx.beginPath();
       ctx.moveTo(headR * 1.5, 0);
@@ -484,23 +503,17 @@ export function drawSnakes(
       ctx.quadraticCurveTo(headR * 0.2, -headR * 0.9, headR * 1.5, 0);
       ctx.closePath();
       ctx.fill();
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = strokeW;
-      ctx.stroke();
       ctx.restore();
     } else {
-      // round — 플랫 원 + 손그림 stroke
+      // round — 아웃라인 원 먼저 → 색상 원 위에
+      ctx.fillStyle = outlineColor;
+      ctx.beginPath();
+      ctx.arc(head.x, head.y, headR + 2 * cam.zoom, 0, Math.PI * 2);
+      ctx.fill();
       ctx.fillStyle = skin.primaryColor;
       ctx.beginPath();
       ctx.arc(head.x, head.y, headR, 0, Math.PI * 2);
       ctx.fill();
-      // 손그림 아웃라인 (wobbly circle stroke)
-      ctx.strokeStyle = outlineColor;
-      ctx.lineWidth = strokeW;
-      ctx.lineCap = 'round';
-      ctx.lineJoin = 'round';
-      wobblyCirclePath(ctx, head.x, head.y, headR, snakeSeed + 300, 10);
-      ctx.stroke();
     }
 
     // ── 눈 (연필 스타일 — 반짝 하이라이트 제거) ──
