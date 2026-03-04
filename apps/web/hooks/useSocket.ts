@@ -199,6 +199,10 @@ export function useSocket() {
         countdown: data.countdown > 0 ? data.countdown : null,
         roundEnd: null,
       }));
+      // 새 라운드 시작 시 자동 리스폰 (서버가 이미 새 arena에 등록해둠)
+      if (data.countdown === 0) {
+        socket.emit('respawn', {});
+      }
     });
 
     socket.on('round_end', (data) => {

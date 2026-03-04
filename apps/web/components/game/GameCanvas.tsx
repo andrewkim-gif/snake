@@ -154,7 +154,9 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
   const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
   const showCountdown = uiState.roomState === 'countdown' && uiState.countdown !== null && uiState.countdown > 0;
   const showRoundResult = uiState.roomState === 'ending' && uiState.roundEnd !== null;
-  const showDeath = uiState.deathInfo && !showRoundResult && uiState.roomState !== 'ending';
+  const showCooldown = uiState.roomState === 'cooldown';
+  const showWaiting = uiState.roomState === 'waiting';
+  const showDeath = uiState.deathInfo && !showRoundResult && !showCooldown && uiState.roomState !== 'ending';
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
@@ -163,11 +165,28 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
       {showTimer && <RoundTimerHUD timeRemaining={uiState.timeRemaining} />}
       {showCountdown && <CountdownOverlay initialCount={uiState.countdown!} />}
       {showRoundResult && <RoundResultOverlay roundEnd={uiState.roundEnd!} />}
+      {showCooldown && <WaitingBanner text="Next round starting soon..." />}
+      {showWaiting && <WaitingBanner text="Waiting for players..." />}
       {showDeath && <DeathOverlay deathInfo={uiState.deathInfo!} onRespawn={handleRespawn} />}
 
       {menuOpen && (
         <PauseMenu onResume={() => setMenuOpen(false)} onExit={handleExitToLobby} />
       )}
+    </div>
+  );
+}
+
+function WaitingBanner({ text }: { text: string }) {
+  return (
+    <div style={{
+      position: 'absolute', top: '12px', left: '50%', transform: 'translateX(-50%)',
+      zIndex: 20, fontFamily: '"Patrick Hand", "Inter", sans-serif',
+      fontSize: '1.1rem', fontWeight: 700, color: '#6B5E52',
+      backgroundColor: 'rgba(245, 240, 232, 0.85)',
+      padding: '6px 20px', borderRadius: '4px',
+      border: '1.5px solid #A89888', letterSpacing: '0.03em',
+    }}>
+      {text}
     </div>
   );
 }

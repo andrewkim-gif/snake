@@ -15,12 +15,17 @@ export interface RoomStateTransition {
   finalLeaderboard?: LeaderboardEntry[];
 }
 
+interface PlayerMeta {
+  name: string;
+  skinId: number;
+}
+
 export class Room {
   readonly id: string;
   private arena: Arena;
   private state: RoomStatus = 'waiting';
-  private timer = 0; // 남은 시간 (초)
-  private humanPlayers: Set<string> = new Set();
+  private timer = 0;
+  private humanPlayers: Map<string, PlayerMeta> = new Map();
   private lastWinner: WinnerInfo | null = null;
   private maxPlayers: number;
 
@@ -41,7 +46,6 @@ export class Room {
   getWinner(): WinnerInfo | null { return this.lastWinner; }
   getHumanPlayerCount(): number { return this.humanPlayers.size; }
 
-  /** 시작 — arena game loop 시작 */
   start(): void {
     this.arena.start();
   }
@@ -49,7 +53,6 @@ export class Room {
   /** 매 1초 호출 — 상태 전환 반환 */
   tick(): RoomStateTransition | null {
     if (this.state === 'waiting') {
-      // 인간 플레이어 MIN_PLAYERS_TO_START 이상이면 카운트다운 시작
       if (this.humanPlayers.size >= ROOM_CONFIG.MIN_PLAYERS_TO_START) {
         return this.transitionTo('countdown');
       }
@@ -101,7 +104,6 @@ export class Room {
       case 'waiting':
         this.timer = 0;
         this.lastWinner = null;
-        // waiting 전환 시 인원 충분하면 즉시 countdown으로 다시 진입
         break;
     }
 
@@ -110,7 +112,6 @@ export class Room {
 
   private determineWinner(): WinnerInfo | null {
     const entries = this.arena.getLeaderboardEntries();
-    // 인간 플레이어 중 1위 찾기
     for (const entry of entries) {
       if (this.humanPlayers.has(entry.id)) {
         return {
@@ -121,7 +122,6 @@ export class Room {
         };
       }
     }
-    // 인간 없으면 봇 1위
     if (entries.length > 0) {
       const top = entries[0];
       return {
@@ -135,29 +135,34 @@ export class Room {
   }
 
   private resetRound(): void {
-    // 기존 인간 플레이어 ID 보존
-    const humanIds = [...this.humanPlayers];
-
-    // 기존 arena 중단
     this.arena.stop();
 
-    // 새 arena 생성 + 시작
     this.arena = this.createArena();
     this.arena.start();
 
-    // 인간 플레이어 새 arena에 재등록하지 않음 — SocketHandler에서 round_reset 수신 후 클라이언트가 다시 join
-    // humanPlayers set은 유지 (소켓 연결은 유지되므로)
-    // 실제 arena에 addPlayer는 클라이언트가 respawn/rejoin할 때 수행
+    // 인간 플레이어를 새 arena에 자동 재등록 (이름/스킨 보존)
+    for (const [socketId, meta] of this.humanPlayers) {
+      this.arena.addPlayer(socketId, meta.name, meta.skinId);
+    }
   }
 
   addHumanPlayer(socketId: string, name: string, skinId: number): ReturnType<Arena['addPlayer']> {
-    this.humanPlayers.add(socketId);
+    this.humanPlayers.set(socketId, { name, skinId });
     return this.arena.addPlayer(socketId, name, skinId);
   }
 
   removeHumanPlayer(socketId: string): void {
     this.humanPlayers.delete(socketId);
     this.arena.removePlayer(socketId);
+  }
+
+  /** 리스폰 시 메타 업데이트 (이름/스킨 변경 가능) */
+  updatePlayerMeta(socketId: string, name?: string, skinId?: number): void {
+    const meta = this.humanPlayers.get(socketId);
+    if (meta) {
+      if (name) meta.name = name;
+      if (skinId !== undefined) meta.skinId = skinId;
+    }
   }
 
   isJoinable(): boolean {

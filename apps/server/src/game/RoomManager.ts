@@ -157,10 +157,11 @@ export class RoomManager {
   }
 
   /** 전체 룸 통계 */
-  getStats(): { totalPlayers: number; totalRooms: number; rooms: Array<{ id: string; players: number; state: string }> } {
+  getStats(): { totalPlayers: number; totalRooms: number; rooms: Array<{ id: string; players: number; humans: number; state: string }> } {
     const rooms = [...this.rooms.values()].map(r => ({
       id: r.id,
-      players: r.getHumanPlayerCount(),
+      players: r.getArena().getPlayerCount(),
+      humans: r.getHumanPlayerCount(),
       state: r.getState(),
     }));
     return {

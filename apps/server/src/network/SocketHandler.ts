@@ -112,6 +112,7 @@ export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
       const spawn = room.getArena().respawnPlayer(socket.id, name, skinId);
 
       if (spawn) {
+        room.updatePlayerMeta(socket.id, name, skinId);
         socket.emit('respawned', { spawn, tick: room.getArena().getTick() });
       }
     });
