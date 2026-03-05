@@ -1,6 +1,7 @@
 'use client';
 
-import type { RoundEndPayload } from '@snake-arena/shared';
+import type { RoundEndPayload, DeathPayload, DamageSource, TomeType, AbilityType } from '@snake-arena/shared';
+import { MC, mcPanelShadow, pixelFont, bodyFont } from '@/lib/minecraft-ui';
 
 const P = {
   paper: '#F5F0E8',
@@ -12,12 +13,42 @@ const P = {
   crayonBlue: '#5B8DAD',
 } as const;
 
-interface RoundResultOverlayProps {
-  roundEnd: RoundEndPayload;
+// Damage source 한글 표시
+const DAMAGE_SOURCE_LABELS: Record<string, string> = {
+  aura: 'Aura Combat',
+  dash: 'Dash Strike',
+  boundary: 'Arena Boundary',
+  venom: 'Venom DoT',
+};
+
+// Tome/Ability 타입별 색상
+const TOME_COLORS: Record<string, string> = {
+  xp: '#FFAA00', speed: '#55FFFF', damage: '#FF5555', armor: '#AAAAAA',
+  magnet: '#FFFF55', luck: '#55FF55', regen: '#55FF55', cursed: '#AA00AA',
+};
+
+const ABILITY_COLORS: Record<string, string> = {
+  venom_aura: '#55FF55', shield_burst: '#5555FF', lightning_strike: '#FFFF55',
+  speed_dash: '#55FFFF', mass_drain: '#FF55FF', gravity_well: '#AA00AA',
+};
+
+export interface BuildSummary {
+  tomes: Partial<Record<TomeType, number>>;
+  abilities: Array<{ type: AbilityType; level: number }>;
+  synergies: string[];
+  finalLevel: number;
 }
 
-export function RoundResultOverlay({ roundEnd }: RoundResultOverlayProps) {
+interface RoundResultOverlayProps {
+  roundEnd: RoundEndPayload;
+  deathInfo?: DeathPayload | null;
+  buildSummary?: BuildSummary | null;
+  analysisPanel?: React.ReactNode;
+}
+
+export function RoundResultOverlay({ roundEnd, deathInfo, buildSummary, analysisPanel }: RoundResultOverlayProps) {
   const { winner, yourRank, yourScore, finalLeaderboard } = roundEnd;
+  const hasSynergies = buildSummary && buildSummary.synergies.length >= 2;
 
   return (
     <div style={{
@@ -27,22 +58,24 @@ export function RoundResultOverlay({ roundEnd }: RoundResultOverlayProps) {
       flexDirection: 'column',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(245, 240, 232, 0.94)',
+      backgroundColor: 'rgba(0, 0, 0, 0.8)',
       zIndex: 40,
-      fontFamily: '"Patrick Hand", "Inter", sans-serif',
-      gap: '0.8rem',
+      fontFamily: bodyFont,
+      gap: '0.6rem',
+      overflowY: 'auto',
+      padding: '1rem',
     }}>
       {/* Title */}
       <h2 style={{
-        fontSize: '2.2rem', fontWeight: 900, color: P.crayonOrange,
-        margin: 0, textTransform: 'uppercase', letterSpacing: '0.04em',
-        position: 'relative',
+        fontFamily: pixelFont,
+        fontSize: '1rem',
+        color: MC.textGold,
+        margin: 0,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+        textShadow: '2px 2px 0 #553300',
       }}>
         ROUND OVER!
-        <span style={{
-          position: 'absolute', bottom: '-3px', left: '10%', width: '80%',
-          height: '2.5px', backgroundColor: P.pencilDark, opacity: 0.2,
-        }} />
       </h2>
 
       {/* Winner */}
@@ -50,46 +83,208 @@ export function RoundResultOverlay({ roundEnd }: RoundResultOverlayProps) {
         <div style={{
           display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.2rem',
         }}>
-          <span style={{ fontSize: '0.9rem', color: P.pencilMedium }}>Winner</span>
+          <span style={{ fontFamily: pixelFont, fontSize: '0.35rem', color: MC.textSecondary }}>
+            Winner
+          </span>
           <span style={{
-            fontSize: '1.8rem', fontWeight: 900, color: P.crayonOrange,
+            fontFamily: pixelFont, fontSize: '0.7rem', color: MC.textGold,
+            textShadow: '1px 1px 0 #553300',
           }}>
             {winner.name}
           </span>
-          <span style={{ fontSize: '0.85rem', color: P.pencilMedium }}>
-            {winner.score} pts · {winner.kills} kills
+          <span style={{ fontSize: '0.85rem', color: MC.textSecondary }}>
+            {winner.score} pts | {winner.kills} kills
           </span>
         </div>
       )}
 
       {/* Your stats */}
       <div style={{
-        display: 'flex', gap: '1.5rem', fontSize: '1rem', fontWeight: 700,
-        color: P.pencilDark,
-        backgroundColor: 'rgba(245, 240, 232, 0.95)',
-        padding: '0.8rem 2rem', borderRadius: '4px',
-        border: `1.5px solid ${P.pencilMedium}`,
+        display: 'flex', gap: '1rem', fontSize: '0.85rem', fontWeight: 700,
+        backgroundColor: MC.panelBg,
+        boxShadow: mcPanelShadow(),
+        border: `2px solid ${MC.panelBorderDark}`,
+        padding: '0.6rem 1.5rem',
+        color: MC.textPrimary,
       }}>
         <span>
-          Rank: <span style={{ color: P.crayonBlue }}>#{yourRank}</span>
+          Rank: <span style={{ color: MC.textGold }}>#{yourRank}</span>
         </span>
         <span>
-          Score: <span style={{ color: P.crayonOrange }}>{yourScore}</span>
+          Score: <span style={{ color: MC.textGold }}>{yourScore}</span>
         </span>
+        {buildSummary && (
+          <span>
+            Level: <span style={{ color: '#5B8DAD' }}>Lv.{buildSummary.finalLevel}</span>
+          </span>
+        )}
       </div>
+
+      {/* Death cause */}
+      {deathInfo && (
+        <div style={{
+          fontSize: '0.8rem',
+          color: MC.textSecondary,
+          textAlign: 'center',
+        }}>
+          {deathInfo.killer ? (
+            <span>
+              Eliminated by <span style={{ color: MC.textRed, fontWeight: 700 }}>{deathInfo.killer}</span>
+              {deathInfo.damageSource && (
+                <span style={{ color: MC.textGray }}> ({DAMAGE_SOURCE_LABELS[deathInfo.damageSource] ?? deathInfo.damageSource})</span>
+              )}
+            </span>
+          ) : deathInfo.damageSource === 'boundary' ? (
+            <span style={{ color: MC.textRed }}>Eliminated by Arena Boundary</span>
+          ) : null}
+        </div>
+      )}
+
+      {/* Build Summary */}
+      {buildSummary && (
+        <div style={{
+          backgroundColor: MC.panelBg,
+          boxShadow: mcPanelShadow(),
+          border: `2px solid ${MC.panelBorderDark}`,
+          padding: '0.6rem 1rem',
+          maxWidth: '350px',
+          width: '100%',
+        }}>
+          <div style={{
+            fontFamily: pixelFont,
+            fontSize: '0.35rem',
+            color: MC.textSecondary,
+            marginBottom: '0.4rem',
+            letterSpacing: '0.06em',
+            borderBottom: `1px solid ${MC.panelBorderDark}`,
+            paddingBottom: '0.3rem',
+          }}>
+            BUILD SUMMARY
+            {hasSynergies && (
+              <span style={{
+                marginLeft: '8px',
+                color: MC.textGold,
+                backgroundColor: 'rgba(255,170,0,0.2)',
+                padding: '1px 5px',
+                fontSize: '0.25rem',
+              }}>
+                BEST BUILD
+              </span>
+            )}
+          </div>
+
+          {/* Tomes */}
+          {Object.entries(buildSummary.tomes).filter(([_, v]) => v && v > 0).length > 0 && (
+            <div style={{ marginBottom: '0.3rem' }}>
+              <div style={{
+                fontFamily: pixelFont,
+                fontSize: '0.25rem',
+                color: MC.textGray,
+                marginBottom: '2px',
+              }}>
+                TOMES
+              </div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {Object.entries(buildSummary.tomes)
+                  .filter(([_, v]) => v && v > 0)
+                  .map(([type, stacks]) => (
+                    <span key={type} style={{
+                      fontFamily: pixelFont,
+                      fontSize: '0.25rem',
+                      color: TOME_COLORS[type] ?? MC.textPrimary,
+                      backgroundColor: 'rgba(255,255,255,0.05)',
+                      padding: '1px 4px',
+                    }}>
+                      {type.toUpperCase()} x{stacks}
+                    </span>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* Abilities */}
+          {buildSummary.abilities.length > 0 && (
+            <div style={{ marginBottom: '0.3rem' }}>
+              <div style={{
+                fontFamily: pixelFont,
+                fontSize: '0.25rem',
+                color: MC.textGray,
+                marginBottom: '2px',
+              }}>
+                ABILITIES
+              </div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {buildSummary.abilities.map((a, i) => (
+                  <span key={i} style={{
+                    fontFamily: pixelFont,
+                    fontSize: '0.25rem',
+                    color: ABILITY_COLORS[a.type] ?? MC.textPrimary,
+                    backgroundColor: 'rgba(255,255,255,0.05)',
+                    padding: '1px 4px',
+                  }}>
+                    {a.type.replace(/_/g, ' ').toUpperCase()} Lv{a.level}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Synergies */}
+          {buildSummary.synergies.length > 0 && (
+            <div>
+              <div style={{
+                fontFamily: pixelFont,
+                fontSize: '0.25rem',
+                color: MC.textGray,
+                marginBottom: '2px',
+              }}>
+                SYNERGIES
+              </div>
+              <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                {buildSummary.synergies.map((s) => (
+                  <span key={s} style={{
+                    fontFamily: pixelFont,
+                    fontSize: '0.25rem',
+                    color: MC.textGold,
+                    backgroundColor: 'rgba(255,170,0,0.15)',
+                    padding: '1px 5px',
+                  }}>
+                    {s}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Top 5 leaderboard */}
       {finalLeaderboard.length > 0 && (
         <div style={{
-          display: 'flex', flexDirection: 'column', gap: '0.15rem',
-          fontSize: '0.8rem', color: P.pencilMedium,
+          display: 'flex', flexDirection: 'column', gap: '0.1rem',
+          fontSize: '0.8rem', color: MC.textSecondary,
           minWidth: '200px',
+          backgroundColor: MC.panelBg,
+          boxShadow: mcPanelShadow(),
+          border: `2px solid ${MC.panelBorderDark}`,
+          padding: '0.5rem 0.8rem',
         }}>
+          <div style={{
+            fontFamily: pixelFont,
+            fontSize: '0.3rem',
+            color: MC.textSecondary,
+            marginBottom: '0.2rem',
+            letterSpacing: '0.06em',
+          }}>
+            FINAL STANDINGS
+          </div>
           {finalLeaderboard.slice(0, 5).map((entry, i) => (
             <div key={entry.id} style={{
               display: 'flex', justifyContent: 'space-between', gap: '1rem',
               fontWeight: i === 0 ? 700 : 400,
-              color: i === 0 ? P.crayonOrange : P.pencilMedium,
+              color: i === 0 ? MC.textGold : MC.textSecondary,
+              fontSize: '0.8rem',
+              padding: '1px 0',
             }}>
               <span>#{entry.rank} {entry.name}</span>
               <span>{entry.score}</span>
@@ -98,10 +293,15 @@ export function RoundResultOverlay({ roundEnd }: RoundResultOverlayProps) {
         </div>
       )}
 
+      {/* AI Analysis (Phase 5) */}
+      {analysisPanel}
+
       {/* Next round info */}
       <p style={{
-        fontSize: '0.85rem', color: P.pencilMedium,
-        margin: 0, fontStyle: 'italic',
+        fontFamily: pixelFont,
+        fontSize: '0.35rem',
+        color: MC.textGray,
+        margin: 0,
       }}>
         Next round starting soon...
       </p>

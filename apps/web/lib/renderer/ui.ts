@@ -3,7 +3,7 @@
  * 손그림 패널 + 연필 텍스트 + 워블 미니맵
  */
 
-import type { SnakeNetworkData, MinimapPayload, LeaderboardEntry } from '@snake-arena/shared';
+import type { AgentNetworkData, MinimapPayload, LeaderboardEntry } from '@snake-arena/shared';
 import { COLORS, ARENA_CONFIG } from '@snake-arena/shared';
 import type { KillFeedEntry } from './types';
 
@@ -310,7 +310,7 @@ export function drawKillFeed(ctx: CanvasRenderingContext2D, killFeed: KillFeedEn
 
 export function drawScorePanel(
   ctx: CanvasRenderingContext2D,
-  mySnake: SnakeNetworkData | null,
+  mySnake: AgentNetworkData | null,
   playerRank: number,
   playerCount: number,
   _w: number,
@@ -327,7 +327,7 @@ export function drawScorePanel(
   drawSketchPanel(ctx, px, py, panelW, panelH, 500);
 
   const score = Math.floor(mySnake.m);
-  const length = mySnake.p.length;
+  const level = mySnake.lv ?? 1;
 
   // 연필 별 아이콘
   drawSketchStar(ctx, px + 22, py + 28, 10, CRAYON_ORANGE);
@@ -341,13 +341,13 @@ export function drawScorePanel(
   ctx.font = 'bold 10px "Patrick Hand", "Inter", sans-serif';
   drawText(ctx, 'SCORE', px + 38, py + 50, PENCIL_MEDIUM);
 
-  // Length (우측 상단)
+  // Level (우측 상단)
   ctx.textAlign = 'right';
   ctx.font = 'bold 14px "Patrick Hand", "Inter", sans-serif';
-  drawText(ctx, `${length}`, px + panelW - 14, py + 28, CRAYON_BLUE);
+  drawText(ctx, `Lv.${level}`, px + panelW - 14, py + 28, CRAYON_BLUE);
 
   ctx.font = 'bold 9px "Patrick Hand", "Inter", sans-serif';
-  drawText(ctx, 'LEN', px + panelW - 14, py + 40, PENCIL_MEDIUM);
+  drawText(ctx, 'LEVEL', px + panelW - 14, py + 40, PENCIL_MEDIUM);
 
   // ─── Boost Gauge — rough 사각형 + 크레용 fill ───
   const barX = px + 14;
@@ -476,7 +476,7 @@ function drawSketchStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r
 
 export function drawHUD(
   ctx: CanvasRenderingContext2D,
-  mySnake: SnakeNetworkData | null,
+  mySnake: AgentNetworkData | null,
   killFeed: KillFeedEntry[],
   playerRank: number,
   playerCount: number,
@@ -501,7 +501,7 @@ const EFFECT_ICONS: Record<number, { label: string; color: string; maxTicks: num
 
 function drawEffectHUD(
   ctx: CanvasRenderingContext2D,
-  mySnake: SnakeNetworkData | null,
+  mySnake: AgentNetworkData | null,
   w: number,
   h: number,
 ): void {

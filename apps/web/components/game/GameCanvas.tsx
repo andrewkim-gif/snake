@@ -4,6 +4,7 @@
  * GameCanvas — 순수 React 컴포넌트 (조합만)
  * 카메라/보간/예측/렌더러를 서브모듈에 위임
  * useSocket은 부모(page.tsx)에서 lift — props로 수신
+ * v10: Snake → Agent 전환
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
@@ -14,11 +15,23 @@ import { render } from '@/lib/renderer';
 import type { RenderState, KillFeedEntry } from '@/lib/renderer';
 import { drawBackground, drawBoundary } from '@/lib/renderer/background';
 import { createCamera, updateCamera } from '@/lib/camera';
-import { interpolateSnakes, applyClientPrediction } from '@/lib/interpolation';
+import { interpolateAgents, applyClientPrediction } from '@/lib/interpolation';
 import { DeathOverlay } from './DeathOverlay';
 import { RoundTimerHUD } from './RoundTimerHUD';
 import { CountdownOverlay } from './CountdownOverlay';
 import { RoundResultOverlay } from './RoundResultOverlay';
+import type { BuildSummary } from './RoundResultOverlay';
+
+// v10 overlays
+import { LevelUpOverlay } from './LevelUpOverlay';
+import { BuildHUD } from './BuildHUD';
+import type { BuildData } from './BuildHUD';
+import { XPBar } from './XPBar';
+import { ShrinkWarning } from './ShrinkWarning';
+import { SynergyPopup } from './SynergyPopup';
+import { CoachOverlay } from './CoachOverlay';
+import { AnalystPanel } from './AnalystPanel';
+
 import { ARENA_CONFIG } from '@snake-arena/shared';
 
 interface GameCanvasProps {
@@ -29,9 +42,11 @@ interface GameCanvasProps {
   playerName: string;
   skinId: number;
   onExit: () => void;
+  chooseUpgrade?: (choiceId: string) => void;
+  dismissSynergyPopup?: (synergyId: string) => void;
 }
 
-export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, skinId, onExit }: GameCanvasProps) {
+export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, skinId, onExit, chooseUpgrade, dismissSynergyPopup }: GameCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputSeqRef = useRef(0);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -98,13 +113,13 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
     const elapsed = now - data.stateTimestamp;
     const t = serverInterval > 0 ? Math.min(elapsed / serverInterval, 1.5) : 1;
 
-    let snakes = interpolateSnakes(data.prevState?.s || null, state.s, t);
-    const mySnake = snakes.find(s => s.i === data.playerId);
+    let agents = interpolateAgents(data.prevState?.s || null, state.s, t);
+    const myAgent = agents.find(a => a.i === data.playerId);
 
-    if (mySnake && mySnake.p.length > 0) {
-      const predicted = applyClientPrediction(mySnake, angleRef.current, dt);
-      snakes = snakes.map(s => s.i === data.playerId ? predicted : s);
-      updateCamera(cameraRef.current, predicted.p[0][0], predicted.p[0][1], predicted.m, dt);
+    if (myAgent) {
+      const predicted = applyClientPrediction(myAgent, angleRef.current, dt);
+      agents = agents.map(a => a.i === data.playerId ? predicted : a);
+      updateCamera(cameraRef.current, predicted.x, predicted.y, predicted.m, dt);
     }
 
     const rawFeed = data.killFeed;
@@ -113,7 +128,7 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
       for (let i = 0; i < newCount; i++) {
         const kill = rawFeed[i];
         killFeedRef.current.unshift({
-          text: `You ate ${kill.victim}!`,
+          text: `You eliminated ${kill.victim}!`,
           isMe: true,
           timestamp: now,
         });
@@ -125,14 +140,14 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
     }
 
     const renderState: RenderState = {
-      snakes,
+      agents,
       orbs: state.o,
       minimap: data.minimap,
       leaderboard: data.leaderboard,
       killFeed: killFeedRef.current,
       camera: cameraRef.current,
       arenaRadius: ARENA_CONFIG.radius,
-      playerCount: snakes.length,
+      playerCount: agents.length,
       rtt: data.rtt,
       fps: fpsData.value,
     };
@@ -151,23 +166,81 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
     onExit();
   }, [onExit]);
 
+  // 현재 플레이어 정보 (for v10 overlays)
+  const myAgent = (() => {
+    const state = dataRef.current.latestState;
+    if (!state || !dataRef.current.playerId) return null;
+    return state.s.find(a => a.i === dataRef.current.playerId) ?? null;
+  })();
+
+  const playerDistance = myAgent
+    ? Math.sqrt(myAgent.x * myAgent.x + myAgent.y * myAgent.y)
+    : 0;
+  const currentRadius = uiState.arenaShrink?.currentRadius ?? ARENA_CONFIG.radius;
+
   const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
   const showCountdown = uiState.roomState === 'countdown' && uiState.countdown !== null && uiState.countdown > 0;
   const showRoundResult = uiState.roomState === 'ending' && uiState.roundEnd !== null;
   const showCooldown = uiState.roomState === 'cooldown';
   const showWaiting = uiState.roomState === 'waiting';
   const showDeath = uiState.deathInfo && !showRoundResult && !showCooldown && uiState.roomState !== 'ending';
+  const showLevelUp = uiState.levelUp !== null && uiState.alive && !showDeath && !showRoundResult;
 
   return (
     <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
       <canvas ref={canvasRef} style={{ display: 'block' }} />
 
+      {/* v10 ShrinkWarning (always mounted, conditionally visible) */}
+      <ShrinkWarning
+        shrinkData={uiState.arenaShrink}
+        playerDistance={playerDistance}
+        currentRadius={currentRadius}
+      />
+
+      {/* v10 Synergy Popup */}
+      {dismissSynergyPopup && (
+        <SynergyPopup
+          synergies={uiState.synergyPopups}
+          onDismiss={dismissSynergyPopup}
+        />
+      )}
+
+      {/* v10 BuildHUD */}
+      <BuildHUD build={null} />
+
+      {/* v10 XP Bar */}
+      {myAgent && (
+        <XPBar
+          level={myAgent.lv ?? 1}
+          xp={0}
+          xpToNext={100}
+        />
+      )}
+
+      {/* Round/game overlays */}
       {showTimer && <RoundTimerHUD timeRemaining={uiState.timeRemaining} />}
       {showCountdown && <CountdownOverlay initialCount={uiState.countdown!} />}
-      {showRoundResult && <RoundResultOverlay roundEnd={uiState.roundEnd!} />}
+      {showRoundResult && (
+        <RoundResultOverlay
+          roundEnd={uiState.roundEnd!}
+          deathInfo={uiState.deathInfo}
+          analysisPanel={<AnalystPanel analysis={uiState.roundAnalysis ?? null} />}
+        />
+      )}
       {showCooldown && <WaitingBanner text="Next round starting soon..." />}
       {showWaiting && <WaitingBanner text="Waiting for players..." />}
-      {showDeath && <DeathOverlay deathInfo={uiState.deathInfo!} onRespawn={handleRespawn} />}
+      {showDeath && !showLevelUp && <DeathOverlay deathInfo={uiState.deathInfo!} onRespawn={handleRespawn} />}
+
+      {/* Phase 5: Coach Overlay */}
+      <CoachOverlay message={uiState.coachMessage ?? null} />
+
+      {/* v10 LevelUp Overlay (highest priority gameplay overlay) */}
+      {showLevelUp && chooseUpgrade && (
+        <LevelUpOverlay
+          levelUp={uiState.levelUp!}
+          onChoose={chooseUpgrade}
+        />
+      )}
 
       {menuOpen && (
         <PauseMenu onResume={() => setMenuOpen(false)} onExit={handleExitToLobby} />

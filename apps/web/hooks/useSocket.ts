@@ -1,17 +1,29 @@
 'use client';
 
 import { useRef, useEffect, useCallback, useState } from 'react';
-import { io, Socket } from 'socket.io-client';
+import { GameSocket } from './useWebSocket';
 import type {
-  ClientToServerEvents, ServerToClientEvents,
   StatePayload, JoinedPayload, DeathPayload,
   KillPayload, MinimapPayload, RoomInfo, RecentWinner,
   RoomStatus, RoundEndPayload, LeaderboardEntry,
+  LevelUpPayload, ArenaShrinkPayload, SynergyActivatedPayload,
 } from '@snake-arena/shared';
 
-type GameSocket = Socket<ServerToClientEvents, ClientToServerEvents>;
+const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:9001';
 
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
+// Coach message from server
+export interface CoachMessageData {
+  type: 'warning' | 'tip' | 'opportunity' | 'strategy' | 'efficiency';
+  message: string;
+}
+
+// Round analysis from server
+export interface RoundAnalysisData {
+  buildEfficiency: number;
+  combatScore: number;
+  positioningScore: number;
+  suggestions: string[];
+}
 
 export interface GameData {
   connected: boolean;
@@ -29,6 +41,10 @@ export interface GameData {
   currentRoomId: string | null;
   roomState: RoomStatus | null;
   timeRemaining: number;
+  // v10 upgrade system
+  levelUp: LevelUpPayload | null;
+  arenaShrink: ArenaShrinkPayload | null;
+  synergyPopups: SynergyActivatedPayload[];
 }
 
 function createInitialData(): GameData {
@@ -48,6 +64,9 @@ function createInitialData(): GameData {
     currentRoomId: null,
     roomState: null,
     timeRemaining: 0,
+    levelUp: null,
+    arenaShrink: null,
+    synergyPopups: [],
   };
 }
 
@@ -62,6 +81,13 @@ export interface UiState {
   roundEnd: RoundEndPayload | null;
   countdown: number | null;
   timeRemaining: number;
+  // v10 upgrade system
+  levelUp: LevelUpPayload | null;
+  arenaShrink: ArenaShrinkPayload | null;
+  synergyPopups: SynergyActivatedPayload[];
+  // v10 Phase 5: coach + analyst
+  coachMessage: CoachMessageData | null;
+  roundAnalysis: RoundAnalysisData | null;
 }
 
 export function useSocket() {
@@ -79,28 +105,25 @@ export function useSocket() {
     roundEnd: null,
     countdown: null,
     timeRemaining: 0,
+    levelUp: null,
+    arenaShrink: null,
+    synergyPopups: [],
+    coachMessage: null,
+    roundAnalysis: null,
   });
 
   useEffect(() => {
     dataRef.current = createInitialData();
 
-    const socket: GameSocket = io(SERVER_URL, {
-      transports: ['websocket', 'polling'],
-      reconnection: true,
-      reconnectionDelay: 2000,
-      reconnectionDelayMax: 10000,
-      reconnectionAttempts: 5,
-      timeout: 5000,
-      forceNew: true,
-    });
+    const socket = new GameSocket();
     socketRef.current = socket;
 
-    socket.on('connect', () => {
+    socket.onConnect = () => {
       dataRef.current.connected = true;
       setUiState(prev => ({ ...prev, connected: true }));
-    });
+    };
 
-    socket.on('disconnect', () => {
+    socket.onDisconnect = () => {
       dataRef.current.connected = false;
       dataRef.current.alive = false;
       dataRef.current.currentRoomId = null;
@@ -109,16 +132,7 @@ export function useSocket() {
         ...prev, connected: false, alive: false,
         currentRoomId: null, roomState: null,
       }));
-    });
-
-    socket.on('connect_error', () => {
-      dataRef.current.connected = false;
-    });
-
-    socket.io.on('reconnect_failed', () => {
-      dataRef.current.connected = false;
-      setUiState(prev => ({ ...prev, connected: false }));
-    });
+    };
 
     socket.on('joined', (data: JoinedPayload) => {
       dataRef.current.playerId = data.id;
@@ -148,7 +162,8 @@ export function useSocket() {
     socket.on('death', (data: DeathPayload) => {
       dataRef.current.alive = false;
       dataRef.current.deathInfo = data;
-      setUiState(prev => ({ ...prev, alive: false, deathInfo: data }));
+      dataRef.current.levelUp = null;
+      setUiState(prev => ({ ...prev, alive: false, deathInfo: data, levelUp: null }));
     });
 
     socket.on('respawned', () => {
@@ -165,12 +180,12 @@ export function useSocket() {
       dataRef.current.minimap = data;
     });
 
-    socket.on('pong', (data) => {
+    socket.on('pong', (data: { t: number; st: number }) => {
       dataRef.current.rtt = Date.now() - data.t;
     });
 
     // Room events
-    socket.on('rooms_update', (data) => {
+    socket.on('rooms_update', (data: { rooms: RoomInfo[]; recentWinners: RecentWinner[] }) => {
       setUiState(prev => ({
         ...prev,
         rooms: data.rooms,
@@ -191,7 +206,7 @@ export function useSocket() {
       }
     });
 
-    socket.on('round_start', (data) => {
+    socket.on('round_start', (data: { countdown: number }) => {
       dataRef.current.roomState = data.countdown > 0 ? 'countdown' : 'playing';
       setUiState(prev => ({
         ...prev,
@@ -205,7 +220,7 @@ export function useSocket() {
       }
     });
 
-    socket.on('round_end', (data) => {
+    socket.on('round_end', (data: RoundEndPayload) => {
       dataRef.current.roomState = 'ending';
       setUiState(prev => ({
         ...prev,
@@ -215,12 +230,15 @@ export function useSocket() {
       }));
     });
 
-    socket.on('round_reset', (data) => {
+    socket.on('round_reset', (data: { roomState: RoomStatus }) => {
       dataRef.current.roomState = data.roomState;
       dataRef.current.alive = false;
       dataRef.current.latestState = null;
       dataRef.current.prevState = null;
       dataRef.current.deathInfo = null;
+      dataRef.current.levelUp = null;
+      dataRef.current.arenaShrink = null;
+      dataRef.current.synergyPopups = [];
       setUiState(prev => ({
         ...prev,
         roomState: data.roomState,
@@ -228,7 +246,40 @@ export function useSocket() {
         deathInfo: null,
         roundEnd: null,
         countdown: null,
+        levelUp: null,
+        arenaShrink: null,
+        synergyPopups: [],
+        coachMessage: null,
+        roundAnalysis: null,
       }));
+    });
+
+    // v10 upgrade system events
+    socket.on('level_up', (data: LevelUpPayload) => {
+      dataRef.current.levelUp = data;
+      setUiState(prev => ({ ...prev, levelUp: data }));
+    });
+
+    socket.on('arena_shrink', (data: ArenaShrinkPayload) => {
+      dataRef.current.arenaShrink = data;
+      setUiState(prev => ({ ...prev, arenaShrink: data }));
+    });
+
+    socket.on('synergy_activated', (data: SynergyActivatedPayload) => {
+      dataRef.current.synergyPopups = [...dataRef.current.synergyPopups, data];
+      setUiState(prev => ({
+        ...prev,
+        synergyPopups: [...prev.synergyPopups, data],
+      }));
+    });
+
+    // Phase 5: Coach + Analyst events
+    socket.on('coach_message', (data: CoachMessageData) => {
+      setUiState(prev => ({ ...prev, coachMessage: data }));
+    });
+
+    socket.on('round_analysis', (data: RoundAnalysisData) => {
+      setUiState(prev => ({ ...prev, roundAnalysis: data }));
     });
 
     const pingInterval = setInterval(() => {
@@ -236,6 +287,9 @@ export function useSocket() {
         socket.emit('ping', { t: Date.now() });
       }
     }, 5000);
+
+    // Socket.IO 연결 시작
+    socket.connect(SERVER_URL);
 
     return () => {
       clearInterval(pingInterval);
@@ -250,7 +304,7 @@ export function useSocket() {
   }, []);
 
   const leaveRoom = useCallback(() => {
-    socketRef.current?.emit('leave_room');
+    socketRef.current?.emit('leave_room', {});
     dataRef.current.currentRoomId = null;
     dataRef.current.roomState = null;
     dataRef.current.alive = false;
@@ -259,6 +313,9 @@ export function useSocket() {
     dataRef.current.prevState = null;
     dataRef.current.deathInfo = null;
     dataRef.current.killFeed = [];
+    dataRef.current.levelUp = null;
+    dataRef.current.arenaShrink = null;
+    dataRef.current.synergyPopups = [];
     setUiState(prev => ({
       ...prev,
       currentRoomId: null,
@@ -267,6 +324,11 @@ export function useSocket() {
       deathInfo: null,
       roundEnd: null,
       countdown: null,
+      levelUp: null,
+      arenaShrink: null,
+      synergyPopups: [],
+      coachMessage: null,
+      roundAnalysis: null,
     }));
   }, []);
 
@@ -282,5 +344,19 @@ export function useSocket() {
     socketRef.current?.disconnect();
   }, []);
 
-  return { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, disconnect };
+  const chooseUpgrade = useCallback((choiceId: string) => {
+    socketRef.current?.emit('choose_upgrade', { choiceId });
+    dataRef.current.levelUp = null;
+    setUiState(prev => ({ ...prev, levelUp: null }));
+  }, []);
+
+  const dismissSynergyPopup = useCallback((synergyId: string) => {
+    dataRef.current.synergyPopups = dataRef.current.synergyPopups.filter(s => s.synergyId !== synergyId);
+    setUiState(prev => ({
+      ...prev,
+      synergyPopups: prev.synergyPopups.filter(s => s.synergyId !== synergyId),
+    }));
+  }, []);
+
+  return { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, disconnect, chooseUpgrade, dismissSynergyPopup };
 }

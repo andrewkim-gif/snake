@@ -2,7 +2,7 @@
  * Renderer Types — Camera, RenderState 인터페이스
  */
 
-import type { SnakeNetworkData, OrbNetworkData, MinimapPayload, LeaderboardEntry } from '@snake-arena/shared';
+import type { AgentNetworkData, OrbNetworkData, MinimapPayload, LeaderboardEntry } from '@snake-arena/shared';
 import type { Camera } from '../camera';
 
 export interface KillFeedEntry {
@@ -12,7 +12,7 @@ export interface KillFeedEntry {
 }
 
 export interface RenderState {
-  snakes: SnakeNetworkData[];
+  agents: AgentNetworkData[];
   orbs: OrbNetworkData[];
   minimap: MinimapPayload | null;
   leaderboard: LeaderboardEntry[];
