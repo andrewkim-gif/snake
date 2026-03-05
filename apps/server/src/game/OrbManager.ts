@@ -116,6 +116,32 @@ export class OrbManager {
     }
   }
 
+  /** v10: 에이전트 사망 시 position 기반 death orbs 생성 */
+  decomposeAgent(position: Position, mass: number, currentTick: number): void {
+    const orbMass = mass * this.config.deathOrbRatio;
+    // 세그먼트 없으므로 mass 기반 오브 수 (5~15개)
+    const orbCount = Math.max(5, Math.min(15, Math.floor(mass / 3)));
+    const valuePerOrb = orbMass / orbCount;
+
+    for (let i = 0; i < orbCount; i++) {
+      // position 주위 원형 산포
+      const angle = (i / orbCount) * Math.PI * 2;
+      const spread = 20 + Math.random() * 30;
+      const orb: Orb = {
+        id: this.nextId++,
+        position: {
+          x: position.x + Math.cos(angle) * spread,
+          y: position.y + Math.sin(angle) * spread,
+        },
+        value: Math.max(1, Math.round(valuePerOrb)),
+        color: Math.floor(Math.random() * ORB.COLOR_COUNT),
+        type: 'death',
+        createdAt: currentTick,
+      };
+      this.orbs.set(orb.id, orb);
+    }
+  }
+
   /** boost trail orb 생성 */
   spawnTrailOrb(position: Position, currentTick: number): void {
     const orb: Orb = {

@@ -1,13 +1,13 @@
 /**
- * SocketHandler v3 — Multi-Room Tournament 이벤트 라우팅
- * join → join_room/leave_room 으로 변경
+ * SocketHandler v10 — Multi-Room + Agent Survivor 이벤트 라우팅
+ * v10: choose_upgrade 이벤트 추가, 1 Life 리스폰 제한
  */
 
 import type { Server, Socket } from 'socket.io';
 import type { Logger } from 'pino';
 import type {
   ClientToServerEvents, ServerToClientEvents,
-  InputPayload, JoinRoomPayload, RespawnPayload,
+  InputPayload, JoinRoomPayload, RespawnPayload, ChooseUpgradePayload,
 } from '@snake-arena/shared';
 import {
   isValidAngle, isValidBoost, isValidSequence,
@@ -65,13 +65,13 @@ export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
         return;
       }
 
-      const { room, snake } = result;
+      const { room, snake: agent } = result;
       socket.join(room.id);
 
       socket.emit('joined', {
         roomId: room.id,
         id: socket.id,
-        spawn: snake.head,
+        spawn: agent.position,
         arena: { radius: ARENA_CONFIG.radius, orbCount: room.getArena().getOrbCount() },
         tick: room.getArena().getTick(),
         roomState: room.getState(),
@@ -104,8 +104,11 @@ export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
       const room = roomManager.getPlayerRoom(socket.id);
       if (!room) return;
 
-      // playing 상태일 때만 리스폰 허용
-      if (room.getState() !== 'playing' && room.getState() !== 'waiting' && room.getState() !== 'countdown') return;
+      // v10: 1 Life 정책 — playing 중 리스폰 불가
+      if (!room.canRespawn()) {
+        socket.emit('error', { code: 'NO_RESPAWN', message: '1 Life mode - no respawn during round' });
+        return;
+      }
 
       const name = data.name ? sanitizeName(data.name) : undefined;
       const skinId = isValidSkinId(data.skinId) ? data.skinId : undefined;
@@ -115,6 +118,13 @@ export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
         room.updatePlayerMeta(socket.id, name, skinId);
         socket.emit('respawned', { spawn, tick: room.getArena().getTick() });
       }
+    });
+
+    // v10: 업그레이드 선택
+    socket.on('choose_upgrade', (data: ChooseUpgradePayload) => {
+      const room = roomManager.getPlayerRoom(socket.id);
+      if (!room) return;
+      room.getArena().chooseUpgrade(socket.id, data.choiceId);
     });
 
     socket.on('ping', (data) => {

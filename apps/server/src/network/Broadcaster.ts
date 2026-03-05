@@ -1,12 +1,13 @@
 /**
- * Broadcaster — Multi-Room state/minimap/death/kill + 로비 브로드캐스팅
+ * Broadcaster v10 — Multi-Room state/death/kill/level_up/arena_shrink 브로드캐스팅
+ * v10: level_up 이벤트 + arena_shrink 이벤트 추가
  */
 
 import type { Server, Socket } from 'socket.io';
 import type {
   ClientToServerEvents, ServerToClientEvents,
 } from '@snake-arena/shared';
-import { NETWORK, ROOM_CONFIG } from '@snake-arena/shared';
+import { NETWORK, ROOM_CONFIG, SHRINK_CONFIG } from '@snake-arena/shared';
 import type { RoomManager } from '../game/RoomManager';
 import type { RoomStateTransition } from '../game/Room';
 
@@ -22,10 +23,8 @@ export class Broadcaster {
 
   /** 게임 루프 (20Hz) + 로비 루프 (1Hz) */
   start(io: GameIO, roomManager: RoomManager, tickMs: number): void {
-    // 룸 참조 캐시 (변하지 않음)
     const rooms = roomManager.getAllRooms();
 
-    // 게임 루프: 각 룸의 state/death/kill/minimap 브로드캐스트
     this.stateInterval = setInterval(() => {
       for (const room of rooms) {
         const arena = room.getArena();
@@ -38,7 +37,7 @@ export class Broadcaster {
           if (deadSocket) {
             const info = arena.getDeathInfo(death.snakeId);
             if (info) {
-              const killerName = death.killerId ? arena.getSnakeName(death.killerId) : undefined;
+              const killerName = death.killerId ? arena.getAgentName(death.killerId) : undefined;
               deadSocket.emit('death', {
                 score: info.score,
                 length: info.length,
@@ -46,6 +45,8 @@ export class Broadcaster {
                 duration: info.duration,
                 rank: info.rank,
                 killer: killerName ?? undefined,
+                damageSource: death.damageSource,
+                level: info.level,
               });
             }
           }
@@ -53,14 +54,30 @@ export class Broadcaster {
           if (death.killerId) {
             const killerSocket = io.sockets.sockets.get(death.killerId) as GameSocket | undefined;
             if (killerSocket) {
-              const victimName = arena.getSnakeName(death.snakeId) ?? 'Unknown';
-              const victimMass = arena.getSnakeMass(death.snakeId);
+              const victimName = arena.getAgentName(death.snakeId) ?? 'Unknown';
+              const victimMass = arena.getAgentMass(death.snakeId);
               killerSocket.emit('kill', { victim: victimName, victimMass });
             }
           }
         }
 
-        // state 브로드캐스팅 — arena에 등록된 플레이어만
+        // v10: level_up 이벤트 브로드캐스트
+        const levelUps = arena.consumeLastTickLevelUps();
+        for (const lu of levelUps) {
+          const socket = io.sockets.sockets.get(lu.agentId) as GameSocket | undefined;
+          if (socket) {
+            const agent = arena.getAgentById(lu.agentId);
+            if (agent && agent.data.pendingUpgradeChoices) {
+              socket.emit('level_up', {
+                level: lu.level,
+                choices: agent.data.pendingUpgradeChoices,
+                timeoutTicks: agent.data.upgradeDeadlineTick - tick,
+              });
+            }
+          }
+        }
+
+        // state 브로드캐스팅
         for (const playerId of arena.getPlayerIds()) {
           const socket = io.sockets.sockets.get(playerId) as GameSocket | undefined;
           if (!socket) continue;
@@ -75,6 +92,16 @@ export class Broadcaster {
             const minimap = arena.getMinimapForPlayer(playerId);
             socket.emit('minimap', minimap);
           }
+        }
+
+        // v10: arena_shrink (매 20틱 = 1초마다)
+        if (tick % NETWORK.MINIMAP_INTERVAL === 0) {
+          const currentRadius = arena.getCurrentRadius();
+          io.to(room.id).emit('arena_shrink', {
+            currentRadius,
+            minRadius: SHRINK_CONFIG.MIN_RADIUS,
+            shrinkRate: SHRINK_CONFIG.SHRINK_RATE_PER_MIN,
+          });
         }
       }
     }, tickMs);
@@ -104,11 +131,9 @@ export class Broadcaster {
         break;
 
       case 'ending': {
-        // 개별 플레이어에게 개인화된 round_end 전송
         const arena = room.getArena();
         const leaderboard = finalLeaderboard || arena.getLeaderboardEntries();
 
-        // Socket.IO room의 소켓 목록
         const roomSockets = io.sockets.adapter.rooms.get(roomId);
         if (roomSockets) {
           for (const socketId of roomSockets) {

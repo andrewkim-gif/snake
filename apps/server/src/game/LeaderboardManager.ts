@@ -4,21 +4,41 @@
  */
 
 import type { LeaderboardEntry } from '@snake-arena/shared';
-import type { SnakeEntity } from './Snake';
+import type { AgentEntity } from './AgentEntity';
 
 export class LeaderboardManager {
   private entries: LeaderboardEntry[] = [];
 
-  /** 리더보드 갱신 — 살아있는 뱀들의 score 기준 상위 10명 */
-  update(snakes: Map<string, SnakeEntity>): void {
+  /** v10: 에이전트 기반 리더보드 갱신 */
+  updateFromAgents(agents: Map<string, AgentEntity>): void {
     const list: LeaderboardEntry[] = [];
-    for (const snake of snakes.values()) {
-      if (!snake.isAlive) continue;
+    for (const agent of agents.values()) {
+      if (!agent.isAlive) continue;
       list.push({
-        id: snake.data.id,
-        name: snake.data.name,
-        score: snake.data.score,
-        kills: snake.data.kills,
+        id: agent.data.id,
+        name: agent.data.name,
+        score: agent.data.score,
+        kills: agent.data.kills,
+        rank: 0,
+      });
+    }
+    list.sort((a, b) => b.score - a.score);
+    for (let i = 0; i < list.length; i++) {
+      list[i].rank = i + 1;
+    }
+    this.entries = list.slice(0, 10);
+  }
+
+  /** @deprecated v10: updateFromAgents 사용 */
+  update(entities: Map<string, any>): void {
+    const list: LeaderboardEntry[] = [];
+    for (const entity of entities.values()) {
+      if (!entity.isAlive) continue;
+      list.push({
+        id: entity.data.id,
+        name: entity.data.name,
+        score: entity.data.score,
+        kills: entity.data.kills,
         rank: 0,
       });
     }

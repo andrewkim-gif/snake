@@ -3,7 +3,7 @@
  * Multi-Room Tournament System
  */
 
-import type { LeaderboardEntry, Position, SnakeSkin } from './game';
+import type { LeaderboardEntry, Position, SnakeSkin, UpgradeChoice, DamageSource, TomeType, AbilityType } from './game';
 
 // ─── Room System Types ───
 
@@ -89,11 +89,22 @@ export interface OrbNetworkData {
   t: number;    // type: 0=natural|1=death|2=trail|3=magnet|4=speed|5=ghost|6=mega
 }
 
+/** v10 Map Object 네트워크 데이터 */
+export interface MapObjectNetworkData {
+  id: string;
+  type: string;   // 'shrine' | 'spring' | 'altar' | 'gate'
+  x: number;
+  y: number;
+  r: number;      // interaction radius
+  active: boolean;
+}
+
 export interface StatePayload {
   t: number;                 // server tick
-  s: SnakeNetworkData[];     // visible snakes
+  s: AgentNetworkData[];     // visible agents (v10, Agent 단일 좌표)
   o: OrbNetworkData[];       // visible orbs
   l?: LeaderboardEntry[];    // leaderboard (매 5번째 틱)
+  mo?: MapObjectNetworkData[]; // v10 map objects (shrines, springs, altars, gates)
 }
 
 export interface DeathPayload {
@@ -103,6 +114,8 @@ export interface DeathPayload {
   killer?: string;
   duration: number; // survival seconds
   rank: number;
+  damageSource?: DamageSource; // v10: 사망 원인
+  level?: number;              // v10: 사망 시 레벨
 }
 
 export interface RespawnedPayload {
@@ -144,7 +157,8 @@ export type ErrorCode =
   | 'ROOM_NOT_FOUND'
   | 'ALREADY_IN_ROOM'
   | 'NOT_IN_ROOM'
-  | 'ROOM_NOT_JOINABLE';
+  | 'ROOM_NOT_JOINABLE'
+  | 'NO_RESPAWN';
 
 // ─── Room Event Payloads ───
 
@@ -168,6 +182,52 @@ export interface RoundResetPayload {
   roomState: RoomStatus;
 }
 
+// ─── v10 Agent Network Data ───
+
+/** v10 압축된 에이전트 네트워크 데이터 */
+export interface AgentNetworkData {
+  i: string;              // id
+  n: string;              // name
+  x: number;              // position.x
+  y: number;              // position.y
+  h: number;              // heading
+  m: number;              // mass
+  b: boolean;             // boosting
+  k: number;              // skin id
+  lv: number;             // level
+  e?: number[];           // activeEffects [type, remainingTicks, ...]
+  // 하위 호환: 클라이언트가 p(segments)를 기대할 경우 position에서 생성
+  p?: [number, number][]; // segments 호환 (position을 단일 세그먼트로)
+}
+
+// ─── v10 Upgrade Events ───
+
+/** 서버→클라: 레벨업 시 선택지 제시 */
+export interface LevelUpPayload {
+  level: number;
+  choices: UpgradeChoice[];
+  timeoutTicks: number;
+}
+
+/** 클라→서버: 업그레이드 선택 */
+export interface ChooseUpgradePayload {
+  choiceId: string;  // UpgradeChoice.id
+}
+
+/** 서버→클라: 시너지 발동 알림 */
+export interface SynergyActivatedPayload {
+  synergyId: string;
+  synergyName: string;
+  description: string;
+}
+
+/** 서버→클라: 아레나 수축 정보 */
+export interface ArenaShrinkPayload {
+  currentRadius: number;
+  minRadius: number;
+  shrinkRate: number;  // px/min
+}
+
 // ─── Socket.IO Event Maps ───
 
 export interface ClientToServerEvents {
@@ -176,6 +236,8 @@ export interface ClientToServerEvents {
   input: (data: InputPayload) => void;
   respawn: (data: RespawnPayload) => void;
   ping: (data: PingPayload) => void;
+  // v10 이벤트
+  choose_upgrade: (data: ChooseUpgradePayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -191,4 +253,8 @@ export interface ServerToClientEvents {
   round_start: (data: RoundStartPayload) => void;
   round_end: (data: RoundEndPayload) => void;
   round_reset: (data: RoundResetPayload) => void;
+  // v10 이벤트
+  level_up: (data: LevelUpPayload) => void;
+  synergy_activated: (data: SynergyActivatedPayload) => void;
+  arena_shrink: (data: ArenaShrinkPayload) => void;
 }

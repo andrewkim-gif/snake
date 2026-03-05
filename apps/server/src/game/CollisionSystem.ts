@@ -1,157 +1,214 @@
 /**
- * CollisionSystem — 경계/머리-몸통/머리-머리 충돌 감지 + 사망 처리
- * v4: 모든 충돌에서 mass 비율 기반 흡수 메카닉
- *   - 1.5배 이상 크면 → 큰 뱀 생존, 작은 뱀 흡수
- *   - 비슷하면 → 머리→몸통: 머리 쪽 사망 / 머리→머리: 양쪽 사망
+ * CollisionSystem v10 — 오라/대시 기반 전투 시스템
+ * 세그먼트 기반 충돌 → 히트박스 오라 전투로 전면 교체
+ *
+ * 전투 모델:
+ * - 오라-오라 충돌: 양쪽 DPS 교환 (60px 반경)
+ * - 대시 충돌: 부스트 돌진 → mass 30% 즉시 피해
+ * - 경계 충돌: 수축 경계 밖 → mass 패널티 (ArenaShrink에서 처리)
  */
 
-import type { ArenaConfig } from '@snake-arena/shared';
-import { distanceFromOrigin, distanceSq } from '@snake-arena/shared';
-import type { SnakeEntity } from './Snake';
+import type { ArenaConfig, DamageSource } from '@snake-arena/shared';
+import { COMBAT_CONFIG } from '@snake-arena/shared';
+import type { AgentEntity } from './AgentEntity';
 import type { OrbManager } from './OrbManager';
 import type { SpatialHash } from './SpatialHash';
 
 export interface DeathEvent {
-  snakeId: string;
+  snakeId: string;       // 하위 호환: snakeId 유지 (agentId 역할)
   killerId?: string;
   absorbed?: boolean;
+  damageSource?: DamageSource; // v10: 사망 원인
 }
 
-/** 흡수 임계값 — 1.2배 이상 크면 흡수 */
-const ABSORB_MASS_RATIO = 1.2;
-/** 흡수 시 피해자 mass 중 흡수되는 비율 */
-const ABSORB_EFFICIENCY = 0.8;
-
 export class CollisionSystem {
-  detectAll(
-    snakes: Map<string, SnakeEntity>,
+  /**
+   * v10: 오라 전투 처리 — 매 틱 호출
+   * 기존 detectAll()은 즉사 방식이었지만, v10은 점진적 DPS로 변경
+   * 사망 이벤트는 mass <= 0 체크로 발생
+   */
+  processAuraCombat(
+    agents: Map<string, AgentEntity>,
     spatialHash: SpatialHash,
     config: ArenaConfig,
-  ): DeathEvent[] {
-    const deaths: DeathEvent[] = [];
-    const deadSet = new Set<string>();
+    currentTick: number,
+    gracePeriodTicks: number,
+  ): void {
+    for (const agent of agents.values()) {
+      if (!agent.isAlive) continue;
 
-    for (const snake of snakes.values()) {
-      if (!snake.isAlive) continue;
-      const head = snake.head;
+      // Grace period 동안 전투 면역
+      const ticksSinceJoin = currentTick - (agent.data.joinedAt / 50); // 대략적 틱 변환
+      if (ticksSinceJoin < gracePeriodTicks && agent.data.level <= 1) continue;
 
-      // 경계 충돌 — 크기 무관, 무조건 사망
-      if (distanceFromOrigin(head) >= config.radius) {
-        deaths.push({ snakeId: snake.data.id });
-        deadSet.add(snake.data.id);
-        continue;
+      // Shield Burst 무적 체크
+      if (agent.hasEffect('ghost')) continue;
+
+      const pos = agent.position;
+      const nearbyAgents = spatialHash.queryAgents(pos, config.auraRadius);
+
+      for (const entry of nearbyAgents) {
+        if (entry.agentId === agent.data.id) continue;
+
+        const other = agents.get(entry.agentId);
+        if (!other || !other.isAlive) continue;
+        if (other.hasEffect('ghost')) continue;
+
+        const dx = pos.x - entry.x;
+        const dy = pos.y - entry.y;
+        const distSq = dx * dx + dy * dy;
+        const auraR = config.auraRadius;
+
+        if (distSq < auraR * auraR) {
+          // 오라 범위 내 → DPS 교환
+          const myDps = agent.getAuraDps(config);
+
+          // 상대에게 데미지 적용
+          other.takeDamage(myDps, agent.data.id);
+        }
       }
+    }
+  }
 
-      // ghost 효과: 다른 뱀 몸통 충돌 스킵
-      if (!snake.hasEffect('ghost')) {
-        const nearby = spatialHash.querySegments(head, config.headRadius * 2);
-        for (const entry of nearby) {
-          if (entry.snakeId === snake.data.id) continue;
-          const dx = head.x - entry.x;
-          const dy = head.y - entry.y;
-          const distSqVal = dx * dx + dy * dy;
-          const collisionR = config.headRadius;
-          if (distSqVal < collisionR * collisionR) {
-            // 머리→몸통: mass 비율 체크
-            const other = snakes.get(entry.snakeId);
-            if (other && snake.data.mass / other.data.mass >= ABSORB_MASS_RATIO) {
-              // 내가 1.5배 이상 크다 → 상대가 죽고 내가 흡수
-              deaths.push({ snakeId: other.data.id, killerId: snake.data.id, absorbed: true });
-              deadSet.add(other.data.id);
-            } else {
-              // 비슷하거나 상대가 더 크다 → 기존대로 머리 쪽(나) 사망
-              deaths.push({ snakeId: snake.data.id, killerId: entry.snakeId });
-              deadSet.add(snake.data.id);
-            }
-            break;
+  /**
+   * v10: 대시(부스트) 충돌 처리
+   * 부스트 상태로 상대 히트박스 범위 내 진입 → 상대 mass의 30% 즉시 피해
+   */
+  processDashCollisions(
+    agents: Map<string, AgentEntity>,
+    spatialHash: SpatialHash,
+    config: ArenaConfig,
+  ): void {
+    for (const agent of agents.values()) {
+      if (!agent.isAlive || !agent.data.boosting) continue;
+
+      const pos = agent.position;
+      const nearbyAgents = spatialHash.queryAgents(pos, config.hitboxMaxRadius * 2);
+
+      for (const entry of nearbyAgents) {
+        if (entry.agentId === agent.data.id) continue;
+
+        const other = agents.get(entry.agentId);
+        if (!other || !other.isAlive) continue;
+        if (other.hasEffect('ghost')) continue;
+
+        const dx = pos.x - entry.x;
+        const dy = pos.y - entry.y;
+        const distSq = dx * dx + dy * dy;
+        const collisionR = agent.data.hitboxRadius + other.data.hitboxRadius;
+
+        if (distSq < collisionR * collisionR) {
+          // 대시 히트! 상대 mass의 30% 즉시 피해
+          const dashDamage = other.data.mass * config.dashDamageRatio;
+          other.takeDamage(dashDamage, agent.data.id);
+
+          // Berserker 시너지: 대시 피해 ×3
+          if (agent.data.activeSynergies.includes('berserker')) {
+            other.takeDamage(dashDamage * 2, agent.data.id); // 추가 2배 (총 3배)
           }
         }
       }
     }
+  }
 
-    // Head-to-head — SpatialHash 기반 근접 쿼리 (O(N²) → O(N*k))
-    const threshold = config.headRadius * 2;
-    const checked = new Set<string>();
-    for (const snake of snakes.values()) {
-      if (!snake.isAlive) continue;
-      checked.add(snake.data.id);
+  /**
+   * v10: 사망 체크 — mass <= 0인 에이전트를 DeathEvent로 변환
+   * 기존 detectAll + processDeaths를 대체
+   */
+  detectDeaths(
+    agents: Map<string, AgentEntity>,
+    currentRadius: number,
+  ): DeathEvent[] {
+    const deaths: DeathEvent[] = [];
 
-      const nearby = spatialHash.querySegments(snake.head, threshold);
-      for (const entry of nearby) {
-        if (entry.snakeId === snake.data.id) continue;
-        if (entry.segIndex !== 0) continue; // 머리 세그먼트만
-        if (checked.has(entry.snakeId)) continue;
+    for (const agent of agents.values()) {
+      if (!agent.isAlive) continue;
 
-        const other = snakes.get(entry.snakeId);
-        if (!other || !other.isAlive) continue;
+      // 경계 사망 (수축된 경계 기준)
+      const { x, y } = agent.position;
+      const dist = Math.sqrt(x * x + y * y);
+      if (dist > currentRadius * 1.1) {
+        // 경계 밖 10% 이상 벗어나면 즉사
+        deaths.push({
+          snakeId: agent.data.id,
+          killerId: undefined,
+          damageSource: 'boundary',
+        });
+        continue;
+      }
 
-        const dx = snake.head.x - other.head.x;
-        const dy = snake.head.y - other.head.y;
-        const dSq = dx * dx + dy * dy;
-
-        if (dSq < threshold * threshold) {
-          const aAlreadyDead = deadSet.has(snake.data.id);
-          const bAlreadyDead = deadSet.has(other.data.id);
-
-          const ratio = snake.data.mass / other.data.mass;
-
-          if (ratio >= ABSORB_MASS_RATIO) {
-            if (!bAlreadyDead) {
-              deaths.push({ snakeId: other.data.id, killerId: snake.data.id, absorbed: true });
-              deadSet.add(other.data.id);
-            }
-          } else if (1 / ratio >= ABSORB_MASS_RATIO) {
-            if (!aAlreadyDead) {
-              deaths.push({ snakeId: snake.data.id, killerId: other.data.id, absorbed: true });
-              deadSet.add(snake.data.id);
-            }
-          } else {
-            if (!aAlreadyDead) {
-              deaths.push({ snakeId: snake.data.id });
-              deadSet.add(snake.data.id);
-            }
-            if (!bAlreadyDead) {
-              deaths.push({ snakeId: other.data.id });
-              deadSet.add(other.data.id);
-            }
-          }
-        }
+      // mass 0 사망
+      if (agent.data.mass <= 0) {
+        const killerId = agent.data.lastDamagedBy;
+        const wasAura = killerId != null;
+        deaths.push({
+          snakeId: agent.data.id,
+          killerId: killerId ?? undefined,
+          damageSource: wasAura ? 'aura' : 'boundary',
+        });
       }
     }
 
     return deaths;
   }
 
+  /**
+   * v10: 사망 처리 — DeathEvent를 받아 사망 처리 + XP 오브 생성
+   */
   processDeaths(
     deaths: DeathEvent[],
-    snakes: Map<string, SnakeEntity>,
+    agents: Map<string, AgentEntity>,
     orbManager: OrbManager,
     tick: number,
   ): void {
     for (const death of deaths) {
-      const snake = snakes.get(death.snakeId);
-      if (!snake || !snake.isAlive) continue;
+      const agent = agents.get(death.snakeId);
+      if (!agent || !agent.isAlive) continue;
 
-      const victimMass = snake.data.mass;
+      const victimMass = agent.data.mass;
+      const victimPos = agent.position;
 
-      if (death.absorbed && death.killerId) {
-        const killer = snakes.get(death.killerId);
+      // 사망 오브 생성 — position 기반 (segments 없음)
+      orbManager.decomposeAgent(victimPos, victimMass, tick);
+
+      agent.die();
+
+      // 킬러에게 보상
+      if (death.killerId) {
+        const killer = agents.get(death.killerId);
         if (killer?.isAlive) {
-          killer.addMass(victimMass * ABSORB_EFFICIENCY);
           killer.data.kills++;
-        }
-        snake.die();
-      } else {
-        orbManager.decomposeSnake(snake.data.segments, victimMass, tick);
-        snake.die();
+          killer.data.killStreak++;
 
-        if (death.killerId) {
-          const killer = snakes.get(death.killerId);
-          if (killer?.isAlive) {
-            killer.data.kills++;
+          // Vampire 시너지: 독 킬 시 mass 회복
+          if (killer.data.activeSynergies.includes('vampire') && death.damageSource === 'venom') {
+            killer.addMass(victimMass * 0.20);
           }
         }
       }
     }
+  }
+
+  // ─── 하위 호환 메서드 (기존 Arena.ts에서 호출) ───
+
+  /** @deprecated v10: processAuraCombat + detectDeaths 사용 */
+  detectAll(
+    snakes: Map<string, any>,
+    spatialHash: SpatialHash,
+    config: ArenaConfig,
+  ): DeathEvent[] {
+    // v10에서는 오라 전투가 별도로 처리되므로,
+    // 이 메서드는 경계/mass 0 사망만 체크
+    const deaths: DeathEvent[] = [];
+    for (const snake of snakes.values()) {
+      if (!snake.isAlive) continue;
+      const pos = snake.position || snake.head;
+      if (!pos) continue;
+      const dist = Math.sqrt(pos.x * pos.x + pos.y * pos.y);
+      if (dist >= config.radius) {
+        deaths.push({ snakeId: snake.data.id, damageSource: 'boundary' });
+      }
+    }
+    return deaths;
   }
 }

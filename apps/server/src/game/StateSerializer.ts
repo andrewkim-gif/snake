@@ -1,14 +1,15 @@
 /**
- * StateSerializer — 뷰포트 컬링 + 직렬화 + 미니맵
- * Arena.ts에서 추출
+ * StateSerializer v10 — 뷰포트 컬링 + 직렬화 + 미니맵
+ * Snake→Agent: segments → position 직렬화
+ * 하위 호환: AgentNetworkData.p (segments) 필드를 position에서 생성
  */
 
 import type {
-  LeaderboardEntry, SnakeNetworkData, OrbNetworkData,
+  LeaderboardEntry, AgentNetworkData, OrbNetworkData,
   StatePayload, MinimapPayload, OrbType,
 } from '@snake-arena/shared';
 import { NETWORK } from '@snake-arena/shared';
-import type { SnakeEntity } from './Snake';
+import type { AgentEntity } from './AgentEntity';
 import type { OrbManager } from './OrbManager';
 import type { SpatialHash } from './SpatialHash';
 
@@ -19,36 +20,37 @@ export class StateSerializer {
   };
 
   private static readonly EFFECT_TYPE_MAP = { magnet: 0, speed: 1, ghost: 2 } as const;
+
   /** 플레이어별 뷰포트 기반 state 생성 */
   getStateForPlayer(
     playerId: string,
     viewportWidth: number,
     viewportHeight: number,
-    snakes: Map<string, SnakeEntity>,
+    agents: Map<string, AgentEntity>,
     orbManager: OrbManager,
     spatialHash: SpatialHash,
     leaderboard: LeaderboardEntry[],
     tick: number,
   ): StatePayload | null {
-    const snake = snakes.get(playerId);
-    if (!snake) return null;
+    const agent = agents.get(playerId);
+    if (!agent) return null;
 
-    const center = snake.isAlive ? snake.head : { x: 0, y: 0 };
+    const center = agent.isAlive ? agent.position : { x: 0, y: 0 };
     const margin = NETWORK.VIEWPORT_MARGIN;
     const halfW = viewportWidth / 2 + margin;
     const halfH = viewportHeight / 2 + margin;
 
-    // 뷰포트 내 뱀 필터링
-    const visibleSnakes: SnakeNetworkData[] = [];
-    for (const other of snakes.values()) {
+    // 뷰포트 내 에이전트 필터링
+    const visibleSnakes: AgentNetworkData[] = [];
+    for (const other of agents.values()) {
       if (!other.isAlive) continue;
-      if (Math.abs(other.head.x - center.x) < halfW + 500 &&
-          Math.abs(other.head.y - center.y) < halfH + 500) {
-        visibleSnakes.push(this.serializeSnake(other, tick));
+      if (Math.abs(other.position.x - center.x) < halfW + 500 &&
+          Math.abs(other.position.y - center.y) < halfH + 500) {
+        visibleSnakes.push(this.serializeAgent(other, tick));
       }
     }
 
-    // 뷰포트 내 orb — SpatialHash 쿼리 (전체 순회 대신)
+    // 뷰포트 내 orb — SpatialHash 쿼리
     const queryRadius = Math.max(halfW, halfH);
     const nearbyOrbs = spatialHash.queryOrbs(center, queryRadius);
     const visibleOrbs: OrbNetworkData[] = [];
@@ -78,20 +80,20 @@ export class StateSerializer {
     return payload;
   }
 
-  /** minimap 데이터 (1Hz, 모든 뱀 위치) */
+  /** minimap 데이터 (1Hz, 모든 에이전트 위치) */
   getMinimapForPlayer(
     playerId: string,
-    snakes: Map<string, SnakeEntity>,
+    agents: Map<string, AgentEntity>,
     radius: number,
   ): MinimapPayload {
     const result: MinimapPayload['snakes'] = [];
-    for (const snake of snakes.values()) {
-      if (!snake.isAlive) continue;
+    for (const agent of agents.values()) {
+      if (!agent.isAlive) continue;
       result.push({
-        x: Math.round(snake.head.x),
-        y: Math.round(snake.head.y),
-        m: snake.data.mass,
-        me: snake.data.id === playerId,
+        x: Math.round(agent.position.x),
+        y: Math.round(agent.position.y),
+        m: agent.data.mass,
+        me: agent.data.id === playerId,
       });
     }
     return { snakes: result, boundary: radius };
@@ -100,43 +102,47 @@ export class StateSerializer {
   /** death 이벤트 데이터 조회 */
   getDeathInfo(
     playerId: string,
-    snakes: Map<string, SnakeEntity>,
+    agents: Map<string, AgentEntity>,
     leaderboard: LeaderboardEntry[],
-  ): { score: number; length: number; kills: number; duration: number; rank: number } | null {
-    const snake = snakes.get(playerId);
-    if (!snake) return null;
+  ): { score: number; length: number; kills: number; duration: number; rank: number; level: number } | null {
+    const agent = agents.get(playerId);
+    if (!agent) return null;
     return {
-      score: snake.data.score,
-      length: snake.data.segments.length,
-      kills: snake.data.kills,
-      duration: Math.floor((Date.now() - snake.data.joinedAt) / 1000),
-      rank: leaderboard.findIndex(e => e.id === playerId) + 1 || snakes.size,
+      score: agent.data.score,
+      length: 1, // v10: 세그먼트 없음, 하위 호환을 위해 1 반환
+      kills: agent.data.kills,
+      duration: Math.floor((Date.now() - agent.data.joinedAt) / 1000),
+      rank: leaderboard.findIndex(e => e.id === playerId) + 1 || agents.size,
+      level: agent.data.level,
     };
   }
 
-  private serializeSnake(snake: SnakeEntity, tick: number): SnakeNetworkData {
-    // segments.map() 대신 for 루프 — 클로저/중간 배열 생성 감소
-    const segs = snake.data.segments;
-    const points: [number, number][] = new Array(segs.length);
-    for (let i = 0; i < segs.length; i++) {
-      points[i] = [
-        Math.round(segs[i].x * 10) / 10,
-        Math.round(segs[i].y * 10) / 10,
-      ];
-    }
+  /**
+   * v10: Agent → AgentNetworkData 직렬화
+   * 하위 호환: p(segments) 필드를 position에서 단일 포인트 배열로 생성
+   */
+  private serializeAgent(agent: AgentEntity, tick: number): AgentNetworkData {
+    const pos = agent.position;
+    const point: [number, number] = [
+      Math.round(pos.x * 10) / 10,
+      Math.round(pos.y * 10) / 10,
+    ];
 
-    const data: SnakeNetworkData = {
-      i: snake.data.id,
-      n: snake.data.name,
-      h: Math.round(snake.data.heading * 100) / 100,
-      m: snake.data.mass,
-      b: snake.data.boosting,
-      k: snake.data.skin.id,
-      p: points,
+    const data: AgentNetworkData = {
+      i: agent.data.id,
+      n: agent.data.name,
+      x: point[0],
+      y: point[1],
+      h: Math.round(agent.data.heading * 100) / 100,
+      m: agent.data.mass,
+      b: agent.data.boosting,
+      k: agent.data.skin.id,
+      lv: agent.data.level,
+      p: [point], // 하위 호환 (segments 형태)
     };
 
-    if (snake.data.activeEffects.length > 0) {
-      data.e = snake.data.activeEffects.flatMap(e => [
+    if (agent.data.activeEffects.length > 0) {
+      data.e = agent.data.activeEffects.flatMap(e => [
         StateSerializer.EFFECT_TYPE_MAP[e.type],
         Math.max(0, e.expiresAt - tick),
       ]);

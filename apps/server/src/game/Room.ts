@@ -1,6 +1,7 @@
 /**
- * Room — Arena를 감싸는 상태 머신 + 타이머 + 승자 결정
+ * Room v10 — Arena를 감싸는 상태 머신 + 타이머 + 승자 결정
  * waiting → countdown(10s) → playing(300s) → ending(5s) → cooldown(15s) → waiting
+ * v10: 1 Life 정책 — playing 중 리스폰 불가
  */
 
 import type { RoomStatus, RoomInfo, WinnerInfo, LeaderboardEntry } from '@snake-arena/shared';
@@ -54,7 +55,8 @@ export class Room {
   tick(): RoomStateTransition | null {
     if (this.state === 'waiting') {
       if (this.humanPlayers.size >= ROOM_CONFIG.MIN_PLAYERS_TO_START) {
-        return this.transitionTo('countdown');
+        // 카운트다운 없이 즉시 시작
+        return this.transitionTo('playing');
       }
       return null;
     }
@@ -118,7 +120,7 @@ export class Room {
           name: entry.name,
           score: entry.score,
           kills: entry.kills,
-          skinId: this.arena.getSnakeById(entry.id)?.data.skin.id ?? 0,
+          skinId: this.arena.getAgentById(entry.id)?.data.skin.id ?? 0,
         };
       }
     }
@@ -128,10 +130,16 @@ export class Room {
         name: top.name,
         score: top.score,
         kills: top.kills,
-        skinId: this.arena.getSnakeById(top.id)?.data.skin.id ?? 0,
+        skinId: this.arena.getAgentById(top.id)?.data.skin.id ?? 0,
       };
     }
     return null;
+  }
+
+  /** v10: playing 중 리스폰 허용 여부 */
+  canRespawn(): boolean {
+    // 1 Life 정책: playing 중에는 리스폰 불가
+    return this.state !== 'playing' && this.state !== 'ending';
   }
 
   private resetRound(): void {

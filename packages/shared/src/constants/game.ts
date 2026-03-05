@@ -14,7 +14,7 @@ export const ARENA_CONFIG: ArenaConfig = {
   baseSpeed: 150,        // px/s
   boostSpeed: 300,       // px/s (2x)
   turnRate: 0.25,        // rad/tick (5.0 rad/s @ 20Hz — 90도 전환 ~0.3s)
-  segmentSpacing: 8,     // units
+  segmentSpacing: 8,     // units (deprecated in v10)
   initialMass: 10,
   minBoostMass: 15,
   boostCostPerTick: 0.5,
@@ -22,9 +22,26 @@ export const ARENA_CONFIG: ArenaConfig = {
   headRadius: 12,
   naturalOrbTarget: 2000,
   deathOrbRatio: 0.8,
-  trailOrbInterval: 3,   // ticks
+  trailOrbInterval: 3,   // ticks (deprecated in v10)
   trailOrbValue: 2,
-  trailOrbLifetime: 600, // ticks (30s)
+  trailOrbLifetime: 600, // ticks (deprecated in v10)
+
+  // v10 전투 상수
+  auraRadius: 60,
+  auraDpsPerTick: 2.0,
+  dashDamageRatio: 0.30,
+  hitboxBaseRadius: 16,
+  hitboxMaxRadius: 22,
+
+  // v10 아레나 수축
+  shrinkEnabled: true,
+  shrinkRatePerMin: 600,
+  shrinkMinRadius: 1200,
+  boundaryPenaltyPerTick: 0.0025,
+
+  // v10 레벨업
+  upgradeChoiceTimeout: 100, // 5초 @ 20Hz
+  gracePeriodTicks: 600,     // 30초
 };
 
 // ─── Derived Constants ───
@@ -145,7 +162,7 @@ export const ROOM_CONFIG = {
   COUNTDOWN_DURATION: 10,      // 카운트다운 10초
   ENDING_DURATION: 5,          // 결과 화면 5초
   COOLDOWN_DURATION: 15,       // 다음 라운드 대기 15초
-  MIN_PLAYERS_TO_START: 2,
+  MIN_PLAYERS_TO_START: 1,
   BOTS_PER_ROOM: 15,
   ROOM_ORB_TARGET: 1000,
   LOBBY_UPDATE_INTERVAL: 1000, // 1Hz
