@@ -214,6 +214,50 @@ export interface ChooseUpgradePayload {
   choiceId: string;  // UpgradeChoice.id
 }
 
+// ─── Agent Training API 이벤트 ───
+
+/** 에이전트 명령 페이로드 */
+export interface AgentCommandPayload {
+  cmd: string;
+  [key: string]: any;
+}
+
+/** 트레이닝 프로필 설정 페이로드 */
+export interface SetTrainingProfilePayload {
+  agentId: string;
+  profile: {
+    buildProfile?: {
+      primaryPath: string;
+      fallbackPath?: string;
+      fallbackCondition?: { levelBelow: number; timeElapsed: number };
+      bannedUpgrades?: string[];
+      alwaysPick?: string[];
+    };
+    combatRules?: Array<{
+      condition: string;
+      action: string;
+      priority?: number;
+    }>;
+    strategyPhases?: {
+      early: string;
+      mid: string;
+      late: string;
+    };
+  };
+}
+
+/** 트레이닝 프로필 저장 확인 */
+export interface TrainingProfileSavedPayload {
+  agentId: string;
+  success: boolean;
+  updatedAt: number;
+}
+
+/** 게임 관찰 요청 */
+export interface ObserveGamePayload {
+  agentId: string;
+}
+
 /** 서버→클라: 시너지 발동 알림 */
 export interface SynergyActivatedPayload {
   synergyId: string;
@@ -238,6 +282,10 @@ export interface ClientToServerEvents {
   ping: (data: PingPayload) => void;
   // v10 이벤트
   choose_upgrade: (data: ChooseUpgradePayload) => void;
+  // v10 Phase 3: Agent Training
+  observe_game: (data: ObserveGamePayload, callback: (response: any) => void) => void;
+  agent_command: (data: AgentCommandPayload) => void;
+  set_training_profile: (data: SetTrainingProfilePayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -257,4 +305,6 @@ export interface ServerToClientEvents {
   level_up: (data: LevelUpPayload) => void;
   synergy_activated: (data: SynergyActivatedPayload) => void;
   arena_shrink: (data: ArenaShrinkPayload) => void;
+  // v10 Phase 3: Agent Training
+  training_profile_saved: (data: TrainingProfileSavedPayload) => void;
 }

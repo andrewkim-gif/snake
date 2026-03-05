@@ -45,7 +45,7 @@ export default function Home() {
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
   const [fadeOut, setFadeOut] = useState(false);
-  const { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, chooseUpgrade, dismissSynergyPopup } = useSocket();
+  const { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, chooseUpgrade, dismissSynergyPopup, setTrainingProfile } = useSocket();
 
   const handleQuickJoin = useCallback(() => {
     const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
@@ -221,7 +221,7 @@ export default function Home() {
           <RecentWinnersPanel winners={uiState.recentWinners} />
 
           {/* Agent Training Console */}
-          <TrainingConsole />
+          <TrainingConsole onSaveProfile={setTrainingProfile} />
 
           {/* RP System */}
           <RPPanel playerName={playerName} />

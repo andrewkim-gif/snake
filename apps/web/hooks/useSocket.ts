@@ -358,5 +358,10 @@ export function useSocket() {
     }));
   }, []);
 
-  return { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, disconnect, chooseUpgrade, dismissSynergyPopup };
+  // v10 Phase 3: 트레이닝 프로필 저장
+  const setTrainingProfile = useCallback((agentId: string, profile: any) => {
+    socketRef.current?.emit('set_training_profile', { agentId, profile });
+  }, []);
+
+  return { dataRef, uiState, joinRoom, leaveRoom, sendInput, respawn, disconnect, chooseUpgrade, dismissSynergyPopup, setTrainingProfile };
 }

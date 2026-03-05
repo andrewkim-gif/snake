@@ -8,6 +8,7 @@ import type { Logger } from 'pino';
 import type {
   ClientToServerEvents, ServerToClientEvents,
   InputPayload, JoinRoomPayload, RespawnPayload, ChooseUpgradePayload,
+  AgentCommandPayload, SetTrainingProfilePayload, ObserveGamePayload,
 } from '@snake-arena/shared';
 import {
   isValidAngle, isValidBoost, isValidSequence,
@@ -15,16 +16,24 @@ import {
 } from '@snake-arena/shared';
 import { ARENA_CONFIG, ROOM_CONFIG } from '@snake-arena/shared';
 import { RoomManager } from '../game/RoomManager';
+import { AgentAPI } from '../game/AgentAPI';
+import { TrainingSystem } from '../game/TrainingSystem';
 import { RateLimiter } from './RateLimiter';
 import { Broadcaster } from './Broadcaster';
 
 type GameIO = Server<ClientToServerEvents, ServerToClientEvents>;
 type GameSocket = Socket<ClientToServerEvents, ServerToClientEvents>;
 
-export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
+export function setupSocketHandlers(
+  io: GameIO,
+  logger: Logger,
+  options?: { agentAPI?: AgentAPI; trainingSystem?: TrainingSystem },
+): RoomManager {
   const roomManager = new RoomManager();
   const rateLimiter = new RateLimiter();
   const broadcaster = new Broadcaster();
+  const agentAPI = options?.agentAPI ?? new AgentAPI(roomManager);
+  const trainingSystem = options?.trainingSystem ?? new TrainingSystem();
 
   // Broadcaster에 상태 전환 콜백 연결
   roomManager.setOnStateTransition((transition) => {
@@ -127,6 +136,46 @@ export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
       room.getArena().chooseUpgrade(socket.id, data.choiceId);
     });
 
+    // v10 Phase 3: 게임 상태 관찰 (Agent API)
+    socket.on('observe_game', (data: ObserveGamePayload, callback) => {
+      if (typeof callback !== 'function') return;
+      const result = agentAPI.getObserveData(data.agentId);
+      callback(result);
+    });
+
+    // v10 Phase 3: 에이전트 명령 (Commander Mode)
+    socket.on('agent_command', (data: AgentCommandPayload) => {
+      // socket.id를 사용하여 에이전트 찾기
+      const agent = agentAPI.getAgentForPlayer(socket.id);
+      if (!agent) {
+        socket.emit('error', { code: 'NOT_AGENT' as any, message: 'Not registered as agent' });
+        return;
+      }
+      const result = agentAPI.executeCommand(agent.agentId, data as any);
+      if (!result.success) {
+        socket.emit('error', { code: 'COMMAND_FAILED' as any, message: (result as any).error });
+      }
+    });
+
+    // v10 Phase 3: 트레이닝 프로필 설정
+    socket.on('set_training_profile', (data: SetTrainingProfilePayload) => {
+      try {
+        const updated = trainingSystem.setProfile(data.agentId, data.profile as any);
+        socket.emit('training_profile_saved', {
+          agentId: data.agentId,
+          success: true,
+          updatedAt: updated.updatedAt,
+        });
+        logger.info({ agentId: data.agentId }, 'Training profile saved');
+      } catch (err) {
+        socket.emit('training_profile_saved', {
+          agentId: data.agentId,
+          success: false,
+          updatedAt: 0,
+        });
+      }
+    });
+
     socket.on('ping', (data) => {
       socket.emit('pong', { t: data.t, st: Date.now() });
     });
@@ -140,6 +189,10 @@ export function setupSocketHandlers(io: GameIO, logger: Logger): RoomManager {
       logger.info({ socketId: socket.id }, 'Client disconnected');
     });
   });
+
+  // RoomManager에 agentAPI와 trainingSystem 참조 저장 (REST API용)
+  (roomManager as any)._agentAPI = agentAPI;
+  (roomManager as any)._trainingSystem = trainingSystem;
 
   return roomManager;
 }
