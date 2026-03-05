@@ -23,6 +23,7 @@ import {
 } from './UpgradeSystem';
 import { MapObjects, type MapObjectEvent } from './MapObjects';
 import { AbilityProcessor } from './AbilityProcessor';
+import { CoachSystem, type CoachMessage } from './CoachSystem';
 
 export class Arena {
   private config: ArenaConfig;
@@ -36,12 +37,15 @@ export class Arena {
   private arenaShrink: ArenaShrink;
   private mapObjects: MapObjects;
   private abilityProcessor: AbilityProcessor;
+  private coachSystem: CoachSystem;
   private tick = 0;
   private interval: ReturnType<typeof setInterval> | null = null;
   private tickDuration = 0;
   private lastTickDeaths: DeathEvent[] = [];
   /** 이번 틱에 레벨업한 에이전트 목록 */
   private lastTickLevelUps: Array<{ agentId: string; level: number }> = [];
+  /** 이번 틱에 생성된 코치 메시지 */
+  private lastTickCoachMessages: Array<{ playerId: string; message: CoachMessage }> = [];
 
   constructor(config: ArenaConfig = ARENA_CONFIG, botCount = 20) {
     this.config = config;
@@ -54,6 +58,7 @@ export class Arena {
     this.arenaShrink = new ArenaShrink(config);
     this.mapObjects = new MapObjects(config.radius);
     this.abilityProcessor = new AbilityProcessor();
+    this.coachSystem = new CoachSystem();
   }
 
   start(): void {
@@ -241,6 +246,25 @@ export class Arena {
     // 10. Leaderboard
     if (this.tick % NETWORK.LEADERBOARD_INTERVAL === 0) {
       this.leaderboardManager.updateFromAgents(this.agents);
+    }
+
+    // 10.5 Coach 메시지 생성 (3초 간격)
+    if (this.coachSystem.shouldCheck(this.tick)) {
+      this.lastTickCoachMessages = [];
+      const mapObjInfo = this.mapObjects.getNetworkData().map(o => ({
+        type: o.type, position: { x: o.x, y: o.y }, active: o.active,
+      }));
+      const arenaRadius = this.arenaShrink.getCurrentRadius();
+      // timeRemaining은 Room에서 관리 → 0으로 전달 (Broadcaster에서 보정)
+      for (const agent of this.agents.values()) {
+        if (!agent.isAlive) continue;
+        const msg = this.coachSystem.generateCoachMessages(
+          agent, this.agents, arenaRadius, 0, this.tick, mapObjInfo,
+        );
+        if (msg) {
+          this.lastTickCoachMessages.push({ playerId: agent.data.id, message: msg });
+        }
+      }
     }
 
     // 11. Orb 유지
@@ -479,5 +503,19 @@ export class Arena {
       if (dist < minDist) { minDist = dist; nearest = orb.position; }
     }
     return nearest;
+  }
+
+  // ─── v10 Phase 4: Coach/Analyst/RP/Quest 접근자 ───
+
+  /** 이번 틱 코치 메시지 소비 */
+  consumeLastTickCoachMessages(): Array<{ playerId: string; message: CoachMessage }> {
+    const msgs = this.lastTickCoachMessages;
+    this.lastTickCoachMessages = [];
+    return msgs;
+  }
+
+  /** 에이전트 맵 접근 (분석용) */
+  getAgents(): Map<string, AgentEntity> {
+    return this.agents;
   }
 }

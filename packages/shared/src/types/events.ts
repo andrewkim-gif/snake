@@ -253,6 +253,57 @@ export interface TrainingProfileSavedPayload {
   updatedAt: number;
 }
 
+// ── v10 Phase 4: Coach/Analyst/RP/Quest Payloads ──
+
+export interface CoachMessagePayload {
+  type: 'warning' | 'tip' | 'opportunity' | 'strategy' | 'efficiency';
+  message: string;
+  priority: number;
+}
+
+export interface RoundAnalysisPayload {
+  buildEfficiency: number;
+  combatScore: number;
+  positioningScore: number;
+  xpEfficiency: number;
+  overallScore: number;
+  suggestions: string[];
+  mvpStats: {
+    highestDPS: boolean;
+    mostKills: boolean;
+    longestSurvivor: boolean;
+    bestBuilder: boolean;
+    mostXP: boolean;
+  };
+}
+
+export interface RPUpdatePayload {
+  totalRP: number;
+  rpEarned: number;
+  breakdown: Record<string, number>;
+  newUnlocks: Array<{
+    id: string;
+    name: string;
+    type: string;
+    description: string;
+  }>;
+  unlockedItems: string[];
+}
+
+export interface QuestProgressPayload {
+  questId: string;
+  current: number;
+  target: number;
+  completed: boolean;
+  rpReward: number;
+}
+
+export interface QuestUpdatePayload {
+  quests: QuestProgressPayload[];
+  completedQuests: QuestProgressPayload[];
+  rpEarned: number;
+}
+
 /** 게임 관찰 요청 */
 export interface ObserveGamePayload {
   agentId: string;
@@ -307,4 +358,9 @@ export interface ServerToClientEvents {
   arena_shrink: (data: ArenaShrinkPayload) => void;
   // v10 Phase 3: Agent Training
   training_profile_saved: (data: TrainingProfileSavedPayload) => void;
+  // v10 Phase 4: Coach/Analyst/RP/Quest
+  coach_message: (data: CoachMessagePayload) => void;
+  round_analysis: (data: RoundAnalysisPayload) => void;
+  rp_update: (data: RPUpdatePayload) => void;
+  quest_update: (data: QuestUpdatePayload) => void;
 }

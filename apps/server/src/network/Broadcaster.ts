@@ -1,6 +1,7 @@
 /**
  * Broadcaster v10 — Multi-Room state/death/kill/level_up/arena_shrink 브로드캐스팅
  * v10: level_up 이벤트 + arena_shrink 이벤트 추가
+ * v10 Phase 4: coach_message, round_analysis, rp_update, quest_update 이벤트 추가
  */
 
 import type { Server, Socket } from 'socket.io';
@@ -51,12 +52,19 @@ export class Broadcaster {
             }
           }
 
+          // 킬러에게 kill 이벤트
           if (death.killerId) {
             const killerSocket = io.sockets.sockets.get(death.killerId) as GameSocket | undefined;
             if (killerSocket) {
               const victimName = arena.getAgentName(death.snakeId) ?? 'Unknown';
               const victimMass = arena.getAgentMass(death.snakeId);
               killerSocket.emit('kill', { victim: victimName, victimMass });
+            }
+
+            // v10 Phase 4: 킬 퀘스트 추적
+            const humanIds = room.getHumanPlayerIds();
+            if (humanIds.has(death.killerId)) {
+              room.questSystem.trackKill(death.killerId);
             }
           }
         }
@@ -74,6 +82,19 @@ export class Broadcaster {
                 timeoutTicks: agent.data.upgradeDeadlineTick - tick,
               });
             }
+          }
+        }
+
+        // v10 Phase 4: coach_message 이벤트 브로드캐스트
+        const coachMessages = arena.consumeLastTickCoachMessages();
+        for (const { playerId, message } of coachMessages) {
+          const socket = io.sockets.sockets.get(playerId) as GameSocket | undefined;
+          if (socket) {
+            socket.emit('coach_message', {
+              type: message.type,
+              message: message.message,
+              priority: message.priority,
+            });
           }
         }
 
@@ -117,7 +138,7 @@ export class Broadcaster {
 
   /** 상태 전환 이벤트 처리 */
   handleStateTransition(io: GameIO, transition: RoomStateTransition, roomManager: RoomManager): void {
-    const { roomId, to, winner, finalLeaderboard } = transition;
+    const { roomId, to, winner, finalLeaderboard, rpResults, analysisResults, questResults } = transition;
     const room = roomManager.getRoom(roomId);
     if (!room) return;
 
@@ -143,12 +164,52 @@ export class Broadcaster {
             const rank = leaderboard.findIndex(e => e.id === socketId);
             const entry = rank >= 0 ? leaderboard[rank] : null;
 
+            // round_end 이벤트
             socket.emit('round_end', {
               winner: winner ?? null,
               finalLeaderboard: leaderboard.slice(0, 10),
               yourRank: rank >= 0 ? rank + 1 : leaderboard.length + 1,
               yourScore: entry?.score ?? 0,
             });
+
+            // v10 Phase 4: round_analysis 이벤트
+            if (analysisResults) {
+              const analysis = analysisResults.get(socketId);
+              if (analysis) {
+                socket.emit('round_analysis', analysis);
+              }
+            }
+
+            // v10 Phase 4: rp_update 이벤트
+            if (rpResults) {
+              const rpResult = rpResults.find(r => r.playerId === socketId);
+              if (rpResult) {
+                socket.emit('rp_update', {
+                  totalRP: rpResult.newTotal,
+                  rpEarned: rpResult.rpEarned,
+                  breakdown: rpResult.breakdown,
+                  newUnlocks: rpResult.newUnlocks.map(u => ({
+                    id: u.id,
+                    name: u.name,
+                    type: u.type,
+                    description: u.description,
+                  })),
+                  unlockedItems: room.rpSystem.getPlayerUnlocks(socketId),
+                });
+              }
+            }
+
+            // v10 Phase 4: quest_update 이벤트
+            if (questResults) {
+              const questResult = questResults.get(socketId);
+              if (questResult) {
+                socket.emit('quest_update', {
+                  quests: questResult.quests,
+                  completedQuests: questResult.completedQuests,
+                  rpEarned: questResult.rpEarned,
+                });
+              }
+            }
           }
         }
         break;
