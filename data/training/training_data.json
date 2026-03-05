@@ -1,0 +1,38 @@
+{
+  "configs": {
+    "default": {
+      "buildPath": "balanced",
+      "combatStyle": "balanced",
+      "strategyPhases": [
+        {
+          "phase": "early",
+          "strategy": "gather"
+        },
+        {
+          "phase": "mid",
+          "strategy": "farm"
+        },
+        {
+          "phase": "late",
+          "strategy": "fight"
+        }
+      ],
+      "combatRules": [
+        {
+          "condition": "hp_below_30",
+          "action": "flee"
+        },
+        {
+          "condition": "enemy_weaker",
+          "action": "engage"
+        },
+        {
+          "condition": "outnumbered",
+          "action": "kite"
+        }
+      ],
+      "updatedAt": 1772750082633
+    }
+  },
+  "history": {}
+}

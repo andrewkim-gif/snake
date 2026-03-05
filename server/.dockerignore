@@ -1,0 +1,17 @@
+# Build artifacts
+agent-survivor
+*.exe
+
+# Test files
+*_test.go
+
+# IDE
+.idea/
+.vscode/
+
+# Git
+.git/
+.gitignore
+
+# Docs
+README.md
