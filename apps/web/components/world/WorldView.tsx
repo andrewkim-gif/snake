@@ -5,10 +5,12 @@
  * v12: viewMode를 외부에서 제어, 자체 HUD 제거 (LobbyHeader로 통합)
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import type { CountryClientState } from '@/lib/globe-data';
+import { loadGeoJSON, featureToCountryState } from '@/lib/globe-data';
+import { getCountryISO } from '@/lib/map-style';
 
 const WorldMap = dynamic(
   () => import('@/components/world/WorldMap').then((m) => ({ default: m.WorldMap })),
@@ -43,8 +45,29 @@ export function WorldView({
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
+  const [fallbackStates, setFallbackStates] = useState<Map<string, CountryClientState>>(new Map());
 
-  const states = useMemo(() => countryStates || new Map(), [countryStates]);
+  // 서버 데이터 없으면 GeoJSON에서 fallback 국가 데이터 생성
+  useEffect(() => {
+    if (countryStates && countryStates.size > 0) return;
+    loadGeoJSON().then((data) => {
+      const map = new Map<string, CountryClientState>();
+      data.features
+        .filter((f) => f.geometry.type !== 'Point')
+        .forEach((f) => {
+          const state = featureToCountryState(f);
+          if (state.iso3 && state.iso3 !== 'Unknown') {
+            map.set(state.iso3, state);
+          }
+        });
+      setFallbackStates(map);
+    }).catch(console.error);
+  }, [countryStates]);
+
+  const states = useMemo(
+    () => (countryStates && countryStates.size > 0) ? countryStates : fallbackStates,
+    [countryStates, fallbackStates],
+  );
 
   const handleCountryClick = useCallback((iso3: string, _name: string) => {
     setSelectedCountry(iso3);
