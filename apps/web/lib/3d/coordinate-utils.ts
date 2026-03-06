@@ -17,12 +17,19 @@ export function toWorld(x: number, y: number, height = 0): [number, number, numb
 
 /**
  * 게임 heading(라디안)을 Three.js Y축 회전으로 변환
- * 게임: 반시계 방향 양수 → Three.js: 시계 방향 양수
+ *
+ * 게임: heading=0 → +X(오른쪽), 반시계 양수
+ * Three.js: rotY=0일 때 local +Z → world +Z
+ * 캐릭터 얼굴: BoxGeometry index 4 = +Z face
+ *
+ * 따라서 heading=0(+X)일 때 local +Z → world +X가 되려면
+ * rotY = π/2 필요. 일반식: rotY = π/2 - heading
+ *
  * @param heading - 게임 heading (0~2π, 반시계)
- * @returns Y축 rotation (시계 방향)
+ * @returns Y축 rotation
  */
 export function headingToRotY(heading: number): number {
-  return -heading;
+  return Math.PI / 2 - heading;
 }
 
 /**
