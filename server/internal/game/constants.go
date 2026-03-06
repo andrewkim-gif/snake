@@ -267,6 +267,15 @@ func DefaultMapObjectConfig() MapObjectConfig {
 }
 
 // ============================================================
+// Map Object Constants
+// ============================================================
+
+const (
+	// MapObjectCollectRadius is the distance within which an agent can activate a map object (px).
+	MapObjectCollectRadius = 40.0
+)
+
+// ============================================================
 // Spatial Hash Constants
 // ============================================================
 

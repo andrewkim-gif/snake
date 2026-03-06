@@ -302,35 +302,137 @@ func (bm *BotManager) Count() int {
 	return len(bm.bots)
 }
 
+// GetBotBuildPath returns the build path for a given bot ID.
+func (bm *BotManager) GetBotBuildPath(botID string) (BotBuildPath, bool) {
+	state, ok := bm.bots[botID]
+	if !ok {
+		return "", false
+	}
+	return state.BuildPath, true
+}
+
+// GetAllBotBuildPaths returns a map of botID -> BotBuildPath for all bots.
+func (bm *BotManager) GetAllBotBuildPaths() map[string]BotBuildPath {
+	result := make(map[string]BotBuildPath, len(bm.bots))
+	for id, state := range bm.bots {
+		result[id] = state.BuildPath
+	}
+	return result
+}
+
 // AutoChooseUpgrade selects an upgrade based on the bot's build path.
+// Enhanced with synergy awareness, late-game defensive bias, and ability slot logic.
 func (bm *BotManager) AutoChooseUpgrade(botID string, choices []domain.UpgradeChoice) int {
 	state, ok := bm.bots[botID]
 	if !ok || len(choices) == 0 {
 		return 0
 	}
 
-	// Find preferred tome from build path
-	prefs, ok := buildPathTomePrefs[state.BuildPath]
-	if !ok {
-		return 0 // default: first choice
+	agent, agentOk := bm.arena.GetAgent(botID)
+	if !agentOk {
+		return 0
 	}
 
-	// Score each choice based on build path preference
+	return BotDecideUpgrade(agent, choices, state.BuildPath, bm.arena)
+}
+
+// BotDecideUpgrade implements a multi-factor decision tree for bot upgrade selection.
+// Priority:
+//  1. Synergy completion opportunity (highest)
+//  2. Build path Tome preference
+//  3. Ability slot utilization
+//  4. Late-game defensive bias
+//  5. Fallback: generic useful choice
+func BotDecideUpgrade(agent *domain.Agent, choices []domain.UpgradeChoice, buildPath BotBuildPath, arena *Arena) int {
+	if len(choices) == 0 {
+		return 0
+	}
+
+	prefs, hasPrefs := buildPathTomePrefs[buildPath]
+
+	// Determine if late game (< 60 seconds remaining ~ < 1200 ticks)
+	lateGame := false
+	if arena != nil {
+		// Rough heuristic: if the arena has been running for a while
+		tick := arena.GetTick()
+		roundDuration := uint64(DefaultRoomConfig().RoundDurationSec * TickRate)
+		if roundDuration > 0 && tick > roundDuration-uint64(60*TickRate) {
+			lateGame = true
+		}
+	}
+
 	bestIdx := 0
-	bestScore := -1
+	bestScore := -1000
 
 	for i, choice := range choices {
 		score := 0
+
 		if choice.Type == "tome" {
-			for rank, pref := range prefs {
-				if choice.TomeType == pref {
-					score = 100 - rank*10
-					break
+			// --- Priority 1: Synergy completion check ---
+			synScore := synergyCompletionScore(agent, choice.TomeType)
+			if synScore > 0 {
+				score += 200 + synScore*50 // very high priority
+			}
+
+			// --- Priority 2: Build path Tome preference ---
+			if hasPrefs {
+				for rank, pref := range prefs {
+					if choice.TomeType == pref {
+						score += 100 - rank*15
+						break
+					}
 				}
 			}
+
+			// --- Priority 4: Late-game defensive bias ---
+			if lateGame {
+				switch choice.TomeType {
+				case domain.TomeArmor:
+					score += 40
+				case domain.TomeRegen:
+					score += 35
+				case domain.TomeSpeed:
+					score += 20 // escape utility
+				}
+			}
+
+			// --- Priority 5: Fallback universal value ---
+			switch choice.TomeType {
+			case domain.TomeXP:
+				score += 15 // always useful
+			case domain.TomeSpeed:
+				score += 12
+			case domain.TomeMagnet:
+				score += 10
+			}
+
 		} else if choice.Type == "ability" {
-			score = 50 // abilities are secondary
+			// --- Priority 3: Ability slot logic ---
+			equippedCount := len(agent.Build.AbilitySlots)
+			maxSlots := agent.Build.MaxAbilities
+			if maxSlots == 0 {
+				maxSlots = AbilityBaseSlots
+			}
+
+			if choice.AbilityLevel > 1 {
+				// Upgrading existing ability is decent
+				score += 60 + choice.AbilityLevel*10
+			} else if equippedCount < maxSlots {
+				// New ability in open slot
+				score += 55
+				// Bonus for abilities matching build path
+				score += abilityBuildPathBonus(choice.AbilityType, buildPath)
+			} else {
+				// No slot available — should not appear, but score low
+				score -= 50
+			}
+
+			// Late-game: favor Shield Burst
+			if lateGame && choice.AbilityType == domain.AbilityShieldBurst {
+				score += 30
+			}
 		}
+
 		if score > bestScore {
 			bestScore = score
 			bestIdx = i
@@ -338,6 +440,105 @@ func (bm *BotManager) AutoChooseUpgrade(botID string, choices []domain.UpgradeCh
 	}
 
 	return bestIdx
+}
+
+// synergyCompletionScore returns a score based on how close adding this tome
+// brings the agent to completing any synergy. Higher = closer to completion.
+func synergyCompletionScore(agent *domain.Agent, tomeType domain.TomeType) int {
+	bestScore := 0
+
+	for _, synergy := range domain.AllSynergies {
+		// Skip already active synergies
+		alreadyActive := false
+		for _, active := range agent.ActiveSynergies {
+			if active == synergy.ID {
+				alreadyActive = true
+				break
+			}
+		}
+		if alreadyActive {
+			continue
+		}
+
+		// Check if this tome is relevant to this synergy
+		required, needed := synergy.TomeReqs[tomeType]
+		if !needed {
+			continue
+		}
+
+		current := agent.Build.Tomes[tomeType]
+		if current >= required {
+			continue // already satisfied for this synergy
+		}
+
+		// Count how many tome requirements remain for this synergy
+		remainingReqs := 0
+		totalReqs := 0
+		for reqTome, reqCount := range synergy.TomeReqs {
+			totalReqs++
+			if agent.Build.Tomes[reqTome] < reqCount {
+				remainingReqs++
+			}
+		}
+		// Also count ability reqs
+		for reqAbility, reqLevel := range synergy.AbilityReqs {
+			totalReqs++
+			found := false
+			for _, slot := range agent.Build.AbilitySlots {
+				if slot.Type == reqAbility && slot.Level >= reqLevel {
+					found = true
+					break
+				}
+			}
+			if !found {
+				remainingReqs++
+			}
+		}
+
+		// If adding this tome reduces remaining by 1, compute closeness score
+		wouldReduce := current+1 >= required
+		if wouldReduce {
+			remainingAfter := remainingReqs - 1
+			if remainingAfter <= 0 {
+				// This tome completes the synergy!
+				return 10
+			}
+			// Closer to completion = higher score
+			closeness := totalReqs - remainingAfter
+			if closeness > bestScore {
+				bestScore = closeness
+			}
+		}
+	}
+
+	return bestScore
+}
+
+// abilityBuildPathBonus returns bonus score for abilities that synergize with a build path.
+func abilityBuildPathBonus(abilityType domain.AbilityType, buildPath BotBuildPath) int {
+	switch buildPath {
+	case BuildBerserker:
+		if abilityType == domain.AbilitySpeedDash || abilityType == domain.AbilityLightningStrike {
+			return 20
+		}
+	case BuildTank:
+		if abilityType == domain.AbilityShieldBurst {
+			return 25
+		}
+	case BuildSpeedster:
+		if abilityType == domain.AbilitySpeedDash {
+			return 25
+		}
+	case BuildVampire:
+		if abilityType == domain.AbilityVenomAura || abilityType == domain.AbilityMassDrain {
+			return 25
+		}
+	case BuildScholar:
+		if abilityType == domain.AbilityGravityWell {
+			return 20
+		}
+	}
+	return 0
 }
 
 // --- Bot name pool (30+ MC-style unique names) ---

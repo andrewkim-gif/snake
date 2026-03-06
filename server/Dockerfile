@@ -1,5 +1,5 @@
 # === Builder Stage ===
-FROM golang:1.24-alpine AS builder
+FROM golang:1.25-alpine AS builder
 
 WORKDIR /app
 
@@ -7,10 +7,10 @@ WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy source
+# Copy source (includes all packages: domain, game, ws, config)
 COPY . .
 
-# Build static binary
+# Build static binary (server only; balance/loadtest are dev tools)
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build -ldflags="-s -w" -o /server ./cmd/server
 

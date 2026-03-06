@@ -18,7 +18,8 @@ const (
 	EventKill     ArenaEventType = "kill"
 	EventLevelUp  ArenaEventType = "level_up"
 	EventSynergy  ArenaEventType = "synergy"
-	EventShrinkWarn ArenaEventType = "shrink_warn"
+	EventShrinkWarn    ArenaEventType = "shrink_warn"
+	EventMapObjectUse  ArenaEventType = "map_object_use"
 )
 
 // ArenaEvent is a game event generated during a tick.
@@ -39,6 +40,7 @@ type Arena struct {
 	upgradeSystem   *UpgradeSystem
 	spatialHash     *SpatialHash
 	leaderboard     *Leaderboard
+	mapObjects      *MapObjectManager
 
 	tick         uint64
 	running      bool
@@ -57,6 +59,7 @@ func NewArena() *Arena {
 		upgradeSystem:   NewUpgradeSystem(),
 		spatialHash:     sh,
 		leaderboard:     NewLeaderboard(),
+		mapObjects:      NewMapObjectManager(),
 		tick:            0,
 		running:         false,
 		eventBuffer:     make([]ArenaEvent, 0, 64),
@@ -164,6 +167,33 @@ func (a *Arena) processTick() {
 		// Spawn death orbs
 		if victim, ok := a.agents[ce.VictimID]; ok {
 			a.orbManager.SpawnDeathOrbs(victim.Position, ce.VictimMass, a.tick)
+		}
+	}
+
+	// 5b. Map object interactions
+	a.mapObjects.Update(a.tick)
+	activations := a.mapObjects.CheckCollisions(a.agents, a.tick)
+	for _, act := range activations {
+		agent, ok := a.agents[act.AgentID]
+		if !ok || !agent.Alive {
+			continue
+		}
+		effect := ApplyMapObjectEffect(agent, act.Object, a.mapObjects.config)
+		a.eventBuffer = append(a.eventBuffer, ArenaEvent{
+			Type:      EventMapObjectUse,
+			AgentID:   act.AgentID,
+			AgentName: agent.Name,
+			Data: domain.MapObjectActivatedEvent{
+				ObjectID:  act.Object.ID,
+				Type:      string(act.Object.Type),
+				AgentID:   act.AgentID,
+				AgentName: agent.Name,
+				Effect:    effect,
+			},
+		})
+		// If altar caused a level-up, generate upgrade choices
+		if act.Object.Type == MapObjUpgradeAltar && len(agent.PendingChoices) == 0 {
+			a.handleLevelUp(agent)
 		}
 	}
 
@@ -367,6 +397,11 @@ func (a *Arena) GetLeaderboard() *Leaderboard {
 	return a.leaderboard
 }
 
+// GetMapObjects returns the map object manager.
+func (a *Arena) GetMapObjects() *MapObjectManager {
+	return a.mapObjects
+}
+
 // GetShrinkInfo returns arena shrink status for broadcasting.
 func (a *Arena) GetShrinkInfo() domain.ArenaShrinkEvent {
 	a.mu.RLock()
@@ -437,6 +472,8 @@ func (a *Arena) Reset() {
 	a.orbManager.Clear()
 	a.arenaShrink.Reset()
 	a.leaderboard.Reset()
+	a.mapObjects.Reset()
+	a.mapObjects.PlaceObjects(ArenaRadius)
 	a.tick = 0
 	a.eventBuffer = a.eventBuffer[:0]
 
