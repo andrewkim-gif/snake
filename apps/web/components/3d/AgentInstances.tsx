@@ -1,12 +1,15 @@
 'use client';
 
 /**
- * AgentInstances — MC 복셀 캐릭터 InstancedMesh 일괄 렌더링
+ * AgentInstances — 큐블링(Cubeling) 캐릭터 InstancedMesh 일괄 렌더링
  * 6개 파트(head, body, armL, armR, legL, legR)별 InstancedMesh
  * 총 6 draw calls로 최대 60 Agent 렌더링
  *
- * 애니메이션: idle/walk/boost/death 상태별 파트 rotation
- * 텍스처: getAgentTextures()의 Canvas 텍스처 + instanceColor 미사용(파트별 material)
+ * Phase 1 변경사항:
+ * - 32u MC 프로포션 → 24u 큐블링 프로포션 (cubeling-proportions.ts 사용)
+ * - head [8,8,8] → [10,10,8], body [8,12,4] → [8,7,5], arm/leg [4,12,4] → [4,7,4]
+ * - 오프셋 전체 변경 (큐블링 비율)
+ * - 기존 idle/walk/boost 애니메이션 로직 유지
  *
  * CRITICAL: useFrame priority 0 — auto-render 유지!
  */
@@ -16,26 +19,13 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getAgentTextures, getHeadMaterials, disposeTextureCache, disposeMaterialCache } from '@/lib/3d/agent-textures';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
+import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import type { AgentNetworkData } from '@agent-survivor/shared';
 
 // ─── Constants ───
 
 const MAX_AGENTS = 60;
 const PI2 = Math.PI * 2;
-
-/**
- * MC 캐릭터 파트 정의 (6파트)
- * 전체 높이 32 units: Legs(0~12) + Body(12~24) + Head(24~32)
- * Arms/Legs는 geometry.translate()로 피벗을 상단에 배치 (어깨/엉덩이 회전)
- */
-const PARTS = {
-  head: { size: [8, 8, 8] as const, offset: [0, 28, 0] as const },
-  body: { size: [8, 12, 4] as const, offset: [0, 18, 0] as const },
-  armL: { size: [4, 12, 4] as const, offset: [-6, 24, 0] as const },  // shoulder pivot
-  armR: { size: [4, 12, 4] as const, offset: [6, 24, 0] as const },   // shoulder pivot
-  legL: { size: [4, 12, 4] as const, offset: [-2, 12, 0] as const },  // hip pivot
-  legR: { size: [4, 12, 4] as const, offset: [2, 12, 0] as const },   // hip pivot
-} as const;
 
 // ─── 재사용 임시 객체 (GC 방지) ───
 
@@ -73,6 +63,7 @@ interface AgentInstancesProps {
 
 /**
  * Agent의 속도 기반 애니메이션 상태에서 팔/다리 rotation 계산
+ * Phase 1: 기존 로직 유지 (큐블링 프로포션에서는 시각적으로 더 귀여운 바운스)
  */
 function computePartRotations(
   velocity: number,
@@ -90,15 +81,16 @@ function computePartRotations(
     };
   }
 
-  const walkFreq = Math.min(velocity / 100, 3); // 최대 3Hz
-  const walkAmp = 0.52; // ~30° radians
+  // 큐블링은 짧은 팔/다리 → 스윙 진폭 조금 더 크게 (0.52→0.44 rad ≈ 25°)
+  const walkFreq = Math.min(velocity / 80, 3.5); // 조금 더 빠른 걸음
+  const walkAmp = 0.44; // ~25° radians (큐블링 짧은 다리에 맞춤)
 
   if (boosting) {
-    // boost: 팔 뒤로 고정(-45°) + 다리 빠른 스윙(2x freq)
-    const legSwing = Math.sin(elapsed * walkFreq * 2 * PI2) * walkAmp;
+    // boost: 팔 뒤로 고정(-60°) + 다리 빠른 스윙(2x freq, 1.3배 진폭)
+    const legSwing = Math.sin(elapsed * walkFreq * 2 * PI2) * walkAmp * 1.3;
     return {
-      armLX: -0.78, // -45° 고정
-      armRX: -0.78,
+      armLX: -1.05, // -60° 고정 (큐블링 대시 포즈)
+      armRX: -1.05,
       legLX: legSwing,
       legRX: -legSwing,
     };
@@ -199,21 +191,24 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
   const legRRef = useRef<THREE.InstancedMesh>(null!);
 
   // ─── 파트별 Geometry (useMemo — 한 번만 생성) ───
+  // 큐블링 24u 프로포션 사용
   // Arms/Legs: geometry.translate()로 피벗을 상단(어깨/엉덩이)에 배치
   // → rotation 적용 시 어깨/엉덩이에서 자연스럽게 스윙
   const geometries = useMemo(() => {
-    const armLGeo = new THREE.BoxGeometry(...PARTS.armL.size);
-    armLGeo.translate(0, -PARTS.armL.size[1] / 2, 0); // 피벗 → 어깨
-    const armRGeo = new THREE.BoxGeometry(...PARTS.armR.size);
-    armRGeo.translate(0, -PARTS.armR.size[1] / 2, 0);
-    const legLGeo = new THREE.BoxGeometry(...PARTS.legL.size);
-    legLGeo.translate(0, -PARTS.legL.size[1] / 2, 0); // 피벗 → 엉덩이
-    const legRGeo = new THREE.BoxGeometry(...PARTS.legR.size);
-    legRGeo.translate(0, -PARTS.legR.size[1] / 2, 0);
+    const P = CUBELING_PARTS;
+
+    const armLGeo = new THREE.BoxGeometry(...P.armL.size);
+    armLGeo.translate(0, -P.armL.size[1] / 2, 0); // 피벗 → 어깨
+    const armRGeo = new THREE.BoxGeometry(...P.armR.size);
+    armRGeo.translate(0, -P.armR.size[1] / 2, 0);
+    const legLGeo = new THREE.BoxGeometry(...P.legL.size);
+    legLGeo.translate(0, -P.legL.size[1] / 2, 0); // 피벗 → 엉덩이
+    const legRGeo = new THREE.BoxGeometry(...P.legR.size);
+    legRGeo.translate(0, -P.legR.size[1] / 2, 0);
 
     return {
-      head: new THREE.BoxGeometry(...PARTS.head.size),
-      body: new THREE.BoxGeometry(...PARTS.body.size),
+      head: new THREE.BoxGeometry(...P.head.size),
+      body: new THREE.BoxGeometry(...P.body.size),
       armL: armLGeo,
       armR: armRGeo,
       legL: legLGeo,
@@ -259,13 +254,8 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
     if (!headMesh || !bodyMesh || !armLMesh || !armRMesh || !legLMesh || !legRMesh) return;
 
     // 가장 많은 Agent가 사용하는 skinId를 찾아 각 mesh의 material 교체
-    // → 단순화: 첫 번째 Agent의 skinId material 사용 (모든 Agent 동일 텍스처)
-    // → 더 나은 방안: 가장 빈번한 skinId 사용
-    // ★ 현실적 접근: 단일 InstancedMesh에는 단일 material만 가능.
-    //   진정한 해결은 TextureAtlas이지만 Phase 2에서는 가장 많은 스킨 기준.
-    //   다수의 스킨 차이는 미세하므로 시각적 영향 최소.
+    // ★ Phase 2에서 setColorAt 기반으로 전환 예정
     if (agents.length > 0) {
-      // 빈도 카운트로 가장 많은 skinId 찾기
       const skinCounts = new Map<number, number>();
       for (const a of agents) {
         skinCounts.set(a.k, (skinCounts.get(a.k) ?? 0) + 1);
@@ -277,7 +267,7 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       });
 
       const mats = getPartMaterials(dominantSkin);
-      headMesh.material = mats.headMats; // 6-material array (face on front only)
+      headMesh.material = mats.headMats; // 6-material array
       bodyMesh.material = mats.body;
       armLMesh.material = mats.arm;
       armRMesh.material = mats.arm; // 양팔 동일
@@ -285,6 +275,7 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       legRMesh.material = mats.leg; // 양다리 동일
     }
 
+    const P = CUBELING_PARTS;
     let idx = 0;
 
     for (const agent of agents) {
@@ -303,9 +294,7 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       const dx = x - motion.prevX;
       const dy = y - motion.prevY;
       const dist = Math.sqrt(dx * dx + dy * dy);
-      // delta가 0이면 나누기 방지
       const rawVel = delta > 0 ? dist / delta : 0;
-      // 스무딩 (급격한 변화 방지)
       motion.velocity = motion.velocity * 0.7 + rawVel * 0.3;
       motion.prevX = x;
       motion.prevY = y;
@@ -318,31 +307,31 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       // ─── 애니메이션 ───
       const anim = computePartRotations(motion.velocity, boosting, elapsed);
 
-      // ─── 6파트 Matrix 설정 ───
+      // ─── 6파트 Matrix 설정 (큐블링 24u 오프셋) ───
 
       // Head (애니메이션 없음 — rotX = 0)
       setPartMatrix(headMesh, idx, worldX, worldZ, rotY, scale,
-        PARTS.head.offset[0], PARTS.head.offset[1], PARTS.head.offset[2], 0);
+        P.head.offset[0], P.head.offset[1], P.head.offset[2], 0);
 
       // Body (애니메이션 없음 — rotX = 0)
       setPartMatrix(bodyMesh, idx, worldX, worldZ, rotY, scale,
-        PARTS.body.offset[0], PARTS.body.offset[1], PARTS.body.offset[2], 0);
+        P.body.offset[0], P.body.offset[1], P.body.offset[2], 0);
 
       // ArmL
       setPartMatrix(armLMesh, idx, worldX, worldZ, rotY, scale,
-        PARTS.armL.offset[0], PARTS.armL.offset[1], PARTS.armL.offset[2], anim.armLX);
+        P.armL.offset[0], P.armL.offset[1], P.armL.offset[2], anim.armLX);
 
       // ArmR
       setPartMatrix(armRMesh, idx, worldX, worldZ, rotY, scale,
-        PARTS.armR.offset[0], PARTS.armR.offset[1], PARTS.armR.offset[2], anim.armRX);
+        P.armR.offset[0], P.armR.offset[1], P.armR.offset[2], anim.armRX);
 
       // LegL
       setPartMatrix(legLMesh, idx, worldX, worldZ, rotY, scale,
-        PARTS.legL.offset[0], PARTS.legL.offset[1], PARTS.legL.offset[2], anim.legLX);
+        P.legL.offset[0], P.legL.offset[1], P.legL.offset[2], anim.legLX);
 
       // LegR
       setPartMatrix(legRMesh, idx, worldX, worldZ, rotY, scale,
-        PARTS.legR.offset[0], PARTS.legR.offset[1], PARTS.legR.offset[2], anim.legRX);
+        P.legR.offset[0], P.legR.offset[1], P.legR.offset[2], anim.legRX);
 
       idx++;
     }

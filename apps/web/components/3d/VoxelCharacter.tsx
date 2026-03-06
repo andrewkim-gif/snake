@@ -1,8 +1,14 @@
 'use client';
 
 /**
- * VoxelCharacter — MC 스타일 6파트 휴머노이드
- * Head(0.5) + Body(0.75) + Arms(0.75x2) + Legs(0.75x2)
+ * VoxelCharacter — 큐블링(Cubeling) 스타일 6파트 휴머노이드 (로비 프리뷰)
+ *
+ * Phase 1 변경사항:
+ * - MC 32u 프로포션 → 큐블링 24u 프로포션
+ * - HEAD 0.5→0.625, BODY 0.5×0.75→0.5×0.4375, ARM/LEG 0.75→0.4375
+ * - 총 높이: 2.0 → 1.5 world units
+ * - cubeling-proportions.ts의 LOBBY_DIMENSIONS/LOBBY_OFFSETS 사용
+ *
  * idle 애니메이션: 팔/다리 pendulum + 머리 bob/look
  * useFrame priority=0 (auto-render 유지 필수)
  * arm/leg pivot: geometry.translate(0, -halfHeight, 0)
@@ -12,6 +18,7 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getAgentTextures } from '@/lib/3d/agent-textures';
+import { LOBBY_DIMENSIONS, LOBBY_OFFSETS } from '@/lib/3d/cubeling-proportions';
 
 interface VoxelCharacterProps {
   skinId: number;
@@ -20,17 +27,17 @@ interface VoxelCharacterProps {
   phaseOffset?: number;
 }
 
-// 파트 치수
-const HEAD = { w: 0.5, h: 0.5, d: 0.5 };
-const BODY = { w: 0.5, h: 0.75, d: 0.25 };
-const ARM = { w: 0.25, h: 0.75, d: 0.25 };
-const LEG = { w: 0.25, h: 0.75, d: 0.25 };
+// 큐블링 로비 치수 (cubeling-proportions에서 가져옴)
+const HEAD = LOBBY_DIMENSIONS.head;
+const BODY = LOBBY_DIMENSIONS.body;
+const ARM = LOBBY_DIMENSIONS.arm;
+const LEG = LOBBY_DIMENSIONS.leg;
 
-// 발바닥 기준 Y 오프셋
-const LEG_TOP = LEG.h;           // 0.75
-const BODY_CENTER = LEG_TOP + BODY.h / 2; // 1.125
-const SHOULDER_Y = LEG_TOP + BODY.h;      // 1.5
-const HEAD_CENTER = SHOULDER_Y + HEAD.h / 2; // 1.75
+// 발바닥 기준 Y 오프셋 (큐블링 24u → 1.5 world units)
+const LEG_TOP = LOBBY_OFFSETS.legTop;           // 0.4375
+const BODY_CENTER = LOBBY_OFFSETS.bodyCenter;    // 0.65625
+const SHOULDER_Y = LOBBY_OFFSETS.shoulderY;      // 0.875
+const HEAD_CENTER = LOBBY_OFFSETS.headCenter;    // 1.1875
 
 export function VoxelCharacter({ skinId, position, rotation = 0, phaseOffset = 0 }: VoxelCharacterProps) {
   const leftArmRef = useRef<THREE.Mesh>(null!);
@@ -64,7 +71,7 @@ export function VoxelCharacter({ skinId, position, rotation = 0, phaseOffset = 0
   useFrame((state) => {
     const t = state.clock.elapsedTime + phaseOffset;
 
-    // 팔 pendulum swing
+    // 팔 pendulum swing (큐블링 짧은 팔 → 진폭 유지)
     const armSwing = Math.sin(t * 1.5) * 0.25;
     if (leftArmRef.current) leftArmRef.current.rotation.x = armSwing;
     if (rightArmRef.current) rightArmRef.current.rotation.x = -armSwing;
@@ -88,12 +95,12 @@ export function VoxelCharacter({ skinId, position, rotation = 0, phaseOffset = 0
         <boxGeometry args={[BODY.w, BODY.h, BODY.d]} />
       </mesh>
 
-      {/* Head */}
+      {/* Head — 큐블링: 큰 머리(42%) */}
       <mesh ref={headRef} position={[0, HEAD_CENTER, 0]} material={headMat}>
         <boxGeometry args={[HEAD.w, HEAD.h, HEAD.d]} />
       </mesh>
 
-      {/* Left Arm */}
+      {/* Left Arm — 어깨 피벗 */}
       <mesh
         ref={leftArmRef}
         position={[-(BODY.w / 2 + ARM.w / 2), SHOULDER_Y, 0]}
@@ -101,7 +108,7 @@ export function VoxelCharacter({ skinId, position, rotation = 0, phaseOffset = 0
         material={armMat}
       />
 
-      {/* Right Arm */}
+      {/* Right Arm — 어깨 피벗 */}
       <mesh
         ref={rightArmRef}
         position={[BODY.w / 2 + ARM.w / 2, SHOULDER_Y, 0]}
@@ -109,7 +116,7 @@ export function VoxelCharacter({ skinId, position, rotation = 0, phaseOffset = 0
         material={armMat}
       />
 
-      {/* Left Leg */}
+      {/* Left Leg — 엉덩이 피벗 */}
       <mesh
         ref={leftLegRef}
         position={[-LEG.w / 2, LEG_TOP, 0]}
@@ -117,7 +124,7 @@ export function VoxelCharacter({ skinId, position, rotation = 0, phaseOffset = 0
         material={legMat}
       />
 
-      {/* Right Leg */}
+      {/* Right Leg — 엉덩이 피벗 */}
       <mesh
         ref={rightLegRef}
         position={[LEG.w / 2, LEG_TOP, 0]}
