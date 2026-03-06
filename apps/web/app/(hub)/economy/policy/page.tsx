@@ -6,7 +6,7 @@
  * Hub Layout (Economy sub-tabs) 적용
  */
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
@@ -116,7 +116,7 @@ function PolicyPanelSkeleton() {
   );
 }
 
-export default function PolicyPage() {
+function PolicyPageInner() {
   const searchParams = useSearchParams();
   const countryParam = searchParams.get('country');
 
@@ -176,5 +176,19 @@ export default function PolicyPage() {
         canEdit={false}
       />
     </div>
+  );
+}
+
+export default function PolicyPage() {
+  return (
+    <Suspense
+      fallback={
+        <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
+          Loading policy...
+        </div>
+      }
+    >
+      <PolicyPageInner />
+    </Suspense>
   );
 }
