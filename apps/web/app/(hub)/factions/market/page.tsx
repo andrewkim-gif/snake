@@ -1,33 +1,51 @@
 'use client';
 
 /**
- * /factions/market — 용병 시장 (placeholder)
- * Phase 5에서 MercenaryMarket 연결
+ * /factions/market — 용병 시장
+ * MercenaryMarket 컴포넌트 연결
+ * Props: factionId (optional), token (optional)
  */
 
-import { SK, bodyFont } from '@/lib/sketch-ui';
+import dynamic from 'next/dynamic';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+
+// Lazy load MercenaryMarket 컴포넌트
+const MercenaryMarket = dynamic(() => import('@/components/market/MercenaryMarket'), {
+  loading: () => (
+    <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 40, textAlign: 'center' }}>
+      Loading mercenary market...
+    </div>
+  ),
+});
 
 export default function MercenaryMarketPage() {
   return (
     <div>
-      <h1 style={{
-        fontFamily: bodyFont,
-        fontWeight: 800,
-        fontSize: '24px',
-        color: SK.textPrimary,
-        letterSpacing: '2px',
-        textTransform: 'uppercase',
-        marginBottom: '8px',
-      }}>
-        MERCENARY MARKET
-      </h1>
-      <p style={{
-        fontFamily: bodyFont,
-        fontSize: '14px',
-        color: SK.textSecondary,
-      }}>
-        Mercenary market will be connected in Phase 5.
-      </p>
+      {/* 페이지 헤더 */}
+      <div style={{ marginBottom: 24 }}>
+        <h1 style={{
+          fontFamily: headingFont,
+          fontWeight: 800,
+          fontSize: '24px',
+          color: SK.textPrimary,
+          letterSpacing: '2px',
+          textTransform: 'uppercase',
+          margin: 0,
+        }}>
+          MERCENARY MARKET
+        </h1>
+        <p style={{
+          fontFamily: bodyFont,
+          fontSize: '14px',
+          color: SK.textSecondary,
+          marginTop: 4,
+        }}>
+          Hire elite warriors to fight for your faction. Deploy them to defend your territories.
+        </p>
+      </div>
+
+      {/* MercenaryMarket 컴포넌트 */}
+      <MercenaryMarket />
     </div>
   );
 }
