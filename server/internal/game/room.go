@@ -26,6 +26,8 @@ const (
 	RoomEvtState         RoomEventType = "state"
 	RoomEvtMinimap       RoomEventType = "minimap"
 	RoomEvtArenaShrink   RoomEventType = "arena_shrink"
+	RoomEvtCoachMessage  RoomEventType = "coach_message"
+	RoomEvtRoundAnalysis RoomEventType = "round_analysis"
 )
 
 // RoomEvent is a lifecycle event emitted by a Room.
@@ -71,6 +73,12 @@ type Room struct {
 	// Recent winners for lobby display
 	recentWinners []domain.WinnerInfo
 
+	// Coach Agent (S57) - generates real-time coaching advice
+	coachAgent *CoachAgent
+
+	// Analyst Agent (S58) - generates post-round analysis
+	analystAgent *AnalystAgent
+
 	// Event callback (set by main.go)
 	OnEvents RoomEventCallback
 
@@ -92,6 +100,8 @@ func NewRoom(id, name string, cfg RoomConfig) *Room {
 		round:         0,
 		stateTicksLeft: 0,
 		recentWinners: make([]domain.WinnerInfo, 0, 5),
+		coachAgent:    NewCoachAgent(),
+		analystAgent:  NewAnalystAgent(),
 	}
 }
 
@@ -192,6 +202,11 @@ func (r *Room) tickPlaying() {
 	// Broadcast arena shrink at 1Hz
 	if arenaTick > 0 && arenaTick%ShrinkUpdateInterval == 0 {
 		r.broadcastShrinkInfo()
+	}
+
+	// Coach Agent advice (S57) — check every 20 ticks (1Hz)
+	if arenaTick > 0 && arenaTick%uint64(TickRate) == 0 {
+		r.broadcastCoachAdvice(arenaTick)
 	}
 }
 
@@ -339,6 +354,44 @@ func (r *Room) endRound() {
 		})
 	}
 	r.emitEvents(events)
+
+	// Analyst Agent (S58): generate post-round analysis for each human player
+	if r.analystAgent != nil {
+		var analysisEvents []RoomEvent
+		roundDuration := r.Config.RoundDurationSec
+		for pid := range r.players {
+			agent, ok := agents[pid]
+			if !ok {
+				continue
+			}
+			rank := 0
+			for i, entry := range finalRanking {
+				if entry.ID == pid {
+					rank = i + 1
+					break
+				}
+			}
+			survivalTime := roundDuration // survived the whole round if alive
+			if !agent.Alive {
+				survivalTime = int(time.Since(time.UnixMilli(agent.JoinedAt)).Seconds())
+				if survivalTime > roundDuration {
+					survivalTime = roundDuration
+				}
+			}
+			analysis := r.analystAgent.AnalyzeRound(agent, rank, len(finalRanking), survivalTime, roundDuration)
+			if analysis != nil {
+				analysisEvents = append(analysisEvents, RoomEvent{
+					RoomID:   r.ID,
+					Type:     RoomEvtRoundAnalysis,
+					TargetID: pid,
+					Data:     analysis,
+				})
+			}
+		}
+		if len(analysisEvents) > 0 {
+			r.emitEvents(analysisEvents)
+		}
+	}
 
 	r.transitionTo(domain.RoomStateEnding)
 
@@ -572,6 +625,29 @@ func (r *Room) broadcastShrinkInfo() {
 		Type:   RoomEvtArenaShrink,
 		Data:   shrinkInfo,
 	}})
+}
+
+// broadcastCoachAdvice sends coaching messages to human players (S57).
+func (r *Room) broadcastCoachAdvice(tick uint64) {
+	if r.coachAgent == nil {
+		return
+	}
+	agents := r.arena.GetAgents()
+	for pid := range r.players {
+		agent, ok := agents[pid]
+		if !ok || !agent.Alive {
+			continue
+		}
+		msg := r.coachAgent.GenerateAdvice(agent, r.arena, tick)
+		if msg != nil {
+			r.emitEvents([]RoomEvent{{
+				RoomID:   r.ID,
+				Type:     RoomEvtCoachMessage,
+				TargetID: pid,
+				Data:     msg,
+			}})
+		}
+	}
 }
 
 // --- Info getters ---

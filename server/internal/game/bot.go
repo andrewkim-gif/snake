@@ -28,6 +28,26 @@ var AllBuildPaths = []BotBuildPath{
 	BuildScholar,
 }
 
+// PersonalityToBuildPath maps personality type to preferred bot build path (S56).
+var PersonalityToBuildPath = map[PersonalityType]BotBuildPath{
+	PersonalityAggro:    BuildBerserker,
+	PersonalityCautious: BuildTank,
+	PersonalityScholar:  BuildScholar,
+	PersonalityGambler:  BuildBerserker, // Gambler uses berserker (high risk build)
+	PersonalityBalanced: BuildVampire,
+	PersonalityAdaptive: BuildScholar, // fallback; real adaptive uses memory
+}
+
+// PersonalityToCombatStyle maps personality type to combat style (S56).
+var PersonalityToCombatStyle = map[PersonalityType]CombatStyle{
+	PersonalityAggro:    CombatStyleAggressive,
+	PersonalityCautious: CombatStyleDefensive,
+	PersonalityScholar:  CombatStyleXPRush,
+	PersonalityGambler:  CombatStyleAggressive,
+	PersonalityBalanced: CombatStyleBalanced,
+	PersonalityAdaptive: CombatStyleBalanced,
+}
+
 // buildPathTomePrefs defines tome preferences per build path (ordered by priority).
 var buildPathTomePrefs = map[BotBuildPath][]domain.TomeType{
 	BuildBerserker: {domain.TomeDamage, domain.TomeCursed, domain.TomeSpeed},

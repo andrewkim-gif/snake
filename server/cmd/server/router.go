@@ -42,17 +42,26 @@ var upgrader = websocket.Upgrader{
 // newRouter creates the chi HTTP router with middleware and routes.
 // RouterDeps holds optional dependencies for the HTTP router.
 type RouterDeps struct {
-	TrainingStore *game.TrainingStore
-	MemoryStore   *game.MemoryStore
+	TrainingStore    *game.TrainingStore
+	MemoryStore      *game.MemoryStore
+	ProgressionStore *game.ProgressionStore
+	QuestStore       *game.QuestStore
+	GlobalLeaderboard *game.GlobalLeaderboard
 }
 
 func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager, deps ...*RouterDeps) http.Handler {
 	// Optional dependencies
 	var ts *game.TrainingStore
 	var ms *game.MemoryStore
+	var ps *game.ProgressionStore
+	var qs *game.QuestStore
+	var glb *game.GlobalLeaderboard
 	if len(deps) > 0 && deps[0] != nil {
 		ts = deps[0].TrainingStore
 		ms = deps[0].MemoryStore
+		ps = deps[0].ProgressionStore
+		qs = deps[0].QuestStore
+		glb = deps[0].GlobalLeaderboard
 	}
 	r := chi.NewRouter()
 
@@ -273,6 +282,54 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 	r.Get("/api/personalities", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(game.PersonalityPresets)
+	})
+
+	// --- Player Progression API (S53) ---
+	r.Route("/api/player/{playerId}", func(r chi.Router) {
+		// GET /api/player/:id/progression — Get RP + unlock state
+		r.Get("/progression", func(w http.ResponseWriter, r *http.Request) {
+			if ps == nil {
+				http.Error(w, `{"error":"progression not initialized"}`, http.StatusServiceUnavailable)
+				return
+			}
+			playerID := chi.URLParam(r, "playerId")
+			resp := ps.BuildProgressionResponse(playerID)
+			if resp == nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "progression not found"})
+				return
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+		})
+
+		// GET /api/player/:id/quests — Get quest state (S54)
+		r.Get("/quests", func(w http.ResponseWriter, r *http.Request) {
+			if qs == nil {
+				http.Error(w, `{"error":"quests not initialized"}`, http.StatusServiceUnavailable)
+				return
+			}
+			playerID := chi.URLParam(r, "playerId")
+			resp := qs.GetPlayerQuestsResponse(playerID)
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(resp)
+		})
+	})
+
+	// --- Global Leaderboard API (S55) ---
+	r.Get("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
+		if glb == nil {
+			http.Error(w, `{"error":"leaderboard not initialized"}`, http.StatusServiceUnavailable)
+			return
+		}
+		lbType := r.URL.Query().Get("type")
+		if lbType == "" {
+			lbType = "agent"
+		}
+		resp := glb.GetLeaderboard(lbType)
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(resp)
 	})
 
 	return r

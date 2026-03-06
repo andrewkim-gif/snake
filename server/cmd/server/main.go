@@ -56,14 +56,22 @@ func main() {
 	trainingStore := game.NewTrainingStore("data")
 	memoryStore := game.NewMemoryStore("data")
 
+	// Create progression store (S53), quest store (S54), global leaderboard (S55)
+	progressionStore := game.NewProgressionStore("data")
+	questStore := game.NewQuestStore(progressionStore)
+	globalLeaderboard := game.NewGlobalLeaderboard(progressionStore)
+
 	// Create event router with handlers
 	eventRouter := ws.NewEventRouter()
 	registerEventHandlers(eventRouter, hub, roomManager, agentCmdRouter)
 
 	// Build HTTP router
 	router := newRouter(cfg, hub, eventRouter, roomManager, &RouterDeps{
-		TrainingStore: trainingStore,
-		MemoryStore:   memoryStore,
+		TrainingStore:     trainingStore,
+		MemoryStore:       memoryStore,
+		ProgressionStore:  progressionStore,
+		QuestStore:        questStore,
+		GlobalLeaderboard: globalLeaderboard,
 	})
 
 	// HTTP server
@@ -461,6 +469,10 @@ func createRoomEventHandler(hub *ws.Hub) game.RoomEventCallback {
 				wsEvent = ws.EventMinimap
 			case game.RoomEvtArenaShrink:
 				wsEvent = ws.EventArenaShrink
+			case game.RoomEvtCoachMessage:
+				wsEvent = ws.EventCoachMessage
+			case game.RoomEvtRoundAnalysis:
+				wsEvent = ws.EventRoundAnalysis
 			default:
 				continue
 			}

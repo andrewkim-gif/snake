@@ -44,6 +44,10 @@ const (
 	EventAgentLevelUp       = "agent_level_up"
 	EventAgentObserveGame   = "agent_observe_game"
 	EventTrainingUpdate     = "training_update"
+
+	// Coach/Analyst events (server → client) (S57, S58)
+	EventCoachMessage       = "coach_message"
+	EventRoundAnalysis      = "round_analysis"
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}

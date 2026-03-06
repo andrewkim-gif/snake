@@ -53,13 +53,179 @@ type StrategyPhases struct {
 }
 
 // ============================================================
-// Personality Presets (6 types)
+// Personality Presets (6 types) — v10 S56 Enhanced
+// Maps: Aggro, Cautious, Scholar, Gambler, Balanced, Adaptive
+// Each personality defines build path, combat style, and risk tolerance.
 // ============================================================
+
+// PersonalityType identifies a personality preset name.
+type PersonalityType string
+
+const (
+	PersonalityAggro    PersonalityType = "aggro"
+	PersonalityCautious PersonalityType = "cautious"
+	PersonalityScholar  PersonalityType = "scholar"
+	PersonalityGambler  PersonalityType = "gambler"
+	PersonalityBalanced PersonalityType = "balanced"
+	PersonalityAdaptive PersonalityType = "adaptive"
+)
+
+// PersonalityMeta holds personality metadata for display.
+type PersonalityMeta struct {
+	Type          PersonalityType `json:"type"`
+	Name          string          `json:"name"`
+	Description   string          `json:"description"`
+	RiskTolerance float64         `json:"riskTolerance"` // 0.0 (safe) to 1.0 (risky)
+	Playstyle     string          `json:"playstyle"`     // short description
+}
+
+// AllPersonalityMeta provides display info for all personalities.
+var AllPersonalityMeta = []PersonalityMeta{
+	{Type: PersonalityAggro, Name: "Aggro", Description: "Maximum aggression. Hunt everything, never back down.", RiskTolerance: 0.9, Playstyle: "All-in combat"},
+	{Type: PersonalityCautious, Name: "Cautious", Description: "Careful and defensive. Survive first, fight second.", RiskTolerance: 0.2, Playstyle: "Safe farming"},
+	{Type: PersonalityScholar, Name: "Scholar", Description: "Knowledge is power. Rush XP, outscale opponents.", RiskTolerance: 0.3, Playstyle: "XP farming"},
+	{Type: PersonalityGambler, Name: "Gambler", Description: "High risk, high reward. Cursed builds and risky plays.", RiskTolerance: 1.0, Playstyle: "Glass cannon"},
+	{Type: PersonalityBalanced, Name: "Balanced", Description: "Adapt to the situation. No extreme commitment.", RiskTolerance: 0.5, Playstyle: "Flexible"},
+	{Type: PersonalityAdaptive, Name: "Adaptive", Description: "Learns from past rounds. Adjusts strategy automatically.", RiskTolerance: 0.5, Playstyle: "Self-improving"},
+}
 
 // PersonalityPreset maps personality name to default training profile.
 var PersonalityPresets = map[string]TrainingProfile{
+	// Aggro (공격적): Berserker build, always engages, high risk
+	"aggro": {
+		Personality: "aggro",
+		BuildProfile: BuildProfile{
+			PrimaryPath:  "berserker",
+			FallbackPath: "vampire",
+			FallbackCondition: FallbackCondition{
+				TimeElapsed: 180, // switch at 3min if behind
+			},
+			AlwaysPick: []string{"damage", "cursed", "venom_aura"},
+		},
+		CombatRules: []CombatRule{
+			{Condition: "mass_ratio > 0.7", Action: "engage"},
+			{Condition: "mass_ratio < 0.3", Action: "flee"},
+			{Condition: "kill_streak >= 3", Action: "engage"},
+			{Condition: "time_remaining < 30", Action: "engage"},
+		},
+		StrategyPhases: StrategyPhases{
+			Early: "aggressive",
+			Mid:   "aggressive",
+			Late:  "aggressive",
+		},
+	},
+	// Cautious (신중): Tank build, avoids combat, farms safely
+	"cautious": {
+		Personality: "cautious",
+		BuildProfile: BuildProfile{
+			PrimaryPath:  "tank",
+			FallbackPath: "scholar",
+			FallbackCondition: FallbackCondition{
+				LevelBelow:  4,
+				TimeElapsed: 120,
+			},
+			BannedUpgrades: []string{"cursed"},
+			AlwaysPick:     []string{"armor", "regen", "shield_burst"},
+		},
+		CombatRules: []CombatRule{
+			{Condition: "mass_ratio < 0.5", Action: "flee"},
+			{Condition: "mass_ratio > 2.5", Action: "engage"},
+			{Condition: "time_remaining < 60", Action: "go_center"},
+			{Condition: "mass < 20", Action: "no_boost"},
+			{Condition: "zone == danger", Action: "go_center"},
+		},
+		StrategyPhases: StrategyPhases{
+			Early: "defensive",
+			Mid:   "defensive",
+			Late:  "endgame",
+		},
+	},
+	// Scholar (학구적): XP rush, outscale, late-game dominance
+	"scholar": {
+		Personality: "scholar",
+		BuildProfile: BuildProfile{
+			PrimaryPath:  "scholar",
+			FallbackPath: "tank",
+			FallbackCondition: FallbackCondition{
+				LevelBelow:  5,
+				TimeElapsed: 120,
+			},
+			BannedUpgrades: []string{"cursed"},
+			AlwaysPick:     []string{"xp", "luck", "magnet"},
+		},
+		CombatRules: []CombatRule{
+			{Condition: "mass_ratio > 2.0", Action: "engage"},
+			{Condition: "mass_ratio < 0.5", Action: "flee"},
+			{Condition: "time_remaining < 60", Action: "go_center"},
+			{Condition: "level > 8", Action: "engage"},
+		},
+		StrategyPhases: StrategyPhases{
+			Early: "xp_rush",
+			Mid:   "balanced",
+			Late:  "endgame",
+		},
+	},
+	// Gambler (도박): High risk builds, cursed tome stacking
+	"gambler": {
+		Personality: "gambler",
+		BuildProfile: BuildProfile{
+			PrimaryPath:  "berserker",
+			FallbackPath: "speedster",
+			FallbackCondition: FallbackCondition{
+				TimeElapsed: 240, // late fallback
+			},
+			AlwaysPick: []string{"cursed", "damage", "speed"},
+			NeverPick:  []string{"armor", "regen"},
+		},
+		CombatRules: []CombatRule{
+			{Condition: "mass_ratio > 0.5", Action: "engage"},
+			{Condition: "mass_ratio < 0.2", Action: "flee"},
+			{Condition: "kill_streak >= 2", Action: "engage"},
+		},
+		StrategyPhases: StrategyPhases{
+			Early: "aggressive",
+			Mid:   "aggressive",
+			Late:  "aggressive",
+		},
+	},
+	// Balanced (균형): Adapts per phase, no extremes
+	"balanced": {
+		Personality: "balanced",
+		BuildProfile: BuildProfile{
+			PrimaryPath:  "vampire",
+			FallbackPath: "tank",
+			FallbackCondition: FallbackCondition{
+				LevelBelow:  4,
+				TimeElapsed: 150,
+			},
+		},
+		CombatRules: []CombatRule{
+			{Condition: "mass_ratio > 1.5", Action: "engage"},
+			{Condition: "mass_ratio < 0.4", Action: "flee"},
+			{Condition: "time_remaining < 60", Action: "go_center"},
+		},
+		StrategyPhases: StrategyPhases{
+			Early: "balanced",
+			Mid:   "balanced",
+			Late:  "endgame",
+		},
+	},
+	// Adaptive (적응): Adjusts based on previous round results
+	"adaptive": {
+		Personality: "adaptive",
+		BuildProfile: BuildProfile{
+			PrimaryPath: "", // determined at runtime by memory analysis
+		},
+		StrategyPhases: StrategyPhases{
+			Early: "balanced",
+			Mid:   "balanced",
+			Late:  "balanced",
+		},
+	},
+
+	// --- Legacy aliases (backward compat with existing v1 presets) ---
 	"warrior": {
-		Personality: "warrior",
+		Personality: "aggro",
 		BuildProfile: BuildProfile{
 			PrimaryPath: "berserker",
 		},
@@ -74,14 +240,13 @@ var PersonalityPresets = map[string]TrainingProfile{
 		},
 	},
 	"guardian": {
-		Personality: "guardian",
+		Personality: "cautious",
 		BuildProfile: BuildProfile{
 			PrimaryPath: "tank",
 		},
 		CombatRules: []CombatRule{
 			{Condition: "mass_ratio < 0.5", Action: "flee"},
 			{Condition: "time_remaining < 60", Action: "go_center"},
-			{Condition: "mass < 20", Action: "no_boost"},
 		},
 		StrategyPhases: StrategyPhases{
 			Early: "defensive",
@@ -89,31 +254,8 @@ var PersonalityPresets = map[string]TrainingProfile{
 			Late:  "endgame",
 		},
 	},
-	"scholar": {
-		Personality: "scholar",
-		BuildProfile: BuildProfile{
-			PrimaryPath:  "scholar",
-			FallbackPath: "tank",
-			FallbackCondition: FallbackCondition{
-				LevelBelow:  5,
-				TimeElapsed: 120,
-			},
-			BannedUpgrades: []string{"cursed"},
-			AlwaysPick:     []string{"xp"},
-		},
-		CombatRules: []CombatRule{
-			{Condition: "mass_ratio > 2.0", Action: "engage"},
-			{Condition: "mass_ratio < 0.5", Action: "flee"},
-			{Condition: "time_remaining < 60", Action: "go_center"},
-		},
-		StrategyPhases: StrategyPhases{
-			Early: "xp_rush",
-			Mid:   "balanced",
-			Late:  "endgame",
-		},
-	},
 	"runner": {
-		Personality: "runner",
+		Personality: "cautious",
 		BuildProfile: BuildProfile{
 			PrimaryPath: "speedster",
 		},
@@ -127,7 +269,7 @@ var PersonalityPresets = map[string]TrainingProfile{
 		},
 	},
 	"experimenter": {
-		Personality: "experimenter",
+		Personality: "gambler",
 		BuildProfile: BuildProfile{
 			PrimaryPath: "", // random each round
 		},
@@ -137,17 +279,50 @@ var PersonalityPresets = map[string]TrainingProfile{
 			Late:  "balanced",
 		},
 	},
-	"adaptive": {
-		Personality: "adaptive",
-		BuildProfile: BuildProfile{
-			PrimaryPath: "", // determined by memory analysis
-		},
-		StrategyPhases: StrategyPhases{
-			Early: "balanced",
-			Mid:   "balanced",
-			Late:  "balanced",
-		},
-	},
+}
+
+// AdaptiveSelectBuildPath selects a build path for the Adaptive personality
+// based on previous round performance data from memory.
+func AdaptiveSelectBuildPath(mem *AgentMemory) string {
+	if mem == nil || len(mem.RoundHistory) == 0 {
+		return "balanced" // default if no history
+	}
+
+	// Find the build hash with the best average rank
+	bestPath := "balanced"
+	bestRank := 999.0
+
+	for hash, stats := range mem.BuildPerformance {
+		if stats.SampleCount >= 3 && stats.AvgRank < bestRank {
+			bestRank = stats.AvgRank
+			bestPath = hash
+		}
+	}
+
+	// If the last round was a loss (rank > 5), counter-pick
+	lastRound := mem.RoundHistory[len(mem.RoundHistory)-1]
+	if lastRound.Rank > 5 {
+		// Switch to a counter strategy
+		switch lastRound.DeathCause {
+		case "aura":
+			return "tank" // died from sustained damage → more armor
+		case "dash":
+			return "speedster" // died from burst → more speed/evasion
+		case "boundary":
+			return "speedster" // died from zone → more speed
+		default:
+			return "vampire" // balanced counter
+		}
+	}
+
+	// Map build hash back to a known path if possible, otherwise use best
+	for _, pathID := range AllBuildPathIDs() {
+		if pathID == bestPath {
+			return pathID
+		}
+	}
+
+	return "balanced"
 }
 
 // GetPersonalityPreset returns a training profile preset by personality name.
