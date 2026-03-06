@@ -1,1853 +1,1499 @@
 # Agent Survivor v10 — System Architecture Document
 
-> **Version**: 1.0
+> **Version**: v1.0
 > **Date**: 2026-03-06
-> **Status**: Draft
-> **Author**: DAVINCI /da:system
-> **Input**: v10-survival-roguelike-plan.md (1472 lines)
-> **Project Type**: GAME (Multiplayer Real-time)
+> **Status**: Proposed
+> **Parent**: [v10-survival-roguelike-plan.md](v10-survival-roguelike-plan.md) (전체 기획서)
+> **Related**: [v10-go-server-plan.md](v10-go-server-plan.md) | [v10-3d-graphics-plan.md](v10-3d-graphics-plan.md) | [v10-ui-ux-plan.md](v10-ui-ux-plan.md) | [v10-development-roadmap.md](v10-development-roadmap.md)
+> **Architect**: System Architect + Backend Architect + Frontend Architect
+
+---
+
+## Table of Contents
+
+1. [Overview](#1-overview)
+2. [Goals / Non-Goals](#2-goals--non-goals)
+3. [System Context — C4 Level 1](#3-system-context--c4-level-1)
+4. [Container Diagram — C4 Level 2](#4-container-diagram--c4-level-2)
+5. [Component Design — C4 Level 3](#5-component-design--c4-level-3)
+6. [Data Flow & Sequence Diagrams](#6-data-flow--sequence-diagrams)
+7. [API & Protocol Specification](#7-api--protocol-specification)
+8. [Data Model](#8-data-model)
+9. [Security Architecture](#9-security-architecture)
+10. [Scalability & Performance](#10-scalability--performance)
+11. [Reliability & Observability](#11-reliability--observability)
+12. [Infrastructure & Deployment](#12-infrastructure--deployment)
+13. [Architecture Decision Records](#13-architecture-decision-records)
+14. [Open Questions](#14-open-questions)
 
 ---
 
 ## 1. Overview
 
-Agent Survivor v10 is a **multiplayer auto-combat survival roguelike** built on top of the existing Snake Arena v7 codebase. The transformation replaces the snake-segment entity model with a single-position MC-style agent, introduces an XP/level-up/build system (Tomes + Abilities + Synergies), auto-combat via proximity auras, arena shrinking, and an AI Agent Commander Mode for LLM-driven strategic gameplay.
+Agent Survivor는 **멀티플레이어 자동전투 서바이벌 로그라이크** 게임이다.
+마인크래프트 스타일 복셀 에이전트가 아레나에서 자동으로 전투하며, XP를 수집해 레벨업하고,
+Tome/Ability 업그레이드를 선택해 시너지 빌드를 완성하는 5분 라운드 배틀로얄이다.
 
-**Architecture Transformation Scope**:
-- **Entity Model**: `Snake(segments[])` → `Agent(position)` — eliminates segment tracking across SpatialHash, CollisionSystem, StateSerializer, all renderers
-- **Combat Model**: Head-body collision → Hitbox aura DPS + dash burst damage
-- **Progression Model**: Mass growth → XP/Level/Build (Tome stacks + Ability slots + Synergy bonuses)
-- **Round Model**: Respawn-based → 1-Life survival with arena shrink
-- **Rendering Path**: Phase 1-3 2D Canvas → Phase 4+ 3D R3F (lobby already R3F)
+**"Agent"의 이중 의미**: (1) 게임 캐릭터 — MC 스타일 복셀 에이전트, (2) AI 에이전트 — LLM이 조종하는 자율 플레이어.
 
-**Monorepo Structure** (unchanged):
+### 1.1 핵심 아키텍처 특성
+
+| 특성 | 설계 방향 | 근거 |
+|------|----------|------|
+| **Real-time** | 20Hz 서버 틱, 60fps 클라이언트 보간 | .io 게임 표준, 부드러운 전투 피드백 |
+| **Stateful** | 인메모리 게임 상태 (DB 없음) | 게임 서버 특성, 초저지연 필수 |
+| **Multi-room** | Room당 독립 goroutine, 최대 50 Room | 격리된 게임 루프, true parallelism |
+| **Event-driven** | WebSocket JSON 프레임 {e, d} | 양방향 실시간 통신 |
+| **Monolithic** | 단일 Go 바이너리 (마이크로서비스 X) | 게임 서버 복잡성 ≠ 비즈니스 도메인 복잡성 |
+
+### 1.2 기술 스택 요약
+
 ```
-snake/
-├── apps/server/     — Node.js + Socket.IO game server
-├── apps/web/        — Next.js 15 + R3F client
-└── packages/shared/ — Types, constants, utilities
+┌─────────────────────────────────────────────────────────┐
+│                    Agent Survivor v10                      │
+├──────────────────────┬──────────────────────────────────┤
+│  Server (Go 1.24)    │  Client (Next.js 15 + R3F)       │
+│  ┌────────────────┐  │  ┌──────────────────────────┐    │
+│  │ gorilla/websocket│  │  │ React 19 + TypeScript     │    │
+│  │ chi/v5 router    │  │  │ Three.js + React Three    │    │
+│  │ encoding/json    │  │  │ Fiber (R3F) 9.5           │    │
+│  │ log/slog         │  │  │ Native WebSocket          │    │
+│  └────────────────┘  │  └──────────────────────────┘    │
+├──────────────────────┴──────────────────────────────────┤
+│  Deploy: Railway (Go) + Vercel (Next.js)                 │
+│  Monorepo: server/ (Go) + apps/web/ (Next.js)           │
+└─────────────────────────────────────────────────────────┘
 ```
+
+---
 
 ## 2. Goals / Non-Goals
 
-### Goals
-- **G1**: Complete Snake→Agent entity transformation with zero data loss on movement/input mechanics
-- **G2**: Auto-combat system with deterministic server-side aura DPS at 20Hz tick rate
-- **G3**: XP/Level-up with 8 Tomes (stackable) + 6 Abilities (auto-trigger) + 10 Synergies (6 public + 4 hidden)
-- **G4**: 1-Life survival with arena shrink (6000→1200px radius over 5 minutes)
-- **G5**: AI Agent integration via Commander Mode (build selection + combat strategy)
-- **G6**: Maintain current deployment: Vercel (client) + Railway (server)
-- **G7**: MC-style character customization (AgentSkin, 30+ fields, 34 presets)
-- **G8**: 5-Phase migration from v7 with backward-compatible network protocol evolution
+### 2.1 Goals
 
-### Non-Goals
-- Server-side 3D simulation (server stays 2D coordinate plane)
-- Physics engine integration (custom collision math is sufficient)
-- Persistent database (Phase 1-3 use in-memory + JSON; DB is Phase 5+)
-- Matchmaking/ELO rating (Phase 5+)
-- VR/AR support
-- WebGPU-only rendering (WebGL2 baseline)
+| # | Goal | 측정 기준 |
+|---|------|----------|
+| G1 | **대규모 동시접속**: 50 Room × 100명 = 5,000 CCU/인스턴스 | 부하 테스트 통과 |
+| G2 | **안정적 20Hz 틱**: Room당 < 2ms 틱 처리 | P99 < 5ms |
+| G3 | **기존 게임 로직 100% 포팅**: TS 프로토타입 → Go | 모든 시스템 테스트 통과 |
+| G4 | **최소 클라이언트 변경**: Socket.IO → WebSocket 어댑터 교체만 | useSocket.ts 1개 파일 |
+| G5 | **MC 통합 비주얼**: 로비 + 인게임 아트 디렉션 통일 | MC 복셀 스타일 일관성 |
+| G6 | **AI Agent 플랫폼**: LLM 에이전트가 전략적으로 플레이 가능 | Agent API 연동 테스트 |
+| G7 | **Railway 단일 인스턴스 배포**: Docker 단일 바이너리 | 배포 성공, health 200 |
 
-## 3. System Context (C4 Level 1)
+### 2.2 Non-Goals
 
-```
-┌─────────────────────────────────────────────────────────────────────┐
-│                        Agent Survivor System                        │
-│                                                                     │
-│  ┌──────────┐        ┌──────────────┐        ┌──────────────┐     │
-│  │  Human    │◄──────►│   Web Client  │◄──────►│  Game Server │     │
-│  │  Player   │  HTTP  │  (Next.js)   │ WS/SIO │  (Node.js)  │     │
-│  │  Browser  │        │  Vercel      │        │  Railway     │     │
-│  └──────────┘        └──────────────┘        └──────┬───────┘     │
-│                                                      │              │
-│  ┌──────────┐        ┌──────────────┐               │              │
-│  │    AI    │◄───────│  Agent API   │───────────────┘              │
-│  │  Agent   │  HTTP  │  (REST+WS)   │  Socket.IO                  │
-│  │  (LLM)  │        │  Phase 4+     │                             │
-│  └──────────┘        └──────────────┘                              │
-└─────────────────────────────────────────────────────────────────────┘
+| # | Non-Goal | 근거 |
+|---|----------|------|
+| N1 | 데이터베이스/영구 저장 | 인메모리 게임 서버, JSON 파일 저장으로 충분 |
+| N2 | 마이크로서비스 분리 | 단일 게임 서버, 도메인 경계 불필요 |
+| N3 | 클라이언트 3D 렌더링 재작성 | Three.js/R3F 기존 스택 유지, 에셋만 교체 |
+| N4 | 글로벌 멀티리전 배포 | Phase 1은 단일 리전 (Railway) |
+| N5 | 바이너리 프로토콜 (Phase 1) | JSON 우선, 성능 병목 시 Phase 2에서 전환 |
+| N6 | 사용자 인증/계정 시스템 | 게스트 플레이 우선, OAuth는 Phase 4+ |
 
-External Actors:
-  - Human Player: Browser-based, touch/mouse+keyboard input
-  - AI Agent: LLM-powered (Claude, GPT, custom) connecting via Agent API
-  - CDN (Vercel Edge): Static assets + Next.js SSR
-  - Railway: Server process hosting
-```
+---
 
-## 4. Container Diagram (C4 Level 2)
+## 3. System Context — C4 Level 1
+
+### 3.1 Context Diagram
 
 ```
-┌─────────────────────────────────────────────────────────────────────────────┐
-│  GAME SERVER (Node.js + Socket.IO)  — Railway                               │
-│  apps/server/                                                               │
-│                                                                             │
-│  ┌───────────────────┐   ┌─────────────┐   ┌─────────────────────────┐    │
-│  │  SocketHandler    │──▶│ RoomManager │──▶│  Room[0..4]             │    │
-│  │  (network/*)      │   │ (5 rooms)    │   │  ┌─────────────────┐   │    │
-│  │                   │   │              │   │  │  Arena           │   │    │
-│  │  - join_room      │   │  - quickJoin │   │  │  ┌────────────┐ │   │    │
-│  │  - leave_room     │   │  - getRoom   │   │  │  │AgentEntity │ │   │    │
-│  │  - input (30Hz)   │   │  - broadcast │   │  │  │CollisionSys│ │   │    │
-│  │  - choose_upgrade │   │              │   │  │  │OrbManager  │ │   │    │
-│  │  - respawn        │   └─────────────┘   │  │  │SpatialHash │ │   │    │
-│  │  - ping/pong      │                     │  │  │UpgradeSys  │ │   │    │
-│  └───────────────────┘                     │  │  │MapObjects  │ │   │    │
-│                                            │  │  │ArenaShrink │ │   │    │
-│  ┌───────────────────┐                     │  │  │BotManager  │ │   │    │
-│  │  Broadcaster      │◀────────────────────│  │  └────────────┘ │   │    │
-│  │  (network/*)      │                     │  │  State Machine:  │   │    │
-│  │                   │                     │  │  wait→count→     │   │    │
-│  │  - state (20Hz)   │                     │  │  play→end→cool  │   │    │
-│  │  - rooms_update   │                     │  └─────────────────┘   │    │
-│  │  - level_up       │                     └─────────────────────────┘    │
-│  │  - round_start/end│                                                    │
-│  │  - minimap (1Hz)  │                                                    │
-│  │  - synergy_activated                                                   │
-│  │  - arena_shrink   │                                                    │
-│  └───────────────────┘                                                    │
-└──────────────────────────────────────────┬────────────────────────────────┘
-                                           │ Socket.IO (WebSocket + polling fallback)
-                                           │ 20Hz state, 1Hz minimap, event-driven level_up/death/kill
-┌──────────────────────────────────────────┴────────────────────────────────┐
-│  WEB CLIENT (Next.js 15 + R3F)  — Vercel                                  │
-│  apps/web/                                                                 │
-│                                                                            │
-│  ┌─── Page Router ──────────────────────────────────────────────────────┐  │
-│  │  app/page.tsx — Mode: lobby | playing                                │  │
-│  │  ┌────────────────────┐  ┌───────────────────────────────────────┐  │  │
-│  │  │  Lobby Mode        │  │  Playing Mode                         │  │  │
-│  │  │  - LobbyScene3D    │  │  - GameCanvas (2D) / GameCanvas3D    │  │  │
-│  │  │  - RoomList        │  │  - LevelUpOverlay                    │  │  │
-│  │  │  - AgentPreview    │  │  - BuildHUD + XPBar                  │  │  │
-│  │  │  - SkinCustomizer  │  │  - ShrinkWarning                    │  │  │
-│  │  │  - RecentWinners   │  │  - SynergyPopup                     │  │  │
-│  │  │                    │  │  - RoundTimerHUD                     │  │  │
-│  │  └────────────────────┘  │  - CountdownOverlay                  │  │  │
-│  │                          │  - RoundResultOverlay                │  │  │
-│  │                          │  - DeathOverlay                      │  │  │
-│  │                          └───────────────────────────────────────┘  │  │
-│  └────────────────────────────────────────────────────────────────────┘  │
-│                                                                          │
-│  ┌─── Shared Hooks ─────────────────────────────────────────────────┐    │
-│  │  useSocket.ts — joinRoom, leaveRoom, onLevelUp, onSynergyActivated│   │
-│  │  useGameState.ts — interpolation, camera, input handling          │   │
-│  └───────────────────────────────────────────────────────────────────┘    │
-│                                                                          │
-│  ┌─── Renderer Layer ───────────────────────────────────────────────┐    │
-│  │  Phase 1-3: lib/renderer/* (2D Canvas — entities, background, ui)│   │
-│  │  Phase 4+:  components/3d/* (R3F — AgentModel3D, VoxelTerrain)   │   │
-│  └───────────────────────────────────────────────────────────────────┘    │
-└──────────────────────────────────────────────────────────────────────────┘
-
-┌──────────────────────────────────────────────────────────────────────────┐
-│  SHARED PACKAGE  — packages/shared/                                       │
-│                                                                          │
-│  types/game.ts      — Agent, AgentSkin, PlayerBuild, TomeType, etc.     │
-│  types/events.ts    — LevelUpEvent, ChooseUpgradeCommand, RoundSummary  │
-│  constants/game.ts  — ARENA_CONFIG, ROOM_CONFIG, SHRINK_CONFIG          │
-│  constants/upgrades.ts — TOMES, ABILITIES, SYNERGIES (NEW)              │
-│  constants/colors.ts   — Agent color palette                            │
-│  utils/*              — Math, validation                                │
-└──────────────────────────────────────────────────────────────────────────┘
+                           ┌───────────────────┐
+                           │   Human Player     │
+                           │  (웹 브라우저)       │
+                           └─────────┬─────────┘
+                                     │ HTTPS + WSS
+                                     ▼
+┌──────────────┐           ┌───────────────────┐           ┌──────────────┐
+│  AI Agent    │──WSS────▷│  Agent Survivor    │◁──HTTPS──│   Vercel     │
+│  (LLM Bot)  │           │  Game System        │           │   CDN        │
+└──────────────┘           └───────────────────┘           └──────────────┘
+                                     │
+                                     │ Docker
+                                     ▼
+                           ┌───────────────────┐
+                           │    Railway PaaS    │
+                           │  (Container Host)   │
+                           └───────────────────┘
 ```
 
-### 4.1 Communication Protocols
+### 3.2 External Actors
 
-| Channel | Direction | Protocol | Rate | Purpose |
-|---------|-----------|----------|------|---------|
-| `input` | C→S | Socket.IO | 30Hz (rate-limited) | Steering angle + boost toggle |
-| `state` | S→C | Socket.IO | 20Hz | Viewport-culled game state |
-| `minimap` | S→C | Socket.IO | 1Hz | Full-map agent positions |
-| `rooms_update` | S→C | Socket.IO | 1Hz | Lobby room list |
-| `level_up` | S→C | Socket.IO | Event | 3 upgrade choices + context |
-| `choose_upgrade` | C→S | Socket.IO | Event | Selected upgrade index |
-| `synergy_activated` | S→C | Socket.IO | Event | Synergy bonus notification |
-| `arena_shrink` | S→C | Socket.IO | Event | New arena radius |
-| `round_start/end/reset` | S→C | Socket.IO | Event | Round lifecycle |
-| `death/kill` | S→C | Socket.IO | Event | Combat results |
-| Agent API (Phase 4+) | Agent↔S | REST + WS | Event | Commander Mode commands |
+| Actor | 설명 | 통신 방식 |
+|-------|------|----------|
+| **Human Player** | 웹 브라우저에서 게임 플레이. 조향(마우스/터치) + 부스트 + 레벨업 선택 | WebSocket (게임), HTTPS (정적 에셋) |
+| **AI Agent** | LLM 기반 자율 플레이어. 빌드 전략, 전투 명령, 레벨업 선택을 자동 수행 | WebSocket (게임 + 명령) |
+| **Vercel CDN** | Next.js 프론트엔드 정적 파일 호스팅 + SSR | HTTPS |
+| **Railway PaaS** | Go 서버 Docker 컨테이너 호스팅 | Internal |
 
-### 4.2 Data Flow Summary
+### 3.3 System Boundary
 
-```
-Human Input → SocketHandler → Room.applyInput() → Arena.applyInput()
-  → AgentEntity.setTarget() → gameLoop tick
-  → CollisionSystem.processAuraCombat() + processCollisions()
-  → UpgradeSystem.checkLevelUp() → [level_up event if triggered]
-  → StateSerializer.getStateForPlayer() → Broadcaster → Client
-  → Interpolation → Renderer (2D Canvas / 3D R3F)
-```
+Agent Survivor 시스템은 크게 **2개 배포 단위**로 구성:
 
-## 5. Component Design — Server (C4 Level 3)
+1. **Go Game Server** (Railway) — 게임 로직, WebSocket Hub, Room 관리, AI Bot, Agent API
+2. **Next.js Web Client** (Vercel) — 로비 UI, 게임 렌더링 (2D Canvas → 3D R3F), 캐릭터 커스터마이저
 
-### 5.1 Server Module Dependency Graph
+---
+
+## 4. Container Diagram — C4 Level 2
+
+### 4.1 Container Overview
 
 ```
-index.ts
-  └─▶ SocketHandler
-        └─▶ RoomManager
-              └─▶ Room[0..4]
-                    └─▶ Arena
-                          ├─▶ AgentEntity (was: SnakeEntity)
-                          ├─▶ CollisionSystem
-                          ├─▶ OrbManager
-                          ├─▶ SpatialHash
-                          ├─▶ UpgradeSystem (NEW)
-                          ├─▶ MapObjects (NEW)
-                          ├─▶ ArenaShrink (NEW)
-                          ├─▶ BotManager → BotBehaviors
-                          ├─▶ LeaderboardManager
-                          └─▶ StateSerializer
-              └─▶ Broadcaster
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         Agent Survivor System                            │
+│                                                                         │
+│  ┌──────────────────────────────────────┐  ┌─────────────────────────┐  │
+│  │         Go Game Server               │  │   Next.js Web Client     │  │
+│  │         (Railway Container)           │  │   (Vercel Edge)          │  │
+│  │                                      │  │                         │  │
+│  │  ┌──────────┐  ┌─────────────────┐  │  │  ┌───────────────────┐  │  │
+│  │  │ HTTP      │  │ WebSocket Hub    │  │  │  │ React App          │  │  │
+│  │  │ Router    │  │ (channel-based) │  │  │  │ (SSR/CSR)          │  │  │
+│  │  │ (chi/v5)  │  │                 │  │  │  └───────┬───────────┘  │  │
+│  │  └─────┬────┘  └────────┬────────┘  │  │          │              │  │
+│  │        │                │            │  │  ┌───────▼───────────┐  │  │
+│  │        │         ┌──────▼──────┐     │  │  │ Game Renderer      │  │  │
+│  │  ┌─────▼────┐   │ RoomManager  │     │  │  │ (2D Canvas/3D R3F)│  │  │
+│  │  │ REST API  │   │  ┌────────┐ │     │  │  └───────────────────┘  │  │
+│  │  │ /health   │   │  │ Room×N │ │     │  │                         │  │
+│  │  │ /api/v1/* │   │  │ Arena  │ │     │  │  ┌───────────────────┐  │  │
+│  │  └──────────┘   │  │ Bots   │ │     │  │  │ WebSocket Adapter  │  │  │
+│  │                  │  └────────┘ │     │  │  │ (Native WS)       │  │  │
+│  │                  └─────────────┘     │  │  └───────────────────┘  │  │
+│  └──────────────────────────────────────┘  └─────────────────────────┘  │
+│                                                                         │
+│  ┌──────────────────────────────────────┐                               │
+│  │       Shared Types (packages/shared) │  ← TypeScript 타입 정의       │
+│  │       constants, types, utils         │  (Go는 domain/ 내 재정의)     │
+│  └──────────────────────────────────────┘                               │
+└─────────────────────────────────────────────────────────────────────────┘
 ```
 
-### 5.2 Module Specifications
+### 4.2 Container Details
 
-#### AgentEntity.ts (was: Snake.ts) — FULL REWRITE
+#### Go Game Server (Primary Container)
 
-| Aspect | v7 (Snake) | v10 (Agent) |
-|--------|-----------|-------------|
-| Position | `segments: Position[]` (head+body) | `position: Position` (single point) |
-| Size | `mass = segment count` | `mass = HP` (hitbox scales slightly) |
-| State | heading, speed, boosting, alive | + level, xp, xpToNext, build, activeSynergies |
-| Update | Move head → trail segments → drop trail orbs | Move position → apply effects → check aura range |
-| LOC estimate | ~170 lines | ~120 lines (simpler without segments) |
+| 속성 | 값 |
+|------|-----|
+| **언어/런타임** | Go 1.24, 단일 바이너리 (~10MB) |
+| **책임** | 게임 로직, 실시간 상태 관리, WebSocket 통신, Bot AI, Agent API |
+| **포트** | `$PORT` (Railway 동적 할당, 기본 8000) |
+| **Goroutine 구조** | Main + Hub(1) + RoomManager(1) + Room(N) + Client(M×2) |
+| **상태** | 완전 인메모리 (재시작 시 초기화) |
+| **배포** | Railway Docker (multi-stage build, `scratch` base) |
 
-**Key Methods**:
-- `update(dt)`: Move position, apply speed modifiers (Speed Tome), consume boost mass
-- `takeDamage(amount, source)`: Reduce mass, track damage source for kill credit
-- `addXP(amount)`: Add XP with Tome multipliers, return true if level-up triggered
-- `applyTomeBonus(type)`: Recalculate derived stats after Tome stack change
-- `getHitboxRadius()`: `16 + (mass > 50 ? 3 : 0) + (mass > 100 ? 3 : 0)` px
-- `getAuraDPS()`: `BASE_AURA_DPS * (1 + damageTomeStacks * 0.15) * levelBonus`
-
-#### CollisionSystem.ts — FULL REWRITE
-
+**내부 패키지 구조**:
 ```
-v7 Collision Types:          v10 Collision Types:
-  1. Boundary check            1. Boundary check (+ shrink boundary)
-  2. Head-body collision       2. Aura-Aura combat (DPS exchange) ← NEW
-  3. Head-head collision       3. Dash collision (burst damage) ← replaces head-body
-                               4. Map object interaction ← NEW
-
-Processing Order (per tick):
-  1. auraCollisions(): SpatialHash range query (AURA_RADIUS=60px)
-     → For each pair within range: mutual DPS application
-     → Venom DoT application if ability active
-  2. dashCollisions(): SpatialHash range query (HITBOX_RADIUS)
-     → Boosting agent hits non-boosting → 30% mass burst damage
-  3. boundaryCheck(): agent.position vs shrinking arena radius
-     → Outside boundary: 0.25% mass/tick penalty
-  4. mapObjectInteractions(): agent.position vs MapObject positions
-     → Shrine/Spring/Altar/Gate proximity triggers
-```
-
-#### UpgradeSystem.ts — NEW (~250 LOC)
-
-```typescript
-// Core responsibilities:
-class UpgradeSystem {
-  // Generate 3 random choices weighted by Luck Tome + current build
-  generateChoices(agent: AgentEntity): UpgradeChoice[];
-
-  // Apply chosen upgrade to agent's build
-  applyUpgrade(agent: AgentEntity, choice: UpgradeChoice): void;
-
-  // Check all synergy conditions after build change
-  checkSynergies(build: PlayerBuild): SynergyDef[];
-
-  // Calculate XP needed for next level (polynomial curve)
-  xpForLevel(level: number): number;
-  // Formula: 20 + (level - 2) * 15 + (level - 2)^1.2 * 5
-}
+server/
+├── cmd/server/main.go          ← Composition root
+├── internal/
+│   ├── config/config.go        ← envconfig 기반 설정
+│   ├── server/router.go        ← chi 라우터 + 미들웨어
+│   ├── ws/                     ← WebSocket 계층
+│   │   ├── hub.go              ← Channel-based Hub (lock-free)
+│   │   ├── client.go           ← ReadPump + WritePump goroutine
+│   │   └── protocol.go         ← JSON 프레임 직렬화
+│   ├── game/                   ← 게임 로직 계층
+│   │   ├── room_manager.go     ← Room 생명주기, Quick Join
+│   │   ├── room.go             ← Room 상태 머신 + 20Hz 루프
+│   │   ├── arena.go            ← 게임 루프 오케스트레이터
+│   │   ├── agent.go            ← Agent 엔티티 (물리/전투/빌드)
+│   │   ├── collision.go        ← Aura DPS + Dash + 경계
+│   │   ├── upgrade.go          ← Tome/Ability/Synergy
+│   │   ├── orb.go              ← Orb 관리
+│   │   ├── shrink.go           ← 아레나 수축
+│   │   ├── spatial_hash.go     ← 공간 인덱싱
+│   │   ├── bot.go              ← Bot AI + 빌드 패스
+│   │   ├── leaderboard.go      ← 점수 랭킹
+│   │   ├── serializer.go       ← 뷰포트 컬링 + 직렬화
+│   │   ├── map_objects.go      ← Shrine/Spring/Altar/Gate
+│   │   ├── training.go         ← Agent 훈련 프로필
+│   │   ├── progression.go      ← RP/퀘스트/해금
+│   │   ├── coach.go            ← Coach Agent (규칙 기반)
+│   │   ├── analyst.go          ← Analyst Agent (라운드 분석)
+│   │   └── constants.go        ← 게임 상수
+│   └── domain/                 ← 순수 타입 (의존성 없음)
+│       ├── types.go            ← Agent, Orb, Position, Build
+│       ├── events.go           ← WS 이벤트 페이로드
+│       ├── skins.go            ← 34종 스킨 프리셋
+│       └── upgrades.go         ← Tome/Ability/Synergy 정의
+├── go.mod / go.sum
+└── Dockerfile
 ```
 
-**Upgrade Choice Generation Algorithm**:
+**패키지 의존성 규칙** (단방향, 순환 금지):
 ```
-1. Pool = ALL_TOMES + ALL_ABILITIES (weighted)
-2. Filter: Remove abilities if all slots full AND no existing ability to upgrade
-3. Weight: Luck Tome stacks increase rare upgrade probability
-4. Ensure diversity: At least 1 Tome + at most 1 new Ability per set
-5. Near-synergy boost: If 1 upgrade away from synergy, +3x weight for that upgrade
-6. Return 3 choices (sorted by rarity: common first for readability)
-```
-
-#### ArenaShrink.ts — NEW (~60 LOC)
-
-```typescript
-class ArenaShrink {
-  currentRadius: number;      // starts at 6000
-  shrinkStartTime: number;    // 60s after round start
-  shrinkRate: number;          // 600px per minute = 0.5px per tick
-
-  update(tick: number): void;  // Reduce radius if past start time
-  isOutOfBounds(pos: Position): boolean;
-  getBoundaryPenalty(): number; // 0.25% mass/tick
-  getNextShrinkWarning(): { secondsUntil: number; newRadius: number } | null;
-}
+cmd/server → internal/config, internal/server, internal/ws, internal/game
+internal/server → internal/ws, internal/game
+internal/ws → internal/domain
+internal/game → internal/domain
+internal/domain → (없음, Pure Types)
 ```
 
-#### MapObjects.ts — NEW (~100 LOC)
+#### Next.js Web Client (Secondary Container)
 
-```typescript
-class MapObjects {
-  objects: MapObject[];  // XP Shrine(3), Healing Spring(2), Upgrade Altar(1), Speed Gate(4)
+| 속성 | 값 |
+|------|-----|
+| **프레임워크** | Next.js 15 + React 19 + TypeScript |
+| **렌더링** | SSR (로비) + CSR (게임) |
+| **3D 엔진** | Three.js 0.175 + React Three Fiber 9.5 + Drei 10.7 |
+| **WebSocket** | Native WebSocket (Socket.IO 제거) |
+| **배포** | Vercel Edge Network |
 
-  update(tick: number): void;         // Handle cooldowns and respawns
-  checkInteractions(agents: AgentEntity[]): MapInteraction[];
-  getVisibleObjects(): MapObject[];   // For state serialization
-}
-
-interface MapObject {
-  type: 'xp_shrine' | 'healing_spring' | 'upgrade_altar' | 'speed_gate';
-  position: Position;
-  radius: number;          // interaction range
-  cooldown: number;        // current cooldown ticks remaining
-  maxCooldown: number;     // reset value
-  available: boolean;
-}
+**디렉토리 구조** (주요 변경):
+```
+apps/web/
+├── app/page.tsx                     ← 로비/게임 모드 전환
+├── hooks/
+│   ├── useWebSocket.ts              ← NEW: Native WS 어댑터
+│   └── useSocket.ts                 ← 리팩토링: Socket.IO → useWebSocket
+├── lib/
+│   ├── renderer/                    ← 2D Canvas 렌더러
+│   │   ├── entities.ts              ← 전면 리라이트: Snake→Agent 스프라이트
+│   │   ├── background.ts            ← MC 타일 배경
+│   │   └── ui.ts                    ← HUD 렌더링
+│   ├── interpolation.ts             ← Snake→Agent 보간
+│   └── camera.ts                    ← 동적 줌 (유지)
+├── components/
+│   ├── game/                        ← 인게임 UI
+│   │   ├── GameCanvas.tsx
+│   │   ├── LevelUpOverlay.tsx       ← NEW: 3택 업그레이드 카드
+│   │   ├── BuildHUD.tsx             ← NEW: Tome/Ability 슬롯
+│   │   ├── XPBar.tsx                ← NEW: MC 경험치 바
+│   │   ├── ShrinkWarning.tsx        ← NEW: 수축 경고
+│   │   ├── SynergyPopup.tsx         ← NEW: 시너지 발동 팝업
+│   │   ├── CoachBubble.tsx          ← NEW: Coach 조언 버블
+│   │   └── AnalystPanel.tsx         ← NEW: 라운드 분석 패널
+│   ├── lobby/                       ← 로비 UI
+│   │   ├── CharacterCreator.tsx     ← NEW: MC 캐릭터 커스터마이저
+│   │   ├── TrainingConsole.tsx      ← NEW: Agent 훈련 콘솔
+│   │   ├── RoomList.tsx             ← 리브랜딩
+│   │   └── Mc*.tsx                  ← 유지 (McPanel, McButton, McInput)
+│   └── 3d/                          ← R3F 3D 컴포넌트
+│       ├── LobbyScene3D.tsx         ← 유지 → Agent 아이들로 교체
+│       └── LobbyAgentPreview.tsx    ← NEW: MC 에이전트 프리뷰
+└── public/sprites/agents/            ← NEW: MC 스프라이트시트
 ```
 
-#### Arena.ts — MAJOR MODIFICATION (~200 LOC added)
+#### Shared Types Package
 
-**Changed**: `snakes: Map<string, SnakeEntity>` → `agents: Map<string, AgentEntity>`
+| 속성 | 값 |
+|------|-----|
+| **위치** | `packages/shared/` |
+| **역할** | TypeScript 타입 정의 (클라이언트 전용) |
+| **Go 측** | `internal/domain/` 에서 동일 타입을 Go로 재정의 |
+| **동기화** | 수동 (JSON 태그 camelCase로 호환 유지) |
 
-**New methods added to game loop**:
-```
-gameLoop() {
-  // Existing (modified):
-  this.moveAgents();                    // was: moveSnakes (simplified)
-  this.collisionSystem.process();       // rewritten for aura combat
-  this.processOrbCollection();          // + XP tracking
+### 4.3 컨테이너 간 통신
 
-  // New:
-  this.upgradeSystem.processLevelUps(); // check XP thresholds → emit level_up
-  this.upgradeSystem.processAbilities();// auto-trigger ability effects
-  this.arenaShrink.update(this.tick);   // shrink boundary
-  this.mapObjects.update(this.tick);    // map object cooldowns
-  this.mapObjects.checkInteractions();  // proximity interactions
-  this.processEffects();                // ability duration/cooldown
-  this.botManager.updateBots();         // bot decisions (expanded)
-}
-```
+| From | To | Protocol | 빈도 | 데이터 |
+|------|----|----------|------|--------|
+| Client | Server | WSS `{e,d}` | 30Hz (input) | 조향 각도, 부스트, 시퀀스 |
+| Server | Client | WSS `{e,d}` | 20Hz (state) | 에이전트/오브 상태, 리더보드 |
+| Server | Client | WSS `{e,d}` | 1Hz (lobby) | Room 목록, 최근 우승자 |
+| Server | Client | WSS `{e,d}` | 이벤트 | death, kill, level_up, synergy |
+| Client | Server | WSS `{e,d}` | 이벤트 | join_room, leave_room, choose_upgrade |
+| AI Agent | Server | WSS `{e,d}` | 동일 | 동일 프로토콜 (API key 인증 추가) |
+| Browser | Vercel | HTTPS | 요청시 | 정적 에셋, SSR 페이지 |
+| Browser | Server | HTTPS | 요청시 | REST API (/health, /api/v1/*) |
 
-#### BotBehaviors.ts — EXPANDED
+---
 
-**New behaviors** (extending existing survive/hunt/gather/wander):
-- `behaviorKite(target)`: Maintain position within aura range but outside hitbox
-- `behaviorCamp()`: Position at shrink boundary -200px
-- `behaviorFarmOrbs(zone)`: Restrict orb gathering to safe/center/edge zone
-- `chooseLevelUpgrade(choices, buildPath)`: Algorithm from plan section 6.3
+## 5. Component Design — C4 Level 3
 
-**Bot Build Path Assignment** (BotManager):
-```
-On bot creation:
-  Randomly assign one of 5 build paths: Berserker(20%), Tank(20%),
-  Speedster(20%), Vampire(20%), Scholar(20%)
-  Each path dictates upgrade priority + strategy phase transitions
-```
-
-## 6. Component Design — Client (C4 Level 3)
-
-### 6.1 Component Tree
+### 5.1 Server — WebSocket Layer (`internal/ws/`)
 
 ```
-app/page.tsx (mode: lobby | playing)
-├── Lobby Mode:
-│   ├── LobbyScene3D.tsx          (R3F 3D background — existing, unchanged)
-│   ├── RoomList.tsx              (MC server list — text changes only)
-│   ├── LobbyAgentPreview.tsx     (was: LobbySnakePreview — MC agent rotation)
-│   ├── SkinCustomizer.tsx        (NEW — AgentSkin tier-based customization)
-│   ├── RecentWinnersPanel.tsx    (add build/synergy info to winners)
-│   └── McPanel/McButton/McInput  (MC UI components — unchanged)
-│
-├── Playing Mode:
-│   ├── GameCanvas.tsx            (2D Canvas wrapper — agent rendering)
-│   │   └── lib/renderer/
-│   │       ├── entities.ts       (REWRITE — agent sprite 16x16 + aura circle)
-│   │       ├── background.ts     (add shrink boundary + zone indicators)
-│   │       └── ui.ts             (add XP bar, build icons, shrink warning)
-│   │
-│   ├── LevelUpOverlay.tsx        (NEW — 3 upgrade cards, 5s timer)
-│   ├── BuildHUD.tsx              (NEW — tome stacks + ability slots display)
-│   ├── XPBar.tsx                 (NEW — experience bar under agent name)
-│   ├── ShrinkWarning.tsx         (NEW — arena shrink countdown warning)
-│   ├── SynergyPopup.tsx          (NEW — synergy activation notification)
-│   ├── RoundTimerHUD.tsx         (existing — unchanged)
-│   ├── CountdownOverlay.tsx      (existing — unchanged)
-│   ├── RoundResultOverlay.tsx    (MODIFIED — add build details + synergy display)
-│   └── DeathOverlay.tsx          (MODIFIED — 1 Life messaging, spectate option)
-│
-└── Shared Hooks:
-    ├── useSocket.ts              (MODIFIED — agent events, level_up, synergy)
-    └── useGameState.ts           (derived — interpolation, camera, predictions)
+┌──────────────────────────────────────────────────────────┐
+│                    WebSocket Layer                         │
+│                                                          │
+│  ┌─────────────────────────────────────────────────┐     │
+│  │              Hub (단일 goroutine)                 │     │
+│  │                                                 │     │
+│  │  rooms: map[roomID]map[*Client]bool             │     │
+│  │  lobby: map[*Client]bool                        │     │
+│  │                                                 │     │
+│  │  Channels:                                      │     │
+│  │  ├── register   ← 새 연결 등록                    │     │
+│  │  ├── unregister ← 연결 해제                      │     │
+│  │  ├── broadcast  ← 전체 브로드캐스트               │     │
+│  │  ├── roomcast   ← Room별 브로드캐스트             │     │
+│  │  ├── unicast    ← 단일 클라이언트 전송            │     │
+│  │  └── done       ← 종료 신호                      │     │
+│  └─────────────────────────────────────────────────┘     │
+│          ▲              ▲              ▲                  │
+│          │              │              │                  │
+│  ┌───────┴──┐  ┌───────┴──┐  ┌───────┴──┐              │
+│  │ Client A │  │ Client B │  │ Client N │              │
+│  │ ┌──────┐ │  │ ┌──────┐ │  │ ┌──────┐ │              │
+│  │ │Read  │ │  │ │Read  │ │  │ │Read  │ │              │
+│  │ │Pump  │ │  │ │Pump  │ │  │ │Pump  │ │              │
+│  │ ├──────┤ │  │ ├──────┤ │  │ ├──────┤ │              │
+│  │ │Write │ │  │ │Write │ │  │ │Write │ │              │
+│  │ │Pump  │ │  │ │Pump  │ │  │ │Pump  │ │              │
+│  │ ├──────┤ │  │ ├──────┤ │  │ ├──────┤ │              │
+│  │ │Rate  │ │  │ │Rate  │ │  │ │Rate  │ │              │
+│  │ │Limiter│ │  │ │Limiter│ │  │ │Limiter│ │              │
+│  │ └──────┘ │  │ └──────┘ │  │ └──────┘ │              │
+│  └──────────┘  └──────────┘  └──────────┘              │
+│                                                          │
+│  ┌─────────────────────────────────────────────────┐     │
+│  │              Protocol                            │     │
+│  │  JSON Frame: {"e": "event", "d": {...}}          │     │
+│  │  Event Router: event name → handler function     │     │
+│  │  Rate Limits: input 30Hz, respawn 1Hz, ping 5Hz  │     │
+│  └─────────────────────────────────────────────────┘     │
+└──────────────────────────────────────────────────────────┘
 ```
 
-### 6.2 New Client Components
+**핵심 설계 결정**:
+- Hub는 **단일 goroutine + channel**로 동작 (lock-free, 데드락 불가)
+- Client당 ReadPump + WritePump 2개 goroutine
+- WritePump의 send channel 버퍼(64) 초과 시 클라이언트 추방 (backpressure)
+- Rate Limiter는 Client 구조체에 내장 (sync.Map 기반)
 
-#### LevelUpOverlay.tsx
-- **Trigger**: `level_up` socket event
-- **Display**: 3 upgrade cards (Tome/Ability) with icon, name, description, stack count
-- **Input**: Click card or press 1/2/3, auto-select on 5s timeout
-- **Sends**: `choose_upgrade { choiceIndex: 0|1|2 }`
-- **Z-index**: Above game canvas, below death overlay
-- **Animation**: Cards slide up from bottom, selected card scales + fades
-
-#### BuildHUD.tsx
-- **Position**: Top-left corner, below leaderboard
-- **Display**: Tome stack icons (colored bars) + Ability slot icons (with cooldown rings)
-- **Data**: From `state.agents[myId].build`
-- **Update**: Every state tick (20Hz)
-
-#### XPBar.tsx
-- **Position**: Bottom of screen, full width, thin bar
-- **Display**: Current XP / XP to next level, level number
-- **Animation**: Smooth fill with glow on level-up
-
-#### ShrinkWarning.tsx
-- **Trigger**: `arena_shrink` event or 10s before shrink
-- **Display**: Red pulse border + "Arena Shrinking!" text + new boundary preview on minimap
-
-#### SynergyPopup.tsx
-- **Trigger**: `synergy_activated` event
-- **Display**: Gold banner with synergy name + bonus description, 3s auto-dismiss
-- **Animation**: Slide down from top, gold particle burst
-
-### 6.3 Renderer Modifications (lib/renderer/)
-
-#### entities.ts — FULL REWRITE (~764 LOC → ~500 LOC)
+### 5.2 Server — Game Layer (`internal/game/`)
 
 ```
-v7 Snake Rendering:                    v10 Agent Rendering:
-  For each snake:                        For each agent:
-    Draw segments (circles along path)     Draw 16x16 sprite at position
-    Draw head (larger circle + eyes)       Draw MC face (eyeStyle + mouthStyle)
-    Draw name tag                          Draw name tag + level badge
-    Draw outline glow                      Draw combat aura circle (60px radius)
-                                           Draw active ability indicators
-                                           Draw build visual effects (§5B.6)
-                                           Draw hitbox (debug mode)
+┌──────────────────────────────────────────────────────────────┐
+│                      Game Layer                               │
+│                                                              │
+│  ┌───────────────────────────────────────────────────┐       │
+│  │                  RoomManager                       │       │
+│  │  rooms: []*Room (최대 50개)                        │       │
+│  │  playerRoom: map[clientID]roomID                   │       │
+│  │                                                   │       │
+│  │  JoinRoom() | LeaveRoom() | QuickJoin()           │       │
+│  │  GetRoomList() | BroadcastLobby() (1Hz)           │       │
+│  └───────────────────┬───────────────────────────────┘       │
+│                      │ owns N                                │
+│           ┌──────────▼──────────┐                            │
+│           │     Room (goroutine) │ × N                       │
+│           │                     │                            │
+│           │  state: RoomState   │  waiting → countdown(10s)  │
+│           │  timer: int         │  → playing(5min)           │
+│           │  inputChan          │  → ending(10s)             │
+│           │  joinChan           │  → cooldown(15s) → waiting │
+│           │  leaveChan          │                            │
+│           │                     │                            │
+│           │  ┌─────────────┐   │                            │
+│           │  │   Arena      │   │ ← 20Hz game loop          │
+│           │  │              │   │                            │
+│           │  │ ┌──────────┐│   │                            │
+│           │  │ │ agents   ││   │ map[id]*Agent              │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │OrbManager││   │ 오브 스폰/수집/만료         │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Collision ││   │ Aura DPS + Dash + 경계     │
+│           │  │ │System    ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Spatial   ││   │ Grid 200px 공간 해시       │
+│           │  │ │Hash      ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Upgrade   ││   │ Tome/Ability/Synergy       │
+│           │  │ │System    ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Arena     ││   │ 1분마다 -600px             │
+│           │  │ │Shrink    ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Bot       ││   │ 최대 15봇/Room             │
+│           │  │ │Manager   ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Map       ││   │ Shrine/Spring/Altar/Gate   │
+│           │  │ │Objects   ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │Leader    ││   │ Top 10, 1Hz 갱신           │
+│           │  │ │board     ││   │                            │
+│           │  │ ├──────────┤│   │                            │
+│           │  │ │State     ││   │ 뷰포트 컬링 + 직렬화      │
+│           │  │ │Serializer││   │                            │
+│           │  │ └──────────┘│   │                            │
+│           │  └─────────────┘   │                            │
+│           └─────────────────────┘                            │
+└──────────────────────────────────────────────────────────────┘
 ```
 
-**Agent Sprite Strategy (Phase 1-3)**:
-- 16x16 pixel canvas sprites generated from AgentSkin properties at connect time
-- Cached as `OffscreenCanvas` per agent — regenerated only on skin change
-- Top-down view: head circle + body square + directional indicator
-- Colors from AgentSkin: `skinTone` (face), `bodyColor` (body), `legColor` (legs)
-- Equipment rendered as small overlay icons
-
-#### background.ts — MODIFICATIONS
-- Add shrinking arena boundary line (red dashed, pulsing when < 10s to shrink)
-- Add zone color indicators (subtle tints: edge=green, mid=yellow, core=red)
-- Add map object markers (shrine=purple glow, spring=blue, altar=gold, gate=cyan)
-
-### 6.4 Client State Management
-
+**Arena Tick 순서** (20Hz, 50ms 간격):
 ```
-useSocket.ts state shape:
-{
-  mode: 'lobby' | 'playing',
-  roomId: string | null,
-  agents: Map<string, AgentState>,     // was: snakes
-  orbs: OrbState[],
-  myAgentId: string | null,            // was: mySnakeId
-  leaderboard: LeaderboardEntry[],
-  minimap: MinimapData,
-
-  // NEW v10 state:
-  levelUpChoices: UpgradeChoice[] | null,  // non-null = overlay visible
-  roundTimer: number,
-  arenaRadius: number,
-  shrinkWarning: boolean,
-  lastSynergyActivation: { name: string; bonus: string } | null,
-  mapObjects: MapObject[],
-}
+1. Bot AI Update → 봇 입력 생성
+2. Agent Physics → 이동 + 방향 + 부스트
+3. Arena Shrink → 경계 업데이트 + 페널티
+4. Spatial Hash Rebuild → 전체 에이전트+오브 재등록
+5. Aura Combat → 60px 내 DPS 교환
+6. Dash Collision → 부스트 충돌 30% 버스트
+7. Death Detection → mass 0 판정 + 킬 크레딧
+8. Kill XP Reward → 킬러에게 XP 보상
+9. Effect Processing → 버프/디버프 틱
+10. Orb Collection → 수집 반경 내 오브 흡수
+11. Upgrade Timeout → 5초 타임아웃 처리
+12. Leaderboard → 1Hz 정렬 (tick%20==0)
+13. Orb Maintenance → 자연 오브 유지/만료
 ```
 
-## 7. Component Design — Shared Package
+### 5.3 Server — Domain Layer (`internal/domain/`)
 
-### 7.1 packages/shared/ File Map
+순수 타입 정의 레이어. 어떤 다른 패키지도 import하지 않음.
 
-```
-packages/shared/src/
-├── types/
-│   ├── game.ts          — Agent, AgentSkin, PlayerBuild, UpgradeChoice (REWRITE)
-│   └── events.ts        — Socket event payloads (EXPANDED)
-├── constants/
-│   ├── game.ts          — ARENA_CONFIG, ROOM_CONFIG, SHRINK_CONFIG (MODIFIED)
-│   ├── upgrades.ts      — TOMES, ABILITIES, SYNERGIES (NEW)
-│   └── colors.ts        — MC 12-color wool palette + skin tones (REWRITE)
-└── utils/
-    ├── math.ts          — Distance, angle calculations (unchanged)
-    └── validation.ts    — Input validation (unchanged)
-```
+| 파일 | 책임 | 주요 타입 |
+|------|------|----------|
+| `types.go` | 핵심 게임 엔티티 | `Agent`, `Orb`, `Position`, `PlayerBuild`, `AbilitySlot`, `AgentSkin` |
+| `events.go` | WebSocket 이벤트 페이로드 | `StateUpdate`, `DeathEvent`, `LevelUpEvent`, `RoundEndEvent` |
+| `skins.go` | 스킨 프리셋 정의 | 34종 `AgentSkin` 프리셋 (ID 00~33) |
+| `upgrades.go` | 업그레이드 정의 테이블 | 8 `TomeDef`, 6 `AbilityDef`, 10 `SynergyDef` |
 
-### 7.2 Key Type Changes
-
-| v7 Type | v10 Type | Change |
-|---------|----------|--------|
-| `Snake` | `Agent` | segments[] removed, position single, +level/xp/build |
-| `SnakeSkin` | `AgentSkin` | 8 fields → 30+ fields (5-Tier system: Base→Surface→Face→Equipment→Effects) |
-| `DEFAULT_SKINS[24]` | `DEFAULT_AGENT_SKINS[34]` | Complete rewrite |
-| `segmentSpacing` | removed | No segments |
-| `headRadius` | `hitboxRadius` | Dynamic, mass-based |
-| N/A | `TomeType` | 8 enum values |
-| N/A | `AbilityType` | 6 enum values |
-| N/A | `SynergyDef` | 10 definitions (6 public + 4 hidden) |
-| N/A | `PlayerBuild` | tomes: Record + abilities: AbilitySlot[] |
-| N/A | `UpgradeChoice` | type + subtype + description + rarity |
-| N/A | `MapObject` | type + position + cooldown + available |
-| N/A | `SHRINK_CONFIG` | startTime, rate, boundaryPenalty |
-| N/A | `UPGRADE_CONFIG` | xpCurve, choiceTimeout, maxAbilitySlots |
-
-### 7.3 AgentSkin Type System (types/game.ts) — 5-Tier Customization
-
-> **Design Principle**: Minecraft Bedrock Character Creator + .io game cosmetics.
-> All customization is **purely cosmetic** — zero gameplay impact.
-> Combination space (Tier 1-4 only): **~2.19B combinations**.
-
-```typescript
-interface AgentSkin {
-  id: number;
-  name: string;                               // Preset name or "Custom"
-  rarity: SkinRarity;                         // Cosmetic rarity
-
-  // ═══════════════════════════════════════
-  // TIER 1: BASE (Body Shape)
-  // ═══════════════════════════════════════
-  bodyType: 'standard' | 'slim';              // MC Steve(4px arm) vs Alex(3px arm)
-  bodySize: 'small' | 'medium' | 'large';     // Visual scale only (hitbox unchanged)
-  skinTone: SkinTone;                         // 15 skin tones
-
-  // ═══════════════════════════════════════
-  // TIER 2: COLORS & SURFACE
-  // ═══════════════════════════════════════
-  bodyColor: BodyColor;                        // Main torso color (12-color palette)
-  legColor: BodyColor;                        // Leg color (12-color palette)
-  pattern: SurfacePattern;                    // Pattern (8 types)
-  patternColor?: BodyColor;                   // Pattern secondary color
-
-  // ═══════════════════════════════════════
-  // TIER 3: FACE
-  // ═══════════════════════════════════════
-  eyeStyle: EyeStyle;                        // Eye style (8 types)
-  eyeColor?: EyeColor;                       // Eye color (some styles fixed: visor→cyan, enderman→purple)
-  mouthStyle: MouthStyle;                    // Mouth style (6 types)
-  markings: FaceMarkings;                    // MC mob-themed face markings (8 types)
-
-  // ═══════════════════════════════════════
-  // TIER 4: EQUIPMENT (Cosmetic Only)
-  // ═══════════════════════════════════════
-  hat: HeadwearType;                         // Hats/helmets (16 types)
-  backItem: BackItemType;                    // Back items (14 types)
-  bodyOverlay: BodyOverlayType;              // Outfit overlays (17 types)
-  accessory: AccessoryType;                  // Neck/face accessories (10 types)
-  handItem: HandItemType;                    // Hand items (10 types)
-  footwear: FootwearType;                    // Footwear (8 types)
-
-  // ═══════════════════════════════════════
-  // TIER 5: EFFECTS (some auto-linked to build)
-  // ═══════════════════════════════════════
-  auraColor?: string;                        // Combat aura (build-based auto)
-  weaponVisual?: string;                     // Ability-based weapon visual (auto)
-  trailEffect: TrailEffect;                  // Movement trail (8 types)
-  deathEffect: DeathEffect;                  // Death animation (6 types)
-  killEffect: KillEffect;                    // Kill effect (6 types)
-  spawnEffect: SpawnEffect;                  // Spawn animation (8 types)
-  emote: EmoteType;                          // Emote expression (8 types)
-
-  // Nametag (sub-section of Tier 5)
-  nametagStyle: NametagStyle;                // Nametag style (6 types)
-  nametagColor?: McTextColor;                // Nametag text color (MC §color code)
-  title?: string;                            // Title ("The Destroyer", "Tome Master", etc.)
-}
-
-// ── Sub-type Definitions ──
-
-type SkinRarity = 'common' | 'uncommon' | 'rare' | 'epic' | 'legendary' | 'mythic';
-
-type BodyColor =
-  | 'white' | 'light_gray' | 'gray' | 'black'
-  | 'red' | 'orange' | 'yellow' | 'green'
-  | 'cyan' | 'blue' | 'purple' | 'brown';
-  // MC wool 12-color palette
-
-type EyeColor =
-  | 'brown' | 'blue' | 'green' | 'gray' | 'hazel' | 'amber'
-  | 'violet' | 'red';
-
-type McTextColor =
-  | 'white' | 'gray' | 'dark_gray' | 'black'
-  | 'gold' | 'yellow' | 'green' | 'dark_green'
-  | 'aqua' | 'dark_aqua' | 'blue' | 'dark_blue'
-  | 'red' | 'dark_red' | 'light_purple' | 'dark_purple';
-  // MC §color code 16-color palette
-
-type SkinTone =
-  | 'pale' | 'light' | 'fair' | 'medium_light' | 'medium'
-  | 'olive' | 'tan' | 'brown' | 'dark_brown' | 'deep'
-  | 'warm_beige' | 'cool_pink' | 'golden' | 'ashen' | 'otherworldly';
-
-type SurfacePattern =
-  | 'solid' | 'striped' | 'checkered' | 'dotted'
-  | 'marble' | 'scales' | 'camo' | 'gradient';
-
-type EyeStyle =
-  | 'default' | 'cute' | 'angry' | 'cool'
-  | 'wink' | 'dot' | 'visor' | 'enderman';
-
-type MouthStyle =
-  | 'smile' | 'neutral' | 'determined'
-  | 'open' | 'fangs' | 'none';
-
-type FaceMarkings =
-  | 'none' | 'blaze_stripes' | 'skeleton_face' | 'creeper_face'
-  | 'enderman_eyes' | 'wither_scars' | 'piglin_snout' | 'guardian_spikes';
-
-type HeadwearType =
-  | 'none'
-  | 'helmet_iron' | 'helmet_gold' | 'helmet_diamond' | 'helmet_netherite'
-  | 'crown' | 'tophat' | 'wizard_hat' | 'headband' | 'antenna'
-  | 'pumpkin' | 'flower_crown' | 'straw_hat' | 'viking' | 'santa' | 'graduation';
-
-type BackItemType =
-  | 'none'
-  | 'cape_red' | 'cape_blue' | 'cape_purple' | 'cape_gold'
-  | 'wings_angel' | 'wings_bat' | 'wings_elytra' | 'wings_butterfly' | 'wings_ender' | 'wings_phoenix'
-  | 'backpack' | 'quiver' | 'jetpack';
-
-type BodyOverlayType =
-  | 'none'
-  | 'knight_armor' | 'pirate_coat' | 'ninja_suit' | 'astronaut_suit' | 'chef_apron'
-  | 'scientist_coat' | 'wizard_robe' | 'samurai_armor' | 'hoodie' | 'tuxedo'
-  | 'creeper_hoodie' | 'enderman_suit' | 'blaze_armor' | 'wither_cloak'
-  | 'diamond_armor' | 'netherite_armor';
-
-type AccessoryType =
-  | 'none'
-  | 'scarf' | 'necklace' | 'goggles' | 'mask_creeper' | 'mask_pumpkin'
-  | 'monocle' | 'bandana' | 'flower_pin' | 'earring';
-
-type HandItemType =
-  | 'none'
-  | 'sword_diamond' | 'pickaxe_iron' | 'torch' | 'shield_iron'
-  | 'enchanted_book' | 'fishing_rod' | 'bow' | 'trident' | 'totem_of_undying';
-
-type FootwearType =
-  | 'none' | 'boots_iron' | 'boots_gold' | 'boots_diamond' | 'boots_netherite'
-  | 'sneakers' | 'sandals' | 'roller_skates';
-
-type TrailEffect =
-  | 'none' | 'sparkle' | 'smoke' | 'hearts'
-  | 'fire' | 'ice_crystals' | 'ender_particles' | 'redstone_dust';
-
-type DeathEffect =
-  | 'none' | 'explosion' | 'poof' | 'shatter' | 'dissolve' | 'firework';
-
-type KillEffect =
-  | 'none' | 'lightning_strike' | 'confetti' | 'skull_popup' | 'gold_burst' | 'ender_flash';
-
-type SpawnEffect =
-  | 'none' | 'beam_down' | 'portal_emerge' | 'block_build' | 'nether_gate'
-  | 'lightning_strike' | 'soul_fire' | 'ender_teleport';
-
-type EmoteType =
-  | 'none' | 'wave' | 'dance' | 'taunt' | 'clap'
-  | 'bow' | 'spin' | 'flex';
-
-type NametagStyle =
-  | 'default' | 'gold_outline' | 'enchanted_glow' | 'fire_text'
-  | 'ice_text' | 'rainbow_cycle';
-```
-
-#### 7.3.1 5-Tier Cosmetic Catalog Summary
-
-| Tier | Category | Item Count | Rarity Range |
-|------|----------|------------|--------------|
-| **Tier 1: Base** | Body Type (2), Body Size (3), Skin Tone (15) | 20 options | Free |
-| **Tier 2: Surface** | Body Color (12), Leg Color (12), Pattern (8), Pattern Color (12) | 44 options | Common~Uncommon |
-| **Tier 3: Face** | Eye Style (8), Eye Color (8), Mouth (6), Markings (8) | 30 options | Common~Rare |
-| **Tier 4: Equipment** | Headwear (16), Back (14), Overlay (17), Accessory (10), Hand (10), Footwear (8) | 75 options | Uncommon~Legendary |
-| **Tier 5: Effects** | Trail (8), Death (6), Kill (6), Spawn (8), Emote (8), Nametag (6) | 42 options | Rare~Mythic |
-
-#### 7.3.2 Preset Characters (34 total)
-
-| Category | Count | Rarity | IDs | Unlock |
-|----------|-------|--------|-----|--------|
-| **Basic Characters** | 12 | Common | 00-11 | Free at start |
-| **MC Mob Theme** | 8 | Rare | 12-19 | Achievement unlock |
-| **Job Theme** | 6 | Uncommon | 20-25 | Easy achievement |
-| **Achievement Theme** | 4 | Epic | 30-33 | Challenging achievement |
-| **Season Limited** | 2 | Legendary | 27-28 | Seasonal events |
-| **Ultra Rare** | 2 | Mythic | 26, 29 | Extreme milestones |
-
-#### 7.3.3 Rarity System
+### 5.4 Client — Hook/State Layer
 
 ```
-┌──────────────┬───────┬──────────────────────────────────────────┐
-│   Rarity     │ Color │ Unlock Method                            │
-├──────────────┼───────┼──────────────────────────────────────────┤
-│ Common       │ White │ Free at start (all 12 basic presets)     │
-│ Uncommon     │ Green │ 10 games played / first win / easy quest │
-│ Rare         │ Blue  │ 50 kills / 3-win streak / 5000 XP       │
-│ Epic         │ Purple│ 5 synergies / tournament win / quests    │
-│ Legendary    │ Gold  │ 1000 kills / all synergies discovered    │
-│ Mythic       │ Red   │ 10,000 kills / 100 tournament wins (P4+)│
-└──────────────┴───────┴──────────────────────────────────────────┘
+┌──────────────────────────────────────────────────────────┐
+│                  Client State Architecture                 │
+│                                                          │
+│  page.tsx (App Root)                                     │
+│  ├── useSocket() hook ← 모든 게임 상태의 단일 소스       │
+│  │   ├── gameState: agents[], orbs[], leaderboard        │
+│  │   ├── roomState: rooms[], currentRoom, roundTimer     │
+│  │   ├── playerState: myAgent, death, score              │
+│  │   ├── buildState: pendingChoices, currentBuild        │
+│  │   ├── emit: joinRoom, leaveRoom, input, chooseUpgrade │
+│  │   └── connection: connected, latency, reconnecting    │
+│  │                                                       │
+│  │   내부 의존:                                           │
+│  │   └── useWebSocket() ← Native WS 어댑터               │
+│  │       ├── connect(url) / disconnect()                 │
+│  │       ├── emit(event, data) / on(event, handler)      │
+│  │       └── 자동 재연결 (exp backoff, 최대 5회)          │
+│  │                                                       │
+│  ├── mode === 'lobby' → Lobby Components                 │
+│  │   ├── RoomList → rooms from useSocket                 │
+│  │   ├── CharacterCreator → localStorage skin            │
+│  │   └── TrainingConsole → REST API /api/v1/agents/*     │
+│  │                                                       │
+│  └── mode === 'playing' → Game Components                │
+│      ├── GameCanvas → agents, orbs (props drilling)      │
+│      ├── LevelUpOverlay → pendingChoices                 │
+│      ├── BuildHUD → currentBuild                         │
+│      ├── XPBar → myAgent.xp, myAgent.level               │
+│      ├── ShrinkWarning → arenaRadius events              │
+│      ├── SynergyPopup → synergy_activated events         │
+│      └── DeathOverlay / RoundResultOverlay               │
+└──────────────────────────────────────────────────────────┘
 ```
 
-#### 7.3.4 Cosmetic Implementation Phases
+### 5.5 Client — Rendering Pipeline
 
 ```
-Phase 1 (Minimal — functional presets):
-  - Tier 1: bodyType(2) + skinTone(15) — bodySize fixed to medium
-  - Tier 2: bodyColor(12) + legColor(12) + pattern(4: solid/striped/checkered/dotted)
-  - Tier 3: eyeStyle(8) + mouthStyle(6) — no markings
-  - Tier 4: hat(6) + accessory(4) — simple 2D sprites
-  - Effects: none (Tier 5 disabled)
+Phase 1 (2D Canvas):
+  requestAnimationFrame (60fps)
+  └── render()
+      ├── interpolateAgents(prev, curr, alpha) → 부드러운 20→60fps
+      ├── updateCamera(myAgent.position) → lerp 추적 + 동적 줌
+      ├── drawBackground(camera) → MC 타일 패턴 (존별 색상)
+      ├── drawMapObjects(mapObjects) → Shrine/Spring/Altar/Gate 스프라이트
+      ├── drawShrinkBoundary(radius) → 빨간 반투명 원 + 파티클
+      ├── drawOrbs(orbs, camera) → 뷰포트 내 오브
+      ├── drawAgents(agents, camera) → MC 16×16 스프라이트 + 오라
+      │   ├── drawAgentBody(skin) → bodyColor, pattern, equipment
+      │   ├── drawAura(mass, build) → 전투 오라 (빌드별 색상)
+      │   ├── drawBuildVisuals(build) → 잔상/독안개/전기 이펙트
+      │   └── drawNametag(name, level) → 이름 + 레벨
+      ├── drawHUD() → 미니맵, 타이머, 리더보드
+      └── drawParticles() → 킬/시너지/수축 파티클
 
-Phase 3 (Full catalog):
-  - Tier 2 expanded: all 8 patterns
-  - Tier 3 expanded: markings 8 types
-  - Tier 4 expanded: all categories (backItem, bodyOverlay, handItem, footwear)
-  → Tier 1-4 full: ~2.19B combinations
-
-Phase 4+ (Effects + 3D):
-  - Tier 5 effects: trail + death + kill + spawn + emote (particle system)
-  - Nametag customization
-  - 3D model generation from AgentSkin properties
+Phase 4+ (3D R3F):
+  R3F Canvas (useFrame)
+  └── Scene
+      ├── PlayCamera → 45° 쿼터뷰 추적
+      ├── VoxelTerrain → MC 복셀 지형
+      ├── VoxelAgents → InstancedMesh MC 캐릭터
+      ├── VoxelOrbs → 오브 입자
+      ├── AuraEffects → 전투 오라 셰이더
+      ├── ParticleSystem → MC 파티클
+      └── MapObjectMeshes → 블록 구조물
 ```
 
-### 7.4 Constants Architecture (constants/upgrades.ts)
+---
 
-```typescript
-// All upgrade definitions — single source of truth for server + client
-export const TOMES: Record<TomeType, TomeDef> = {
-  xp:     { tier: 'S', effectPerStack: 0.20, maxStack: 10, description: 'XP +20%/stack' },
-  speed:  { tier: 'S', effectPerStack: 0.10, maxStack: 5,  description: 'Speed +10%/stack' },
-  damage: { tier: 'S', effectPerStack: 0.15, maxStack: 10, description: 'Aura DPS +15%/stack' },
-  armor:  { tier: 'A', effectPerStack: 0.10, maxStack: 8,  description: 'Damage taken -10%/stack' },
-  magnet: { tier: 'A', effectPerStack: 0.25, maxStack: 6,  description: 'Collect radius +25%/stack' },
-  luck:   { tier: 'A', effectPerStack: 0.15, maxStack: 6,  description: 'Rare upgrade +15%/stack' },
-  regen:  { tier: 'B', effectPerStack: 0.5,  maxStack: 5,  description: '+0.5 mass/s/stack' },
-  cursed: { tier: 'S', effectPerStack: 0.25, maxStack: 5,  description: 'DPS +25%, taken +20%/stack' },
-};
+## 6. Data Flow & Sequence Diagrams
 
-export const ABILITIES: Record<AbilityType, AbilityDef> = { /* 6 abilities */ };
-export const SYNERGIES: SynergyDef[] = [ /* 10 synergies */ ];
+### 6.1 Player Join Flow
+
+```
+Browser                    Go Server                    Game
+  │                          │                           │
+  │ WSS connect /ws          │                           │
+  │─────────────────────────▷│                           │
+  │                          │ Hub.register (lobby)      │
+  │                          │──────────────────────▷    │
+  │                          │                           │
+  │ {e:"join_room", d:{      │                           │
+  │   roomId, name, skinId}} │                           │
+  │─────────────────────────▷│                           │
+  │                          │ RoomManager.JoinRoom()    │
+  │                          │──────────────────────▷    │
+  │                          │      Room.joinChan        │
+  │                          │      ──────────────▷      │
+  │                          │      Arena.AddAgent()     │
+  │                          │      ──────────────▷      │
+  │                          │                           │
+  │ {e:"joined", d:{         │                           │
+  │   roomId, id, spawn,     │                           │
+  │   arena, tick,           │◁──────────────────────    │
+  │   roomState, timeLeft}}  │                           │
+  │◁─────────────────────────│                           │
+  │                          │                           │
+  │ {e:"state", d:{...}}     │  20Hz broadcast           │
+  │◁═════════════════════════│◁══════════════════════    │
 ```
 
-## 8. Data Model
+### 6.2 Game Tick Broadcast Flow
 
-### 8.1 Core Entity — Agent (Server-Side)
-
-```typescript
-interface AgentEntity {
-  // Identity
-  id: string;
-  name: string;
-  isBot: boolean;
-  isAgent: boolean;           // AI Agent (Phase 4+)
-
-  // Spatial (SIMPLIFIED from segments[])
-  position: Position;         // Single coordinate {x, y}
-  heading: number;            // 0~2pi radians
-  targetAngle: number;        // Input-requested angle
-  speed: number;              // Current speed px/s (base 150, modified by tomes)
-
-  // Survival
-  mass: number;               // HP role (initial: 10, death at 0)
-  alive: boolean;
-  boosting: boolean;          // Dash state
-  hitboxRadius: number;       // 16~22px, derived from mass
-
-  // Progression (NEW)
-  level: number;              // 1~12
-  xp: number;                 // Current XP
-  xpToNext: number;           // XP threshold for next level
-
-  // Build System (NEW)
-  build: PlayerBuild;
-  activeSynergies: string[];  // Currently active synergy IDs
-
-  // Combat Tracking (NEW)
-  lastDamageSource: string | null;  // Agent ID for kill credit
-  lastDamageTime: number;
-  killStreak: number;
-  totalDamageDealt: number;
-  totalDamageReceived: number;
-
-  // Visual
-  skin: AgentSkin;
-
-  // Effects (modified from v7)
-  activeEffects: ActiveEffect[];
-  effectCooldowns: EffectCooldown[];
-  abilityCooldowns: Record<AbilityType, number>;  // NEW: per-ability cooldown ticks
-
-  // Score
-  score: number;
-  kills: number;
-  bestScore: number;
-
-  // Meta
-  joinedAt: number;
-  lastInputSeq: number;
-}
-
-interface PlayerBuild {
-  tomes: Record<TomeType, number>;    // Stack count per tome type
-  abilities: AbilitySlot[];            // Max 2 (3 with RP unlock)
-}
-
-interface AbilitySlot {
-  type: AbilityType;
-  level: number;       // 1~4 (base + 3 upgrades)
-}
+```
+Room goroutine (20Hz)
+  │
+  ├── gameTicker.C ───▷ arena.Tick()
+  │                      ├── 물리/전투/수집/사망 처리
+  │                      └── deathEvents[], levelUps[] 버퍼링
+  │
+  ├── serializer.Serialize(agents, orbs, clientViewport)
+  │     └── 클라이언트별 뷰포트 컬링
+  │
+  ├── Hub.roomcast ───▷ {e:"state", d:{t, s:[agents], o:[orbs], l:[leaderboard]}}
+  │
+  ├── deathEvents 발생 시:
+  │     ├── Hub.unicast(victim) ──▷ {e:"death", d:{score, kills, killer, level...}}
+  │     └── Hub.unicast(killer) ──▷ {e:"kill", d:{victim, victimMass}}
+  │
+  └── levelUps 발생 시:
+        └── Hub.unicast(agent) ──▷ {e:"level_up", d:{level, choices[], deadline}}
 ```
 
-### 8.2 Serialized State (Wire Format — S→C)
+### 6.3 Level-Up Choice Flow
 
-```typescript
-// Per-tick state broadcast (20Hz) — viewport-culled
-interface AgentState {
-  id: string;
-  n: string;               // name (abbreviated key)
-  p: [number, number];     // position [x, y] (was: segments)
-  h: number;               // heading
-  s: number;               // speed
-  m: number;               // mass
-  b: boolean;              // boosting
-  a: boolean;              // alive
-  sk: number;              // skin ID
-  // NEW fields:
-  lv: number;              // level
-  xp: number;              // current XP (for XP bar rendering)
-  xn: number;              // xpToNext
-  bd: SerializedBuild;     // compact build
-  sy: string[];            // active synergy IDs
-  hr: number;              // hitbox radius
-  ks: number;              // kill streak
-  ef: number[];            // active effect type IDs
-}
-
-// Compact build serialization: "t:xp3,dmg5,arm2|a:venom2,shield1"
-type SerializedBuild = string;
+```
+Server                     Client/Agent
+  │                           │
+  │ Agent XP >= XPToNext      │
+  │ GenerateChoices(3)        │
+  │                           │
+  │ {e:"level_up", d:{       │
+  │   level: 5,              │
+  │   choices: [Tome,Tome,   │
+  │   Ability],              │
+  │   timeoutTicks: 100}}    │
+  │──────────────────────────▷│
+  │                           │ 5초 타이머 시작
+  │                           │ UI: 3택 카드 표시
+  │                           │
+  │ {e:"choose_upgrade",     │ 사용자 선택 또는
+  │  d:{choiceId: 1}}        │ 에이전트 자동 선택
+  │◁──────────────────────────│
+  │                           │
+  │ ApplyUpgrade(agent, 1)   │
+  │ CheckSynergies()         │
+  │                           │
+  │ [시너지 발동 시]           │
+  │ {e:"synergy_activated",  │
+  │  d:{synergyId, name}}    │
+  │──────────────────────────▷│
+  │                           │
+  │ [5초 타임아웃 시]          │
+  │ 서버 랜덤 선택 적용       │
 ```
 
-**Bandwidth Impact**: Removing `segments[]` (avg 15 segments x 2 floats = 30 numbers per snake) and replacing with single `[x,y]` **reduces per-agent payload by ~85%**. New fields (lv, xp, bd, sy) add ~50 bytes. Net bandwidth reduction: ~60% per agent.
+### 6.4 Room State Machine Flow
 
-### 8.3 Round Summary (Post-Round — S→C)
+```
+              MIN_PLAYERS
+  waiting ─────────────────▷ countdown (10s)
+    ▲                              │
+    │                              │ 카운트다운 완료
+    │                              ▼
+cooldown (15s)              playing (300s / 5분)
+    ▲                              │
+    │                              │ 시간 만료 OR
+    │                              │ 인간 1명 이하
+    │                              ▼
+    └─────────────── ending (10s)
 
-```typescript
-interface RoundSummary {
-  roundId: string;
-  result: {
-    rank: number;
-    level: number;
-    kills: number;
-    survivalTime: number;
-    totalXP: number;
-    totalDamageDealt: number;
-  };
-  buildHistory: BuildHistoryEntry[];  // Per-level choice log
-  activeSynergies: string[];
-  deathCause: 'aura' | 'dash' | 'boundary' | 'arena_shrink' | 'survived';
-  keyMoments: KeyMoment[];
-}
-
-interface BuildHistoryEntry {
-  level: number;
-  choice: UpgradeType;
-  alternatives: UpgradeType[];
-  timestamp: number;         // seconds into round
-  gamePhase: 'early' | 'mid' | 'late';
-}
+이벤트:
+  countdown → {e:"round_start", d:{countdown: 10}}
+  playing   → {e:"state"} 20Hz + {e:"minimap"} 1Hz
+  ending    → {e:"round_end", d:{winner, leaderboard, yourRank}}
+  cooldown  → {e:"round_reset", d:{roomState: "waiting"}}
 ```
 
-## 9. Event Protocol (Socket.IO)
+### 6.5 Input Pipeline (Critical Path Latency)
 
-### 9.1 Complete Event Catalog
+```
+Client mouse/touch event
+  │
+  ▼ ~1ms (JS event loop)
+useSocket.emit("input", {a: angle, b: boost, s: seq})
+  │
+  ▼ ~5-50ms (네트워크 RTT/2)
+Server ReadPump goroutine
+  │
+  ▼ ~0.01ms (JSON decode)
+  │
+  ▼ ~0.01ms (Rate limit check)
+  │
+  ▼ Room.inputChan <- InputMsg
+  │
+  ▼ ~0-50ms (다음 틱 대기, 평균 25ms)
+Room goroutine: agent.ApplyInput(angle, boost, seq)
+  │
+  Total: ~30-100ms (input → 반영)
+  Client 보간으로 시각적 지연 감춤
+```
+
+---
+
+## 7. API & Protocol Specification
+
+### 7.1 WebSocket Protocol
+
+**프레임 포맷**: 모든 메시지는 JSON 오브젝트 `{"e": "event_name", "d": {...payload}}`
 
 #### Client → Server Events
 
-| Event | Payload | Rate | Description |
-|-------|---------|------|-------------|
-| `join_room` | `{ roomId: string, name: string, skin: AgentSkin }` | Once | Join a game room |
-| `leave_room` | — | Once | Leave current room |
-| `input` | `{ angle: number, boost: boolean, seq: number }` | 30Hz max | Steering input |
-| `choose_upgrade` | `{ choiceIndex: 0\|1\|2 }` | Event | Level-up upgrade selection |
-| `ping` | `{ timestamp: number }` | 5Hz | Latency measurement |
+| Event | Payload | Rate Limit | 설명 |
+|-------|---------|-----------|------|
+| `join_room` | `{roomId: string, name: string, skinId: number}` | 1/s | Room 참여 |
+| `leave_room` | `{}` | - | Room 퇴장 |
+| `input` | `{a: float, b: 0\|1, s: int}` | 30/s | 조향 각도(a), 부스트(b), 시퀀스(s) |
+| `respawn` | `{name?: string, skinId?: number}` | 1/s | 리스폰 (grace period 내 1회만) |
+| `choose_upgrade` | `{choiceId: int}` | - | 레벨업 선택 (0/1/2) |
+| `ping` | `{t: int}` | 5/s | 레이턴시 측정 |
 
 #### Server → Client Events
 
-| Event | Payload | Rate | Description |
-|-------|---------|------|-------------|
-| `joined` | `{ roomId, agentId, roomState }` | Once | Room join confirmation |
-| `state` | `{ agents[], orbs[], tick, arenaRadius, mapObjects[] }` | 20Hz | Game state (viewport-culled) |
-| `minimap` | `{ agents: [id, x, y, color][], radius }` | 1Hz | Full-map overview |
-| `rooms_update` | `{ rooms: RoomInfo[] }` | 1Hz (lobby) | Room list for lobby |
-| `level_up` | `LevelUpEvent` | Event | 3 upgrade choices + game context |
-| `choose_upgrade_ack` | `{ success, appliedUpgrade, newBuild }` | Event | Confirmation + state |
-| `synergy_activated` | `{ agentId, synergyId, synergyName, bonus }` | Event | Synergy triggered |
-| `arena_shrink` | `{ newRadius, nextShrinkAt }` | Event (every 60s) | Boundary reduced |
-| `shrink_warning` | `{ secondsUntil, newRadius }` | Event (10s before) | Upcoming shrink |
-| `death` | `{ agentId, killerId, cause, position, xpDropped }` | Event | Agent death |
-| `kill` | `{ killerId, victimId, xpEarned, killStreak }` | Event | Kill notification |
-| `round_start` | `{ roomId, duration, agentCount }` | Event | Round begins |
-| `round_end` | `{ roomId, winner, rankings[], roundSummary }` | Event | Round complete |
-| `round_reset` | `{ roomId }` | Event | Transitioning to next round |
-| `pong` | `{ timestamp }` | 5Hz | Latency response |
+| Event | Payload | 빈도 | 설명 |
+|-------|---------|------|------|
+| `joined` | `{roomId, id, spawn, arena, tick, roomState, timeRemaining}` | 1회 | 참여 확인 |
+| `state` | `{t: tick, s: Agent[], o: Orb[], l?: Leaderboard[]}` | 20Hz | 게임 상태 (뷰포트 컬링됨) |
+| `death` | `{score, kills, duration, rank, killer?, damageSource, level, build}` | 사망시 | 사망 정보 |
+| `kill` | `{victim, victimMass}` | 킬시 | 킬 알림 |
+| `minimap` | `{agents: [{x,y,m,me}], boundary, mapObjects}` | 1Hz | 미니맵 데이터 |
+| `pong` | `{t: clientTs, st: serverTs}` | 응답 | 레이턴시 응답 |
+| `rooms_update` | `{rooms: RoomInfo[], recentWinners}` | 1Hz | 로비 Room 목록 |
+| `round_start` | `{countdown: int}` | 상태전환 | 라운드 시작 카운트다운 |
+| `round_end` | `{winner, finalLeaderboard, yourRank, yourScore, buildStats}` | 상태전환 | 라운드 종료 |
+| `round_reset` | `{roomState}` | 상태전환 | 대기 상태 복귀 |
+| `level_up` | `{level, choices: UpgradeChoice[], timeoutTicks, currentBuild}` | 레벨업시 | 업그레이드 선택 요청 |
+| `synergy_activated` | `{synergyId, name, description, bonus}` | 시너지시 | 시너지 발동 |
+| `arena_shrink` | `{currentRadius, minRadius, shrinkRate}` | 1Hz | 아레나 수축 정보 |
+| `coach_message` | `{type, message, priority}` | 0.5~1Hz | Coach 조언 |
+| `round_analysis` | `{buildEfficiency, positioning, suggestions[]}` | 라운드종료 | Analyst 분석 |
+| `error` | `{code: int, message: string}` | 에러시 | 에러 알림 |
 
-### 9.2 New Event Details
+### 7.2 REST API Endpoints
 
-#### LevelUpEvent (S→C)
-```typescript
+#### Health & Monitoring
+
+| Method | Path | Response | 설명 |
+|--------|------|----------|------|
+| GET | `/health` | `{status, uptime, rooms, totalPlayers, goroutines}` | 헬스체크 |
+| GET | `/metrics` | Prometheus text format (선택) | 메트릭 |
+
+#### Agent Training API (Phase 4)
+
+| Method | Path | Body/Response | 설명 |
+|--------|------|--------------|------|
+| GET | `/api/v1/agents/:id/training` | `TrainingProfile` | 훈련 설정 조회 |
+| PUT | `/api/v1/agents/:id/training` | `TrainingProfile` | 훈련 설정 저장 |
+| GET | `/api/v1/agents/:id/memory` | `AgentMemory` | 학습 데이터 조회 |
+| PUT | `/api/v1/agents/:id/build-path` | `BuildPath` | 빌드 패스 등록 |
+
+#### Progression API (Phase 5)
+
+| Method | Path | Response | 설명 |
+|--------|------|----------|------|
+| GET | `/api/v1/players/:id/progression` | `{rp, unlocks, achievements}` | RP/해금 조회 |
+| GET | `/api/v1/players/:id/quests` | `{daily, progress}` | 퀘스트 상태 |
+| GET | `/api/v1/leaderboard` | `{type, entries[]}` | 리더보드 (build/synergy/agent) |
+
+### 7.3 Key Payload Schemas
+
+#### State Update (20Hz — 가장 빈번, 크기 최적화 대상)
+
+```json
 {
-  type: 'level_up',
-  agentId: string,
-  level: number,                // New level reached
-  choices: [
-    {
-      index: 0,
-      category: 'tome' | 'ability',
-      type: TomeType | AbilityType,
-      name: string,              // Display name
-      description: string,       // Effect description
-      rarity: 'common' | 'uncommon' | 'rare',
-      isUpgrade: boolean,        // true if upgrading existing ability
-      currentStack?: number,     // for tomes: current stack count
-      newLevel?: number,         // for abilities: level after upgrade
-    },
-    // ... 2 more choices
-  ],
-  currentBuild: {
-    tomes: Record<TomeType, number>,
-    abilities: AbilitySlot[],
-    activeSynergies: string[],
-    nearbySynergies: string[],   // "1 more upgrade to trigger"
-  },
-  gameContext: {
-    timeRemaining: number,
-    myRank: number,
-    myMass: number,
-    nearbyThreats: number,
-    arenaRadius: number,
-  },
-  deadline: number,              // 5000ms to choose
+  "e": "state",
+  "d": {
+    "t": 12345,
+    "s": [
+      {
+        "i": "agent-uuid",
+        "n": "PlayerName",
+        "x": 1234.5, "y": 678.9,
+        "h": 1.57,
+        "m": 85.3,
+        "v": 7,
+        "b": false,
+        "a": true,
+        "sk": 4,
+        "hr": 18.5,
+        "bd": {"t": {"dmg": 3, "spd": 2}, "ab": [{"t": "venom", "l": 2}]},
+        "sy": ["vampire"],
+        "bot": false
+      }
+    ],
+    "o": [
+      {"i": "orb-1", "x": 100, "y": 200, "v": 2, "t": "natural"}
+    ],
+    "l": [
+      {"i": "agent-uuid", "n": "PlayerName", "s": 85, "k": 3}
+    ]
+  }
 }
 ```
 
-### 9.3 Protocol Evolution (Backward Compatibility)
+**필드 약어 (대역폭 최적화)**:
+- `i`=id, `n`=name, `x`/`y`=position, `h`=heading, `m`=mass
+- `v`=level, `b`=boosting, `a`=alive, `sk`=skinId, `hr`=hitboxRadius
+- `bd`=build, `sy`=synergies, `t`=type/tick, `s`=score/agents, `o`=orbs, `l`=leaderboard
 
-**Strategy**: Additive-only protocol changes. New fields are optional in v10 state events.
+#### Level Up Event
 
-```
-v7 state.snakes[].segments → v10 state.agents[].p  (breaking: segments removed)
-v7 state.snakes[].mass     → v10 state.agents[].m  (compatible: same semantics)
-v10 state.agents[].lv      → (new: level, ignored by v7 clients)
-v10 state.agents[].bd      → (new: build, ignored by v7 clients)
-```
-
-**Migration approach**: Version header in `joined` event. Server sends v10 format only; legacy clients unsupported after migration.
-
-## 10. Game Systems Architecture
-
-### 10.1 Auto-Combat System
-
-#### Combat Processing Pipeline (per tick, 20Hz)
-
-```
-Phase 1: Spatial Query
-  SpatialHash.queryRadius(agent.position, AURA_RADIUS=60px)
-  → Returns set of nearby agent IDs
-
-Phase 2: Aura DPS Exchange
-  For each pair (A, B) within AURA_RADIUS:
-    dpsA = A.getAuraDPS()  // base 2.0 * (1 + damageTome * 0.15) * levelBonus
-    dpsB = B.getAuraDPS()
-    A.takeDamage(dpsB, B.id)   // B damages A
-    B.takeDamage(dpsA, A.id)   // A damages B
-
-    // Venom DoT application
-    if A.hasAbility('venom_aura'):
-      B.applyDoT('venom', venomDPS, 3 seconds)
-    if B.hasAbility('venom_aura'):
-      A.applyDoT('venom', venomDPS, 3 seconds)
-
-Phase 3: Dash Collision
-  For each boosting agent A:
-    SpatialHash.queryRadius(A.position, A.hitboxRadius + B.hitboxRadius)
-    → For each non-boosting B in range:
-      B.takeDamage(B.mass * 0.30, A.id)  // 30% mass burst
-      A.dashHitCooldown = 20 ticks        // prevent multi-hit
-
-Phase 4: Kill Resolution
-  For each agent where mass <= 0:
-    killer = lastDamageSource
-    emit('death', { agentId, killerId, cause })
-    emit('kill', { killerId, victimId, xpEarned })
-    spawnDeathOrbs(agent.position, agent.mass * 0.80)
-    agent.alive = false
-```
-
-#### Derived Constants Table
-
-| Constant | Formula | Value | Purpose |
-|----------|---------|-------|---------|
-| `BASE_AURA_DPS_PER_TICK` | 40/s / 20Hz | 2.0 mass/tick | Base combat damage |
-| `AURA_RADIUS` | Fixed | 60 px | Combat detection range |
-| `HITBOX_RADIUS_BASE` | Fixed | 16 px | Dash collision base |
-| `HITBOX_RADIUS_MAX` | mass > 100 | 22 px | Large agent hitbox |
-| `DASH_BURST_RATIO` | Fixed | 0.30 | 30% mass on dash hit |
-| `LEVEL_DPS_BONUS` | Lv >= 8 | 1.20x | High level advantage |
-
-### 10.2 Upgrade System (Tomes & Abilities)
-
-#### Tome Stack Mechanics
-
-```
-Final Stat = BaseValue * (1 + SUM(tomeStacks[i] * effectPerStack[i]))
-
-Example: Speed = 150 * (1 + 3 * 0.10) = 195 px/s
-         With max 5 stacks: 150 * 1.50 = 225 px/s
-         Boost cap: 300 px/s (not affected by Speed Tome)
-```
-
-#### Ability Auto-Trigger System
-
-```
-Priority queue evaluated every tick:
-  1. Shield Burst: triggers when mass < 30% of peak mass
-  2. Lightning Strike: triggers when enemy within 200px, off cooldown
-  3. Speed Dash: triggers when fleeing (mass_ratio < 0.5) or chasing kill
-  4. Mass Drain: triggers on hitbox contact
-  5. Gravity Well: triggers when 3+ orbs within 150px
-  6. Venom Aura: always active (passive, no trigger needed)
-
-Ability Upgrade Scaling:
-  Level 1 (base): 100% effect, 100% cooldown
-  Level 2 (+1): 130% effect, 80% cooldown
-  Level 3 (+2): 170% effect, 65% cooldown
-  Level 4 (+3): 220% effect, 50% cooldown
-```
-
-#### XP Level-Up Curve
-
-```
-Level  Required   Cumulative   Formula
-  2      20          20        20
-  3      30          50        20 + 10
-  4      45          95        20 + 25
-  5      65         160        20 + 45 (accelerating)
-  ...
-  12    345        1595        Polynomial: 20 + (L-2)*15 + floor((L-2)^1.2 * 5)
-```
-
-### 10.3 Synergy Engine
-
-#### Check Algorithm (runs on every level-up)
-
-```typescript
-function checkSynergies(build: PlayerBuild): SynergyDef[] {
-  const activated: SynergyDef[] = [];
-  for (const synergy of ALL_SYNERGIES) {
-    let met = true;
-    // Check tome requirements
-    for (const [tome, minStack] of Object.entries(synergy.requirements.tomes ?? {})) {
-      if ((build.tomes[tome] ?? 0) < minStack) { met = false; break; }
+```json
+{
+  "e": "level_up",
+  "d": {
+    "level": 5,
+    "choices": [
+      {"id": 0, "type": "tome", "name": "Speed Tome", "effect": "+10% 이동속도", "stack": 3},
+      {"id": 1, "type": "ability", "name": "Venom Aura", "effect": "근접 독 DoT", "isNew": true},
+      {"id": 2, "type": "tome", "name": "XP Tome", "effect": "XP +20%", "stack": 1}
+    ],
+    "timeoutTicks": 100,
+    "currentBuild": {
+      "tomes": {"speed": 2, "damage": 1},
+      "abilities": [{"type": "shield_burst", "level": 1}],
+      "synergies": [],
+      "nearbySynergies": ["speedster"]
     }
-    // Check ability requirements
-    for (const [ability, minLevel] of Object.entries(synergy.requirements.abilities ?? {})) {
-      const slot = build.abilities.find(a => a.type === ability);
-      if (!slot || slot.level < minLevel) { met = false; break; }
+  }
+}
+```
+
+---
+
+## 8. Data Model
+
+### 8.1 Core Entity — Agent
+
+```go
+type Agent struct {
+    // Identity
+    ID               string          // UUID
+    Name             string          // Display name
+    IsBot            bool            // 봇 여부
+
+    // Physics (단일 위치, 세그먼트 없음)
+    Position         Position        // {X, Y float64}
+    Heading          float64         // 현재 방향 (rad, 0~2π)
+    TargetAngle      float64         // 입력 방향
+    Speed            float64         // 현재 속도 (px/s)
+
+    // Combat & Survival
+    Mass             float64         // HP 역할 (mass 0 → 사망)
+    HitboxRadius     float64         // 동적 (16~22px, mass 기반)
+    Boosting         bool            // 대시 상태
+    Alive            bool
+    GracePeriodEnd   uint64          // 무적 만료 틱
+    LastDamagedBy    string          // 킬 크레딧 추적
+
+    // Progression
+    Level            int             // 1~12
+    XP               int
+    XPToNext         int             // 레벨업 필요 XP
+
+    // Build System
+    Build            PlayerBuild     // Tome 스택 + Ability 슬롯
+    ActiveSynergies  []string        // 발동 중인 시너지 ID
+    ActiveEffects    []ActiveEffect  // 일시 버프/디버프
+    EffectCooldowns  []EffectCooldown
+
+    // Level-Up State
+    PendingChoices   []UpgradeChoice // nil = 선택 없음
+    UpgradeDeadline  uint64          // 타임아웃 틱
+
+    // Scoring
+    Score            int
+    Kills            int
+    KillStreak       int
+    BestScore        int
+
+    // Visual
+    Skin             AgentSkin       // 34종 프리셋 또는 커스텀
+
+    // Metadata
+    JoinedAt         time.Time
+    LastInputSeq     int
+}
+
+type PlayerBuild struct {
+    Tomes     map[TomeType]int     // Tome별 스택 수
+    Abilities []AbilitySlot        // 최대 2~3개
+}
+
+type AbilitySlot struct {
+    Type      AbilityType
+    Level     int                  // 1~4 (강화 횟수)
+    Cooldown  int                  // 남은 쿨다운 틱
+}
+```
+
+### 8.2 Orb Entity
+
+```go
+type Orb struct {
+    ID        string
+    Position  Position
+    Value     int        // XP 값 (1~15)
+    Type      OrbType    // natural, death, powerup, mega
+    SpawnTick uint64
+    ExpiresAt uint64     // 만료 틱 (death orb 한정)
+}
+
+type OrbType string
+const (
+    OrbNatural  OrbType = "natural"   // 1~2 XP
+    OrbDeath    OrbType = "death"     // 3~5 XP (사망 시 분해)
+    OrbPowerUp  OrbType = "powerup"   // 5 XP + 파워업 효과
+)
+```
+
+### 8.3 Room & Arena
+
+```go
+type Room struct {
+    ID           string
+    Name         string
+    State        RoomState       // waiting|countdown|playing|ending|cooldown
+    Timer        int             // 남은 초
+    Arena        *Arena
+    Humans       map[string]*HumanMeta
+    LastWinner   *WinnerInfo
+    // channels: inputChan, joinChan, leaveChan
+}
+
+type RoomState int
+const (
+    StateWaiting RoomState = iota  // 대기 (MIN_PLAYERS 미만)
+    StateCountdown                  // 10초 카운트다운
+    StatePlaying                    // 5분 게임 진행
+    StateEnding                     // 10초 결과 표시
+    StateCooldown                   // 15초 쿨다운
+)
+
+type Arena struct {
+    Config       ArenaConfig
+    Agents       map[string]*Agent
+    OrbManager   *OrbManager
+    SpatialHash  *SpatialHash
+    Collision    *CollisionSystem
+    Leaderboard  *Leaderboard
+    Shrink       *ArenaShrink
+    BotManager   *BotManager
+    Upgrade      *UpgradeSystem
+    MapObjects   *MapObjectManager
+    Tick         uint64
+    DeathEvents  []DeathEvent      // 틱별 이벤트 버퍼 (재사용)
+    LevelUps     []LevelUpEvent
+}
+```
+
+### 8.4 Upgrade System Definitions
+
+```go
+// 8종 Tome 정의
+type TomeDef struct {
+    ID         TomeType    // xp, speed, damage, armor, magnet, luck, regen, cursed
+    Name       string
+    Tier       string      // S, A, B
+    EffectPerStack float64 // 스택당 효과 계수
+    MaxStack   int         // 최대 스택
+    Description string
+}
+
+// 6종 Ability 정의
+type AbilityDef struct {
+    ID         AbilityType // venom, shield, lightning, speed_dash, mass_drain, gravity
+    Name       string
+    Cooldown   int         // 틱 단위 쿨다운
+    AutoTrigger string     // 자동발동 조건 설명
+    DamageBase float64
+    UpgradeMultiplier float64 // 강화당 배율 (+30%)
+    CooldownReduction float64 // 강화당 쿨다운 감소 (-20%)
+}
+
+// 10종 Synergy 정의 (6 공개 + 4 히든)
+type SynergyDef struct {
+    ID           string
+    Name         string
+    Requirements SynergyReq // Tome 최소 스택 + Ability 최소 레벨
+    Bonus        SynergyBonus
+    Hidden       bool
+    Description  string
+}
+```
+
+### 8.5 Map Objects
+
+```go
+type MapObject struct {
+    ID            string
+    Type          MapObjectType  // shrine, spring, altar, gate
+    Position      Position
+    Active        bool           // 현재 사용 가능 여부
+    CooldownTimer int            // 남은 쿨다운 (초)
+    RespawnTime   int            // 쿨다운 시간 (초)
+}
+
+// 4종: XP Shrine(60s), Healing Spring(45s), Upgrade Altar(1회), Speed Gate(30s)
+```
+
+### 8.6 Persistent Data (JSON Files)
+
+Phase 1에서는 DB 없이 JSON 파일로 영구 데이터 저장:
+
+| 파일 | 위치 | 내용 |
+|------|------|------|
+| Agent 훈련 프로필 | `data/agents/{id}.json` | 빌드 프로필, 전투 규칙, 전략 페이즈 |
+| Agent 학습 데이터 | `data/agents/{id}.json` | 라운드 결과, 상대 분석, 시너지 시도 |
+| Player 진행도 | `data/players/{id}.json` | RP, 해금 상태, 업적, 퀘스트 |
+
+**데이터 크기 예상**: Agent당 ~10KB, Player당 ~5KB → 1,000명 = ~15MB (파일시스템 충분)
+
+---
+
+## 9. Security Architecture
+
+### 9.1 Threat Model (STRIDE Analysis)
+
+| 위협 | 분류 | 공격 벡터 | 완화 전략 | 심각도 |
+|------|------|----------|----------|--------|
+| WS 메시지 위조 | Spoofing | 다른 플레이어 ID로 input 전송 | 서버 측 세션 바인딩 (Client.AgentID 고정) | High |
+| 입력 플러딩 | DoS | 초당 수천 건 input 전송 | Rate Limiter (input 30Hz, 초과 시 드롭) | High |
+| 대형 페이로드 | DoS | 수 MB JSON 전송 | ReadLimit 32KB, 초과 시 연결 종료 | Medium |
+| 메모리 고갈 | DoS | 수천 WS 연결 후 유지 | WritePump 버퍼 64, 초과 시 추방. 연결당 메모리 ~8KB 제한 | High |
+| 봇/치트 | Tampering | 자동화 도구로 최적 input | 서버 권위적 (server-authoritative), 클라이언트 시뮬레이션 없음 | Medium |
+| Agent API 남용 | Spoofing | 타인 에이전트 명령 전송 | API Key 인증 + Agent-Session 바인딩 | High |
+| CORS 우회 | Spoofing | 허용되지 않은 origin에서 연결 | gorilla/websocket CheckOrigin + chi CORS 미들웨어 | Medium |
+| 속도 핵 | Tampering | 비정상적 이동 속도 | 서버가 속도 계산 (클라이언트는 각도만 전송) | Low |
+
+### 9.2 Authentication Strategy
+
+| 사용자 유형 | 인증 방식 | 구현 Phase |
+|------------|----------|-----------|
+| **게스트 플레이어** | 없음 (WS 연결 = 세션) | Phase 1 |
+| **AI Agent** | API Key (HTTP Header `X-Agent-Key`) | Phase 4 |
+| **등록 사용자** | OAuth2 (Google/GitHub) → JWT | Phase 5+ (Non-Goal) |
+
+### 9.3 Server-Authoritative Model
+
+```
+핵심 원칙: 클라이언트는 "의도"만 전송, 서버가 모든 결과를 계산
+
+Client 전송:     {a: 각도(rad), b: 부스트(0/1), s: 시퀀스}
+Server 계산:     위치, 속도, 충돌, 데미지, XP, 레벨업, 사망
+Client 수신:     확정된 상태 (20Hz state 이벤트)
+
+→ 클라이언트에서 위치/데미지/속도를 조작해도 서버가 무시
+→ 유일한 치트 가능성: 봇 프로그램 (허용 — AI Agent 플랫폼이므로)
+```
+
+### 9.4 Rate Limiting Design
+
+```go
+// Client 구조체 내장 Rate Limiter
+type RateLimiter struct {
+    inputLastTime  time.Time  // 최소 33ms 간격 (30Hz)
+    respawnLastTime time.Time // 최소 2s 간격
+    pingLastTime   time.Time  // 최소 200ms 간격 (5Hz)
+}
+
+func (rl *RateLimiter) AllowInput() bool {
+    now := time.Now()
+    if now.Sub(rl.inputLastTime) < 33*time.Millisecond {
+        return false // 드롭 (에러 메시지 없음)
     }
-    if (met) activated.push(synergy);
-  }
-  return activated;
+    rl.inputLastTime = now
+    return true
 }
 ```
 
-#### Near-Synergy Detection (for UI hints)
+### 9.5 Transport Security
+
+| 계층 | 보안 | 설명 |
+|------|------|------|
+| **TLS** | Railway + Vercel 자동 HTTPS/WSS | Let's Encrypt 인증서 |
+| **CORS** | `CORS_ORIGIN` 환경변수 (쉼표 구분) | Vercel 도메인만 허용 |
+| **WS Origin** | `CheckOrigin()` 함수 | CORS_ORIGIN과 동일 검증 |
+| **Read Limit** | `conn.SetReadLimit(32 * 1024)` | 32KB 초과 메시지 거부 |
+| **Ping/Pong** | 30초 타임아웃 | 연결 유지 확인, 좀비 연결 정리 |
+
+---
+
+## 10. Scalability & Performance
+
+### 10.1 Performance Budget — Tick Processing
+
+| 단계 | 예상 시간 | 비율 (50ms) |
+|------|----------|------------|
+| Bot AI 업데이트 (15봇) | 0.1ms | 0.2% |
+| Agent 물리 (100명) | 0.2ms | 0.4% |
+| Arena 수축 + 경계 체크 | 0.05ms | 0.1% |
+| Spatial Hash 재구축 | 0.3ms | 0.6% |
+| Aura 전투 (100명) | 0.5ms | 1.0% |
+| Dash 충돌 | 0.1ms | 0.2% |
+| 사망/XP 처리 | 0.05ms | 0.1% |
+| Orb 수집 (100명 × ~50 orbs) | 0.2ms | 0.4% |
+| 리더보드 정렬 | 0.01ms | 0.02% |
+| **State 직렬화 (100명분)** | **1.0ms** | **2.0%** |
+| **WebSocket 전송 (Hub channel)** | **0.1ms** | **0.2%** |
+| **합계** | **~2.6ms** | **5.2%** |
+| **여유** | **47.4ms** | **94.8%** |
+
+**SLO**: P99 틱 처리 < 5ms/Room (50ms 예산의 10%)
+
+### 10.2 Memory Budget (5,000 CCU)
+
+| 컴포넌트 | 단위 크기 | 수량 | 합계 |
+|----------|----------|------|------|
+| Agent struct | ~512B | 5,000 | 2.5 MB |
+| Orb struct | ~64B | 50,000 | 3.2 MB |
+| SpatialHash grid | ~4B/cell | 50 × 900 | 0.2 MB |
+| Client struct + channels | ~8KB | 5,000 | 40 MB |
+| Goroutine stack | ~2KB | ~10,055 | 20 MB |
+| JSON serialize buffer | ~16KB/room | 50 | 0.8 MB |
+| **합계** | | | **~67 MB** |
+
+Railway Basic (512MB) → 여유 445MB (87%)
+
+### 10.3 Network Bandwidth Budget
+
+| 데이터 | 크기 | 빈도 | 대역폭/플레이어 |
+|--------|------|------|-----------------|
+| State (50 visible agents) | ~4KB | 20Hz | 80 KB/s |
+| Minimap | ~500B | 1Hz | 0.5 KB/s |
+| Arena shrink | ~50B | 1Hz | 0.05 KB/s |
+| Rooms update (lobby) | ~200B | 1Hz | 0.2 KB/s |
+| **합계** | | | **~81 KB/s** |
+
+5,000 CCU → 81 × 5,000 = **~405 MB/s outbound** (1Gbps의 ~40%)
+
+### 10.4 Goroutine Budget
+
+| 컴포넌트 | 수량 | 메모리 |
+|----------|------|--------|
+| Main / Signal / Hub | 3 | 6 KB |
+| RoomManager + Lobby Broadcaster | 2 | 4 KB |
+| Room game loops | 50 | 100 KB |
+| Client ReadPump | 5,000 | 10 MB |
+| Client WritePump | 5,000 | 10 MB |
+| **합계** | **~10,055** | **~20 MB** |
+
+### 10.5 Scaling Strategy
 
 ```
-For each unactivated synergy:
-  Count missing requirements
-  If exactly 1 requirement missing → add to nearbySynergies[]
-  Send in level_up event → client highlights relevant choices
+Phase 1 (현재): 단일 인스턴스 (Railway)
+  └── 5,000 CCU / 50 Room / 1 Container
+
+Phase 2 (필요시): Room Sharding
+  ┌──────────────┐
+  │ Load Balancer │ (Sticky Session by roomID)
+  └──────┬───────┘
+  ┌──────┴───────┐
+  │  Redis Pub/Sub │
+  └──┬────────┬──┘
+  ┌──▼──┐  ┌──▼──┐
+  │ Go #1 │  │ Go #2 │
+  │ R1~25 │  │ R26~50│
+  └──────┘  └──────┘
+
+Phase 3 (글로벌): CDN + 지역별 인스턴스
+  한국(Seoul) / 미국(US-West) / 유럽(EU-West)
 ```
 
-### 10.4 Arena Shrink System
+### 10.6 Optimization Levers (우선순위 순)
 
-#### Shrink Timeline
+| # | 최적화 | 효과 | Phase |
+|---|--------|------|-------|
+| 1 | State JSON 필드 약어 (i/x/y/m/h) | 페이로드 -40% | Phase 1 |
+| 2 | Object pooling (Agent, Orb, []Entry) | GC 압력 -60% | Phase 1 |
+| 3 | SpatialHash slice 재사용 (Clear vs new) | 할당 -80% | Phase 1 |
+| 4 | MessagePack (state 이벤트만) | 페이로드 추가 -30% | Phase 2 |
+| 5 | Delta compression (변경분만 전송) | 대역폭 -50% | Phase 2 |
+| 6 | Custom binary protocol (state만) | 페이로드 -75% vs JSON | Phase 3 |
 
-Linear shrink at **-600px per minute**, starting at T=1:00:
+---
 
-```
-T=0:00  radius=6000  (100%) — No shrink (grace period)
-T=0:30  radius=6000         — First level-ups (most agents Lv2~3)
-T=1:00  radius=5400  (90%)  — Shrink starts, first combats
-T=1:30  radius=5400         — Mid-tier upgrades appear
-T=2:00  radius=4800  (80%)  — Mid-game, build path solidified
-T=2:30  radius=4200  (70%)  — Frequent combat, synergies activate
-T=3:00  radius=3600  (60%)  — Late game, weak agents eliminated
-T=3:30  radius=3000  (50%)  — High-density combat
-T=4:00  radius=2400  (40%)  — Final survival phase
-T=4:30  radius=1800  (30%)  — Extreme density
-T=5:00  radius=1200  (20%)  — Final ring / round ends
-```
+## 11. Reliability & Observability
 
-**Implementation**:
-```typescript
-// In ArenaShrink.update():
-const elapsed = (tick - roundStartTick) / TICK_RATE;  // seconds
-if (elapsed < 60) return;  // No shrink first minute
+### 11.1 Graceful Shutdown
 
-// Linear shrink: -600px per minute = -10px per second = -0.5px per tick
-const shrinkElapsed = elapsed - 60;  // seconds since shrink started
-this.currentRadius = Math.max(
-  1200,  // minimum radius
-  6000 - (shrinkElapsed / 60) * 600
-);
+```go
+// Shutdown 순서 (15초 타임아웃)
+1. SIGTERM/SIGINT 수신
+2. HTTP 서버 Shutdown (새 연결 거부)
+3. context.Cancel() → 모든 Room goroutine 종료
+4. 각 Room: 진행 중 라운드를 즉시 종료 (round_end 이벤트 전송)
+5. Hub.Stop() → 모든 WS 연결에 close frame 전송
+6. errgroup.Wait() → 모든 goroutine 종료 확인
+7. 프로세스 종료
 ```
 
-#### Boundary Penalty
+### 11.2 Error Recovery
 
-```
-If distance(agent.position, center) > currentRadius:
-  overDistance = distance - currentRadius
-  penalty = agent.mass * 0.0025 * (1 + overDistance / 100)  // escalating
-  agent.takeDamage(penalty, 'boundary')
-```
+| 장애 유형 | 감지 | 복구 | 영향 |
+|----------|------|------|------|
+| **Client 연결 끊김** | ReadPump EOF | Hub.unregister → Room.leaveChan → Agent 제거 | 해당 플레이어만 |
+| **Room goroutine 패닉** | recover() + 로깅 | Room 재시작, 진행 중 라운드 손실 | 해당 Room 플레이어 |
+| **Hub goroutine 패닉** | recover() + 로깅 | Hub 재시작, 모든 연결 재등록 | 전체 (critical) |
+| **OOM** | Railway 모니터링 | 컨테이너 재시작 (자동) | 전체 (모든 상태 손실) |
+| **틱 지연 (> 50ms)** | 틱 처리 시간 측정 | slog.Warn + 메트릭 기록 | 해당 Room 랙 |
 
-### 10.5 Map Objects
+### 11.3 Observability
 
-#### Placement Strategy
+#### Structured Logging (slog)
 
-```
-Round start → place objects deterministically:
-  XP Shrine (3): Equidistant on ring at 60% radius
-  Healing Spring (2): Opposite sides at 80% radius
-  Upgrade Altar (1): Dead center (0, 0)
-  Speed Gate (4): Cardinal directions at 50% radius
+```go
+slog.Info("room tick",
+    "room", room.ID,
+    "tick", arena.Tick,
+    "agents", len(arena.Agents),
+    "duration_ms", elapsed.Milliseconds(),
+)
 
-As arena shrinks:
-  Objects outside new boundary → teleport to nearest valid position
-  Objects within 200px of new boundary → marked as "endangered" (UI warning)
-```
-
-#### Object Interaction Protocol
-
-```
-Agent enters object radius (50px):
-  XP Shrine: Apply 10s XP +50% buff → start 60s cooldown → glow dims
-  Healing Spring: Heal 20% mass instantly → start 45s cooldown
-  Upgrade Altar: Grant instant level-up → consumed (no respawn)
-  Speed Gate: Apply 5s 2x speed buff → start 30s cooldown
+slog.Warn("tick budget exceeded",
+    "room", room.ID,
+    "duration_ms", elapsed.Milliseconds(),
+    "budget_ms", 50,
+)
 ```
 
-### 10.6 Bot AI Architecture
+#### Health Endpoint
 
-#### Decision Tree (per tick)
-
-```
-1. Check survival urgency:
-   - Outside shrink boundary? → behaveSurvive(moveInward)
-   - Mass < 15? → behaveSurvive(avoidCombat)
-   - Pending level-up? → chooseLevelUpgrade(buildPath)
-
-2. Check strategic opportunities:
-   - Nearby map object available? → moveToObject (XP Shrine priority)
-   - Upgrade Altar available + mass > 50? → rushCenter
-   - Near-synergy? → prioritize synergy-completing upgrade
-
-3. Execute build-path strategy:
-   - Aggressive: hunt weakest enemy within 300px
-   - Defensive: farm orbs in safe zone, avoid combat
-   - XP Rush: maximize orb collection, avoid all combat
-   - Endgame: move to center, engage carefully
-
-4. Default: behaviorWander() (with orb-seeking bias)
-```
-
-#### Bot Level-Up Decision
-
-```typescript
-function botChooseUpgrade(
-  choices: UpgradeChoice[],
-  buildPath: BuildPath,
-  currentBuild: PlayerBuild,
-  gameContext: GameContext
-): number {
-  // Priority 1: Complete a synergy
-  for (let i = 0; i < choices.length; i++) {
-    if (wouldCompleteSynergy(choices[i], currentBuild)) return i;
+```json
+GET /health
+{
+  "status": "ok",
+  "uptime": "2h34m",
+  "rooms": 5,
+  "totalPlayers": 127,
+  "totalBots": 75,
+  "goroutines": 315,
+  "memory": {
+    "alloc": "45MB",
+    "sys": "89MB",
+    "gcPause": "0.3ms"
+  },
+  "tickLatency": {
+    "room-1": {"p50": "1.2ms", "p99": "3.1ms"},
+    "room-2": {"p50": "0.8ms", "p99": "2.4ms"}
   }
-  // Priority 2: Follow build path priority list
-  for (const priorityType of buildPath.priority) {
-    const idx = choices.findIndex(c => c.type === priorityType);
-    if (idx >= 0) return idx;
-  }
-  // Priority 3: Upgrade existing ability
-  for (let i = 0; i < choices.length; i++) {
-    if (choices[i].isUpgrade) return i;
-  }
-  // Fallback: first choice
-  return 0;
 }
 ```
 
-### 10.7 Reputation Points (RP) Meta-Progression System
-
-#### RP Sources (earned per round)
-
-| Source | RP Amount | Condition |
-|--------|-----------|-----------|
-| Round participation | +5 | Complete any round |
-| Top 50% finish | +10 | Rank in upper half |
-| Top 3 finish | +25 | 1st, 2nd, or 3rd place |
-| 1st place win | +50 | Winner of round |
-| Synergy completed | +10 | Activate any synergy during round |
-| Hidden synergy first discovery | +100 | First player to discover a hidden synergy |
-| 3+ kills in round | +5 | Kill 3 or more agents |
-
-#### RP Unlocks (permanent progression)
-
-| RP Required | Unlock | Description |
-|-------------|--------|-------------|
-| 50 | **Ability Slot +1** | 2 → 3 Ability slots (base is 2) |
-| 100 | **Build History** | View last 50 rounds build statistics |
-| 200 | **Agent Badges** | Win-rate badges (Bronze/Silver/Gold/Diamond) |
-| 500 | **Counter Intel** | See current room agents' recent build patterns |
-| 1000 | **Custom Synergy Hints** | Receive 3 hidden synergy hints upfront |
-
-#### RP Storage
+#### Prometheus Metrics (Phase 2, 선택)
 
 ```
-Phase 1-3: In-memory + JSON file
-  /data/player-rp/{playerId}.json → { totalRP, unlockedFeatures[], questProgress }
-
-Phase 4: REST API
-  GET  /api/v1/players/{id}/rp → RP balance + unlocks
-  POST /api/v1/players/{id}/rp → Award RP from round results
-
-Phase 5+: PostgreSQL persistent storage
+game_room_players{room="room-1"} 45
+game_tick_duration_ms{room="room-1",quantile="0.99"} 1.2
+game_ws_connections_total 2340
+game_ws_messages_in_total 45000
+game_ws_messages_out_total 890000
+game_orbs_total 25000
+game_agent_deaths_total{source="aura"} 156
+game_agent_deaths_total{source="dash"} 42
+game_agent_deaths_total{source="boundary"} 23
+game_synergy_activations_total{synergy="glass_cannon"} 15
+game_upgrade_choices_total{type="tome"} 1234
+game_upgrade_choices_total{type="ability"} 567
 ```
 
-#### Quest System (8 quests, RP rewards)
-
-| Quest | Condition | Reward |
-|-------|-----------|--------|
-| First Blood | First kill achieved | +20 RP |
-| Synergy Master | Complete 3 different synergies | +50 RP |
-| Speed Demon | Reach Speed Tome x5 | +30 RP |
-| Pacifist | Top 3 with 0 kills | +100 RP |
-| Glass Cannon | Win with Cursed Tome x5 | +150 RP |
-| Discovery | Discover 1 hidden synergy | +100 RP |
-| Comeback | Win from Lv3 or below | +200 RP |
-| Marathon | Play 20 consecutive rounds | +100 RP |
-
-## 11. Agent API & Training Architecture
-
-### 11.1 Agent Connection Architecture (Phase 4+)
-
-```
-┌────────────────┐     ┌──────────────────┐     ┌───────────────┐
-│  AI Agent      │────▶│  Agent Gateway    │────▶│  Game Server  │
-│  (LLM Client)  │REST │  (HTTP + WS)     │ SIO │  (Room/Arena) │
-│                │     │                  │     │               │
-│  - Observe     │     │  - Auth + Token  │     │  - Same game  │
-│  - Decide      │     │  - Rate limit    │     │    loop as    │
-│  - Command     │     │  - Session mgmt  │     │    human      │
-└────────────────┘     └──────────────────┘     └───────────────┘
-```
-
-**Phase 4 Implementation Plan**:
-- Agent connects via REST API to register → receives session token
-- Session token used for WebSocket connection (same Socket.IO server)
-- Agent receives same events as human client (`state`, `level_up`, `death`, etc.)
-- Agent sends commands as `input` events + new `commander_command` events
-
-### 11.2 Commander Mode Event Flow
-
-```
-Observation (S→Agent, 10Hz reduced from 20Hz for LLM processing time):
-  {
-    type: 'observation',
-    agents: AgentState[],        // Nearby agents (within 500px)
-    orbs: OrbState[],            // Nearby orbs
-    mapObjects: MapObject[],     // Map objects with availability
-    myState: FullAgentState,     // Own full state including build
-    gameContext: GameContext,     // Time, rank, arena radius
-  }
-
-Command (Agent→S):
-  { cmd: 'go_to', x, y }
-  { cmd: 'hunt_nearest' }
-  { cmd: 'flee' }
-  { cmd: 'engage_weak' }
-  { cmd: 'set_combat_style', style: 'aggressive'|'defensive'|'balanced' }
-  { cmd: 'choose_upgrade', choiceIndex: 0|1|2, reasoning?: string }
-  // ... (full list in v10 plan section 6.2)
-```
-
-### 11.3 Training Profile Storage
-
-```
-Phase 1-3: In-memory + JSON file on server filesystem
-  /data/agent-profiles/{agentId}.json
-
-Phase 4: REST API for profile CRUD
-  PUT /api/v1/agents/{id}/training → BuildProfile + CombatRules + StrategyPhases
-
-Phase 5+: PostgreSQL persistent storage
-```
-
-### 11.4 Agent Memory System
-
-```typescript
-// Persistent across rounds, stored per agent
-interface AgentMemory {
-  buildPerformance: Record<string, BuildStats>;  // "berserker" → avg rank/kills
-  discoveredSynergies: string[];
-  synergyAttempts: Record<string, { attempts: number; completions: number }>;
-  opponentProfiles: Record<string, OpponentProfile>;
-  mapKnowledge: MapKnowledge;
-}
-
-// Updated after each round with RoundSummary data
-// Phase 1-3: Not implemented (bots use static build paths)
-// Phase 4+: Active learning from round results
-```
-
-### 11.5 Show & Learn Training Modes (Phase 4-5)
-
-Three progressive training modes for users to teach their AI agents:
-
-#### Mode 1: Observation (Phase 4)
-
-Agent watches human play and records choices to build strategy rules.
-
-```
-Human plays game → Agent observes via `observe_game` API
-  ├── Level-up choices recorded → "In this situation, user prefers this build"
-  ├── Combat/flee patterns recorded → converted to combat rules
-  └── Positioning patterns recorded → strategy phase preferences
-
-Implementation:
-  - `observe_game` API + client input event logging
-  - Agent receives same state stream as human client
-  - Post-round: observations compiled into BuildProfile suggestions
-```
-
-#### Mode 2: Feedback (Phase 4)
-
-User reviews agent replay and annotates corrections.
-
-```
-Agent plays round → User reviews BuildHistory timeline
-  ├── "At level 5, should have picked XP Tome instead of Venom" → rule added
-  ├── "In this situation, fight instead of flee" → combat rule adjusted
-  └── "Prioritize center positioning in late game" → strategy phase updated
-
-Implementation:
-  - Based on `RoundSummary.buildHistory` timeline + key events list
-  - User annotation UI on top of text-based timeline
-  - ⚠️ Tick-by-tick replay is Phase 5+. Phase 4 uses build history
-    timeline (text) + key event list as substitute.
-```
-
-#### Mode 3: A/B Test (Phase 5)
-
-Two agents with different profiles compete over 10 rounds for statistical comparison.
-
-```
-Agent A (Profile X) vs Agent B (Profile Y)
-  ├── Both register simultaneously in same room
-  ├── 10-round comparison with RoundSummary per round
-  ├── Stats dashboard: avg rank, avg kills, avg level, win rate
-  └── Better-performing profile auto-adopted (or user chooses)
-
-Implementation:
-  - 2 agent registrations + per-round RoundSummary comparison
-  - Dashboard UI component for side-by-side stats
-```
-
-### 11.6 Training Console UI
-
-Placed below the lobby RoomList as a **collapsible McPanel**:
-
-```
-TrainingConsole.tsx (collapsible McPanel)
-├── TrainingHeader — agent status (online/offline, win rate, avg level)
-├── BuildProfileEditor — build path selection + banned/required upgrades
-├── CombatRulesEditor — if/then rule list + add/delete rules
-├── StrategyPhaseEditor — early/mid/late strategy dropdowns
-└── LearningLog — last 10 rounds result table
-```
-
-- Real-time sync via WebSocket `training_update` event
-- McPanel styling (reuses existing design system)
-- Mobile: converts to full-screen modal
-
-## 12. Rendering Architecture (2D → 3D Migration Path)
-
-### 12.1 Dual Renderer Strategy
-
-```
-Phase 1-3 (2D Canvas):
-  lib/renderer/
-    ├── index.ts       — Main render loop (requestAnimationFrame)
-    ├── entities.ts    — Agent sprites (16x16 canvas), aura circles, effects
-    ├── background.ts  — Grid, zone tints, shrink boundary, map objects
-    └── ui.ts          — Nametags, XP bars, build indicators, minimap overlay
-
-Phase 4+ (3D R3F):
-  components/3d/
-    ├── Scene.tsx          — R3F scene root (lighting, fog, sky)
-    ├── AgentModel3D.tsx   — MC voxel character (BoxGeometry + skin textures)
-    ├── CombatAura3D.tsx   — Translucent sphere around agent
-    ├── VoxelTerrain.tsx   — Grass blocks, zone indicators
-    ├── VoxelOrbs.tsx      — InstancedMesh spinning cube orbs
-    ├── MapObjects3D.tsx   — Shrine/Spring/Altar/Gate 3D models
-    ├── CameraSystem.tsx   — Play camera + spectator modes
-    └── Effects3D.tsx      — Ability visual effects, synergy particles
-
-Switching mechanism:
-  const use3D = localStorage.getItem('renderer') === '3d';
-  // Phase 4: user toggle
-  // Phase 5: 3D default, 2D fallback for low-end devices
-```
-
-### 12.2 Agent 2D Sprite Generation
-
-```
-Input: AgentSkin properties
-Output: OffscreenCanvas (16x16 for minimap, 32x32 for game view)
-
-Render layers (bottom to top):
-  1. Body base (bodyColor + legColor) — 2-tone rectangle
-  2. Pattern overlay (striped/checkered/etc.) — patternColor
-  3. Face (eyeStyle + mouthStyle) — pixel art on head region
-  4. Equipment overlays (hat, armor, hand item) — small icon sprites
-  5. Aura circle (combat range indicator) — semi-transparent ring
-
-Cache: Map<skinId, OffscreenCanvas> — invalidated on skin change only
-```
-
-### 12.3 Coordinate System
-
-```
-Server (2D):  Position { x: number, y: number }
-  Origin: center of arena (0, 0)
-  Radius: 6000px (shrinking)
-  Positive X: right, Positive Y: down
-
-Client 2D:  Canvas pixel coordinates
-  Transform: viewport offset + scale
-
-Client 3D (Phase 4+):  Three.js world
-  Mapping: x → x, y → z, height → y (always 0 for ground units)
-  new Vector3(serverPos.x, 0, serverPos.y)
-```
-
-## 13. Performance Budget
-
-### 13.1 Server Performance
-
-| Metric | Target | Rationale |
-|--------|--------|-----------|
-| Tick rate | 20Hz (50ms) | Maintained from v7 |
-| Tick budget | < 25ms per tick | 50% headroom for GC pauses |
-| SpatialHash queries/tick | ~400 (20 agents x 20 neighbors) | Reduced from v7 (~3000 segment queries) |
-| Memory per room | < 50MB | 20 agents + 1000 orbs + 10 map objects |
-| Rooms per server | 5 concurrent | Unchanged from v7 |
-| Max agents per room | 20 (5 human + 15 bot) | Unchanged from v7 |
-
-**v10 Performance Win**: Eliminating segments[] dramatically reduces SpatialHash load.
-- v7: 20 snakes x avg 15 segments = 300 entities in spatial hash
-- v10: 20 agents = 20 entities in spatial hash (93% reduction)
-
-### 13.2 Network Performance
-
-| Metric | v7 | v10 | Change |
-|--------|-----|------|--------|
-| State payload per agent | ~120 bytes (segments) | ~50 bytes (position + build) | -58% |
-| State broadcast (20 agents) | ~2.4 KB/tick | ~1.0 KB/tick | -58% |
-| Bandwidth per client | ~48 KB/s | ~20 KB/s + event spikes | -58% avg |
-| New event overhead | 0 | ~200 bytes/event (level_up, synergy) | Negligible (event-driven) |
-
-### 13.3 Client Performance
-
-| Metric | Target | Strategy |
-|--------|--------|----------|
-| Frame rate (desktop) | 60 FPS | 2D Canvas: lightweight sprite rendering |
-| Frame rate (mobile) | 30 FPS | Reduced particle effects, simpler sprites |
-| JS bundle (game page) | < 200 KB gzip | Code splitting, tree shaking |
-| Time to interactive | < 3s | SSR lobby, lazy-load game canvas |
-| Level-up overlay render | < 16ms | Pre-rendered card templates |
-| Sprite generation | < 5ms per agent | OffscreenCanvas caching |
-
-### 13.4 Scalability Limits
-
-```
-Current architecture (single Node.js process):
-  5 rooms x 20 agents x 20Hz = 2000 state updates/second
-  + event processing (level_up, combat, death) = ~500 events/second
-  Total: ~2500 operations/second → well within single-thread capacity
-
-Scaling path (Phase 5+):
-  If > 5 rooms needed:
-    Option A: Horizontal scaling with room-level sharding (each process owns N rooms)
-    Option B: Worker threads for game loops (SharedArrayBuffer for state)
-    Not needed for Phase 1-4 user base (<100 concurrent users expected)
-```
-
-## 14. Security Considerations
-
-### 14.1 Threat Model (Game-Specific)
-
-| Threat | Severity | Mitigation |
-|--------|----------|------------|
-| **Input spoofing** (fake angles at > 30Hz) | Medium | Rate limiter: max 30 input/s, excess dropped |
-| **choose_upgrade manipulation** (invalid index) | Medium | Server validates index 0-2, ignores invalid |
-| **Aura damage manipulation** | Low | All combat is server-authoritative, client cannot modify |
-| **Speed hack** (boosting without mass cost) | Low | Server-authoritative movement, client is display-only |
-| **Mass manipulation** | Low | mass is server state, never accepted from client |
-| **Bot flooding** (too many connections) | Medium | Socket.IO connection limit per IP (existing) |
-| **Agent API abuse** (Phase 4+) | High | Token-based auth, rate limit per agent, max 1 agent per user |
-| **Memory exhaustion** (huge AgentSkin payloads) | Low | Validate AgentSkin fields on join, reject oversized payloads |
-
-### 14.2 Server-Authoritative Design
-
-```
-ALL game state is computed server-side:
-  - Agent position, mass, level, XP, build → server only
-  - Combat damage → server calculates, client animates
-  - Level-up choices → server generates, client displays
-  - Synergy activation → server checks, client notifies
-
-Client sends ONLY:
-  - Steering angle (number, validated range 0~2pi)
-  - Boost toggle (boolean)
-  - Upgrade choice index (0, 1, or 2)
-  - Room join/leave
-
-No client-computed values are trusted.
-```
-
-### 14.3 Input Validation
-
-```typescript
-// Existing (maintained from v7):
-- angle: clamp to [0, 2*PI]
-- boost: boolean only
-- rate: max 30 inputs/second per socket
-
-// New (v10):
-- choiceIndex: must be 0, 1, or 2
-- choiceIndex: must be during active level-up window (5s timeout)
-- AgentSkin: validate all enum fields against allowed values
-- Agent name: max 20 chars, alphanumeric + underscore only
-```
-
-## 15. Migration Strategy (v7 → v10)
-
-### 15.1 Phase Implementation Order
-
-```
-Phase 1: Entity Revolution + Core Survival (3 weeks)
-  ├── Week 1: Snake→Agent types + AgentEntity rewrite + CollisionSystem rewrite
-  ├── Week 2: UpgradeSystem (Tomes) + XP/Level + ArenaShrink + 1-Life
-  └── Week 3: Bot AI expansion + integration testing + debugging
-
-Phase 2: Abilities + Synergies (2 weeks)
-  ├── Week 4: 6 Abilities + auto-trigger + synergy engine
-  └── Week 5: Map objects + balance tuning + bot strategy testing
-
-Phase 3: Client Rendering + Lobby (3 weeks)
-  ├── Week 6: Agent 2D sprite renderer (entities.ts full rewrite)
-  ├── Week 7: New overlays (LevelUp, BuildHUD, XPBar, ShrinkWarning, SynergyPopup)
-  └── Week 8: Lobby redesign (AgentPreview, SkinCustomizer) + polish
-
-Phase 4: Agent Integration + UI (1.5 weeks)
-  ├── Agent API gateway + Commander Mode events
-  ├── Training Console UI + agent memory system
-  └── 3D R3F renderer migration start (AgentModel3D, terrain, effects)
-
-Phase 5: Meta Progression + Live Service (ongoing)
-  ├── RP system, quests, global leaderboard
-  ├── Persistent database migration
-  └── Season/battlepass infrastructure
-```
-
-### 15.2 Migration Risk Matrix
-
-| Risk | Impact | Probability | Mitigation |
-|------|--------|-------------|------------|
-| segments removal breaks interpolation | High | High | Rewrite interpolation first, test independently |
-| SpatialHash refactor introduces collision bugs | High | Medium | Unit test all collision scenarios before integration |
-| Upgrade balance is broken on first deploy | Medium | High | Bot-only testing for 50+ rounds before human testing |
-| Client renderer rewrite delays Phase 3 | Medium | Medium | Phase 1-2 can deploy with minimal client (debug wireframe) |
-| Agent API security holes | High | Medium | Phase 4 runs behind feature flag, invite-only beta |
-
-### 15.3 File-Level Change Impact
-
-```
-HIGH IMPACT (full rewrite):
-  apps/server/src/game/Snake.ts         → AgentEntity.ts
-  apps/server/src/game/CollisionSystem.ts → new collision model
-  apps/web/lib/renderer/entities.ts      → agent sprite renderer
-  packages/shared/src/types/game.ts      → Agent type system
-  packages/shared/src/constants/game.ts  → config restructure
-
-MEDIUM IMPACT (significant modifications):
-  apps/server/src/game/Arena.ts          → agents map + new subsystems
-  apps/server/src/game/SpatialHash.ts    → simplified (segments removed)
-  apps/server/src/game/BotBehaviors.ts   → expanded decision tree
-  apps/server/src/game/StateSerializer.ts → new serialization format
-  apps/web/hooks/useSocket.ts            → new events + agent state
-  apps/web/lib/renderer/background.ts    → zones + shrink boundary
-  apps/web/lib/interpolation.ts          → simplified (no segments)
-
-LOW IMPACT (minor changes):
-  apps/server/src/game/Room.ts           → shrink integration + 1-Life
-  apps/server/src/game/OrbManager.ts     → XP value property
-  apps/server/src/game/LeaderboardManager.ts → reference rename
-  apps/server/src/network/SocketHandler.ts   → new event handlers
-  apps/server/src/network/Broadcaster.ts     → new event broadcasts
-
-NEW FILES:
-  apps/server/src/game/UpgradeSystem.ts     (~250 LOC)
-  apps/server/src/game/MapObjects.ts        (~100 LOC)
-  apps/server/src/game/ArenaShrink.ts       (~60 LOC)
-  packages/shared/src/constants/upgrades.ts (~200 LOC)
-  apps/web/components/game/LevelUpOverlay.tsx
-  apps/web/components/game/BuildHUD.tsx
-  apps/web/components/game/XPBar.tsx
-  apps/web/components/game/ShrinkWarning.tsx
-  apps/web/components/game/SynergyPopup.tsx
-```
-
-### 15.4 Deployment Strategy
-
-```
-Phase 1-2 (server-only changes):
-  - Deploy to Railway staging environment
-  - Run automated bot-only games for balance testing
-  - No client changes needed (server sends v10 state format)
-  - Client shows raw position data (degraded but functional)
-
-Phase 3 (client + server):
-  - Feature branch deployment to Vercel preview URL
-  - Parallel: v7 production + v10 preview
-  - User testing on preview URL
-  - Cutover: DNS switch when stable
-
-Phase 4+ (agent API):
-  - Behind feature flag: /api/v1/agents/* routes
-  - Invite-only beta for AI agent developers
-  - Rate limiting: 10 commands/second per agent
-```
-
-## 16. Sequence Diagrams
-
-### 16.1 Level-Up Flow
-
-```
-Client              SocketHandler       Arena/UpgradeSystem      AgentEntity
-  │                     │                     │                     │
-  │                     │    processOrbCollection()                 │
-  │                     │    ──────────────────▶                    │
-  │                     │                     │  agent.addXP(value) │
-  │                     │                     │ ──────────────────▶ │
-  │                     │                     │ ◀── returns true    │
-  │                     │                     │     (level up!)     │
-  │                     │                     │                     │
-  │                     │  generateChoices(agent)                   │
-  │                     │  ──────────────────▶│                     │
-  │                     │  ◀── 3 UpgradeChoice[]                   │
-  │                     │                     │                     │
-  │    level_up event   │                     │                     │
-  │◀────────────────────│                     │                     │
-  │                     │                     │                     │
-  │  (user selects)     │                     │                     │
-  │  choose_upgrade {1} │                     │                     │
-  │────────────────────▶│                     │                     │
-  │                     │  applyUpgrade(agent, choice[1])           │
-  │                     │  ──────────────────▶│                     │
-  │                     │                     │  checkSynergies()   │
-  │                     │                     │ ──────────────────▶ │
-  │                     │                     │                     │
-  │  choose_upgrade_ack │                     │                     │
-  │◀────────────────────│                     │                     │
-  │                     │                     │                     │
-  │  (if synergy found) │                     │                     │
-  │  synergy_activated  │                     │                     │
-  │◀────────────────────│                     │                     │
-```
-
-### 16.2 Auto-Combat Flow (Per Tick)
-
-```
-Arena.gameLoop()
-  │
-  ├── moveAgents()
-  │     └── For each alive agent: update position based on heading + speed
-  │
-  ├── CollisionSystem.process()
-  │     ├── auraCollisions()
-  │     │     ├── SpatialHash.queryRadius(agent, 60px)
-  │     │     ├── For each pair: mutual DPS → takeDamage()
-  │     │     └── If mass <= 0: push to deathQueue[]
-  │     │
-  │     ├── dashCollisions()
-  │     │     ├── For each boosting agent: queryRadius(hitbox)
-  │     │     └── Apply 30% mass burst to non-boosting targets
-  │     │
-  │     └── boundaryCheck()
-  │           └── Agents outside shrink radius: mass penalty
-  │
-  ├── processOrbCollection()
-  │     └── Orbs within collectRadius: addXP() + addMass()
-  │
-  ├── UpgradeSystem.processAbilities()
-  │     └── Check auto-trigger conditions → apply ability effects
-  │
-  ├── ArenaShrink.update()
-  │     └── If time threshold passed: reduce radius, emit arena_shrink
-  │
-  ├── MapObjects.checkInteractions()
-  │     └── Agents within object radius: apply effects
-  │
-  ├── resolveDeaths()
-  │     └── Process deathQueue: emit death/kill events, spawn death orbs
-  │
-  └── StateSerializer.getStateForPlayer()
-        └── Viewport cull → serialize agents + orbs + mapObjects → broadcast
-```
-
-### 16.3 Round Lifecycle
-
-```
-Room State Machine:
-  WAITING ──(min_players_met)──▶ COUNTDOWN(10s)
-    │                                │
-    │                          (countdown=0)
-    │                                │
-    │                                ▼
-    │                           PLAYING(5min)
-    │                                │
-    │                   ┌─── each 60s: arena_shrink
-    │                   ├─── level_up events
-    │                   ├─── death/kill events
-    │                   ├─── synergy_activated events
-    │                   │
-    │                   └─── (timer=0 OR 1 agent left)
-    │                                │
-    │                                ▼
-    │                           ENDING(10s)
-    │                                │
-    │                          (show results)
-    │                                │
-    │                                ▼
-    │                          COOLDOWN(15s)
-    │                                │
-    └───────────────────◀────────────┘
-```
-
-## 17. Architecture Decision Records (ADRs)
-
-### ADR-001: Snake→Agent Entity Model Transformation
-
-**Status**: Accepted
-
-**Context**: The v7 snake entity uses `segments: Position[]` (head + body chain) which permeates every system: SpatialHash indexes segments individually, CollisionSystem checks head-body intersections, StateSerializer transmits all segment positions, renderers draw circles along the path. The v10 design replaces this with a single-position agent with an aura-based combat model.
-
-**Decision**: Full entity rewrite rather than incremental adaptation. Replace `SnakeEntity` class with `AgentEntity` class. Remove all segment-related code paths simultaneously in Phase 1.
-
-**Consequences**:
-- Positive: 93% reduction in SpatialHash entities, ~58% network bandwidth reduction, dramatically simpler movement code (170→120 LOC), cleaner combat model
-- Negative: Breaking change — all downstream systems must update simultaneously (big-bang Phase 1). No backward compatibility with v7 clients.
-- Risk: Phase 1 is a 3-week sprint with high integration risk. Mitigated by comprehensive bot testing before human exposure.
-
-**Alternatives Considered**:
-1. *Incremental migration* (keep segments, add agent fields gradually): Rejected — dual entity model would be more complex than either alone, and segments are fundamentally incompatible with aura combat.
-2. *Adapter pattern* (AgentEntity wraps SnakeEntity): Rejected — the entity internals are too different; an adapter would be more code than a clean rewrite.
+### 11.4 Disaster Recovery
+
+| 항목 | 값 | 근거 |
+|------|-----|------|
+| **RTO** | ~30초 | Railway 컨테이너 재시작 시간 |
+| **RPO** | 전체 손실 | 인메모리 상태, 게임 라운드 5분 이하 |
+| **백업** | 불필요 | 게임 상태는 일시적, 영구 데이터(JSON)는 Railway Volume |
+| **DR 전략** | 자동 재시작 | Railway `restartPolicyType: ON_FAILURE` |
+
+**게임 서버 특성**: 상태 손실 시 새 라운드 시작으로 자연 복구. 플레이어 불편은 있지만 데이터 손실 없음 (게스트 플레이, 계정 없음).
 
 ---
 
-### ADR-002: Server-Side Upgrade/Combat Authority
+## 12. Infrastructure & Deployment
 
-**Status**: Accepted
+### 12.1 Deployment Topology
 
-**Context**: The upgrade system (Tome stacks, Ability triggers, synergy checks) and combat system (aura DPS, dash bursts) could theoretically be computed client-side for responsiveness, or server-side for authoritative gameplay.
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     Production Environment                    │
+│                                                             │
+│  ┌─────────────────────────────────────────────────────┐    │
+│  │                    Vercel Edge Network                │    │
+│  │                                                     │    │
+│  │  ┌───────────┐  ┌───────────┐  ┌───────────┐      │    │
+│  │  │ Edge Node │  │ Edge Node │  │ Edge Node │      │    │
+│  │  │ (Seoul)   │  │ (US-West) │  │ (EU-West) │      │    │
+│  │  └─────┬─────┘  └─────┬─────┘  └─────┬─────┘      │    │
+│  │        └───────────┬───┘───────────┘               │    │
+│  │                    │                                │    │
+│  │         Next.js 15 (SSR + Static)                   │    │
+│  │         apps/web/.next                              │    │
+│  └─────────────────────────────────────────────────────┘    │
+│                         │ WSS                               │
+│  ┌─────────────────────▼───────────────────────────────┐    │
+│  │              Railway Container (US-West)              │    │
+│  │                                                     │    │
+│  │  ┌─────────────────────────────────────────────┐    │    │
+│  │  │        Go Game Server (scratch image)        │    │    │
+│  │  │        Single binary ~10MB                   │    │    │
+│  │  │                                             │    │    │
+│  │  │  PORT=8000  CORS_ORIGIN=snake-tonexus.vercel.app │    │
+│  │  │                                             │    │    │
+│  │  │  HTTP: /health, /api/v1/*                   │    │    │
+│  │  │  WS:   /ws (upgrade)                        │    │    │
+│  │  └─────────────────────────────────────────────┘    │    │
+│  │                                                     │    │
+│  │  Resource: 1 vCPU, 512MB RAM                        │    │
+│  └─────────────────────────────────────────────────────┘    │
+└─────────────────────────────────────────────────────────────┘
+```
 
-**Decision**: All upgrade and combat logic is 100% server-authoritative. Client is display-only. Level-up choices are generated server-side, applied server-side, and synergy checks run server-side.
+### 12.2 Docker Build
 
-**Consequences**:
-- Positive: No cheating vectors for build manipulation, damage modification, or speed hacks. Single source of truth for competitive fairness.
-- Negative: Level-up overlay has ~50-100ms latency (1-2 ticks) between selection and confirmation. Ability visual effects may lag slightly behind server trigger.
-- Mitigation: Client can play optimistic animations for abilities (revert if server disagrees). Level-up 5s timeout provides ample time despite latency.
+```dockerfile
+# server/Dockerfile — Multi-stage build
+FROM golang:1.24-alpine AS builder
+WORKDIR /app
+COPY go.mod go.sum ./
+RUN go mod download
+COPY . .
+RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /server ./cmd/server
+
+FROM scratch
+COPY --from=builder /server /server
+EXPOSE 8000
+ENTRYPOINT ["/server"]
+```
+
+**빌드 결과**: ~10MB 바이너리 (scratch 이미지, no OS)
+
+### 12.3 Environment Variables
+
+| 변수 | 기본값 | 설명 |
+|------|--------|------|
+| `PORT` | 8000 | HTTP/WS 서버 포트 (Railway 동적 할당) |
+| `CORS_ORIGIN` | `http://localhost:3000` | 허용 Origin (쉼표 구분 복수 가능) |
+| `TICK_RATE` | 20 | 게임 루프 Hz |
+| `MAX_ROOMS` | 5 | 최대 Room 수 (Phase 1) |
+| `MAX_BOTS_PER_ROOM` | 15 | Room당 최대 봇 수 |
+| `LOG_LEVEL` | info | 로그 레벨 (debug/info/warn/error) |
+
+### 12.4 Monorepo Structure
+
+```
+snake/                          ← Git 루트
+├── apps/
+│   └── web/                    ← Next.js 프론트엔드 (Vercel)
+│       ├── app/
+│       ├── components/
+│       ├── hooks/
+│       ├── lib/
+│       ├── public/
+│       └── package.json
+├── server/                     ← Go 게임 서버 (Railway)
+│   ├── cmd/server/
+│   ├── internal/
+│   ├── go.mod
+│   └── Dockerfile
+├── packages/
+│   └── shared/                 ← TypeScript 공유 타입
+│       ├── types/
+│       ├── constants/
+│       └── utils/
+├── docs/
+│   ├── designs/                ← 기획/설계 문서
+│   └── adr/                    ← Architecture Decision Records
+├── vercel.json                 ← Vercel 배포 설정
+├── railway.json                ← Railway 배포 설정
+├── game.sh                     ← 로컬 개발 스크립트
+└── package.json                ← Monorepo root
+```
+
+### 12.5 CI/CD Pipeline (간소)
+
+```
+Git Push (main)
+  ├── Vercel: 자동 빌드+배포 (apps/web/)
+  │   └── next build → Edge Deploy (~60s)
+  │
+  └── Railway: 자동 빌드+배포 (server/)
+      └── Docker build → Container Deploy (~90s)
+```
+
+현재 Phase에서는 별도 CI (GitHub Actions) 없이 PaaS 자동 배포 활용.
+Phase 2에서 Go 테스트 + 린트 CI 추가 예정.
+
+### 12.6 Local Development
+
+```bash
+# game.sh — 로컬 개발 환경
+./game.sh dev    # Go 서버 빌드+실행 + Next.js dev 동시 시작
+./game.sh server # Go 서버만 실행
+./game.sh build  # Go 바이너리 빌드
+./game.sh stop   # 모든 프로세스 종료
+```
+
+```bash
+# Go 서버 빌드+실행
+cd server && go build -o ../bin/server ./cmd/server
+PORT=8001 CORS_ORIGIN="http://localhost:3000" ./bin/server
+
+# Next.js 클라이언트
+cd apps/web
+NEXT_PUBLIC_SERVER_URL="ws://localhost:8001/ws" npx next dev --port 3000
+```
 
 ---
 
-### ADR-003: 2D-First Rendering with 3D Migration Path
+## 13. Architecture Decision Records
 
-**Status**: Accepted
+### ADR-011: Go + Raw WebSocket (Socket.IO 대체)
 
-**Context**: The lobby already uses R3F 3D. v10 could either go full 3D immediately or start with 2D Canvas for the game view and migrate later.
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | 현재 서버는 TypeScript + Socket.IO. Go 재작성 시 `go-socket.io` 라이브러리는 불안정하고 유지보수 부족. Socket.IO 자체 프로토콜(polling fallback, 패킷 프레이밍) 오버헤드도 불필요 |
+| **Decision** | gorilla/websocket + 커스텀 JSON 프로토콜 `{e, d}` 사용. 클라이언트에 경량 WebSocket 어댑터(~80줄) 추가 |
+| **Consequences** | (+) 검증된 Go WS 라이브러리, Socket.IO 오버헤드 제거, 바이너리 프로토콜 전환 용이. (-) useSocket.ts 수정 필요 (1파일), 자동 재연결 수동 구현 |
 
-**Decision**: Phase 1-3 use 2D Canvas (16x16 sprites, top-down view). Phase 4+ migrates to 3D R3F. The rendering layer is abstracted behind a `Renderer` interface to enable clean switching.
+### ADR-012: Channel-based Hub (Lock-free)
 
-**Consequences**:
-- Positive: Phase 1-3 ships faster (2D sprites are simpler than voxel models). Core gameplay can be validated without 3D complexity. Mobile performance is guaranteed in 2D.
-- Negative: Some visual features (3D effects, depth perception) are deferred. Players may perceive 2D as lower quality than the 3D lobby.
-- Mitigation: 2D renderer uses MC-style pixel art aesthetics that match the lobby theme. 3D migration is planned from the start so rendering code is organized for replacement.
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | WS 메시지 라우팅에 (A) sync.RWMutex 기반 맵 보호 vs (B) 단일 goroutine + channel 이벤트 루프 |
+| **Decision** | agent_arena 검증 패턴인 channel-based Hub 채택. 단일 goroutine이 모든 register/unregister/broadcast 처리 |
+| **Consequences** | (+) Lock-free, 데드락 불가, 프로덕션 검증. (-) Hub goroutine이 단일 병목 (5,000 CCU에서 충분, channel 처리 ~0.01ms/msg) |
+
+### ADR-013: Per-Room Goroutine (독립 게임 루프)
+
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | 50개 Room의 20Hz 게임 루프 실행 방식. (A) 단일 goroutine에서 순차 처리 vs (B) Room별 독립 goroutine |
+| **Decision** | 각 Room이 독립 goroutine에서 `time.Ticker(50ms)` 기반으로 실행. Room goroutine이 해당 Room의 모든 게임 상태를 독점 소유 |
+| **Consequences** | (+) True parallelism, 동기화 불필요, Room 추가/제거 단순. (-) goroutine 수 증가 (50개, 무시 가능) |
+
+### ADR-014: 별도 `server/` 폴더 (모노레포 내 Go 프로젝트)
+
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | Go 서버를 기존 `apps/server/` (TypeScript)와 공존시키는 방법 |
+| **Decision** | 프로젝트 루트에 `server/` 폴더를 생성, 독립 Go 모듈. 기존 TS 서버는 마이그레이션 완료 후 제거 |
+| **Consequences** | (+) 독립 개발, go.mod/package.json 충돌 없음, Railway 별도 서비스. (-) shared types를 Go로 재정의 필요 |
+
+### ADR-015: JSON 우선, Binary 최적화 지연
+
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | 게임 상태 직렬화 포맷: JSON vs Binary (MessagePack/Protobuf) |
+| **Decision** | Phase 1에서 JSON 사용 (필드 약어로 최적화). 대역폭 병목 발생 시 Phase 2에서 state 이벤트만 Binary 전환 |
+| **Consequences** | (+) 브라우저 네이티브 JSON.parse, 디버깅 용이, 클라이언트 변경 최소. (-) Binary 대비 2-3배 큰 페이로드, 5,000 CCU 시 대역폭 ~405MB/s |
+
+### ADR-016: Monolithic Game Server (마이크로서비스 거부)
+
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | 게임 서버를 마이크로서비스로 분리할 것인가 |
+| **Decision** | 단일 Go 바이너리로 모든 게임 로직 포함. 서비스 간 통신 오버헤드가 20Hz 틱 예산에 치명적 |
+| **Consequences** | (+) 네트워크 홉 없음, 배포 단순, 디버깅 용이. (-) 수평 확장 시 Room Sharding 필요 (Phase 2 Redis Pub/Sub) |
+
+### ADR-017: In-Memory State + JSON File Persistence
+
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | 게임 상태 저장소. (A) PostgreSQL/Redis, (B) 인메모리 + JSON 파일, (C) 완전 인메모리 |
+| **Decision** | 게임 상태는 완전 인메모리. 영구 데이터(Agent 훈련, Player 진행도)만 JSON 파일로 디스크 저장 |
+| **Consequences** | (+) 초저지연, DB 의존성 없음, 배포 단순. (-) 서버 재시작 시 게임 상태 손실 (5분 라운드이므로 수용 가능), JSON 파일 규모 제한 (~15MB) |
+
+### ADR-018: 2D Canvas First → 3D R3F Gradual Migration
+
+| 항목 | 내용 |
+|------|------|
+| **Status** | Accepted |
+| **Context** | 인게임 렌더링 방식. (A) 즉시 3D R3F, (B) 2D Canvas → 점진 전환, (C) 2D만 유지 |
+| **Decision** | Phase 1~3은 2D Canvas (MC 스프라이트), Phase 4+에서 3D R3F 전환 (로비와 통일). R3F 인프라는 로비에서 이미 검증 |
+| **Consequences** | (+) 빠른 MVP, 성능 안정, 점진적 비주얼 개선. (-) 2D 에셋 + 3D 에셋 이중 작업 |
 
 ---
 
-### ADR-004: In-Memory State with JSON Persistence
+## 14. Open Questions
 
-**Status**: Accepted (Phase 1-4), Superseded by DB in Phase 5+
-
-**Context**: Agent profiles, build performance data, RP points, and quest progress need persistence. Options: database from day 1, or lightweight JSON files.
-
-**Decision**: Phase 1-4 use in-memory state with JSON file backup on server filesystem. No database dependency. Phase 5+ migrates to PostgreSQL.
-
-**Consequences**:
-- Positive: Zero infrastructure overhead. Deployment stays simple (single Railway process). Development velocity maximized.
-- Negative: Data loss on server restart (JSON backup is periodic, not transactional). No multi-server scaling. No complex queries.
-- Mitigation: Agent profiles are small (< 1KB each). JSON backup every 60 seconds. Railway has persistent filesystem across deploys.
-
----
-
-### ADR-005: Bot Build Path System
-
-**Status**: Accepted
-
-**Context**: Bots need to make level-up decisions that create interesting and varied gameplay. Options: random selection, hardcoded sequences, or build path system.
-
-**Decision**: 5 predefined build paths (Berserker, Tank, Speedster, Vampire, Scholar) randomly assigned to bots on creation. Each path defines upgrade priority + phase-based strategy transitions.
-
-**Consequences**:
-- Positive: Diverse bot behaviors create varied gameplay. Players encounter different "meta" builds. Build paths can be tuned for balance.
-- Negative: 5 paths may become predictable after many rounds.
-- Mitigation: Phase 4+ introduces "Adaptive" and "Experimenter" bot personalities that learn from round results.
-
-## 18. Open Questions
-
-| # | Question | Impact | Decision Needed By |
-|---|----------|--------|--------------------|
-| OQ-1 | Should Ability auto-trigger be fully server-controlled or should agents set priority order? | Medium — affects Agent API complexity | Phase 2 start |
-| OQ-2 | ~~Should arena shrink be linear or phased?~~ **Resolved**: Linear -600px/min matching Plan §8.2 | — | Resolved |
-| OQ-3 | Should dead agents become spectators automatically or require opt-in? | Low — UX decision | Phase 3 client work |
-| OQ-4 | Should hidden synergies have any server-side hints or be purely discovery-based? | Low — affects hint system complexity | Phase 2 |
-| OQ-5 | Should the Upgrade Altar (instant level-up) respawn after arena shrink removes its position? | Medium — affects late-game strategy | Phase 2 map objects |
-| OQ-6 | Should bot names reflect their build path (e.g., "Bot_Berserker_3") for transparency? | Low — UX preference | Phase 1 |
-| OQ-7 | What is the minimum mass threshold below which aura damage is reduced (to prevent instant-death chains)? | High — affects combat balance | Phase 1 combat testing |
-| OQ-8 | Should the 30-second grace period apply to bots or only human players? | Medium — affects early game density | Phase 1 |
+| # | 질문 | 영향 범위 | 결정 시점 |
+|---|------|----------|----------|
+| Q1 | **MessagePack 전환 시점**: JSON 필드 약어만으로 5,000 CCU 대역폭 충분한가? | 네트워크 | Phase 1 부하 테스트 후 |
+| Q2 | **Redis 필요 시점**: 단일 인스턴스 한계 도달 시점? 현실적 CCU 예상? | 인프라 | 서비스 런칭 후 |
+| Q3 | **Agent API 인증**: API Key만으로 충분? OAuth2 필요? | 보안 | Phase 4 |
+| Q4 | **3D R3F 전환 성능**: 100 에이전트 InstancedMesh 모바일 성능? | 렌더링 | Phase 3 프로토타입 |
+| Q5 | **Bot AI 고도화**: 규칙 기반 → 강화학습/ML 전환? | AI | Phase 5+ |
+| Q6 | **영구 저장소 전환**: JSON 파일 → SQLite/PostgreSQL 시점? | 데이터 | 사용자 1,000명 초과 시 |
+| Q7 | **글로벌 배포**: 한국 사용자 대상 US-West 서버 레이턴시 수용 가능? | 인프라 | 한국 사용자 유입 시 |
+| Q8 | **모바일 전용 클라이언트**: React Native / PWA / 웹뷰? | 클라이언트 | Phase 5+ |
 
 ---
 
-*Generated by DAVINCI /da:system — 2026-03-06*
+## Appendix A: Cross-Reference Map
+
+| 아키텍처 섹션 | 참조 기획서 |
+|-------------|-----------|
+| §5.1 WS Layer | `v10-go-server-plan.md` §4, §6 |
+| §5.2 Game Layer | `v10-go-server-plan.md` §5, `v10-survival-roguelike-plan.md` §2-5 |
+| §5.4-5.5 Client | `v10-3d-graphics-plan.md` Part A, `v10-ui-ux-plan.md` §3-9 |
+| §7 Protocol | `v10-go-server-plan.md` §6.2-6.3 |
+| §8 Data Model | `v10-survival-roguelike-plan.md` §5B.2, §4, §9 |
+| §10 Performance | `v10-go-server-plan.md` §8-9 |
+| §12 Deployment | `v10-go-server-plan.md` §9.3 |
+
+## Appendix B: Concurrency Model Summary
+
+```
+main goroutine
+├── [1] HTTP Server              (chi.ListenAndServe)
+├── [1] WS Hub                  (channel-based, lock-free)
+├── [1] RoomManager             (room lifecycle)
+│   ├── [N] Room × 50           (독립 20Hz game loop)
+│   └── [1] Lobby Broadcaster   (1Hz rooms_update)
+├── [1] Signal Watcher          (SIGINT/SIGTERM → graceful shutdown)
+│
+Per WebSocket Connection:
+├── [1] ReadPump                (클라이언트 → 서버)
+├── [1] WritePump               (서버 → 클라이언트)
+└── [1] Buffered channel (64)   (백프레셔, 느린 클라이언트 추방)
+
+Total (5,000 CCU): ~10,055 goroutines ≈ 20MB stack memory
+```
+
+## Appendix C: Development Roadmap Alignment
+
+| Phase | Steps | 아키텍처 의존성 |
+|-------|-------|---------------|
+| Phase 0 (S01~S12) | Go 인프라 | §4.2 Server Container, §5.1 WS Layer, §12 Deployment |
+| Phase 1 (S13~S21) | 게임 시스템 | §5.2 Game Layer, §8 Data Model |
+| Phase 1a (S22~S26) | Room/Bot | §5.2 RoomManager, §6.4 Room State Machine |
+| Phase 2 (S27~S32) | 밸런스/배포 | §10 Performance, §12 Infrastructure |
+| Phase 3 (S33~S45) | 클라이언트 | §4.2 Client Container, §5.4-5.5 Client Layers |
+| Phase 4 (S46~S52) | Agent API | §7.2 REST API, §9.2 Authentication |
+| Phase 5 (S53~S59) | 메타/AI | §8.6 Persistent Data, §7.2 Progression API |

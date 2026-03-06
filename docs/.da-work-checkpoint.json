@@ -1,0 +1,25 @@
+{
+  "pipeline": "da:work",
+  "execution_mode": "roadmap",
+  "plan_file": "docs/designs/v10-survival-roguelike-plan.md",
+  "roadmap_file": "docs/designs/v10-development-roadmap.md",
+  "ref_docs": ["docs/designs/v10-go-server-plan.md", "docs/designs/v10-3d-graphics-plan.md", "docs/designs/v10-ui-ux-plan.md"],
+  "project_type": "GAME",
+  "current_stage": 1,
+  "current_phase": 0,
+  "current_step": null,
+  "total_phases": 7,
+  "total_steps": 59,
+  "phases": [
+    {"name": "Phase 0 — Go 서버 코어 인프라", "steps": "S01~S12", "step_count": 12, "design_needed": false, "status": "pending"},
+    {"name": "Phase 1 — Go 게임 시스템 포팅", "steps": "S13~S21", "step_count": 9, "design_needed": false, "status": "pending"},
+    {"name": "Phase 1a — Room & Bot System", "steps": "S22~S26", "step_count": 5, "design_needed": false, "status": "pending"},
+    {"name": "Phase 2 — Abilities + 밸런스 + 배포", "steps": "S27~S32", "step_count": 6, "design_needed": false, "status": "pending"},
+    {"name": "Phase 3 — Client 통합 + Rendering + Lobby", "steps": "S33~S45", "step_count": 13, "design_needed": true, "status": "pending"},
+    {"name": "Phase 4 — Agent Integration + Training", "steps": "S46~S52", "step_count": 7, "design_needed": true, "status": "pending"},
+    {"name": "Phase 5 — Meta + Coach/Analyst + Polish", "steps": "S53~S59", "step_count": 7, "design_needed": true, "status": "pending"}
+  ],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
+  "last_skill": "da:system",
+  "last_update": "2026-03-06T00:01:00Z"
+}

@@ -8,6 +8,9 @@
 > **Rebranding**: Snake Arena → **Agent Survivor** / 뱀 캐릭터 → 마인크래프트 스타일 에이전트
 > **Tech Stack**: **Go 1.24 + gorilla/websocket + chi** (서버) / Next.js 15 + R3F (클라이언트) / Railway + Vercel (배포)
 > **Server Design**: [`docs/designs/v10-go-server-plan.md`](v10-go-server-plan.md) — 상세 Go 서버 아키텍처
+> **3D Graphics**: [`docs/designs/v10-3d-graphics-plan.md`](v10-3d-graphics-plan.md) — 3D 렌더링 아키텍처 + 전투/맵/UI 수치 상세
+> **Development Roadmap**: [`docs/designs/v10-development-roadmap.md`](v10-development-roadmap.md) — S01~S59 단계별 구현 순서 (DAG 의존관계)
+> **UI/UX Design**: [`docs/designs/v10-ui-ux-plan.md`](v10-ui-ux-plan.md) — 전체 화면 설계, 컴포넌트 스펙, 모바일 반응형, 접근성
 >
 > ### ⚡ 구현 현황
 > | 시스템 | TS 프로토타입 | Go 서버 | 비고 |
@@ -2226,6 +2229,145 @@ Phase 5: Meta + AI Agents + Polish ── 1.5주 ▷ ⏳ (Coach, Analyst, 메타
 
 > **TS 프로토타입 처분**: Go 서버 Phase 2 완료 + 통합 테스트 통과 후 `apps/server/` 폴더 제거.
 > 그 전까지는 로직 레퍼런스로 유지.
+
+---
+
+## 구현 로드맵
+
+<!-- ★ da:work Stage 0이 이 섹션을 자동 파싱합니다 -->
+<!-- 상세 SNN 스텝: docs/designs/v10-development-roadmap.md (S01~S59) -->
+<!-- 각 Phase의 세부 태스크 설명은 §12 참조 -->
+
+> **모드**: roadmap (별도 로드맵 파일 참조)
+> **로드맵 파일**: [`docs/designs/v10-development-roadmap.md`](v10-development-roadmap.md)
+> **총 일정**: ~13주 (병렬화 시 ~11주)
+> **Phase 수**: 7개 (Phase 0 ~ Phase 5)
+> **Step 수**: S01 ~ S59
+
+### Phase 0: Go 서버 코어 인프라
+
+| Task | 설명 |
+|------|------|
+| Go 프로젝트 초기화 | go.mod, 디렉토리 구조, Config, Main, Graceful Shutdown |
+| HTTP Router + Middleware | chi/v5 라우터, CORS, Health 엔드포인트 |
+| WebSocket Hub | channel-based, lock-free Hub + Client ReadPump/WritePump |
+| WS Protocol | JSON `{e, d}` 프레임, Socket.IO 이벤트 1:1 매핑 |
+| Domain Types + Constants | Agent, Orb, Position, Event 타입 + 게임 상수 |
+| Rate Limiter + Dockerfile | 입력 제한 + Railway 배포 설정 |
+
+- **design**: N (서버 인프라 중심)
+- **verify**: `go build ./...` 성공, WebSocket echo 테스트 통과, Health 엔드포인트 200 응답
+- **ref**: `v10-go-server-plan.md` §3-4, §6
+- **blocked_by**: none
+- **예상**: 2주
+
+### Phase 1: Go 게임 시스템 포팅
+
+| Task | 설명 |
+|------|------|
+| Agent Entity | 물리, 전투, 빌드 — TS `AgentEntity.ts` 1:1 포팅 |
+| SpatialHash | Grid 기반 공간 해시 |
+| CollisionSystem | Aura DPS + Dash 충돌 |
+| OrbManager | 스폰, 수집, death orb |
+| ArenaShrink | 수축 타이머 + 경계 밖 패널티 |
+| UpgradeSystem | Tome/Ability/Synergy 정의 + 레벨업 로직 |
+| Arena | 20Hz game loop 오케스트레이터 |
+| StateSerializer | 뷰포트 컬링 + 직렬화 |
+| Leaderboard | 정렬 + 캐싱 |
+
+- **design**: N (서버 로직 포팅)
+- **verify**: 각 시스템 유닛 테스트 통과, Arena 20Hz 루프 < 2ms/tick, TS 레퍼런스 대비 로직 동일성 확인
+- **ref**: `v10-go-server-plan.md` §5, TS 프로토타입 (`apps/server/src/game/`)
+- **blocked_by**: Phase 0
+- **예상**: 2주
+
+### Phase 1a: Go Room & Bot System
+
+| Task | 설명 |
+|------|------|
+| Room State Machine | waiting→countdown→playing→ending→cooldown 상태 전이 |
+| RoomManager | 5개 Room 생명주기, Quick Join, 플레이어-룸 매핑 |
+| BotManager + BotBehaviors | 봇 생성, 자동조종, 빌드 패스, 1 Life 교체 정책 |
+| Lobby Broadcasting | 1Hz rooms_update 브로드캐스트 |
+| 로컬 통합 테스트 | Go 서버 + 기존 클라이언트 연동 확인 |
+
+- **design**: N (서버 로직)
+- **verify**: Room 상태 전이 테스트, 봇 15마리 룸 참여 확인, 기존 클라이언트(Socket.IO) 임시 어댑터 연결 통과
+- **ref**: TS 프로토타입 (`Room.ts`, `RoomManager.ts`, `BotManager.ts`)
+- **blocked_by**: Phase 1
+- **예상**: 1주
+
+### Phase 2: Abilities + 밸런스 + 배포
+
+| Task | 설명 |
+|------|------|
+| 맵 오브젝트 | XP Shrine, Healing Spring, Upgrade Altar, Speed Gate |
+| Tome vs Ability 의사결정 로직 | 봇 레벨업 시 시너지/빌드패스 기반 선택 알고리즘 |
+| 밸런스 1차 튜닝 | 100+ 봇 시뮬레이션, DPS/HP/XP 커브 조정 |
+| Railway Go 서버 배포 | Dockerfile + 헬스체크 + CORS 설정 |
+
+- **design**: N (로직 + 배포)
+- **verify**: 맵 오브젝트 스폰/리스폰 확인, 100봇 5분 라운드 완주, Railway 배포 성공 + 헬스체크 200
+- **ref**: `v10-survival-roguelike-plan.md` §9, §12.2a
+- **blocked_by**: Phase 1a
+- **예상**: 1주
+
+### Phase 3: Client 통합 + Rendering + Lobby
+
+| Task | 설명 |
+|------|------|
+| WebSocket 어댑터 | Socket.IO → native WebSocket 전환 (useWebSocket.ts) |
+| useSocket.ts 수정 | 어댑터 연동 + snake→agent 리네이밍 |
+| Agent 캐릭터 렌더링 | 2D 16×16 MC 스프라이트 렌더러 전면 리라이트 (764줄) |
+| AgentSkin 스프라이트 제작 | 12 Common + 18 해금 = 30종 MC 캐릭터 에셋 |
+| interpolateAgents | 세그먼트→위치 보간 전환 |
+| 캐릭터 커스터마이저 UI | 탭 기반 CharacterCreator (체형/색상/얼굴/장비) |
+| 인게임 UI 컴포넌트 | LevelUpOverlay, BuildHUD, XPBar, ShrinkWarning, SynergyPopup |
+| RoundResult 확장 | 빌드+시너지+AI분석 표시 |
+| 오라/이펙트/맵 오브젝트 | 전투 오라, 빌드 비주얼, MC 블록 구조물 렌더링 |
+| 로비 전체 재설계 | 10개 항목 — 에이전트 프리뷰, 크리에이터, 리브랜딩 |
+
+- **design**: Y (캐릭터 렌더링 + 인게임 HUD + 로비 UI 전면 재설계)
+- **verify**: WS 연결 + 게임 상태 수신 확인, MC 캐릭터 렌더링 정상, 레벨업 UI 동작, 로비→게임 전환 정상, 모바일 반응형 확인
+- **ref**: `v10-3d-graphics-plan.md` Part A, `v10-ui-ux-plan.md` §3-7, `v10-survival-roguelike-plan.md` §5B, §12.3
+- **blocked_by**: Phase 2
+- **예상**: 3.5주
+
+### Phase 4: Agent Integration + Training UI
+
+| Task | 설명 |
+|------|------|
+| Agent level_up + choose_upgrade | 에이전트 레벨업 이벤트 프로토콜 구현 |
+| Commander Mode 확장 | v9→v10 마이그레이션, 전투 스타일/존 이동 명령 |
+| 빌드 패스 시스템 | 5종 프리셋 빌드 패스 + 선택 알고리즘 |
+| 에이전트 훈련 API | PUT /training, 빌드 프로필, 규칙 편집 |
+| 메모리/학습 데이터 저장 | 에이전트별 JSON 파일 기반 |
+| Training Console UI | 접이식 패널 — BuildProfileEditor, CombatRulesEditor 등 |
+| observe_game 확장 | v10 필드 추가 (build, zone, nearbyThreats, mapObjects) |
+
+- **design**: Y (Training Console UI)
+- **verify**: 에이전트 WebSocket 접속 + level_up/choose_upgrade 정상, Training Console CRUD, observe_game v10 필드 확인
+- **ref**: `v10-survival-roguelike-plan.md` §6-7, §12.4
+- **blocked_by**: Phase 3
+- **예상**: 1.5주
+
+### Phase 5: Meta + Coach/Analyst + Polish
+
+| Task | 설명 |
+|------|------|
+| RP 시스템 + 잠금 해제 | Reputation Points 누적 + 3번째 Ability 슬롯 등 해금 |
+| 퀘스트 시스템 (8종) | 도전 과제 + RP 보상 |
+| 글로벌 리더보드 확장 | 빌드 승률, 시너지 발견, 에이전트 순위 |
+| 에이전트 성격 프리셋 (6종) | Aggro/Cautious/Scholar/Gambler/Balanced/Adaptive |
+| Coach Agent | 실시간 AI 코칭 채팅 버블 (0.5~1Hz) |
+| Analyst Agent | 라운드 종료 후 AI 전략 분석 패널 |
+| 최종 밸런스 + 통합 테스트 | 전체 시스템 E2E, 멀티플레이어 QA |
+
+- **design**: Y (Coach/Analyst UI)
+- **verify**: RP 누적/해금 동작, 퀘스트 완료 보상 지급, Coach 메시지 수신, Analyst 분석 표시, 5분 풀 라운드 E2E 통과
+- **ref**: `v10-survival-roguelike-plan.md` §10, §12.5
+- **blocked_by**: Phase 4
+- **예상**: 1.5주
 
 ---
 
