@@ -24,6 +24,7 @@ import { Scene } from '@/components/3d/Scene';
 import { SkyBox } from '@/components/3d/SkyBox';
 import { PlayCamera } from '@/components/3d/PlayCamera';
 import { GameLoop } from '@/components/3d/GameLoop';
+import { AgentInstances } from '@/components/3d/AgentInstances';
 
 // 기존 HUD 오버레이 (Canvas 밖 HTML)
 import { DeathOverlay } from './DeathOverlay';
@@ -67,7 +68,21 @@ export function GameCanvas3D({
   const boostRef = useRef(false);
   const inputSeqRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
+  const elapsedRef = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // 경과 시간 업데이트 (rAF 기반)
+  useEffect(() => {
+    let raf = 0;
+    let lastTime = performance.now();
+    const tick = (now: number) => {
+      elapsedRef.current += (now - lastTime) / 1000;
+      lastTime = now;
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
 
   // ─── 입력 처리 (마우스 + 키보드) ───
   useEffect(() => {
@@ -240,9 +255,11 @@ export function GameCanvas3D({
         {/* 4. SkyBox — 하늘 돔 + 구름 */}
         <SkyBox />
 
+        {/* 5. AgentInstances — MC 복셀 캐릭터 InstancedMesh 렌더링 */}
+        <AgentInstances agentsRef={agentsRef} elapsedRef={elapsedRef} />
+
         {/* 향후 Phase에서 추가:
           <ZoneTerrain />
-          <AgentInstances agentsRef={agentsRef} />
           <OrbInstances />
           <ArenaBoundary />
           <EffectsLayer />
