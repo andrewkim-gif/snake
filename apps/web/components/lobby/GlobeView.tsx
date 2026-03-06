@@ -22,7 +22,6 @@ interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
   selectedCountry?: string | null;
   onCountryClick?: (iso3: string, name: string) => void;
-  autoRotate?: boolean;
   style?: React.CSSProperties;
 }
 
@@ -31,8 +30,7 @@ function GlobeObject({
   countryStates,
   selectedCountry,
   onCountryClick,
-  autoRotate = true,
-}: Omit<GlobeViewProps, 'style'>) {
+}: Omit<GlobeViewProps, 'style' | 'autoRotate'>) {
   const globeRef = useRef<ThreeGlobeInstance | null>(null);
   const groupRef = useRef<THREE.Group>(null);
   const [geoData, setGeoData] = useState<GeoJSONData | null>(null);
@@ -72,9 +70,7 @@ function GlobeObject({
       const globe = new ThreeGlobeClass!()
         .globeImageUrl('')
         .showGlobe(true)
-        .showAtmosphere(true)
-        .atmosphereColor('#1A3A5C')
-        .atmosphereAltitude(0.25)
+        .showAtmosphere(false)
         .polygonsData(geoData.features.filter((f) => f.geometry.type !== 'Point'))
         .polygonCapColor((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
@@ -83,8 +79,8 @@ function GlobeObject({
           if (state?.sovereignFaction) return sovereigntyColors.neutral;
           return sovereigntyColors.unclaimed;
         })
-        .polygonSideColor(() => 'rgba(26, 42, 64, 0.6)')
-        .polygonStrokeColor(() => '#1E293B')
+        .polygonSideColor(() => 'rgba(50, 85, 120, 0.6)')
+        .polygonStrokeColor(() => '#254565')
         .polygonAltitude((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
@@ -92,11 +88,12 @@ function GlobeObject({
           return 0.006;
         });
 
-      // Globe material: 어두운 바다
+      // Globe material: 은은히 발광하는 딥 네이비 바다
       const globeMat = globe.globeMaterial() as THREE.MeshPhongMaterial;
-      globeMat.color = new THREE.Color('#0A0E14');
-      globeMat.emissive = new THREE.Color('#05080C');
-      globeMat.shininess = 5;
+      globeMat.color = new THREE.Color('#101D2E');
+      globeMat.emissive = new THREE.Color('#0C1828');
+      globeMat.emissiveIntensity = 0.4;
+      globeMat.shininess = 20;
 
       if (groupRef.current) {
         // 이전 globe 제거
@@ -137,16 +134,27 @@ function GlobeObject({
       });
   }, [countryStates, selectedCountry, geoData, globeReady]);
 
-  // 자동 회전
-  useFrame(() => {
-    if (autoRotate && groupRef.current) {
-      groupRef.current.rotation.y += 0.0005;
-    }
-  });
+  // tick 유지 (globe 내부 애니메이션용)
+  useFrame(() => {});
+
+  // 드래그 vs 클릭 구분 — 마우스다운 위치 기록
+  const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
+  const CLICK_THRESHOLD = 5; // px — 이 이하 이동만 클릭으로 인정
+
+  const handlePointerDown = useCallback((e: ThreeEvent<PointerEvent>) => {
+    pointerDownPos.current = { x: e.nativeEvent.clientX, y: e.nativeEvent.clientY };
+  }, []);
 
   // 클릭 핸들러 (group 레벨에서 raycasting)
   const handleClick = useCallback((e: ThreeEvent<MouseEvent>) => {
     if (!onCountryClick || !globeRef.current) return;
+
+    // 드래그 감지: 마우스다운과 마우스업 거리가 threshold 초과 시 무시
+    if (pointerDownPos.current) {
+      const dx = e.nativeEvent.clientX - pointerDownPos.current.x;
+      const dy = e.nativeEvent.clientY - pointerDownPos.current.y;
+      if (Math.sqrt(dx * dx + dy * dy) > CLICK_THRESHOLD) return;
+    }
 
     // three-globe polygon meshes are children of the globe object.
     // Traverse up from the hit object to find the polygon index.
@@ -184,13 +192,14 @@ function GlobeObject({
   }, [onCountryClick]);
 
   return (
-    <group ref={groupRef} onClick={handleClick} />
+    <group ref={groupRef} onPointerDown={handlePointerDown} onClick={handleClick} />
   );
 }
 
-// 대기 글로우 이펙트
+// 대기 글로우 이펙트 (듀얼 레이어: 외부 헤일로 + 내부 림 라이트)
 function AtmosphereGlow() {
-  const material = useMemo(() => {
+  // 외부 글로우 — 부드러운 확산 헤일로 (지구본 주변의 은은한 푸른 빛)
+  const outerMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
@@ -203,7 +212,7 @@ function AtmosphereGlow() {
         varying vec3 vNormal;
         void main() {
           float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
-          gl_FragColor = vec4(0.1, 0.3, 0.6, 1.0) * intensity;
+          gl_FragColor = vec4(0.18, 0.45, 0.9, 1.0) * intensity * 0.6;
         }
       `,
       side: THREE.BackSide,
@@ -212,10 +221,74 @@ function AtmosphereGlow() {
     });
   }, []);
 
+  // 내부 림 — 지구본 가장자리의 날카로운 발광 (세련된 에지 글로우)
+  const rimMaterial = useMemo(() => {
+    return new THREE.ShaderMaterial({
+      vertexShader: `
+        varying vec3 vNormal;
+        void main() {
+          vNormal = normalize(normalMatrix * normal);
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        varying vec3 vNormal;
+        void main() {
+          float rim = 1.0 - dot(vNormal, vec3(0, 0, 1.0));
+          float intensity = pow(rim, 3.5) * 0.5;
+          gl_FragColor = vec4(0.3, 0.55, 1.0, intensity);
+        }
+      `,
+      side: THREE.FrontSide,
+      blending: THREE.AdditiveBlending,
+      transparent: true,
+      depthWrite: false,
+    });
+  }, []);
+
   return (
-    <mesh material={material}>
-      <sphereGeometry args={[105, 32, 32]} />
-    </mesh>
+    <>
+      {/* 외부 확산 헤일로 — 지구본에 밀착 (r=104, globe=100) */}
+      <mesh material={outerMaterial}>
+        <sphereGeometry args={[104, 32, 32]} />
+      </mesh>
+      {/* 내부 림 글로우 — 표면 바로 위 (r=101) */}
+      <mesh material={rimMaterial}>
+        <sphereGeometry args={[101, 48, 48]} />
+      </mesh>
+    </>
+  );
+}
+
+// 줌 레벨에 따라 회전 속도 동적 조절
+const MIN_DIST = 150;
+const MAX_DIST = 500;
+const MIN_ROTATE_SPEED = 0.1;
+const MAX_ROTATE_SPEED = 0.5;
+
+function AdaptiveControls() {
+  const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null);
+  const { camera } = useThree();
+
+  useFrame(() => {
+    if (!controlsRef.current) return;
+    const dist = camera.position.length();
+    const t = Math.max(0, Math.min(1, (dist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
+    (controlsRef.current as unknown as { rotateSpeed: number }).rotateSpeed =
+      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t;
+  });
+
+  return (
+    <OrbitControls
+      ref={controlsRef}
+      enablePan={false}
+      minDistance={MIN_DIST}
+      maxDistance={MAX_DIST}
+      enableDamping
+      dampingFactor={0.05}
+      rotateSpeed={MAX_ROTATE_SPEED}
+      zoomSpeed={0.8}
+    />
   );
 }
 
@@ -223,11 +296,10 @@ export function GlobeView({
   countryStates,
   selectedCountry,
   onCountryClick,
-  autoRotate = true,
   style,
 }: GlobeViewProps) {
   return (
-    <div style={{ width: '100%', height: '100%', background: '#0A0E14', ...style }}>
+    <div style={{ width: '100%', height: '100%', background: '#0A0F1A', ...style }}>
       <Canvas
         camera={{
           position: [0, 0, 300],
@@ -241,28 +313,19 @@ export function GlobeView({
           powerPreference: 'high-performance',
         }}
       >
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[100, 100, 100]} intensity={0.8} />
-        <directionalLight position={[-100, -50, -100]} intensity={0.3} color="#4488AA" />
+        <ambientLight intensity={0.85} />
+        <directionalLight position={[100, 100, 100]} intensity={1.0} />
+        <directionalLight position={[-100, -50, -100]} intensity={0.5} color="#4A90D9" />
 
         <GlobeObject
           countryStates={countryStates}
           selectedCountry={selectedCountry}
           onCountryClick={onCountryClick}
-          autoRotate={autoRotate}
         />
 
         <AtmosphereGlow />
 
-        <OrbitControls
-          enablePan={false}
-          minDistance={150}
-          maxDistance={500}
-          enableDamping
-          dampingFactor={0.05}
-          rotateSpeed={0.5}
-          zoomSpeed={0.8}
-        />
+        <AdaptiveControls />
       </Canvas>
     </div>
   );

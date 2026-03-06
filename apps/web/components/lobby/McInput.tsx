@@ -6,7 +6,7 @@
  */
 
 import { useState, type InputHTMLAttributes } from 'react';
-import { SK, SKFont, bodyFont, handDrawnRadius } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
 interface McInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -16,15 +16,15 @@ export function McInput({ style, ...rest }: McInputProps) {
   return (
     <input
       style={{
-        backgroundColor: SK.bg,
-        border: `1.5px solid ${focused ? SK.borderFocus : SK.border}`,
-        borderRadius: handDrawnRadius(2),
+        backgroundColor: 'rgba(12, 18, 32, 0.6)',
+        border: `1px solid ${focused ? SK.borderFocus : SK.border}`,
+        borderRadius: '4px',
         color: SK.textPrimary,
         fontFamily: bodyFont,
         fontWeight: 500,
-        fontSize: '16px',
-        padding: '10px 14px',
-        minHeight: '44px',
+        fontSize: '14px',
+        padding: '8px 12px',
+        minHeight: '38px',
         outline: 'none',
         width: '100%',
         boxSizing: 'border-box',

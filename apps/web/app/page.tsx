@@ -1,25 +1,23 @@
 'use client';
 
 /**
- * AI World War — Main Page
- * 작전 지도 / 워룸 컨셉: 다크 + 손그림 아웃라인 + 군사 톤
+ * AI World War — Main Page (v12)
+ * CIC (Combat Information Center) 디자인
+ * LobbyHeader + WorldView + Agent Setup + NewsFeed 통합
  */
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
-import { RoomList } from '@/components/lobby/RoomList';
-import { RecentWinnersPanel } from '@/components/lobby/RecentWinnersPanel';
-import { McPanel } from '@/components/lobby/McPanel';
-import { McButton } from '@/components/lobby/McButton';
+import { LobbyHeader } from '@/components/lobby/LobbyHeader';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
-import { PixelLogo } from '@/components/lobby/PixelLogo';
+import { NewsFeed } from '@/components/lobby/NewsFeed';
 import { useSocket } from '@/hooks/useSocket';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 
-const LobbyScene3D = dynamic(
-  () => import('@/components/3d/LobbyScene3D').then(m => ({ default: m.LobbyScene3D })),
+const WorldView = dynamic(
+  () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
   { ssr: false },
 );
 const GameCanvas3D = dynamic(
@@ -27,16 +25,22 @@ const GameCanvas3D = dynamic(
   { ssr: false },
 );
 
+const NEWS_FEED_HEIGHT = 36;
+
 export default function Home() {
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing'>('lobby');
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
   const [fadeOut, setFadeOut] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(true);
+  const [newsExpanded, setNewsExpanded] = useState(false);
+  const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
   const {
     dataRef, uiState, joinRoom, leaveRoom, sendInput,
     respawn, chooseUpgrade, dismissSynergyPopup,
   } = useSocket();
 
+  // localStorage 복원
   useEffect(() => {
     const savedName = localStorage.getItem('agent-survivor-name');
     const savedSkin = localStorage.getItem('agent-survivor-skin');
@@ -51,31 +55,40 @@ export default function Home() {
     localStorage.setItem('agent-survivor-skin', String(skinId));
   }, [skinId]);
 
-  const handleQuickJoin = useCallback(() => {
+  // 뷰 전환 (fade)
+  const handleToggleView = useCallback(() => {
+    setViewMode(prev => prev === 'globe' ? 'map' : 'globe');
+  }, []);
+
+  // 국가 아레나 진입
+  const handleEnterArena = useCallback((iso3: string) => {
     const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
     setFadeOut(true);
     setTimeout(() => {
-      joinRoom('quick', name, skinId);
+      joinRoom(iso3, name, skinId);
       setMode('transitioning');
       setFadeOut(false);
     }, 300);
   }, [joinRoom, playerName, skinId]);
 
-  const handleJoinRoom = useCallback((roomId: string) => {
-    const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
+  // 관전
+  const handleSpectate = useCallback((iso3: string) => {
+    const name = playerName || `Spectator${Math.floor(Math.random() * 999)}`;
     setFadeOut(true);
     setTimeout(() => {
-      joinRoom(roomId, name, skinId);
+      joinRoom(iso3, name, skinId);
       setMode('transitioning');
       setFadeOut(false);
     }, 300);
   }, [joinRoom, playerName, skinId]);
 
+  // 퇴장
   const handleExit = useCallback(() => {
     leaveRoom();
     setMode('lobby');
   }, [leaveRoom]);
 
+  // 전환 타이머
   useEffect(() => {
     if (mode !== 'transitioning') return;
     let cancelled = false;
@@ -85,20 +98,22 @@ export default function Home() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [mode]);
 
+  // --- 전환 화면 ---
   if (mode === 'transitioning') {
     return (
       <div style={{
         width: '100vw', height: '100vh', display: 'flex',
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: SK.bg, fontFamily: headingFont,
-        fontSize: '24px', color: SK.textPrimary,
+        backgroundColor: SK.bg, fontFamily: bodyFont,
+        fontWeight: 700, fontSize: '20px', color: SK.textPrimary,
         letterSpacing: '3px',
       }}>
-        DEPLOYING...
+        DEPLOYING TO ARENA...
       </div>
     );
   }
 
+  // --- 게임 화면 ---
   if (mode === 'playing') {
     return (
       <GameCanvas3D
@@ -115,6 +130,7 @@ export default function Home() {
     );
   }
 
+  // --- 로비 화면: CIC 디자인 ---
   return (
     <div style={{
       width: '100vw',
@@ -125,131 +141,139 @@ export default function Home() {
       transition: 'opacity 300ms ease',
     }}>
       <WelcomeTutorial />
-      <LobbyScene3D />
 
-      {/* 다크 오버레이 (3D 씬 위에 비네팅 효과) */}
-      <div style={{
-        position: 'absolute', inset: 0, zIndex: 5,
-        background: `radial-gradient(
-          ellipse at center,
-          rgba(17, 17, 17, 0.6) 0%,
-          rgba(17, 17, 17, 0.85) 60%,
-          rgba(17, 17, 17, 0.95) 100%
-        )`,
-        pointerEvents: 'none',
-      }} />
+      {/* 전체 화면 지구본/맵 */}
+      <WorldView
+        viewMode={viewMode}
+        onEnterArena={handleEnterArena}
+        onSpectate={handleSpectate}
+        bottomOffset={NEWS_FEED_HEIGHT}
+      />
 
-      {/* UI 오버레이 */}
+      {/* CIC 헤더 바 */}
+      <LobbyHeader
+        connected={uiState.connected}
+        viewMode={viewMode}
+        onToggleView={handleToggleView}
+      />
+
+      {/* Agent Setup 패널 — 좌측 */}
       <div style={{
-        position: 'relative', zIndex: 10,
-        width: '100%', height: '100%',
-        display: 'flex', flexDirection: 'column',
-        alignItems: 'center', justifyContent: 'center',
-        gap: '14px',
-        padding: 'clamp(10px, 3vw, 20px)',
-        overflowY: 'auto',
-        WebkitOverflowScrolling: 'touch' as never,
+        position: 'absolute',
+        top: 68,
+        left: 16,
+        zIndex: 60,
+        maxWidth: '280px',
+        width: 'calc(100vw - 32px)',
       }}>
-        {/* 로고 */}
-        <PixelLogo />
-
-        {/* 연결 상태 */}
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '8px',
-        }}>
+        {setupOpen ? (
           <div style={{
-            width: '6px', height: '6px',
-            borderRadius: '50%',
-            backgroundColor: uiState.connected ? SK.statusOnline : SK.statusOffline,
-            boxShadow: uiState.connected
-              ? `0 0 6px ${SK.green}80`
-              : `0 0 6px ${SK.red}80`,
-          }} />
-          <span style={{
-            fontFamily: bodyFont,
-            fontWeight: 600,
-            fontSize: SKFont.xs,
-            color: uiState.connected ? SK.green : SK.red,
-            letterSpacing: '1px',
-            textTransform: 'uppercase',
+            backgroundColor: SK.glassBg,
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: `1px solid ${SK.glassBorder}`,
+            borderRadius: '6px',
+            padding: '14px',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.5)',
           }}>
-            {uiState.connected ? 'Online' : 'Connecting...'}
-          </span>
-        </div>
-
-        {/* 메인 패널: 2열 레이아웃 */}
-        <div style={{
-          display: 'flex',
-          gap: '14px',
-          maxWidth: '860px',
-          width: '100%',
-          flexWrap: 'wrap',
-          justifyContent: 'center',
-        }}>
-          {/* 좌: 플레이어 설정 + 참가 */}
-          <McPanel style={{ flex: '1 1 340px', maxWidth: '420px', padding: '18px' }}>
+            {/* 헤더 */}
             <div style={{
-              fontFamily: headingFont, fontSize: SKFont.h2,
-              color: SK.textPrimary, marginBottom: '12px',
-              letterSpacing: '2px',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
+              marginBottom: '12px',
             }}>
-              AGENT SETUP
+              <span style={{
+                fontFamily: bodyFont,
+                fontSize: '13px',
+                fontWeight: 700,
+                color: SK.textPrimary,
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+              }}>
+                AGENT SETUP
+              </span>
+              <button
+                onClick={() => setSetupOpen(false)}
+                style={{
+                  background: 'none',
+                  border: `1px solid ${SK.border}`,
+                  borderRadius: '3px',
+                  color: SK.textSecondary,
+                  cursor: 'pointer',
+                  padding: '2px 8px',
+                  fontFamily: bodyFont,
+                  fontSize: SKFont.xs,
+                  fontWeight: 700,
+                  transition: 'all 150ms ease',
+                }}
+              >
+                —
+              </button>
             </div>
 
+            {/* 이름 입력 */}
             <McInput
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Enter callsign..."
-              style={{ marginBottom: '14px' }}
+              style={{ marginBottom: '12px' }}
             />
 
+            {/* 캐릭터 선택 */}
             <CharacterCreator skinId={skinId} onSelect={setSkinId} />
 
-            <div style={{ marginTop: '16px' }}>
-              <McButton
-                variant="green"
-                onClick={handleQuickJoin}
-                disabled={!uiState.connected}
-                style={{ width: '100%', padding: '12px 0', fontSize: SKFont.h3 }}
-              >
-                QUICK DEPLOY
-              </McButton>
+            {/* 안내 문구 */}
+            <div style={{
+              marginTop: '14px',
+              padding: '8px 0 0',
+              textAlign: 'center',
+              fontFamily: bodyFont,
+              fontSize: '10px',
+              color: SK.textMuted,
+              letterSpacing: '1.5px',
+              borderTop: `1px solid ${SK.borderDark}`,
+            }}>
+              CLICK A COUNTRY TO DEPLOY
             </div>
-          </McPanel>
-
-          {/* 우: 룸 리스트 + 최근 우승자 */}
-          <div style={{
-            flex: '1 1 340px', maxWidth: '420px',
-            display: 'flex', flexDirection: 'column', gap: '12px',
-          }}>
-            <McPanel style={{ padding: '16px' }}>
-              <div style={{
-                fontFamily: headingFont, fontSize: SKFont.h2,
-                color: SK.textPrimary, marginBottom: '10px',
-                letterSpacing: '2px',
-              }}>
-                WAR ZONES
-              </div>
-              <RoomList rooms={uiState.rooms} onJoin={handleJoinRoom} />
-            </McPanel>
-
-            <McPanel style={{ padding: '16px' }}>
-              <RecentWinnersPanel winners={uiState.recentWinners} />
-            </McPanel>
           </div>
-        </div>
+        ) : (
+          <button
+            onClick={() => setSetupOpen(true)}
+            style={{
+              fontFamily: bodyFont,
+              fontWeight: 700,
+              fontSize: '10px',
+              color: SK.textSecondary,
+              letterSpacing: '2px',
+              textTransform: 'uppercase',
+              padding: '8px 16px',
+              border: `1px solid ${SK.border}`,
+              borderRadius: '4px',
+              backgroundColor: SK.glassBg,
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
+              cursor: 'pointer',
+              transition: 'all 150ms ease',
+            }}
+          >
+            AGENT SETUP
+          </button>
+        )}
+      </div>
 
-        {/* 하단 버전 */}
-        <div style={{
-          fontFamily: bodyFont,
-          fontWeight: 500,
-          fontSize: SKFont.xs,
-          color: SK.textMuted,
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-        }}>
-          v10.0 alpha
-        </div>
+      {/* 뉴스 피드 — 하단 고정 */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        zIndex: 60,
+      }}>
+        <NewsFeed
+          expanded={newsExpanded}
+          onToggleExpand={() => setNewsExpanded(prev => !prev)}
+        />
       </div>
     </div>
   );

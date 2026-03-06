@@ -21,10 +21,10 @@ export function PixelLogo() {
         userSelect: 'none',
       }}>
         <Image
-          src="/images/logo-ww.png"
+          src="/images/logo-ww-mc.png"
           alt="AI World War"
           width={500}
-          height={280}
+          height={274}
           priority
           onError={() => setImgError(true)}
           style={{
@@ -42,13 +42,13 @@ export function PixelLogo() {
           marginTop: '6px',
           textTransform: 'uppercase',
         }}>
-          Survival Roguelike
+          Multiplayer Survival Roguelike
         </div>
       </div>
     );
   }
 
-  // CSS 폴백 로고 (작전 지도 마커 스타일)
+  // CSS 폴백 로고
   return (
     <div style={{
       display: 'flex',
@@ -57,7 +57,8 @@ export function PixelLogo() {
       userSelect: 'none',
     }}>
       <div style={{
-        fontFamily: headingFont,
+        fontFamily: bodyFont,
+        fontWeight: 800,
         fontSize: 'clamp(24px, 5vw, 36px)',
         color: SK.gold,
         lineHeight: 1,
@@ -66,11 +67,13 @@ export function PixelLogo() {
         AI
       </div>
       <div style={{
-        fontFamily: headingFont,
+        fontFamily: bodyFont,
+        fontWeight: 800,
         fontSize: 'clamp(40px, 10vw, 64px)',
         color: SK.textPrimary,
         lineHeight: 1,
         marginTop: '2px',
+        letterSpacing: '2px',
       }}>
         WORLD WAR
       </div>
@@ -83,7 +86,7 @@ export function PixelLogo() {
         marginTop: '8px',
         textTransform: 'uppercase',
       }}>
-        Survival Roguelike
+        Multiplayer Survival Roguelike
       </div>
     </div>
   );

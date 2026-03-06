@@ -84,6 +84,10 @@ interface AgentInstancesProps {
   agentsRef: React.MutableRefObject<AgentNetworkData[]>;
   /** 경과 시간 ref (초 단위 누적) */
   elapsedRef: React.MutableRefObject<number>;
+  /** 애니메이션 상태 머신 ref (외부 공유용 — Phase 5: EquipmentInstances에서 참조) */
+  stateMachineRef: React.MutableRefObject<AnimationStateMachine | null>;
+  /** 에이전트 ID → 상태 머신 인덱스 매핑 (외부 공유용) */
+  agentIndexMapRef: React.MutableRefObject<Map<string, number>>;
 }
 
 // ─── 애니메이션 헬퍼 ───
@@ -155,7 +159,7 @@ function hideInstance(mesh: THREE.InstancedMesh, idx: number): void {
 
 // ─── Component ───
 
-export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
+export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIndexMapRef }: AgentInstancesProps) {
   // ─── Body 패턴별 IM refs (4 IM) ───
   const bodyRefs = useRef<(THREE.InstancedMesh | null)[]>([null, null, null, null]);
 
@@ -165,14 +169,10 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
   const legLRef = useRef<THREE.InstancedMesh>(null!);
   const legRRef = useRef<THREE.InstancedMesh>(null!);
 
-  // ─── 애니메이션 상태 머신 (60 에이전트 일괄 관리) ───
-  const stateMachineRef = useRef<AnimationStateMachine | null>(null);
+  // ─── 애니메이션 상태 머신 초기화 (외부 ref 사용 — Phase 5: EquipmentInstances와 공유) ───
   if (!stateMachineRef.current) {
     stateMachineRef.current = new AnimationStateMachine(MAX_AGENTS);
   }
-
-  // ─── 활성 에이전트 인덱스 매핑 (id → index) ───
-  const agentIndexMapRef = useRef<Map<string, number>>(new Map());
 
   // ─── Geometry (한 번만 생성) ───
   const geometries = useMemo(() => {

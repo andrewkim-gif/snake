@@ -25,6 +25,8 @@ import { SkyBox } from '@/components/3d/SkyBox';
 import { PlayCamera } from '@/components/3d/PlayCamera';
 import { GameLoop } from '@/components/3d/GameLoop';
 import { AgentInstances } from '@/components/3d/AgentInstances';
+import { EquipmentInstances } from '@/components/3d/EquipmentInstances';
+import type { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
 import { TerrainDeco } from '@/components/3d/TerrainDeco';
 import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
@@ -80,6 +82,9 @@ export function GameCanvas3D({
   const inputSeqRef = useRef(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const elapsedRef = useRef(0);
+  // Phase 5: 상태 머신 + 인덱스 맵 ref (AgentInstances ↔ EquipmentInstances 공유)
+  const stateMachineRef = useRef<AnimationStateMachine | null>(null);
+  const agentIndexMapRef = useRef<Map<string, number>>(new Map());
   const [menuOpen, setMenuOpen] = useState(false);
 
   // 경과 시간 업데이트 + 오브 데이터 동기화 (rAF 기반)
@@ -328,7 +333,20 @@ export function GameCanvas3D({
         <SkyBox />
 
         {/* 5. AgentInstances — MC 복셀 캐릭터 InstancedMesh 렌더링 */}
-        <AgentInstances agentsRef={agentsRef} elapsedRef={elapsedRef} />
+        <AgentInstances
+          agentsRef={agentsRef}
+          elapsedRef={elapsedRef}
+          stateMachineRef={stateMachineRef}
+          agentIndexMapRef={agentIndexMapRef}
+        />
+
+        {/* 5.5. EquipmentInstances — 장비(모자/무기/등) InstancedMesh 렌더링 (Phase 5) */}
+        <EquipmentInstances
+          agentsRef={agentsRef}
+          elapsedRef={elapsedRef}
+          stateMachineRef={stateMachineRef}
+          agentIndexMapRef={agentIndexMapRef}
+        />
 
         {/* 6. ZoneTerrain — 3개 동심원 존 바닥 (Edge/Mid/Core) */}
         <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} />

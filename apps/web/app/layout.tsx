@@ -31,7 +31,7 @@ export default function RootLayout({
     <html lang="ko" suppressHydrationWarning>
       <head>
         <link
-          href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Inter:wght@400;500;600;700;800;900&family=Press+Start+2P&family=Rajdhani:wght@400;500;600;700&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Inter:wght@400;500;600;700;800;900&display=swap"
           rel="stylesheet"
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -44,9 +44,9 @@ export default function RootLayout({
         style={{
           margin: 0,
           padding: 0,
-          backgroundColor: '#111111',
-          color: '#E8E0D4',
-          fontFamily: '"Rajdhani", -apple-system, BlinkMacSystemFont, sans-serif',
+          backgroundColor: '#0A0F1A',
+          color: '#E2E8F0',
+          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale' as never,
           overscrollBehavior: 'none',

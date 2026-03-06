@@ -226,8 +226,10 @@ export function NewsFeed({
   if (expanded) {
     return (
       <div style={{
-        background: 'rgba(10, 14, 20, 0.95)',
-        borderTop: `1px solid ${SK.border}`,
+        background: 'rgba(12, 18, 32, 0.92)',
+        backdropFilter: 'blur(16px)',
+        WebkitBackdropFilter: 'blur(16px)',
+        borderTop: `1px solid rgba(100, 160, 220, 0.1)`,
         padding: '12px 20px',
         maxHeight: '40vh',
         overflowY: 'auto',
@@ -331,8 +333,10 @@ export function NewsFeed({
   return (
     <div
       style={{
-        background: 'rgba(10, 14, 20, 0.9)',
-        borderTop: `1px solid ${SK.border}`,
+        background: 'rgba(12, 18, 32, 0.88)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
+        borderTop: `1px solid rgba(100, 160, 220, 0.1)`,
         height: '36px',
         display: 'flex',
         alignItems: 'center',

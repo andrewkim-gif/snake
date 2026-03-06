@@ -5,7 +5,7 @@
 
 // 지배권 색상 체계 (v11-world-war-plan.md §3.5)
 export const sovereigntyColors = {
-  unclaimed: '#4A4A4A',    // 미점령 — 회색
+  unclaimed: '#3D7A9E',    // 미점령 — 밝은 틸블루 (지구본 라이팅 감안)
   myFaction: '#22C55E',    // 내 팩션 — 초록
   allyFaction: '#3B82F6',  // 동맹 팩션 — 파랑
   neutral: '#F59E0B',      // 중립 — 노랑
@@ -57,7 +57,7 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
       id: 'background',
       type: 'background',
       paint: {
-        'background-color': '#0A0E14',
+        'background-color': '#0A0F1A',
       },
     },
     // 국가 fill

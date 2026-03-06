@@ -8,7 +8,7 @@
 import { useRef, useEffect, useState, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { DEFAULT_SKINS } from '@agent-survivor/shared';
-import { SK, SKFont, headingFont, bodyFont, handDrawnRadius, sketchBorder } from '@/lib/sketch-ui';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { VoxelCharacter } from '@/components/3d/VoxelCharacter';
 
 const SKINS_PER_PAGE = 8;
@@ -24,58 +24,70 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
   return (
     <div style={{
       display: 'flex',
-      gap: '12px',
-      alignItems: 'flex-start',
+      flexDirection: 'column',
+      gap: '10px',
       width: '100%',
     }}>
-      <AgentPreview3D skinId={skinId} />
-
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '8px' }}>
-        {/* 탭 */}
-        <div style={{ display: 'flex', gap: '4px' }}>
-          {(['skin', 'color', 'face', 'equip'] as const).map(tab => (
-            <button key={tab} onClick={() => setActiveTab(tab)} style={{
-              fontFamily: bodyFont,
-              fontWeight: activeTab === tab ? 700 : 500,
-              fontSize: SKFont.xs,
-              padding: '4px 10px',
-              backgroundColor: 'transparent',
-              color: activeTab === tab ? SK.gold : SK.textMuted,
-              border: activeTab === tab
-                ? `1px solid ${SK.gold}40`
-                : `1px solid transparent`,
-              borderRadius: handDrawnRadius(2),
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              transition: 'all 150ms ease',
-            }}>
-              {tab}
-            </button>
-          ))}
-        </div>
-
-        {activeTab === 'skin' && (
-          <>
-            <div style={{
-              fontFamily: headingFont, fontSize: '15px',
-              color: SK.textSecondary, letterSpacing: '2px',
-            }}>
-              SELECT UNIT
-            </div>
-            <SkinGrid skinId={skinId} onSelect={onSelect} />
-          </>
-        )}
-        {activeTab !== 'skin' && (
+      {/* 프리뷰 + 유닛명 */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+      }}>
+        <AgentPreview3D skinId={skinId} />
+        <div style={{ flex: 1 }}>
           <div style={{
-            fontFamily: bodyFont, fontSize: SKFont.sm, fontWeight: 500,
-            color: SK.textMuted, padding: '16px 0', textAlign: 'center',
-            letterSpacing: '1px', textTransform: 'uppercase',
+            fontFamily: headingFont, fontSize: '11px',
+            color: SK.textMuted, letterSpacing: '2px',
+            marginBottom: '4px',
           }}>
-            Classified
+            UNIT {String(skinId + 1).padStart(2, '0')}
           </div>
-        )}
+          <div style={{
+            fontFamily: bodyFont, fontSize: SKFont.sm,
+            color: SK.textPrimary, fontWeight: 600,
+          }}>
+            {DEFAULT_SKINS[skinId]?.pattern?.toUpperCase() || 'SOLID'} TYPE
+          </div>
+          {/* 탭 */}
+          <div style={{ display: 'flex', gap: '2px', marginTop: '8px' }}>
+            {(['skin', 'color', 'face', 'equip'] as const).map(tab => (
+              <button key={tab} onClick={() => setActiveTab(tab)} style={{
+                fontFamily: bodyFont,
+                fontWeight: activeTab === tab ? 700 : 500,
+                fontSize: '9px',
+                padding: '3px 7px',
+                backgroundColor: 'transparent',
+                color: activeTab === tab ? SK.gold : SK.textMuted,
+                border: activeTab === tab
+                  ? `1px solid ${SK.gold}40`
+                  : `1px solid transparent`,
+                borderRadius: '2px',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: '1px',
+                transition: 'all 150ms ease',
+              }}>
+                {tab}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
+
+      {/* 탭 콘텐츠 */}
+      {activeTab === 'skin' && (
+        <SkinGrid skinId={skinId} onSelect={onSelect} />
+      )}
+      {activeTab !== 'skin' && (
+        <div style={{
+          fontFamily: bodyFont, fontSize: SKFont.xs, fontWeight: 500,
+          color: SK.textMuted, padding: '12px 0', textAlign: 'center',
+          letterSpacing: '1px', textTransform: 'uppercase',
+        }}>
+          Classified
+        </div>
+      )}
     </div>
   );
 }
@@ -94,11 +106,11 @@ function PreviewCamera() {
 function AgentPreview3D({ skinId }: { skinId: number }) {
   return (
     <div style={{
-      width: '140px',
-      height: '140px',
-      borderRadius: handDrawnRadius(3),
-      border: sketchBorder(),
-      backgroundColor: SK.bg,
+      width: '90px',
+      height: '90px',
+      borderRadius: '4px',
+      border: `1px solid rgba(100, 160, 220, 0.15)`,
+      backgroundColor: 'rgba(12, 18, 32, 0.6)',
       overflow: 'hidden',
       flexShrink: 0,
     }}>
@@ -155,15 +167,15 @@ function SkinThumbnail({ skinId, selected, onClick }: {
       onClick={onClick}
       aria-label={`Skin ${skinId + 1}`}
       style={{
-        width: 34, height: 34, padding: 0,
+        width: '100%', aspectRatio: '1', padding: 0,
         border: selected ? `1.5px solid ${SK.gold}` : `1px solid ${SK.border}`,
-        borderRadius: handDrawnRadius(2),
+        borderRadius: '3px',
         backgroundColor: 'transparent',
         cursor: 'pointer',
         imageRendering: 'pixelated',
         opacity: selected ? 1 : 0.6,
         transition: 'all 150ms ease',
-        transform: selected ? 'scale(1.1)' : 'scale(1)',
+        transform: selected ? 'scale(1.08)' : 'scale(1)',
         boxShadow: selected ? `0 0 0 1px ${SK.gold}30` : 'none',
       }}
     >
@@ -188,14 +200,25 @@ function SkinGrid({ skinId, onSelect }: { skinId: number; onSelect: (id: number)
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '6px' }}>
-      <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+    <div style={{
+      display: 'flex', flexDirection: 'column', gap: '6px',
+      padding: '8px',
+      borderRadius: '4px',
+      backgroundColor: 'rgba(12, 18, 32, 0.4)',
+      border: `1px solid rgba(100, 160, 220, 0.08)`,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
         <button onClick={() => goPage(-1)} style={{
           background: 'none', border: 'none', color: SK.textSecondary,
-          fontSize: '16px', cursor: 'pointer', padding: '0 4px',
+          fontSize: '14px', cursor: 'pointer', padding: '0 2px',
           fontFamily: bodyFont, fontWeight: 700,
         }}>&lt;</button>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '4px' }}>
+        <div style={{
+          flex: 1,
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '4px',
+        }}>
           {pageSkins.map((_, i) => (
             <SkinThumbnail
               key={pageStart + i}
@@ -207,12 +230,12 @@ function SkinGrid({ skinId, onSelect }: { skinId: number; onSelect: (id: number)
         </div>
         <button onClick={() => goPage(1)} style={{
           background: 'none', border: 'none', color: SK.textSecondary,
-          fontSize: '16px', cursor: 'pointer', padding: '0 4px',
+          fontSize: '14px', cursor: 'pointer', padding: '0 2px',
           fontFamily: bodyFont, fontWeight: 700,
         }}>&gt;</button>
       </div>
       {totalPages > 1 && (
-        <div style={{ display: 'flex', gap: '4px' }}>
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '4px' }}>
           {Array.from({ length: totalPages }, (_, i) => (
             <div key={i} style={{
               width: currentPage === i ? 12 : 4, height: 2,

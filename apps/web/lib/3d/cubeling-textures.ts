@@ -1078,5 +1078,196 @@ export class TextureCacheManager {
   }
 }
 
+// ─── Phase 5: 장비 텍스처 생성 ───
+
+/**
+ * 모자 프로시저럴 텍스처 (16x16, 흰색 base → setColorAt 틴팅)
+ *
+ * 8종 모자:
+ *  crown — 왕관 (톱니 형태)
+ *  helmet — 헬멧 (반구형 덮개)
+ *  cap — 모자 (챙 있음)
+ *  hood — 후드 (두건)
+ *  halo — 후광 (반투명 링)
+ *  horns — 뿔 (바이킹)
+ *  propeller — 프로펠러 (모자)
+ *  tophat — 탑햇 (높은 모자)
+ */
+export function generateHatTexture(hatGeometryType: string): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  fillRect(ctx, 0, 0, 16, 16, '#FFFFFF');
+
+  switch (hatGeometryType) {
+    case 'crown':
+      // 왕관 톱니 패턴 (상단)
+      fillRect(ctx, 0, 6, 16, 10, '#F0F0F0');
+      // 톱니
+      fillRect(ctx, 1, 0, 2, 6, '#F4F4F4');
+      fillRect(ctx, 5, 0, 2, 6, '#F4F4F4');
+      fillRect(ctx, 9, 0, 2, 6, '#F4F4F4');
+      fillRect(ctx, 13, 0, 2, 6, '#F4F4F4');
+      // 보석 장식
+      px(ctx, 2, 2, '#E0E0E0');
+      px(ctx, 6, 2, '#E0E0E0');
+      px(ctx, 10, 2, '#E0E0E0');
+      px(ctx, 14, 2, '#E0E0E0');
+      // 하단 밴드
+      fillRect(ctx, 0, 14, 16, 2, '#D8D8D8');
+      break;
+
+    case 'helmet':
+      // 헬멧 (볼록한 형태)
+      fillRect(ctx, 0, 0, 16, 16, '#F0F0F0');
+      // 상단 볼록 하이라이트
+      fillRect(ctx, 3, 2, 10, 3, '#F8F8F8');
+      // 하단 가드
+      fillRect(ctx, 0, 12, 16, 4, '#E0E0E0');
+      // 외곽
+      for (let y = 0; y < 16; y++) {
+        px(ctx, 0, y, '#E4E4E4');
+        px(ctx, 15, y, '#E4E4E4');
+      }
+      // 리벳 장식
+      px(ctx, 4, 8, '#D0D0D0');
+      px(ctx, 11, 8, '#D0D0D0');
+      break;
+
+    case 'hat':
+      // 마법사/챙모자
+      fillRect(ctx, 0, 0, 16, 16, '#F0F0F0');
+      // 뾰족한 상단
+      fillRect(ctx, 6, 0, 4, 4, '#F4F4F4');
+      fillRect(ctx, 7, 0, 2, 2, '#F8F8F8');
+      // 챙 (하단)
+      fillRect(ctx, 0, 12, 16, 4, '#E4E4E4');
+      // 별 장식 (마법사풍)
+      px(ctx, 7, 7, '#E8E8E8');
+      px(ctx, 8, 7, '#E8E8E8');
+      px(ctx, 7, 8, '#E8E8E8');
+      px(ctx, 8, 8, '#E8E8E8');
+      break;
+  }
+
+  applyRoundingShade(ctx, 16, 16, 0.35, 0.55, 0.10);
+  return toCanvasTexture(canvas);
+}
+
+/**
+ * 무기 프로시저럴 텍스처 (16x16, 흰색 base → setColorAt 틴팅)
+ *
+ * 6종 무기:
+ *  sword(blade) — 검 (날+가드+손잡이)
+ *  axe(blade) — 도끼 (넓은 날)
+ *  staff — 지팡이 (긴 봉)
+ *  bow(blade) — 활 (곡선)
+ *  shield(blade) — 방패
+ *  wand(staff) — 완드
+ */
+export function generateWeaponTexture(weaponGeometryType: string): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  fillRect(ctx, 0, 0, 16, 16, '#FFFFFF');
+
+  switch (weaponGeometryType) {
+    case 'blade':
+      // 검 날 (상단 밝은 부분)
+      fillRect(ctx, 5, 0, 6, 10, '#F4F4F4');
+      // 날 하이라이트
+      fillRect(ctx, 6, 1, 2, 8, '#FAFAFA');
+      // 가드 (중간)
+      fillRect(ctx, 2, 10, 12, 2, '#D0D0D0');
+      // 손잡이 (하단)
+      fillRect(ctx, 6, 12, 4, 4, '#C8C8C8');
+      // 외곽선
+      for (let y = 0; y < 10; y++) {
+        px(ctx, 5, y, '#E0E0E0');
+        px(ctx, 10, y, '#E0E0E0');
+      }
+      break;
+
+    case 'staff':
+      // 봉 (중앙 세로)
+      fillRect(ctx, 6, 0, 4, 16, '#F0F0F0');
+      // 봉 하이라이트
+      fillRect(ctx, 7, 0, 2, 16, '#F4F4F4');
+      // 상단 장식 (보석/불꽃)
+      fillRect(ctx, 4, 0, 8, 4, '#E8E8E8');
+      fillRect(ctx, 5, 0, 6, 3, '#F0F0F0');
+      px(ctx, 7, 1, '#FAFAFA');
+      px(ctx, 8, 1, '#FAFAFA');
+      // 하단 (그립)
+      fillRect(ctx, 6, 13, 4, 3, '#D0D0D0');
+      break;
+  }
+
+  applyRoundingShade(ctx, 16, 16, 0.30, 0.50, 0.08);
+  return toCanvasTexture(canvas);
+}
+
+/**
+ * 등 장비 프로시저럴 텍스처 (16x16, 흰색 base → setColorAt 틴팅)
+ *
+ * 5종 등 아이템:
+ *  cape — 망토 (직물 패턴)
+ *  wings — 날개 (깃털 패턴)
+ *  pack — 배낭 (주머니/버클)
+ */
+export function generateBackItemTexture(backGeometryType: string): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  fillRect(ctx, 0, 0, 16, 16, '#FFFFFF');
+
+  switch (backGeometryType) {
+    case 'cape':
+      // 망토 직물 패턴
+      fillRect(ctx, 0, 0, 16, 16, '#F4F4F4');
+      // 세로 주름
+      for (let x = 0; x < 16; x += 4) {
+        fillRect(ctx, x, 0, 1, 16, '#E8E8E8');
+      }
+      // 상단 어깨 연결부
+      fillRect(ctx, 0, 0, 16, 2, '#E0E0E0');
+      // 하단 자락 (불규칙)
+      for (let x = 0; x < 16; x++) {
+        const edge = 14 + (x % 3 === 0 ? 1 : 0);
+        fillRect(ctx, x, edge, 1, 16 - edge, '#EBEBEB');
+      }
+      break;
+
+    case 'wings':
+      // 날개 깃털 패턴
+      fillRect(ctx, 0, 0, 16, 16, '#F8F8F8');
+      // 깃털 라인 (사선)
+      for (let y = 0; y < 16; y += 2) {
+        for (let x = 0; x < 16; x++) {
+          if ((x + y) % 4 === 0) {
+            px(ctx, x, y, '#EEEEEE');
+          }
+        }
+      }
+      // 중앙 척추
+      fillRect(ctx, 7, 0, 2, 16, '#E4E4E4');
+      // 상단 연결부
+      fillRect(ctx, 5, 0, 6, 2, '#E0E0E0');
+      break;
+
+    case 'pack':
+      // 배낭 (주머니/버클)
+      fillRect(ctx, 0, 0, 16, 16, '#F0F0F0');
+      // 메인 주머니 외곽
+      fillRect(ctx, 1, 1, 14, 12, '#F4F4F4');
+      // 구분선
+      fillRect(ctx, 1, 5, 14, 1, '#E0E0E0');
+      // 버클
+      fillRect(ctx, 6, 3, 4, 2, '#D8D8D8');
+      // 지퍼 라인
+      fillRect(ctx, 7, 6, 2, 6, '#E0E0E0');
+      // 하단 바닥
+      fillRect(ctx, 1, 13, 14, 3, '#E4E4E4');
+      break;
+  }
+
+  applyRoundingShade(ctx, 16, 16, 0.35, 0.55, 0.10);
+  return toCanvasTexture(canvas);
+}
+
 /** 글로벌 싱글턴 캐시 매니저 */
 export const textureCacheManager = new TextureCacheManager(60);

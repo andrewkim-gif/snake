@@ -1,22 +1,22 @@
 /**
- * Tactical UI — 작전 지도 / 워룸 스타일 디자인 시스템
- * 흑백 손그림 아웃라인 + 러프한 마커 폰트 + 군사 작전 컨셉
+ * Tactical UI — Deep Navy Command Center 디자인 시스템
+ * 네이비 블루 기반 + 골드 액센트 + 모던 가독성 (Inter UI 폰트)
  */
 
-/** 전술 컬러 팔레트 (흑백 기반 + 군사 액센트) */
+/** 전술 컬러 팔레트 (네이비 블루 기반 + 군사 액센트) */
 export const SK = {
-  // 배경
-  bg: '#111111',
-  bgWarm: '#1A1A1A',
-  cardBg: '#1A1A1A',
-  cardBgHover: '#222222',
-  overlay: 'rgba(0, 0, 0, 0.75)',
+  // 배경 — 네이비 블루 톤 (지구본 바다와 조화)
+  bg: '#0A0F1A',
+  bgWarm: '#111827',
+  cardBg: '#111827',
+  cardBgHover: '#1A2235',
+  overlay: 'rgba(8, 12, 24, 0.8)',
 
-  // 텍스트 (따뜻한 오프화이트 — 오래된 종이 느낌)
-  textPrimary: '#E8E0D4',
-  textSecondary: '#8A8078',
-  textMuted: '#5A544E',
-  textWhite: '#F0EBE3',
+  // 텍스트 — 높은 대비 + 차가운 톤
+  textPrimary: '#E2E8F0',
+  textSecondary: '#8494A7',
+  textMuted: '#4A5568',
+  textWhite: '#F1F5F9',
 
   // 군사 액센트
   orange: '#CC9933',
@@ -28,13 +28,13 @@ export const SK = {
   red: '#CC3333',
   redLight: '#DD5555',
   redDark: '#AA2222',
-  gold: '#CC9933',
-  blue: '#4488AA',
+  gold: '#D4A843',
+  blue: '#4A90D9',
 
-  // 보더 (스케치 라인)
-  border: 'rgba(232, 224, 212, 0.18)',
-  borderDark: 'rgba(232, 224, 212, 0.08)',
-  borderFocus: 'rgba(204, 153, 51, 0.6)',
+  // 보더 — 블루 틴트
+  border: 'rgba(100, 160, 220, 0.15)',
+  borderDark: 'rgba(100, 160, 220, 0.08)',
+  borderFocus: 'rgba(212, 168, 67, 0.6)',
   shadow: 'rgba(0, 0, 0, 0.3)',
   shadowMd: 'rgba(0, 0, 0, 0.5)',
   shadowLg: 'rgba(0, 0, 0, 0.7)',
@@ -42,13 +42,19 @@ export const SK = {
   // 상태
   statusOnline: '#5CB85C',
   statusOffline: '#CC3333',
-  statusWaiting: '#5A544E',
+  statusWaiting: '#4A5568',
   statusLive: '#5CB85C',
   statusStarting: '#CC9933',
   statusEnding: '#CC3333',
 
-  // 3D 씬
-  skyBg: '#0A1520',
+  // 3D 씬 / 글로브
+  skyBg: '#0A0F1A',
+  ocean: '#101D2E',
+  land: '#3D7A9E',
+
+  // 글래스모피즘 프리셋
+  glassBg: 'rgba(12, 18, 32, 0.85)',
+  glassBorder: 'rgba(100, 160, 220, 0.12)',
 } as const;
 
 /** 폰트 사이즈 스케일 */
@@ -62,11 +68,11 @@ export const SKFont = {
   button: '16px',
 } as const;
 
-/** 밀리터리 스텐실 폰트 — 제목/헤딩 */
+/** 밀리터리 스텐실 폰트 — 대형 제목/로고만 (18px+) */
 export const headingFont = '"Black Ops One", sans-serif';
 
-/** 전술 본문 폰트 — 세미 컨덴스드 */
-export const bodyFont = '"Rajdhani", -apple-system, BlinkMacSystemFont, sans-serif';
+/** UI 폰트 — 모든 본문, 라벨, 버튼, 인풋 (Inter = 모든 크기에서 가독성 보장) */
+export const bodyFont = '"Inter", -apple-system, BlinkMacSystemFont, sans-serif';
 
 /** 손그림 보더 라디우스 (비대칭 = 손그림 느낌) */
 export function handDrawnRadius(base = 3) {
@@ -101,9 +107,9 @@ export function sketchBorder(color: string = SK.border) {
 export function tacticalBg() {
   return {
     backgroundImage: [
-      'radial-gradient(circle, rgba(232,224,212,0.05) 1px, transparent 1px)',
-      'linear-gradient(rgba(232,224,212,0.04) 1px, transparent 1px)',
-      'linear-gradient(90deg, rgba(232,224,212,0.04) 1px, transparent 1px)',
+      'radial-gradient(circle, rgba(100,160,220,0.04) 1px, transparent 1px)',
+      'linear-gradient(rgba(100,160,220,0.03) 1px, transparent 1px)',
+      'linear-gradient(90deg, rgba(100,160,220,0.03) 1px, transparent 1px)',
     ].join(', '),
     backgroundSize: '3px 3px, 24px 24px, 24px 24px',
   };
