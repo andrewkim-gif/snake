@@ -4,8 +4,8 @@
  * 16x16 MC 스타일 2D 블록 캐릭터 + Aura + HP 바 + 이름표
  */
 
-import type { AgentNetworkData, OrbNetworkData, MapObjectNetworkData } from '@snake-arena/shared';
-import { ORB_COLORS, DEFAULT_SKINS, ARENA_CONFIG } from '@snake-arena/shared';
+import type { AgentNetworkData, OrbNetworkData, MapObjectNetworkData } from '@agent-survivor/shared';
+import { ORB_COLORS, DEFAULT_SKINS, ARENA_CONFIG } from '@agent-survivor/shared';
 import type { Camera } from './types';
 import { getAgentSprite } from '../sprites';
 

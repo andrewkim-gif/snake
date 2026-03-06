@@ -8,7 +8,7 @@ const nextConfig: NextConfig = {
   // R3F Canvas가 StrictMode 이중 마운트로 WebGL context를 2개 생성→둘 다 lost 되는 문제 방지
   reactStrictMode: false,
   // R3F 공식 문서: Next.js에서 three를 transpilePackages에 포함해야 함
-  transpilePackages: ["@snake-arena/shared", "three"],
+  transpilePackages: ["@agent-survivor/shared", "three"],
   headers: async () => [
     {
       source: "/(.*)",

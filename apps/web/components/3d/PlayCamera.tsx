@@ -13,7 +13,7 @@
 
 import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
-import type { AgentNetworkData } from '@snake-arena/shared';
+import type { AgentNetworkData } from '@agent-survivor/shared';
 import type { GameData } from '@/hooks/useSocket';
 
 interface PlayCameraProps {

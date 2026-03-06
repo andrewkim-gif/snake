@@ -3,9 +3,9 @@
  * v10: Snake 세그먼트 → Agent 단일 위치 보간
  */
 
-import { ARENA_CONFIG } from '@snake-arena/shared';
-import { normalizeAngle, angleDiff, angleToVector } from '@snake-arena/shared';
-import type { AgentNetworkData } from '@snake-arena/shared';
+import { ARENA_CONFIG } from '@agent-survivor/shared';
+import { normalizeAngle, angleDiff, angleToVector } from '@agent-survivor/shared';
+import type { AgentNetworkData } from '@agent-survivor/shared';
 
 // 모듈 레벨 Map 재사용 — 매 프레임 new Map 생성 방지
 const _prevMap = new Map<string, AgentNetworkData>();

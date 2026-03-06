@@ -17,7 +17,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
-import type { ArenaShrinkPayload } from '@snake-arena/shared';
+import type { ArenaShrinkPayload } from '@agent-survivor/shared';
 import { MC, pixelFont } from '@/lib/minecraft-ui';
 
 interface ShrinkWarningProps {

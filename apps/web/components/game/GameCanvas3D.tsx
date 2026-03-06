@@ -16,8 +16,8 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type { GameData, UiState } from '@/hooks/useSocket';
-import type { AgentNetworkData, OrbNetworkData } from '@snake-arena/shared';
-import { ARENA_CONFIG } from '@snake-arena/shared';
+import type { AgentNetworkData, OrbNetworkData } from '@agent-survivor/shared';
+import { ARENA_CONFIG } from '@agent-survivor/shared';
 
 // 3D 컴포넌트
 import { Scene } from '@/components/3d/Scene';

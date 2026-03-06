@@ -5,7 +5,7 @@
  * v10: 빌드 요약, 시너지 배지, 데미지 소스 표시
  */
 
-import type { RoundEndPayload, DeathPayload, TomeType, AbilityType } from '@snake-arena/shared';
+import type { RoundEndPayload, DeathPayload, TomeType, AbilityType } from '@agent-survivor/shared';
 import { MC, mcPanelShadow, pixelFont, bodyFont } from '@/lib/minecraft-ui';
 
 const DAMAGE_SOURCE_LABELS: Record<string, string> = {

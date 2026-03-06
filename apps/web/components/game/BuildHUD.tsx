@@ -5,7 +5,7 @@
  * 화면 좌측 하단, MC 인벤토리 스타일
  */
 
-import type { TomeType, AbilityType } from '@snake-arena/shared';
+import type { TomeType, AbilityType } from '@agent-survivor/shared';
 import { MC, pixelFont } from '@/lib/minecraft-ui';
 
 const TOME_INFO: Record<string, { label: string; color: string }> = {

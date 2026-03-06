@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
-import type { SynergyActivatedPayload } from '@snake-arena/shared';
+import type { SynergyActivatedPayload } from '@agent-survivor/shared';
 import { MC, pixelFont, bodyFont, mcPanelShadow } from '@/lib/minecraft-ui';
 
 interface SynergyPopupProps {

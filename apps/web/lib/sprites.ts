@@ -4,7 +4,7 @@
  * 이미지 파일 불필요 — 모든 스프라이트를 코드로 생성 + 캐싱
  */
 
-import type { SnakeSkin } from '@snake-arena/shared';
+import type { SnakeSkin } from '@agent-survivor/shared';
 
 // ─── 스프라이트 캐시 ───
 const spriteCache = new Map<number, HTMLCanvasElement>();

@@ -3,7 +3,7 @@
  * dt 기반 프레임 독립 lerp로 부드러운 추적
  */
 
-import { lerp } from '@snake-arena/shared';
+import { lerp } from '@agent-survivor/shared';
 
 export interface Camera {
   x: number;

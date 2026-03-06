@@ -19,10 +19,10 @@
       "@/*": [
         "./*"
       ],
-      "@snake-arena/shared": [
+      "@agent-survivor/shared": [
         "../../packages/shared/src"
       ],
-      "@snake-arena/shared/*": [
+      "@agent-survivor/shared/*": [
         "../../packages/shared/src/*"
       ]
     },

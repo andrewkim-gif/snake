@@ -4,7 +4,7 @@
  * DeathOverlay — 사망 화면 UI (Crayon / Pencil Sketch 스타일)
  */
 
-import type { DeathPayload } from '@snake-arena/shared';
+import type { DeathPayload } from '@agent-survivor/shared';
 
 interface DeathOverlayProps {
   deathInfo: DeathPayload;

@@ -6,7 +6,7 @@
  */
 
 import * as THREE from 'three';
-import { DEFAULT_SKINS } from '@snake-arena/shared';
+import { DEFAULT_SKINS } from '@agent-survivor/shared';
 
 // ─── Types ───
 

@@ -16,7 +16,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { getAgentTextures, disposeTextureCache } from '@/lib/3d/agent-textures';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
-import type { AgentNetworkData } from '@snake-arena/shared';
+import type { AgentNetworkData } from '@agent-survivor/shared';
 
 // ─── Constants ───
 

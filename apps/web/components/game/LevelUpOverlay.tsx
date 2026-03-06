@@ -7,7 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import type { LevelUpPayload, UpgradeChoice } from '@snake-arena/shared';
+import type { LevelUpPayload, UpgradeChoice } from '@agent-survivor/shared';
 import { MC, mcPanelShadow, pixelFont, bodyFont } from '@/lib/minecraft-ui';
 
 const TOME_ICONS: Record<string, string> = {

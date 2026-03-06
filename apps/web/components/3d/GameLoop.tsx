@@ -14,7 +14,7 @@ import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { interpolateAgents, applyClientPrediction } from '@/lib/interpolation';
 import type { GameData } from '@/hooks/useSocket';
-import type { AgentNetworkData } from '@snake-arena/shared';
+import type { AgentNetworkData } from '@agent-survivor/shared';
 
 interface GameLoopProps {
   /** 서버 데이터 ref (useSocket에서 제공) */

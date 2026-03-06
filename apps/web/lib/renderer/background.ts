@@ -3,7 +3,7 @@
  * 종이 질감 + 연필 그리드 + 낙서 장식 + 손그림 경계선
  */
 
-import { COLORS } from '@snake-arena/shared';
+import { COLORS } from '@agent-survivor/shared';
 import type { Camera } from './types';
 
 // ─── Seeded Random (프레임간 일관성 유지) ───

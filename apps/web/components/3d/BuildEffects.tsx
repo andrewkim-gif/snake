@@ -24,7 +24,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { toWorld } from '@/lib/3d/coordinate-utils';
-import type { AgentNetworkData } from '@snake-arena/shared';
+import type { AgentNetworkData } from '@agent-survivor/shared';
 
 // ─── Constants ───
 

@@ -5,7 +5,7 @@
  * 랭크 번호 + 이름 + 점수 + 시간
  */
 
-import type { RecentWinner } from '@snake-arena/shared';
+import type { RecentWinner } from '@agent-survivor/shared';
 import { MC, MCFont, mcBorder, pixelFont, bodyFont } from '@/lib/minecraft-ui';
 
 function timeAgo(timestamp: number): string {

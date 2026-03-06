@@ -32,7 +32,7 @@ import { SynergyPopup } from './SynergyPopup';
 import { CoachBubble } from './CoachBubble';
 import { AnalystPanel } from './AnalystPanel';
 
-import { ARENA_CONFIG } from '@snake-arena/shared';
+import { ARENA_CONFIG } from '@agent-survivor/shared';
 
 interface GameCanvasProps {
   dataRef: React.MutableRefObject<GameData>;

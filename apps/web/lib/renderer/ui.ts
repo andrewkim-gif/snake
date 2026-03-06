@@ -3,8 +3,8 @@
  * 손그림 패널 + 연필 텍스트 + 워블 미니맵
  */
 
-import type { AgentNetworkData, MinimapPayload, LeaderboardEntry } from '@snake-arena/shared';
-import { COLORS, ARENA_CONFIG } from '@snake-arena/shared';
+import type { AgentNetworkData, MinimapPayload, LeaderboardEntry } from '@agent-survivor/shared';
+import { COLORS, ARENA_CONFIG } from '@agent-survivor/shared';
 import type { KillFeedEntry } from './types';
 
 // ─── Seeded Random ───

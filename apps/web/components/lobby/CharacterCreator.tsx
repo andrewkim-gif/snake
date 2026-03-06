@@ -9,7 +9,7 @@
 import { useRef, useEffect, useState, Suspense } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import { DEFAULT_SKINS } from '@snake-arena/shared';
+import { DEFAULT_SKINS } from '@agent-survivor/shared';
 import { MC, MCModern, pixelFont } from '@/lib/minecraft-ui';
 import { VoxelCharacter } from '@/components/3d/VoxelCharacter';
 

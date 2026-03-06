@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react';
-import type { RoomInfo, RoomStatus } from '@snake-arena/shared';
+import type { RoomInfo, RoomStatus } from '@agent-survivor/shared';
 import { MC, MCFont, mcBorder, pixelFont } from '@/lib/minecraft-ui';
 
 const STATUS_CONFIG: Record<RoomStatus, { text: string; color: string }> = {
