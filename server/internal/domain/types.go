@@ -500,14 +500,16 @@ type RoomInfo struct {
 
 // WinnerInfo holds information about a round winner.
 type WinnerInfo struct {
-	ID        string     `json:"id"`
-	Name      string     `json:"name"`
-	Score     int        `json:"score"`
-	Kills     int        `json:"kills"`
-	Level     int        `json:"level"`
+	ID        string      `json:"id"`
+	Name      string      `json:"name"`
+	Score     int         `json:"score"`
+	Kills     int         `json:"kills"`
+	Level     int         `json:"level"`
 	Build     PlayerBuild `json:"build"`
-	Synergies []string   `json:"synergies"`
-	Skin      AgentSkin  `json:"skin"`
+	Synergies []string    `json:"synergies"`
+	Skin      AgentSkin   `json:"skin"`
+	RoomID    string      `json:"roomId,omitempty"`
+	Timestamp int64       `json:"timestamp,omitempty"`
 }
 
 // LeaderboardEntry represents a single entry on the leaderboard.

@@ -1,162 +1,160 @@
 'use client';
 
 /**
- * VoxelTerrain — 넓은 바닥 + 언덕 블록 지형
- * 1) 60×60 잔디 바닥 평면 (y=0)
- * 2) 언덕 9개: InstancedMesh 잔디+흙 블록 (y≥0.5)
- * useFrame 미사용 (정적 지형)
+ * VoxelTerrain — 넓은 바닥(120x120) + 언덕 + 장식 (꽃/돌/풀/연못)
+ * 안개로 가장자리 완전 은폐 → 무한 월드 느낌
  */
 
 import { useRef, useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { getVoxelTextures } from '@/lib/3d/voxel-textures';
 
-const GROUND_SIZE = 60;
-const BLOCK_SIZE = 1;
-
-// 미리 정의된 언덕 (중심x, 중심z, 반경, 최대높이)
-const HILLS: { cx: number; cz: number; r: number; maxH: number }[] = [
-  { cx: 0, cz: 0, r: 3, maxH: 2 },
-  { cx: -8, cz: -6, r: 2.5, maxH: 1 },
-  { cx: 7, cz: -8, r: 3, maxH: 2 },
-  { cx: -10, cz: 5, r: 2, maxH: 1 },
-  { cx: 9, cz: 6, r: 2.5, maxH: 2 },
-  { cx: -4, cz: 10, r: 2, maxH: 1 },
-  { cx: 5, cz: -3, r: 2, maxH: 1 },
-  { cx: -6, cz: -10, r: 2.5, maxH: 1 },
-  { cx: 12, cz: -2, r: 2, maxH: 1 },
+const GROUND = 120;
+const HILLS: { cx: number; cz: number; r: number; h: number }[] = [
+  { cx: 0, cz: 0, r: 3, h: 2 }, { cx: -12, cz: -8, r: 3, h: 2 },
+  { cx: 10, cz: -12, r: 2.5, h: 1 }, { cx: -14, cz: 7, r: 2, h: 1 },
+  { cx: 13, cz: 9, r: 3, h: 2 }, { cx: -6, cz: 14, r: 2.5, h: 1 },
+  { cx: 8, cz: -5, r: 2, h: 1 }, { cx: -9, cz: -14, r: 2, h: 1 },
+  { cx: 16, cz: -3, r: 2.5, h: 2 }, { cx: -16, cz: -1, r: 2, h: 1 },
+  { cx: 3, cz: 16, r: 2, h: 1 },
 ];
+const POND = { cx: -5, cz: 7, r: 3 };
 
-interface BlockPos { x: number; y: number; z: number }
+function srand(s: number) { const x = Math.sin(s * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); }
 
-function generateHillBlocks(): { grass: BlockPos[]; dirt: BlockPos[] } {
-  const grass: BlockPos[] = [];
-  const dirt: BlockPos[] = [];
-  // 높이맵: 각 (gx,gz)에서 최대 블록 높이
-  const heightMap = new Map<string, number>();
+interface P3 { x: number; y: number; z: number }
+
+function inPond(x: number, z: number) {
+  return Math.sqrt((x - POND.cx) ** 2 + (z - POND.cz) ** 2) < POND.r + 0.5;
+}
+
+function generate() {
+  const grass: P3[] = [], dirt: P3[] = [];
+  const flowers: P3[] = [], fColors: string[] = [];
+  const stones: P3[] = [], tGrass: P3[] = [];
+  const hm = new Map<string, number>();
 
   for (const hill of HILLS) {
     const ir = Math.ceil(hill.r);
-    for (let dx = -ir; dx <= ir; dx++) {
-      for (let dz = -ir; dz <= ir; dz++) {
-        const dist = Math.sqrt(dx * dx + dz * dz);
-        if (dist > hill.r) continue;
-
-        // 높이: 중심에서 가까울수록 높음 (코사인 프로필)
-        const t = dist / hill.r;
-        const h = Math.max(1, Math.round(hill.maxH * Math.cos(t * Math.PI * 0.5)));
-
-        const gx = hill.cx + dx;
-        const gz = hill.cz + dz;
-        const key = `${gx},${gz}`;
-        const existing = heightMap.get(key) || 0;
-        if (h > existing) {
-          heightMap.set(key, h);
-        }
-      }
+    for (let dx = -ir; dx <= ir; dx++) for (let dz = -ir; dz <= ir; dz++) {
+      const d = Math.sqrt(dx * dx + dz * dz);
+      if (d > hill.r) continue;
+      const h = Math.max(1, Math.round(hill.h * Math.cos((d / hill.r) * Math.PI * 0.5)));
+      const k = `${hill.cx + dx},${hill.cz + dz}`;
+      if (h > (hm.get(k) || 0)) hm.set(k, h);
     }
   }
-
-  // 높이맵에서 블록 생성
-  for (const [key, h] of heightMap) {
-    const [gx, gz] = key.split(',').map(Number);
-    // 맨 위 = 잔디, 아래 = 흙
-    // y=0.5는 바닥면 위 첫 번째 블록 중심
-    for (let layer = 0; layer < h; layer++) {
-      const y = layer + 0.5;
-      if (layer === h - 1) {
-        grass.push({ x: gx, y, z: gz });
-      } else {
-        dirt.push({ x: gx, y, z: gz });
-      }
-    }
+  for (const [k, h] of hm) {
+    const [gx, gz] = k.split(',').map(Number);
+    for (let l = 0; l < h; l++) (l === h - 1 ? grass : dirt).push({ x: gx, y: l + 0.5, z: gz });
   }
 
-  return { grass, dirt };
+  // 꽃 50개
+  for (let i = 0; i < 50; i++) {
+    const x = (srand(i * 3.17) - 0.5) * 50, z = (srand(i * 7.31) - 0.5) * 50;
+    if (inPond(x, z) || hm.has(`${Math.round(x)},${Math.round(z)}`)) continue;
+    flowers.push({ x, y: 0.15, z });
+    fColors.push(srand(i * 11.7) > 0.5 ? '#FF4444' : '#FFDD44');
+  }
+  // 돌 25개
+  for (let i = 0; i < 25; i++) {
+    const x = (srand(i * 5.31 + 100) - 0.5) * 45, z = (srand(i * 9.13 + 100) - 0.5) * 45;
+    if (!inPond(x, z)) stones.push({ x, y: 0.12, z });
+  }
+  // 잔디 40개
+  for (let i = 0; i < 40; i++) {
+    const x = (srand(i * 4.71 + 200) - 0.5) * 50, z = (srand(i * 8.37 + 200) - 0.5) * 50;
+    if (!inPond(x, z)) tGrass.push({ x, y: 0.2, z });
+  }
+
+  return { grass, dirt, flowers, fColors, stones, tGrass };
 }
 
-const _obj = new THREE.Object3D();
+const _o = new THREE.Object3D();
+
+function makeIM(g: THREE.Group, geo: THREE.BufferGeometry, mat: THREE.Material, ps: P3[]) {
+  if (!ps.length) return null;
+  const m = new THREE.InstancedMesh(geo, mat, ps.length);
+  ps.forEach((b, i) => {
+    _o.position.set(b.x, b.y, b.z); _o.rotation.set(0, 0, 0);
+    _o.scale.setScalar(1); _o.updateMatrix(); m.setMatrixAt(i, _o.matrix);
+  });
+  m.instanceMatrix.needsUpdate = true; g.add(m); return m;
+}
 
 export function VoxelTerrain() {
-  const groupRef = useRef<THREE.Group>(null!);
-  const terrain = useMemo(generateHillBlocks, []);
+  const ref = useRef<THREE.Group>(null!);
+  const td = useMemo(generate, []);
 
   useEffect(() => {
-    const group = groupRef.current;
-    if (!group) return;
+    const g = ref.current; if (!g) return;
+    const tex = getVoxelTextures();
+    const dispose: (() => void)[] = [];
 
-    const textures = getVoxelTextures();
+    // 바닥 평면 (120×120)
+    const gGeo = new THREE.PlaneGeometry(GROUND, GROUND); gGeo.rotateX(-Math.PI / 2);
+    const gTex = tex.grassTop.clone();
+    gTex.wrapS = gTex.wrapT = THREE.RepeatWrapping; gTex.repeat.set(GROUND, GROUND); gTex.needsUpdate = true;
+    const gMat = new THREE.MeshLambertMaterial({ map: gTex });
+    const ground = new THREE.Mesh(gGeo, gMat); g.add(ground);
+    dispose.push(() => { g.remove(ground); gGeo.dispose(); gMat.dispose(); gTex.dispose(); });
 
-    // ─── 1) 바닥 평면 (60×60, y=0) ───
-    const groundGeo = new THREE.PlaneGeometry(GROUND_SIZE, GROUND_SIZE);
-    groundGeo.rotateX(-Math.PI / 2); // XZ 평면으로 회전
-
-    const groundTex = textures.grassTop.clone();
-    groundTex.wrapS = THREE.RepeatWrapping;
-    groundTex.wrapT = THREE.RepeatWrapping;
-    groundTex.repeat.set(GROUND_SIZE, GROUND_SIZE); // 1블록당 1타일
-    groundTex.needsUpdate = true;
-
-    const groundMat = new THREE.MeshLambertMaterial({ map: groundTex });
-    const groundMesh = new THREE.Mesh(groundGeo, groundMat);
-    groundMesh.position.y = 0;
-    group.add(groundMesh);
-
-    // ─── 2) 언덕 잔디 블록 ───
-    const blockGeo = new THREE.BoxGeometry(BLOCK_SIZE, BLOCK_SIZE, BLOCK_SIZE);
-
-    let grassMesh: THREE.InstancedMesh | null = null;
+    // 블록 지오메트리 (공유)
+    const bGeo = new THREE.BoxGeometry(1, 1, 1);
     const grassMats = [
-      new THREE.MeshLambertMaterial({ map: textures.grassSide }),
-      new THREE.MeshLambertMaterial({ map: textures.grassSide }),
-      new THREE.MeshLambertMaterial({ map: textures.grassTop }),
-      new THREE.MeshLambertMaterial({ map: textures.dirt }),
-      new THREE.MeshLambertMaterial({ map: textures.grassSide }),
-      new THREE.MeshLambertMaterial({ map: textures.grassSide }),
+      new THREE.MeshLambertMaterial({ map: tex.grassSide }),
+      new THREE.MeshLambertMaterial({ map: tex.grassSide }),
+      new THREE.MeshLambertMaterial({ map: tex.grassTop }),
+      new THREE.MeshLambertMaterial({ map: tex.dirt }),
+      new THREE.MeshLambertMaterial({ map: tex.grassSide }),
+      new THREE.MeshLambertMaterial({ map: tex.grassSide }),
     ];
 
-    if (terrain.grass.length > 0) {
-      grassMesh = new THREE.InstancedMesh(blockGeo, grassMats, terrain.grass.length);
-      terrain.grass.forEach((block, i) => {
-        _obj.position.set(block.x, block.y, block.z);
-        _obj.rotation.set(0, 0, 0);
-        _obj.scale.setScalar(1);
-        _obj.updateMatrix();
-        grassMesh!.setMatrixAt(i, _obj.matrix);
+    // 언덕 잔디+흙
+    const gIM = makeIM(g, bGeo, grassMats as unknown as THREE.Material, td.grass);
+    const dMat = new THREE.MeshLambertMaterial({ map: tex.dirt });
+    const dIM = makeIM(g, bGeo, dMat, td.dirt);
+
+    // 꽃 (per-instance color)
+    const fGeo = new THREE.BoxGeometry(0.2, 0.3, 0.2);
+    const fMat = new THREE.MeshLambertMaterial();
+    if (td.flowers.length) {
+      const fIM = new THREE.InstancedMesh(fGeo, fMat, td.flowers.length);
+      const col = new THREE.Color();
+      td.flowers.forEach((f, i) => {
+        _o.position.set(f.x, f.y, f.z); _o.rotation.set(0, 0, 0); _o.scale.setScalar(1); _o.updateMatrix();
+        fIM.setMatrixAt(i, _o.matrix); col.set(td.fColors[i]); fIM.setColorAt(i, col);
       });
-      grassMesh.instanceMatrix.needsUpdate = true;
-      group.add(grassMesh);
+      fIM.instanceMatrix.needsUpdate = true;
+      if (fIM.instanceColor) fIM.instanceColor.needsUpdate = true;
+      g.add(fIM);
+      dispose.push(() => { g.remove(fIM); fIM.dispose(); });
     }
 
-    // ─── 3) 언덕 흙 블록 ───
-    let dirtMesh: THREE.InstancedMesh | null = null;
-    if (terrain.dirt.length > 0) {
-      const dirtMat = new THREE.MeshLambertMaterial({ map: textures.dirt });
-      dirtMesh = new THREE.InstancedMesh(blockGeo, dirtMat, terrain.dirt.length);
-      terrain.dirt.forEach((block, i) => {
-        _obj.position.set(block.x, block.y, block.z);
-        _obj.rotation.set(0, 0, 0);
-        _obj.scale.setScalar(1);
-        _obj.updateMatrix();
-        dirtMesh!.setMatrixAt(i, _obj.matrix);
-      });
-      dirtMesh.instanceMatrix.needsUpdate = true;
-      group.add(dirtMesh);
-    }
+    // 돌
+    const sGeo = new THREE.BoxGeometry(0.4, 0.25, 0.4);
+    const sMat = new THREE.MeshLambertMaterial({ map: tex.stone });
+    const sIM = makeIM(g, sGeo, sMat, td.stones);
 
-    return () => {
-      group.remove(groundMesh);
-      if (grassMesh) group.remove(grassMesh);
-      if (dirtMesh) group.remove(dirtMesh);
-      groundGeo.dispose();
-      groundMat.dispose();
-      groundTex.dispose();
-      blockGeo.dispose();
-      grassMats.forEach(m => m.dispose());
-      if (grassMesh) grassMesh.dispose();
-      if (dirtMesh) dirtMesh.dispose();
-    };
-  }, [terrain]);
+    // 잔디
+    const tGeo = new THREE.BoxGeometry(0.12, 0.4, 0.12);
+    const tMat = new THREE.MeshLambertMaterial({ color: '#3D8C2E' });
+    const tIM = makeIM(g, tGeo, tMat, td.tGrass);
 
-  return <group ref={groupRef} />;
+    // 연못
+    const wGeo = new THREE.CircleGeometry(POND.r, 16); wGeo.rotateX(-Math.PI / 2);
+    const wMat = new THREE.MeshLambertMaterial({ color: '#3388DD', transparent: true, opacity: 0.6 });
+    const water = new THREE.Mesh(wGeo, wMat); water.position.set(POND.cx, 0.01, POND.cz); g.add(water);
+
+    dispose.push(() => {
+      [gIM, dIM, sIM, tIM].forEach(m => { if (m) { g.remove(m); m.dispose(); } });
+      g.remove(water);
+      [bGeo, fGeo, sGeo, tGeo, wGeo].forEach(x => x.dispose());
+      [dMat, fMat, sMat, tMat, wMat, ...grassMats].forEach(m => m.dispose());
+    });
+
+    return () => dispose.forEach(fn => fn());
+  }, [td]);
+
+  return <group ref={ref} />;
 }

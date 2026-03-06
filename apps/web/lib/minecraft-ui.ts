@@ -25,26 +25,26 @@ export const MC = {
   skyBg: '#87CEEB',
 } as const;
 
-/** 모던 글래스모피즘 디자인 토큰 */
+/** MC 게임 UI 토큰 (인벤토리/서버 리스트 스타일) */
 export const MCModern = {
-  glassBg: 'rgba(0, 0, 0, 0.45)',
-  glassBgLight: 'rgba(0, 0, 0, 0.3)',
-  glassBlur: '16px',
-  glassBorder: 'rgba(255, 255, 255, 0.08)',
-  glassBorderHover: 'rgba(255, 255, 255, 0.15)',
-  radius: '12px',
-  radiusSm: '8px',
-  radiusLg: '16px',
-  radiusPill: '9999px',
-  transition: 'all 200ms ease',
-  transitionFast: 'all 120ms ease',
-  glowGreen: '0 0 12px rgba(87, 158, 69, 0.4)',
-  glowGold: '0 0 12px rgba(255, 170, 0, 0.3)',
-  glowRed: '0 0 12px rgba(199, 91, 91, 0.4)',
-  statusWaiting: 'rgba(136, 136, 136, 0.25)',
-  statusLive: 'rgba(85, 255, 85, 0.15)',
-  statusStarting: 'rgba(255, 255, 85, 0.15)',
-  statusEnding: 'rgba(255, 85, 85, 0.15)',
+  glassBg: MC.panelBg,
+  glassBgLight: 'rgba(0, 0, 0, 0.6)',
+  glassBlur: '0px',
+  glassBorder: MC.panelBorderDark,
+  glassBorderHover: MC.panelBorderLight,
+  radius: '0px',
+  radiusSm: '0px',
+  radiusLg: '0px',
+  radiusPill: '0px',
+  transition: 'all 100ms ease',
+  transitionFast: 'all 80ms ease',
+  glowGreen: '0 0 6px rgba(87, 158, 69, 0.3)',
+  glowGold: '0 0 6px rgba(255, 170, 0, 0.3)',
+  glowRed: '0 0 6px rgba(199, 91, 91, 0.3)',
+  statusWaiting: 'rgba(136, 136, 136, 0.3)',
+  statusLive: 'rgba(85, 255, 85, 0.2)',
+  statusStarting: 'rgba(255, 255, 85, 0.2)',
+  statusEnding: 'rgba(255, 85, 85, 0.2)',
 } as const;
 
 /** 마크 인벤토리 스타일 3D 엠보스 보더 생성 */

@@ -19,10 +19,13 @@ export interface RoomInfo {
 }
 
 export interface WinnerInfo {
+  id?: string;
   name: string;
   score: number;
   kills: number;
-  skinId: number;
+  skinId?: number;  // legacy compat
+  level?: number;
+  skin?: { id: number; name: string; rarity: string };
 }
 
 export interface RecentWinner extends WinnerInfo {
@@ -59,10 +62,7 @@ export interface JoinedPayload {
   roomId: string;
   id: string;
   spawn: Position;
-  arena: {
-    radius: number;
-    orbCount: number;
-  };
+  arenaRadius: number;   // v10: flat field (Go server sends json:"arenaRadius")
   tick: number;
   roomState: RoomStatus;
   timeRemaining: number;
@@ -109,13 +109,14 @@ export interface StatePayload {
 
 export interface DeathPayload {
   score: number;
-  length: number;
   kills: number;
-  killer?: string;
-  duration: number; // survival seconds
+  duration: number;            // survival seconds
   rank: number;
+  killer?: string;
+  killerName?: string;         // v10: killer display name
   damageSource?: DamageSource; // v10: 사망 원인
   level?: number;              // v10: 사망 시 레벨
+  build?: Record<string, any>; // v10: build state at death
 }
 
 export interface RespawnedPayload {
@@ -125,6 +126,7 @@ export interface RespawnedPayload {
 
 export interface KillPayload {
   victim: string;
+  victimName?: string;  // v10: victim display name
   victimMass: number;
 }
 
@@ -193,11 +195,13 @@ export interface AgentNetworkData {
   h: number;              // heading
   m: number;              // mass
   b: boolean;             // boosting
+  a: boolean;             // alive
   k: number;              // skin id
   lv: number;             // level
-  e?: number[];           // activeEffects [type, remainingTicks, ...]
-  // 하위 호환: 클라이언트가 p(segments)를 기대할 경우 position에서 생성
-  p?: [number, number][]; // segments 호환 (position을 단일 세그먼트로)
+  bot?: boolean;          // is bot agent
+  ks?: number;            // kill streak
+  hr: number;             // hitbox radius
+  e?: number[];           // activeEffects (legacy 2D renderer compat)
 }
 
 // ─── v10 Upgrade Events ───
@@ -312,7 +316,7 @@ export interface ObserveGamePayload {
 /** 서버→클라: 시너지 발동 알림 */
 export interface SynergyActivatedPayload {
   synergyId: string;
-  synergyName: string;
+  name: string;          // Go: json:"name"
   description: string;
 }
 

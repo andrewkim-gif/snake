@@ -323,6 +323,8 @@ func (r *Room) endRound() {
 				Build:     topAgent.Build,
 				Synergies: topAgent.ActiveSynergies,
 				Skin:      topAgent.Skin,
+				RoomID:    r.ID,
+				Timestamp: time.Now().UnixMilli(),
 			}
 			winner = &w
 

@@ -1,7 +1,12 @@
 'use client';
 
+/**
+ * McInput — MC 스타일 다크 입력 필드
+ * 솔리드 보더 + 포커스 시 밝은 보더
+ */
+
 import { useState, type InputHTMLAttributes } from 'react';
-import { MC, MCModern, bodyFont } from '@/lib/minecraft-ui';
+import { MC, bodyFont } from '@/lib/minecraft-ui';
 
 interface McInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -11,29 +16,20 @@ export function McInput({ style, ...rest }: McInputProps) {
   return (
     <input
       style={{
-        backgroundColor: 'rgba(0, 0, 0, 0.5)',
-        border: `1.5px solid ${focused ? MC.btnGreen : 'rgba(255,255,255,0.1)'}`,
-        borderRadius: MCModern.radiusSm,
+        backgroundColor: MC.inputBg,
+        border: `2px solid ${focused ? MC.inputFocusBorder : MC.inputBorder}`,
         color: MC.textPrimary,
         fontFamily: bodyFont,
         fontSize: '0.95rem',
-        padding: '0.65rem 0.8rem',
+        padding: '0.6rem 0.8rem',
         outline: 'none',
         width: '100%',
         boxSizing: 'border-box',
         textAlign: 'center',
-        transition: MCModern.transitionFast,
-        boxShadow: focused ? MCModern.glowGreen : 'none',
         ...style,
       }}
-      onFocus={(e) => {
-        setFocused(true);
-        rest.onFocus?.(e);
-      }}
-      onBlur={(e) => {
-        setFocused(false);
-        rest.onBlur?.(e);
-      }}
+      onFocus={(e) => { setFocused(true); rest.onFocus?.(e); }}
+      onBlur={(e) => { setFocused(false); rest.onBlur?.(e); }}
       {...rest}
     />
   );

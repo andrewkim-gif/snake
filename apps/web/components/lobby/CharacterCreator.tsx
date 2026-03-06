@@ -172,7 +172,7 @@ function SkinThumbnail({ skinId, selected, onClick }: {
       style={{
         width: 28, height: 28, padding: 0,
         border: selected ? `2px solid ${MC.textGold}` : `1px solid rgba(255,255,255,0.1)`,
-        borderRadius: '4px',
+        borderRadius: 0,
         backgroundColor: 'transparent',
         cursor: 'pointer',
         imageRendering: 'pixelated',

@@ -64,7 +64,7 @@ function SynergyToast({
           fontFamily: pixelFont, fontSize: '0.35rem', color: MC.textGold,
           textShadow: '1px 1px 0 #553300',
         }}>
-          {synergy.synergyName}
+          {synergy.name}
         </span>
       </div>
       <div style={{
