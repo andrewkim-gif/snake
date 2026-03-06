@@ -124,6 +124,47 @@ func (se *SovereigntyEngine) ProcessBattleResult(result BattleResult) {
 
 	var changeEvent *SovereigntyChangeEvent
 
+	// v12 S21: 주권 전환 조건 — 20% 우위 + 최소 3명 에이전트
+	// 이미 주권을 가진 팩션이 방어한 경우: 조건 없이 레벨업
+	// 새 팩션이 점령 시도: 20% score 우위 + 최소 3명 필요
+	if winnerFaction != oldFaction && oldFaction != "" {
+		// 승리 팩션 에이전트 수 확인
+		winnerAgents := 0
+		if result.FactionAgentCounts != nil {
+			winnerAgents = result.FactionAgentCounts[winnerFaction]
+		}
+		if winnerAgents < 3 {
+			// 최소 3명 미달 — 주권 변경 불가
+			se.mu.Unlock()
+			slog.Info("sovereignty change blocked: min 3 agents required",
+				"country", result.CountryISO,
+				"faction", winnerFaction,
+				"agents", winnerAgents,
+			)
+			return
+		}
+		// 20% 우위 확인
+		defenderScore := 0
+		if result.FactionScores != nil {
+			defenderScore = result.FactionScores[oldFaction]
+		}
+		if defenderScore > 0 {
+			advantage := float64(result.WinnerScore-defenderScore) / float64(defenderScore)
+			if advantage < 0.20 {
+				// 20% 우위 미달 — 주권 변경 불가
+				se.mu.Unlock()
+				slog.Info("sovereignty change blocked: need 20% score advantage",
+					"country", result.CountryISO,
+					"faction", winnerFaction,
+					"winnerScore", result.WinnerScore,
+					"defenderScore", defenderScore,
+					"advantage", advantage,
+				)
+				return
+			}
+		}
+	}
+
 	if winnerFaction == oldFaction {
 		// Successful defense: increment streak and possibly level up
 		record.ConsecutiveWins++

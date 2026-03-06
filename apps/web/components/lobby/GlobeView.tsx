@@ -10,8 +10,8 @@ import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import type { CountryClientState, GeoJSONData } from '@/lib/globe-data';
-import { loadGeoJSON } from '@/lib/globe-data';
-import { sovereigntyColors, getCountryISO } from '@/lib/map-style';
+import { loadGeoJSON, factionColorPalette } from '@/lib/globe-data';
+import { sovereigntyColors, getCountryISO, getCountryName } from '@/lib/map-style';
 
 // three-globe dynamic import 타입
 type ThreeGlobeInstance = import('three-globe').default;
@@ -30,6 +30,50 @@ function hexToRgba(hex: string, alpha: number): string {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// v12 S21: 팩션 이름 → 색상 인덱스 (해시 기반, 안정적 매핑)
+const _factionColorCache = new Map<string, string>();
+function getFactionHexColor(factionId: string): string {
+  if (!factionId) return sovereigntyColors.unclaimed;
+  const cached = _factionColorCache.get(factionId);
+  if (cached) return cached;
+  // 간단한 해시: 문자열 → 인덱스
+  let hash = 0;
+  for (let i = 0; i < factionId.length; i++) {
+    hash = ((hash << 5) - hash + factionId.charCodeAt(i)) | 0;
+  }
+  const idx = Math.abs(hash) % factionColorPalette.length;
+  const color = factionColorPalette[idx];
+  _factionColorCache.set(factionId, color);
+  return color;
+}
+
+// v12 S21: 주권 레벨 (0-5) → opacity (0.3 ~ 1.0)
+function sovereigntyLevelToOpacity(level: number): number {
+  if (level <= 0) return 0.3;
+  // Lv1=0.44, Lv2=0.58, Lv3=0.72, Lv4=0.86, Lv5=1.0
+  return Math.min(1.0, 0.3 + level * 0.14);
+}
+
+// v12 S21: 주권 레벨 라벨
+function sovereigntyLevelLabel(level: number): string {
+  const labels = ['Unclaimed', 'Lv1 Influence', 'Lv2 Control', 'Lv3 Dominion', 'Lv4 Authority', 'Lv5 Sovereignty'];
+  return labels[Math.min(level, 5)] || `Lv${level}`;
+}
+
+// v12 S21: hex 색상 lerp (불투명 기반 — 두 hex 색상 간 보간)
+function lerpHexColor(from: string, to: string, t: number): string {
+  const fr = parseInt(from.slice(1, 3), 16);
+  const fg = parseInt(from.slice(3, 5), 16);
+  const fb = parseInt(from.slice(5, 7), 16);
+  const tr = parseInt(to.slice(1, 3), 16);
+  const tg = parseInt(to.slice(3, 5), 16);
+  const tb = parseInt(to.slice(5, 7), 16);
+  const r = Math.round(fr + (tr - fr) * t);
+  const g = Math.round(fg + (tg - fg) * t);
+  const b = Math.round(fb + (tb - fb) * t);
+  return `#${r.toString(16).padStart(2, '0')}${g.toString(16).padStart(2, '0')}${b.toString(16).padStart(2, '0')}`;
 }
 
 // GeoJSON geometry → centroid (lat/lng) 계산
@@ -51,12 +95,25 @@ function computeCentroid(geometry: { type: string; coordinates: unknown }): { la
   return { lng: sLng / ring.length, lat: sLat / ring.length };
 }
 
+// v12 S21: 호버 데이터 타입
+interface HoverInfo {
+  iso3: string;
+  name: string;
+  faction: string;
+  level: number;
+  screenX: number;
+  screenY: number;
+}
+
 // Globe 3D 오브젝트 컴포넌트
 function GlobeObject({
   countryStates,
   selectedCountry,
   onCountryClick,
-}: Omit<GlobeViewProps, 'style' | 'autoRotate'>) {
+  onHoverCountry,
+}: Omit<GlobeViewProps, 'style' | 'autoRotate'> & {
+  onHoverCountry?: (info: HoverInfo | null) => void;
+}) {
   const globeRef = useRef<ThreeGlobeInstance | null>(null);
   const groupRef = useRef<THREE.Group>(null);
   const labelGroupRef = useRef<THREE.Group | null>(null);
@@ -81,9 +138,27 @@ function GlobeObject({
       }
       if (cancelled) return;
 
-      const polys = geoData.features.filter((f) => f.geometry.type !== 'Point');
-      const globe = new ThreeGlobeClass!()
-        .globeImageUrl('/textures/earth-blue-marble.jpg')
+      // three-globe의 ThreeDigest는 d.id로 폴리곤을 식별함
+      // GeoJSON feature에 id 없으면 전부 undefined → 1개만 생성됨 (근본 버그)
+      const polys = geoData.features
+        .filter((f) => f.geometry.type !== 'Point')
+        .map((f, i) => ({
+          ...f,
+          id: (f.properties.ADM0_A3 as string) || String(i),
+        }));
+      console.log('[GLOBE-DBG] GeoJSON polys:', polys.length, 'first id:', polys[0]?.id);
+
+      // animateIn: false → scale tween 비활성화 (R3F의 rAF와 충돌 방지)
+      // waitForGlobeReady: false → visible 즉시 true (텍스쳐 로딩 대기 안 함)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const globe = new (ThreeGlobeClass as any)({ animateIn: false, waitForGlobeReady: false });
+      // polygonsTransitionDuration(0): polygonsData보다 먼저 설정 필수!
+      // 기본값 1000ms → altitude tween이 -0.001(지구 표면 안쪽)에서 시작 → z-fighting
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globe as any).polygonsTransitionDuration(0);
+
+      globe
+        // .globeImageUrl('/textures/earth-blue-marble.jpg') // 디버그: 텍스쳐 제거하여 렌더링 문제 격리
         .showGlobe(true)
         .showAtmosphere(false)
         .polygonsData(polys)
@@ -91,29 +166,32 @@ function GlobeObject({
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
           const state = countryStates?.get(iso3);
-          if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.55);
-          return hexToRgba(sovereigntyColors.unclaimed, 0.55);
+          // v12 S21: 팩션 색상 + 주권 레벨 기반 opacity
+          if (state?.battleStatus === 'in_battle') return sovereigntyColors.atWar;
+          if (state?.sovereignFaction) {
+            const factionColor = getFactionHexColor(state.sovereignFaction);
+            // 불투명 기반 — 주권 레벨로 밝기 조절 (MeshBasicMaterial 기반이므로 hex RGB로)
+            const lvl = state.sovereigntyLevel ?? 0;
+            const intensity = sovereigntyLevelToOpacity(lvl);
+            // 색상 강도를 intensity로 조절 (어두운 배경 위에서 밝기 변화)
+            return lerpHexColor('#1a1a2e', factionColor, intensity);
+          }
+          return sovereigntyColors.unclaimed;
         })
-        .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
-        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.25)')
+        .polygonSideColor(() => '#1a1a2e')
+        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.4)')
         .polygonAltitude((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
-          if (selectedCountry && iso3 === selectedCountry) return 0.008;
-          return 0.006;
+          if (selectedCountry && iso3 === selectedCountry) return 0.02;
+          return 0.015; // z-fighting 방지: 기존 0.006→0.015
         });
 
-      // 폴리곤 전환 시간 0ms — 즉시 렌더링 (기본 1000ms면 altitude tween이
-      // scale 0.999에서 시작하여 지구 표면 안쪽에 위치 → z-fighting 발생)
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (globe as any).polygonsTransitionDuration(0);
-
-      // Globe material: 텍스처 원본 색감 보존
-      // emissive를 올려서 밤 쪽도 은은하게 보이게 (MeshBasicMaterial 폴리곤과의 밝기 차이 축소)
+      // Globe material: 텍스쳐 없는 상태 — 짙은 바다색 구체 (폴리곤 대비 극대화)
       const globeMat = globe.globeMaterial() as THREE.MeshPhongMaterial;
-      globeMat.color = new THREE.Color('#ffffff');
-      globeMat.emissive = new THREE.Color('#112244');
-      globeMat.emissiveIntensity = 0.18;
+      globeMat.color = new THREE.Color('#0a1628'); // 짙은 네이비
+      globeMat.emissive = new THREE.Color('#0d1f3c');
+      globeMat.emissiveIntensity = 0.5;
       globeMat.shininess = 0;
       globeMat.specular = new THREE.Color('#000000');
 
@@ -134,6 +212,20 @@ function GlobeObject({
 
         groupRef.current.add(globe as unknown as THREE.Object3D);
         globeRef.current = globe;
+        // 진단용 window 노출 (evaluate에서 접근)
+        if (typeof window !== 'undefined') {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          (window as any).__globeDebug = globe;
+        }
+        // 디버그: 글로브 오브젝트 상태 로그
+        const gObj = globe as unknown as THREE.Object3D;
+        console.log('[GLOBE-DBG] Globe added to scene', {
+          visible: gObj.visible,
+          position: gObj.position.toArray(),
+          scale: gObj.scale.toArray(),
+          childCount: gObj.children.length,
+          parent: gObj.parent?.type,
+        });
 
         // 국가 이름 라벨: 단일 캔버스 재사용 (브라우저 캔버스 컨텍스트 제한 회피)
         // 기존: 195개 캔버스 각각 getContext('2d') → 컨텍스트 제한 초과 시 TypeError
@@ -146,6 +238,7 @@ function GlobeObject({
           const sharedCtx = sharedCanvas.getContext('2d');
           if (!sharedCtx) throw new Error('Cannot create 2D canvas context');
 
+          let labelCount = 0;
           for (const f of polys) {
             const name = (f.properties.NAME as string) || '';
             if (!name) continue;
@@ -188,26 +281,15 @@ function GlobeObject({
               sharedCtx.fillStyle = '#FFFFFF';
               sharedCtx.fillText(name, cx, cy);
 
-              // ImageData → Uint8Array 복사 (캔버스 재사용을 위해 독립 복사본 생성)
-              const imageData = sharedCtx.getImageData(0, 0, pw, ph);
-              const pixels = new Uint8Array(imageData.data.length);
-              pixels.set(imageData.data);
-
-              // 상하 반전 (Canvas Y축: 위→아래, WebGL: 아래→위)
-              const rowBytes = pw * 4;
-              const halfH = Math.floor(ph / 2);
-              for (let y = 0; y < halfH; y++) {
-                const topOff = y * rowBytes;
-                const botOff = (ph - 1 - y) * rowBytes;
-                for (let x = 0; x < rowBytes; x++) {
-                  const tmp = pixels[topOff + x];
-                  pixels[topOff + x] = pixels[botOff + x];
-                  pixels[botOff + x] = tmp;
-                }
-              }
-
-              const texture = new THREE.DataTexture(pixels, pw, ph, THREE.RGBAFormat);
-              texture.needsUpdate = true;
+              // 개별 캔버스 → CanvasTexture (가장 안정적인 방식)
+              // THREE.CanvasTexture는 flipY/format을 자동 처리
+              const labelCanvas = document.createElement('canvas');
+              labelCanvas.width = pw;
+              labelCanvas.height = ph;
+              const labelCtx = labelCanvas.getContext('2d');
+              if (!labelCtx) throw new Error('Label canvas context failed');
+              labelCtx.drawImage(sharedCanvas, 0, 0);
+              const texture = new THREE.CanvasTexture(labelCanvas);
               texture.minFilter = THREE.LinearFilter;
               texture.magFilter = THREE.LinearFilter;
 
@@ -236,11 +318,20 @@ function GlobeObject({
               const baseH = 8;
               sprite.scale.set(baseH * (pw / ph), baseH, 1);
               labelGroup.add(sprite);
+              labelCount++;
+              if (labelCount <= 3) {
+                console.log(`[GLOBE-DBG] Label "${name}":`, {
+                  pos: sprite.position.toArray().map((v: number) => Math.round(v)),
+                  scale: sprite.scale.toArray().map((v: number) => +v.toFixed(1)),
+                  tex: `${pw}x${ph}`,
+                });
+              }
             } catch (labelErr) {
               // 개별 라벨 실패는 무시하고 다음 라벨 진행
-              console.warn(`Label failed: ${name}`, labelErr);
+              console.warn(`[GLOBE-DBG] Label failed: ${name}`, labelErr);
             }
           }
+          console.log(`[GLOBE-DBG] Labels created: ${labelCount}/${polys.length}`);
         } catch (err) {
           console.error('Label system init failed:', err);
         }
@@ -278,17 +369,105 @@ function GlobeObject({
         const f = feat as { properties: Record<string, unknown> };
         const iso3 = getCountryISO(f.properties);
         const state = countryStates?.get(iso3);
-        if (state?.battleStatus === 'in_battle') return hexToRgba(sovereigntyColors.atWar, 0.6);
-        if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.55);
-        return hexToRgba(sovereigntyColors.unclaimed, 0.55);
+        // v12 S21: 실시간 팩션 색상 + 주권 레벨 강도
+        if (state?.battleStatus === 'in_battle') return sovereigntyColors.atWar;
+        if (state?.sovereignFaction) {
+          const factionColor = getFactionHexColor(state.sovereignFaction);
+          const lvl = state.sovereigntyLevel ?? 0;
+          const intensity = sovereigntyLevelToOpacity(lvl);
+          return lerpHexColor('#1a1a2e', factionColor, intensity);
+        }
+        return sovereigntyColors.unclaimed;
       })
       .polygonAltitude((feat: object) => {
         const f = feat as { properties: Record<string, unknown> };
         const iso3 = getCountryISO(f.properties);
-        if (selectedCountry && iso3 === selectedCountry) return 0.008;
-        return 0.006;
+        if (selectedCountry && iso3 === selectedCountry) return 0.02;
+        return 0.015;
       });
   }, [countryStates, selectedCountry, geoData, globeReady]);
+
+  // 진단: 폴리곤 머티리얼 수정 + 씬 그래프 로그
+  const dbgFrame = useRef(0);
+  const matFixDone = useRef(false);
+
+  useFrame(() => {
+    dbgFrame.current++;
+
+    // 강제: three-globe의 visible/scale 보장
+    // three-globe는 initGlobe()에서 visible=true + scale tween(1e-6→1)을 실행하지만
+    // R3F 환경에서 three-globe의 자체 _animationCycle(rAF)이 제대로 안 돌 수 있음
+    if (globeRef.current) {
+      const gObj = globeRef.current as unknown as THREE.Object3D;
+      if (!gObj.visible) {
+        gObj.visible = true;
+        console.log('[GLOBE-DBG] Forced globe visible=true');
+      }
+      if (gObj.scale.x < 0.99) {
+        gObj.scale.set(1, 1, 1);
+        console.log('[GLOBE-DBG] Forced globe scale=1');
+      }
+    }
+
+    // 1회성: 폴리곤 머티리얼 depthWrite 수정
+    // three-globe 폴리곤은 비동기 생성 → meshCount > 50 대기
+    if (!matFixDone.current && globeRef.current) {
+      const globeObj = globeRef.current as unknown as THREE.Object3D;
+      let meshCount = 0;
+      globeObj.traverse((c) => { if (c instanceof THREE.Mesh) meshCount++; });
+      if (meshCount > 50) {
+        matFixDone.current = true;
+        let fixCount = 0;
+        globeObj.traverse((child) => {
+          if (child instanceof THREE.Mesh) {
+            const mats = Array.isArray(child.material) ? child.material : [child.material];
+            for (const mat of mats) {
+              if (mat.transparent && mat.depthWrite) {
+                mat.depthWrite = false;
+                fixCount++;
+              }
+            }
+          }
+        });
+        console.log('[GLOBE-DBG] Material fix applied:', { meshes: meshCount, depthWriteFixes: fixCount });
+
+        // 디버그: 폴리곤 캡 머터리얼 (material[1]) 상태 확인
+        // three-globe에서: material[0]=side, material[1]=cap
+        let polyChecked = 0;
+        globeObj.traverse((c) => {
+          if (polyChecked >= 3) return;
+          if (c instanceof THREE.Mesh && Array.isArray(c.material) && c.material.length === 2) {
+            const side = c.material[0] as THREE.MeshBasicMaterial;
+            const cap = c.material[1] as THREE.MeshBasicMaterial;
+            console.log(`[GLOBE-DBG] Polygon[${polyChecked}] side:`, {
+              color: '#' + side.color?.getHexString(),
+              opacity: side.opacity,
+              transparent: side.transparent,
+            });
+            console.log(`[GLOBE-DBG] Polygon[${polyChecked}] cap:`, {
+              color: '#' + cap.color?.getHexString(),
+              opacity: cap.opacity,
+              transparent: cap.transparent,
+              depthWrite: cap.depthWrite,
+            });
+            polyChecked++;
+          }
+        });
+      }
+    }
+
+    // 매 300프레임(~5초)마다 씬 상태 요약 로그
+    if (dbgFrame.current % 300 === 0 && globeRef.current) {
+      const g = globeRef.current as unknown as THREE.Object3D;
+      let mCount = 0, sCount = 0, grpCount = 0;
+      g.traverse((c) => {
+        if (c instanceof THREE.Mesh) mCount++;
+        else if (c instanceof THREE.Sprite) sCount++;
+        else if (c.type === 'Group') grpCount++;
+      });
+      console.log(`[GLOBE-DBG] Frame ${dbgFrame.current}: meshes=${mCount}, sprites=${sCount}, groups=${grpCount}, globeVisible=${g.visible}, globePos=${g.position.toArray()}`);
+    }
+  });
 
   // 라벨 거리 페이드 + facing 기반 뒷면 숨김
   // depthTest: false이므로 뒷면 라벨이 지구를 뚫고 보이는 문제를
@@ -302,6 +481,17 @@ function GlobeObject({
     // 450 이상: 투명, 300 이하: 불투명 (기본 카메라 300 → 1.0)
     const maxOpacity = THREE.MathUtils.clamp((450 - dist) / 150, 0, 1);
     labelGroupRef.current.visible = maxOpacity > 0.01;
+
+    // 매 300프레임마다 라벨 가시성 로그
+    if (dbgFrame.current % 300 === 1) {
+      console.log('[GLOBE-DBG] Labels:', {
+        camDist: dist.toFixed(1),
+        maxOpacity: maxOpacity.toFixed(2),
+        groupVisible: labelGroupRef.current.visible,
+        spriteCount: labelGroupRef.current.children.length,
+      });
+    }
+
     if (!labelGroupRef.current.visible) return;
 
     // 카메라 방향 벡터 (재할당 없이 재사용 — 프레임당 ~200개 Vector3 생성 방지)
@@ -336,6 +526,7 @@ function GlobeObject({
     };
 
     const handleCanvasClick = (event: MouseEvent) => {
+      console.log('[GLOBE-DBG] Click:', { hasCallback: !!onCountryClick, hasGlobe: !!globeRef.current });
       if (!onCountryClick || !globeRef.current) return;
 
       // 드래그 vs 클릭 구분
@@ -356,6 +547,7 @@ function GlobeObject({
       const globeObj = globeRef.current as unknown as THREE.Object3D;
       const intersects = raycasterRef.current.intersectObjects(globeObj.children, true);
 
+      console.log('[GLOBE-DBG] Raycaster hits:', intersects.length, intersects.length > 0 ? intersects[0].object.type : 'none');
       if (intersects.length === 0) return;
 
       // three-globe은 각 polygon 메시의 __data에 원본 GeoJSON feature를 저장
@@ -375,14 +567,69 @@ function GlobeObject({
       }
     };
 
+    // v12 S21: 호버 감지 (pointermove → raycaster → 국가 식별)
+    let hoverThrottle = 0;
+    const handlePointerMove = (event: PointerEvent) => {
+      const now = Date.now();
+      if (now - hoverThrottle < 100) return; // 100ms 스로틀
+      hoverThrottle = now;
+
+      if (!globeRef.current || !onHoverCountry) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const mx = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+      const my = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+
+      const hoverRay = raycasterRef.current;
+      hoverRay.setFromCamera(new THREE.Vector2(mx, my), camera);
+
+      const globeObj = globeRef.current as unknown as THREE.Object3D;
+      const hits = hoverRay.intersectObjects(globeObj.children, true);
+
+      if (hits.length === 0) {
+        onHoverCountry(null);
+        return;
+      }
+
+      let hitTarget: THREE.Object3D | null = hits[0].object;
+      while (hitTarget) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const feat = (hitTarget as any).__data;
+        if (feat?.properties) {
+          const iso3 = getCountryISO(feat.properties);
+          const name = getCountryName(feat.properties);
+          const state = countryStates?.get(iso3);
+          onHoverCountry({
+            iso3,
+            name,
+            faction: state?.sovereignFaction ?? '',
+            level: state?.sovereigntyLevel ?? 0,
+            screenX: event.clientX,
+            screenY: event.clientY,
+          });
+          return;
+        }
+        hitTarget = hitTarget.parent;
+      }
+      onHoverCountry(null);
+    };
+
+    const handlePointerLeave = () => {
+      onHoverCountry?.(null);
+    };
+
     canvas.addEventListener('pointerdown', handlePointerDown);
     canvas.addEventListener('click', handleCanvasClick);
+    canvas.addEventListener('pointermove', handlePointerMove);
+    canvas.addEventListener('pointerleave', handlePointerLeave);
 
     return () => {
       canvas.removeEventListener('pointerdown', handlePointerDown);
       canvas.removeEventListener('click', handleCanvasClick);
+      canvas.removeEventListener('pointermove', handlePointerMove);
+      canvas.removeEventListener('pointerleave', handlePointerLeave);
     };
-  }, [globeReady, gl, camera, onCountryClick]);
+  }, [globeReady, gl, camera, onCountryClick, onHoverCountry, countryStates]);
 
   return (
     <group ref={groupRef} />
@@ -672,8 +919,15 @@ export function GlobeView({
   onCountryClick,
   style,
 }: GlobeViewProps) {
+  // v12 S21: 호버 툴팁 상태
+  const [hoverInfo, setHoverInfo] = useState<HoverInfo | null>(null);
+
+  const handleHover = useCallback((info: HoverInfo | null) => {
+    setHoverInfo(info);
+  }, []);
+
   return (
-    <div style={{ width: '100%', height: '100%', background: '#07080C', ...style }}>
+    <div style={{ width: '100%', height: '100%', background: '#07080C', position: 'relative', ...style }}>
       <Canvas
         camera={{
           position: [0, 0, 300],
@@ -697,12 +951,91 @@ export function GlobeView({
           countryStates={countryStates}
           selectedCountry={selectedCountry}
           onCountryClick={onCountryClick}
+          onHoverCountry={handleHover}
         />
 
         <AtmosphereGlow />
 
         <AdaptiveControls />
       </Canvas>
+
+      {/* v12 S21: 국가 호버 툴팁 (주권 정보 표시) */}
+      {hoverInfo && (
+        <SovereigntyTooltip info={hoverInfo} />
+      )}
+    </div>
+  );
+}
+
+// v12 S21: 주권 정보 호버 툴팁
+function SovereigntyTooltip({ info }: { info: HoverInfo }) {
+  const factionColor = info.faction ? getFactionHexColor(info.faction) : '#8B8D98';
+
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: info.screenX + 14,
+        top: info.screenY - 10,
+        pointerEvents: 'none',
+        zIndex: 100,
+        backgroundColor: 'rgba(14, 14, 18, 0.92)',
+        backdropFilter: 'blur(12px)',
+        WebkitBackdropFilter: 'blur(12px)',
+        border: '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: '5px',
+        padding: '8px 12px',
+        maxWidth: '220px',
+        boxShadow: '0 4px 16px rgba(0, 0, 0, 0.5)',
+        fontFamily: '"Inter", -apple-system, sans-serif',
+      }}
+    >
+      {/* 국가 이름 */}
+      <div style={{
+        fontSize: '13px',
+        fontWeight: 700,
+        color: '#ECECEF',
+        letterSpacing: '0.5px',
+        marginBottom: '4px',
+      }}>
+        {info.name}
+      </div>
+
+      {/* 팩션 + 주권 레벨 */}
+      {info.faction ? (
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          fontSize: '11px',
+        }}>
+          <div style={{
+            width: '8px',
+            height: '8px',
+            borderRadius: '2px',
+            backgroundColor: factionColor,
+            flexShrink: 0,
+          }} />
+          <span style={{ color: factionColor, fontWeight: 600 }}>
+            {info.faction}
+          </span>
+          <span style={{
+            color: '#8B8D98',
+            fontSize: '10px',
+            marginLeft: '4px',
+          }}>
+            ({sovereigntyLevelLabel(info.level)})
+          </span>
+        </div>
+      ) : (
+        <div style={{
+          fontSize: '11px',
+          color: '#55565E',
+          letterSpacing: '1px',
+        }}>
+          UNCLAIMED
+        </div>
+      )}
     </div>
   );
 }

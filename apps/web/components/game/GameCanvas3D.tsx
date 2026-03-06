@@ -52,6 +52,9 @@ import { SynergyPopup } from './SynergyPopup';
 import { CoachBubble } from './CoachBubble';
 import { AnalystPanel } from './AnalystPanel';
 import { GameMinimap } from './GameMinimap';
+import { BattleResultOverlay } from './BattleResultOverlay';
+import { SpectatorMode } from './SpectatorMode';
+import type { SpectatorTarget } from './SpectatorMode';
 
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
@@ -90,6 +93,9 @@ export function GameCanvas3D({
   const agentIndexMapRef = useRef<Map<string, number>>(new Map());
   const [menuOpen, setMenuOpen] = useState(false);
   const [terrainToast, setTerrainToast] = useState<string | null>(null);
+  // v12 S20: Spectator mode + battle result
+  const [spectatorTarget, setSpectatorTarget] = useState<string | null>(null);
+  const [battleCountdown, setBattleCountdown] = useState(10);
 
   // ─── 테마 결정 (uiState.terrainTheme → 폴백 "forest") ───
   const terrainTheme = uiState.terrainTheme || 'forest';
@@ -103,6 +109,45 @@ export function GameCanvas3D({
       return () => clearTimeout(timer);
     }
   }, [terrainTheme]);
+
+  // v12 S20: 배틀 결과 10초 카운트다운
+  useEffect(() => {
+    if (!uiState.battleComplete) {
+      setBattleCountdown(10);
+      return;
+    }
+    setBattleCountdown(10);
+    const interval = setInterval(() => {
+      setBattleCountdown(prev => {
+        if (prev <= 1) {
+          clearInterval(interval);
+          return 0;
+        }
+        return prev - 1;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [uiState.battleComplete]);
+
+  // v12 S20: 살아있는 에이전트 목록 (관전용)
+  const aliveAgentsForSpectator: SpectatorTarget[] = (() => {
+    const state = dataRef.current.latestState;
+    if (!state) return [];
+    const lb = dataRef.current.leaderboard;
+    return state.s
+      .filter(a => a.a && a.i !== dataRef.current.playerId)
+      .map(a => {
+        const lbEntry = lb.find(e => e.id === a.i);
+        return {
+          id: a.i,
+          name: a.n ?? 'Agent',
+          kills: lbEntry?.kills ?? (a.ks ?? 0),
+          level: a.lv ?? 1,
+          score: lbEntry?.score ?? 0,
+          alive: true,
+        };
+      });
+  })();
 
   // 경과 시간 업데이트 + 오브 데이터 동기화 + appearance 캐시 (rAF 기반)
   useEffect(() => {
@@ -313,13 +358,17 @@ export function GameCanvas3D({
   const currentRadius = uiState.arenaShrink?.currentRadius ?? ARENA_CONFIG.radius;
   const targetRadius = uiState.arenaShrink?.minRadius;
 
-  // ─── 오버레이 표시 조건 (기존 GameCanvas.tsx와 동일) ───
+  // ─── 오버레이 표시 조건 (v12: BattleResult + Spectator 추가) ───
   const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
-  const showRoundResult = uiState.roomState === 'ending' && uiState.roundEnd !== null;
-  const showCooldown = uiState.roomState === 'cooldown';
+  const showBattleResult = uiState.battleComplete != null;
+  const showRoundResult = uiState.roomState === 'ending' && uiState.roundEnd !== null && !showBattleResult;
+  const showCooldown = uiState.roomState === 'cooldown' && !showBattleResult;
   const showWaiting = uiState.roomState === 'waiting';
-  const showDeath = uiState.deathInfo && !showRoundResult && !showCooldown && uiState.roomState !== 'ending';
-  const showLevelUp = uiState.levelUp !== null && uiState.alive && !showDeath && !showRoundResult;
+  // v12 S20: 관전 모드 표시 (사망 + 배틀 진행 중 + 배틀 결과 미표시)
+  const showSpectator = uiState.isSpectating && !showBattleResult && !showRoundResult && uiState.roomState === 'playing';
+  // 기존 사망 오버레이: 관전 모드 시 비활성 (SpectatorMode가 대체)
+  const showDeath = uiState.deathInfo && !showRoundResult && !showCooldown && !showSpectator && !showBattleResult && uiState.roomState !== 'ending';
+  const showLevelUp = uiState.levelUp !== null && uiState.alive && !showDeath && !showRoundResult && !showBattleResult;
 
   return (
     <div
@@ -437,6 +486,32 @@ export function GameCanvas3D({
       )}
 
       {showTimer && <RoundTimerHUD timeRemaining={uiState.timeRemaining} />}
+
+      {/* v12 S20: Battle Result Overlay (배틀 완료 시 전체화면) */}
+      {showBattleResult && uiState.roundEnd && (
+        <BattleResultOverlay
+          roundEnd={uiState.roundEnd}
+          deathInfo={uiState.deathInfo}
+          countdownSec={battleCountdown}
+          onReenter={() => {
+            // 같은 국가 재진입: 현재 roomId로 다시 joinRoom
+            // page.tsx의 handleEnterArena에서 처리
+          }}
+          onRedeploy={handleExitToLobby}
+        />
+      )}
+
+      {/* v12 S20: Spectator Mode (사망 후 관전) */}
+      {showSpectator && uiState.deathInfo && (
+        <SpectatorMode
+          deathInfo={uiState.deathInfo}
+          aliveAgents={aliveAgentsForSpectator}
+          followTarget={spectatorTarget}
+          onFollowAgent={setSpectatorTarget}
+          timeRemaining={uiState.timeRemaining}
+        />
+      )}
+
       {showRoundResult && (
         <RoundResultOverlay
           roundEnd={uiState.roundEnd!}

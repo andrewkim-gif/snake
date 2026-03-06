@@ -593,13 +593,21 @@ func (wm *WorldManager) endBattle(countryISO string) {
 
 	wm.mu.Unlock()
 
+	// v12 S21: 팩션별 에이전트 수 집계
+	factionAgentCounts := make(map[string]int)
+	detailedResults := arena.GetDetailedBattleResults()
+	for fid, fs := range detailedResults {
+		factionAgentCounts[fid] = fs.AgentCount
+	}
+
 	// Build result data
 	resultData := BattleResult{
-		CountryISO:    countryISO,
-		WinnerFaction: winnerFaction,
-		WinnerScore:   winnerScore,
-		FactionScores: factionScores,
-		BattledAt:     time.Now(),
+		CountryISO:         countryISO,
+		WinnerFaction:      winnerFaction,
+		WinnerScore:        winnerScore,
+		FactionScores:      factionScores,
+		FactionAgentCounts: factionAgentCounts,
+		BattledAt:          time.Now(),
 	}
 
 	// Emit battle end event
@@ -1051,9 +1059,10 @@ func (wm *WorldManager) UpdateCountryGDP(iso3 string, gdp int64) {
 
 // BattleResult holds the outcome of a country battle.
 type BattleResult struct {
-	CountryISO    string         `json:"country_iso"`
-	WinnerFaction string         `json:"winner_faction"`
-	WinnerScore   int            `json:"winner_score"`
-	FactionScores map[string]int `json:"faction_scores"`
-	BattledAt     time.Time      `json:"battled_at"`
+	CountryISO         string         `json:"country_iso"`
+	WinnerFaction      string         `json:"winner_faction"`
+	WinnerScore        int            `json:"winner_score"`
+	FactionScores      map[string]int `json:"faction_scores"`
+	FactionAgentCounts map[string]int `json:"faction_agent_counts"` // v12 S21: 팩션별 참여 에이전트 수
+	BattledAt          time.Time      `json:"battled_at"`
 }
