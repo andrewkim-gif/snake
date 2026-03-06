@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * McButton — 전술 액센트 버튼
- * 좌측 컬러 스트라이프 + 다크 배경 + 호버 하이라이트
+ * McButton — 모던 액센트 버튼
+ * 좌측 컬러 스트라이프 + 클린 배경 + 호버 하이라이트
  */
 
 import { useState, type CSSProperties, type ReactNode, type ButtonHTMLAttributes } from 'react';
@@ -16,25 +16,25 @@ interface McButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 
 const V = {
   default: {
-    border: 'rgba(232, 224, 212, 0.2)',
-    accent: 'rgba(232, 224, 212, 0.5)',
-    hoverBg: 'rgba(232, 224, 212, 0.08)',
-    pressBg: 'rgba(232, 224, 212, 0.12)',
+    border: 'rgba(0, 0, 0, 0.12)',
+    accent: 'rgba(0, 0, 0, 0.2)',
+    hoverBg: 'rgba(0, 0, 0, 0.04)',
+    pressBg: 'rgba(0, 0, 0, 0.08)',
     text: SK.textPrimary,
   },
   green: {
-    border: 'rgba(74, 158, 74, 0.35)',
+    border: 'rgba(22, 163, 74, 0.25)',
     accent: SK.green,
-    hoverBg: 'rgba(74, 158, 74, 0.12)',
-    pressBg: 'rgba(74, 158, 74, 0.18)',
-    text: SK.green,
+    hoverBg: 'rgba(22, 163, 74, 0.06)',
+    pressBg: 'rgba(22, 163, 74, 0.12)',
+    text: '#15803D',
   },
   red: {
-    border: 'rgba(204, 51, 51, 0.35)',
+    border: 'rgba(220, 38, 38, 0.25)',
     accent: SK.red,
-    hoverBg: 'rgba(204, 51, 51, 0.12)',
-    pressBg: 'rgba(204, 51, 51, 0.18)',
-    text: SK.red,
+    hoverBg: 'rgba(220, 38, 38, 0.06)',
+    pressBg: 'rgba(220, 38, 38, 0.12)',
+    text: '#B91C1C',
   },
 };
 
@@ -53,10 +53,10 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
           ? c.pressBg
           : hovered && isActive
             ? c.hoverBg
-            : 'rgba(26, 26, 26, 0.6)',
+            : '#FFFFFF',
         border: `1px solid ${disabled ? SK.textMuted + '40' : c.border}`,
         borderLeft: `3px solid ${disabled ? SK.textMuted + '40' : c.accent}`,
-        borderRadius: handDrawnRadius(2),
+        borderRadius: handDrawnRadius(6),
         color: disabled ? SK.textMuted : c.text,
         fontFamily: bodyFont,
         fontWeight: 700,
@@ -68,6 +68,7 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
         textTransform: 'uppercase',
         opacity: disabled ? 0.4 : 1,
         transition: 'all 150ms ease',
+        boxShadow: '0 1px 2px rgba(0, 0, 0, 0.05)',
         ...style,
       }}
       onMouseEnter={() => setHovered(true)}

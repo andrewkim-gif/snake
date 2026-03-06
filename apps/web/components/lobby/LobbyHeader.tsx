@@ -1,13 +1,13 @@
 'use client';
 
 /**
- * LobbyHeader — 통합 CIC (Combat Information Center) 헤더 바
- * 글래스모피즘 + 로고 + 상태 + 뷰 토글
+ * LobbyHeader — 모던 라이트 헤더 바
+ * 글래스모피즘 화이트 + 로고 + 상태 + 뷰 토글
  */
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
 interface LobbyHeaderProps {
   connected: boolean;
@@ -30,9 +30,9 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '0 20px',
-      background: 'linear-gradient(to bottom, rgba(10,15,26,0.9) 0%, rgba(10,15,26,0.4) 80%, transparent 100%)',
-      backdropFilter: 'blur(8px)',
-      WebkitBackdropFilter: 'blur(8px)',
+      background: 'linear-gradient(to bottom, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.6) 80%, transparent 100%)',
+      backdropFilter: 'blur(12px)',
+      WebkitBackdropFilter: 'blur(12px)',
       borderBottom: `1px solid ${SK.borderDark}`,
       pointerEvents: 'none',
     }}>
@@ -54,15 +54,16 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             style={{
               height: '36px',
               width: 'auto',
-              filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.5))',
+              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))',
             }}
           />
         ) : (
           <span style={{
-            fontFamily: headingFont,
+            fontFamily: bodyFont,
+            fontWeight: 800,
             fontSize: '18px',
             color: SK.textPrimary,
-            letterSpacing: '3px',
+            letterSpacing: '2px',
           }}>
             AI WORLD WAR
           </span>
@@ -73,13 +74,12 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
           fontFamily: bodyFont,
           fontSize: '9px',
           fontWeight: 700,
-          color: SK.gold,
+          color: SK.blue,
           letterSpacing: '1px',
           padding: '2px 6px',
-          border: `1px solid ${SK.gold}30`,
-          borderRadius: '3px',
+          border: `1px solid ${SK.blue}30`,
+          borderRadius: '4px',
           textTransform: 'uppercase',
-          opacity: 0.7,
         }}>
           ALPHA
         </span>
@@ -104,8 +104,8 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             borderRadius: '50%',
             backgroundColor: connected ? SK.statusOnline : SK.statusOffline,
             boxShadow: connected
-              ? `0 0 6px ${SK.green}80`
-              : `0 0 6px ${SK.red}80`,
+              ? `0 0 6px ${SK.green}60`
+              : `0 0 6px ${SK.red}60`,
           }} />
           <span style={{
             fontFamily: bodyFont,
@@ -130,19 +130,21 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             letterSpacing: '2px',
             textTransform: 'uppercase',
             padding: '6px 14px',
-            border: `1px solid ${SK.border}`,
-            borderRadius: '4px',
-            backgroundColor: 'rgba(17, 24, 39, 0.5)',
+            border: `1px solid rgba(0, 0, 0, 0.1)`,
+            borderRadius: '6px',
+            backgroundColor: 'rgba(255, 255, 255, 0.7)',
             cursor: 'pointer',
             transition: 'all 150ms ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(232, 224, 212, 0.3)';
+            e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
             e.currentTarget.style.color = SK.textPrimary;
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = SK.border;
+            e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
             e.currentTarget.style.color = SK.textSecondary;
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
           }}
         >
           {viewMode === 'globe' ? '2D MAP' : '3D GLOBE'}

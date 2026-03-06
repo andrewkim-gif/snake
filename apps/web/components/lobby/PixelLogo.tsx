@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import Image from 'next/image';
-import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
 export function PixelLogo() {
   const [imgError, setImgError] = useState(false);
@@ -30,7 +30,7 @@ export function PixelLogo() {
           style={{
             maxWidth: 'min(500px, 90vw)',
             height: 'auto',
-            filter: 'drop-shadow(0 2px 16px rgba(0,0,0,0.5))',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.12))',
           }}
         />
         <div style={{

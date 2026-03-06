@@ -40,6 +40,7 @@ const _qAgent = new THREE.Quaternion();
 const _qPart = new THREE.Quaternion();
 const _qCombined = new THREE.Quaternion();
 const _color = new THREE.Color();
+const _hairColor = new THREE.Color();
 
 // ─── 얼굴 그룹 데이터 ───
 
@@ -234,13 +235,12 @@ export function HeadGroupManager({
         group.mesh.setMatrixAt(idx, _obj.matrix);
 
         // 색상: 피부톤 + 머리색 블렌딩
-        // 간단한 접근: 피부톤 기반 (머리카락은 텍스처로 구분)
+        // _qPart를 재사용하지 않으므로 여기서 _color2(임시)를 사용
         const skinToneHex = SKIN_TONES[appearance.skinTone % SKIN_TONES.length];
         const hairColorHex = HAIR_COLORS[appearance.hairColor % HAIR_COLORS.length];
         // 피부톤 70% + 머리색 30% (자연스러운 블렌딩)
         _color.set(skinToneHex);
-        const hairColor = new THREE.Color(hairColorHex);
-        _color.lerp(hairColor, 0.3);
+        _color.lerp(_hairColor.set(hairColorHex), 0.3);
         group.mesh.setColorAt(idx, _color);
 
         idx++;

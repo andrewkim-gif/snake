@@ -6,7 +6,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { SK, SKFont, bodyFont, headingFont } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
 // 뉴스 이벤트 타입
 export type NewsEventType =
@@ -226,10 +226,10 @@ export function NewsFeed({
   if (expanded) {
     return (
       <div style={{
-        background: 'rgba(12, 18, 32, 0.92)',
+        background: 'rgba(255, 255, 255, 0.95)',
         backdropFilter: 'blur(16px)',
         WebkitBackdropFilter: 'blur(16px)',
-        borderTop: `1px solid rgba(100, 160, 220, 0.1)`,
+        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
         padding: '12px 20px',
         maxHeight: '40vh',
         overflowY: 'auto',
@@ -242,7 +242,8 @@ export function NewsFeed({
           marginBottom: '12px',
         }}>
           <span style={{
-            fontFamily: headingFont,
+            fontFamily: bodyFont,
+            fontWeight: 800,
             fontSize: SKFont.h3,
             color: SK.textPrimary,
             letterSpacing: '2px',
@@ -333,10 +334,10 @@ export function NewsFeed({
   return (
     <div
       style={{
-        background: 'rgba(12, 18, 32, 0.88)',
+        background: 'rgba(255, 255, 255, 0.92)',
         backdropFilter: 'blur(8px)',
         WebkitBackdropFilter: 'blur(8px)',
-        borderTop: `1px solid rgba(100, 160, 220, 0.1)`,
+        borderTop: '1px solid rgba(0, 0, 0, 0.06)',
         height: '36px',
         display: 'flex',
         alignItems: 'center',

@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * McInput — 작전 지도 스타일 입력 필드
- * 다크 배경 + 손그림 아웃라인 보더 + 포커스 앰버 글로우
+ * McInput — 모던 입력 필드
+ * 화이트 배경 + 포커스 블루 링
  */
 
 import { useState, type InputHTMLAttributes } from 'react';
@@ -16,9 +16,9 @@ export function McInput({ style, ...rest }: McInputProps) {
   return (
     <input
       style={{
-        backgroundColor: 'rgba(12, 18, 32, 0.6)',
-        border: `1px solid ${focused ? SK.borderFocus : SK.border}`,
-        borderRadius: '4px',
+        backgroundColor: '#FFFFFF',
+        border: `1px solid ${focused ? SK.borderFocus : 'rgba(0, 0, 0, 0.12)'}`,
+        borderRadius: '8px',
         color: SK.textPrimary,
         fontFamily: bodyFont,
         fontWeight: 500,
@@ -31,8 +31,8 @@ export function McInput({ style, ...rest }: McInputProps) {
         textAlign: 'center',
         transition: 'all 150ms ease',
         boxShadow: focused
-          ? `0 0 0 2px ${SK.gold}20`
-          : 'none',
+          ? '0 0 0 3px rgba(59, 130, 246, 0.15)'
+          : '0 1px 2px rgba(0, 0, 0, 0.04)',
         ...style,
       }}
       onFocus={(e) => { setFocused(true); rest.onFocus?.(e); }}

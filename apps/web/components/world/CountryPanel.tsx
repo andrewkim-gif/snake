@@ -9,7 +9,7 @@ import { useState, useEffect, useCallback } from 'react';
 import type { CSSProperties } from 'react';
 import { McPanel } from '@/components/lobby/McPanel';
 import { McButton } from '@/components/lobby/McButton';
-import { SK, SKFont, headingFont, bodyFont, sketchBorder, handDrawnRadius } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont, sketchBorder, handDrawnRadius } from '@/lib/sketch-ui';
 import { tierColors, battleStatusColors, resourceLabels, resourceIcons } from '@/lib/map-style';
 import type { CountryClientState } from '@/lib/globe-data';
 
@@ -43,7 +43,7 @@ function ResourceBar({ label, icon, value, color }: {
       <div style={{
         flex: 1,
         height: '8px',
-        background: 'rgba(255,255,255,0.06)',
+        background: 'rgba(0,0,0,0.04)',
         borderRadius: '2px',
         overflow: 'hidden',
       }}>
@@ -153,7 +153,7 @@ export function CountryPanel({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.4)',
+          background: 'rgba(0, 0, 0, 0.2)',
           zIndex: 100,
           opacity: visible ? 1 : 0,
           transition: 'opacity 200ms ease',
@@ -188,10 +188,11 @@ export function CountryPanel({
         }}>
           <div>
             <div style={{
-              fontFamily: headingFont,
+              fontFamily: bodyFont,
+              fontWeight: 800,
               fontSize: SKFont.h2,
               color: SK.textPrimary,
-              letterSpacing: '2px',
+              letterSpacing: '1px',
               marginBottom: '4px',
             }}>
               {country?.name || 'Unknown'}

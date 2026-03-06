@@ -232,9 +232,10 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
         <AgentPreview3D appearance={appearance} skinId={skinId} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{
-            fontFamily: headingFont,
+            fontFamily: bodyFont,
+            fontWeight: 800,
             fontSize: '10px',
-            color: SK.gold,
+            color: SK.blue,
             letterSpacing: '2px',
             marginBottom: '2px',
           }}>
@@ -292,9 +293,9 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
       {/* 탭 콘텐츠 */}
       <div style={{
         padding: '6px 8px',
-        borderRadius: '4px',
-        backgroundColor: 'rgba(12, 18, 32, 0.4)',
-        border: `1px solid rgba(100, 160, 220, 0.08)`,
+        borderRadius: '8px',
+        backgroundColor: '#F8FAFC',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         maxHeight: '200px',
         overflowY: 'auto',
       }}>
@@ -371,9 +372,9 @@ function AgentPreview3D({ appearance, skinId }: { appearance: CubelingAppearance
     <div style={{
       width: '90px',
       height: '90px',
-      borderRadius: '4px',
-      border: '1px solid rgba(100, 160, 220, 0.15)',
-      backgroundColor: 'rgba(12, 18, 32, 0.6)',
+      borderRadius: '8px',
+      border: '1px solid rgba(0, 0, 0, 0.08)',
+      backgroundColor: '#F1F5F9',
       overflow: 'hidden',
       flexShrink: 0,
     }}>
@@ -412,7 +413,7 @@ function ColorCircle({ color, selected, onClick }: {
       style={{
         ...colorCircleBase,
         backgroundColor: color,
-        border: selected ? selectedBorder : '2px solid rgba(255,255,255,0.1)',
+        border: selected ? selectedBorder : '2px solid rgba(0,0,0,0.08)',
         boxShadow: selected ? selectedShadow : 'none',
         transform: selected ? 'scale(1.15)' : 'scale(1)',
       }}

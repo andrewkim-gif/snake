@@ -16,7 +16,7 @@ import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { NewsFeed } from '@/components/lobby/NewsFeed';
 import { useSocket } from '@/hooks/useSocket';
-import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
@@ -177,7 +177,7 @@ export default function Home() {
             border: `1px solid ${SK.glassBorder}`,
             borderRadius: '6px',
             padding: '14px',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.5)',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)',
           }}>
             {/* 헤더 */}
             <div style={{

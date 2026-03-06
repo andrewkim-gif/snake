@@ -81,14 +81,6 @@ function getCachedAppearance(skinId: number): CubelingAppearance {
   return cached;
 }
 
-// ─── 숨김 매트릭스 (scale 0) ───
-function hideInstance(mesh: THREE.InstancedMesh, idx: number): void {
-  _obj.position.set(0, -9999, 0);
-  _obj.scale.setScalar(0);
-  _obj.updateMatrix();
-  mesh.setMatrixAt(idx, _obj.matrix);
-}
-
 // ─── Props ───
 
 interface EquipmentInstancesProps {
@@ -171,10 +163,9 @@ function computeEquipmentMatrix(
   );
 
   // 5단계: 장비 자체 회전 (부모 회전 + 장비 로컬 회전)
-  const eqLocalQ = new THREE.Quaternion().setFromEuler(
-    _euler.set(equipRotX, equipRotY, equipRotZ),
-  );
-  _obj.quaternion.copy(parentWorldQ).multiply(eqLocalQ);
+  // NOTE: _qPart를 재사용하여 GC 방지 (parentWorldQ는 이미 _qCombined에 저장됨)
+  _qPart.setFromEuler(_euler.set(equipRotX, equipRotY, equipRotZ));
+  _obj.quaternion.copy(parentWorldQ).multiply(_qPart);
 
   _obj.scale.setScalar(agentScale);
   _obj.updateMatrix();
@@ -255,6 +246,26 @@ export function EquipmentInstances({
 
     if (!sm || !indexMap) return;
 
+    // ─── 모바일 성능: 40+ 에이전트 시 장비 렌더링 간소화 ───
+    const agentCount = agents.length;
+    const skipEquipment = agentCount > 50; // 50+ 에이전트: 장비 완전 스킵
+    if (skipEquipment) {
+      // 모든 장비 IM count=0으로 설정하여 GPU 스킵
+      for (const geoType of HAT_GEOMETRY_TYPES) {
+        const mesh = hatRefs.current[geoType];
+        if (mesh) mesh.count = 0;
+      }
+      for (const geoType of WEAPON_GEOMETRY_TYPES) {
+        const mesh = weaponRefs.current[geoType];
+        if (mesh) mesh.count = 0;
+      }
+      for (const geoType of BACK_GEOMETRY_TYPES) {
+        const mesh = backRefs.current[geoType];
+        if (mesh) mesh.count = 0;
+      }
+      return;
+    }
+
     const P = CUBELING_PARTS;
 
     // 형태별 인덱스 추적
@@ -262,25 +273,8 @@ export function EquipmentInstances({
     const weaponIndices: Record<string, number> = { blade: 0, staff: 0 };
     const backIndices: Record<string, number> = { cape: 0, wings: 0, pack: 0 };
 
-    // 모든 IM 인스턴스를 먼저 숨김 처리
-    for (const geoType of HAT_GEOMETRY_TYPES) {
-      const mesh = hatRefs.current[geoType];
-      if (mesh) {
-        for (let i = 0; i < MAX_AGENTS; i++) hideInstance(mesh, i);
-      }
-    }
-    for (const geoType of WEAPON_GEOMETRY_TYPES) {
-      const mesh = weaponRefs.current[geoType];
-      if (mesh) {
-        for (let i = 0; i < MAX_AGENTS; i++) hideInstance(mesh, i);
-      }
-    }
-    for (const geoType of BACK_GEOMETRY_TYPES) {
-      const mesh = backRefs.current[geoType];
-      if (mesh) {
-        for (let i = 0; i < MAX_AGENTS; i++) hideInstance(mesh, i);
-      }
-    }
+    // NOTE: 이전에는 매 프레임 모든 인스턴스를 hideInstance()로 초기화했으나,
+    // 이제 count 기반으로 실제 사용 인스턴스만 설정하고 나머지는 GPU가 스킵
 
     let agentIdx = 0;
     for (const agent of agents) {
@@ -458,29 +452,39 @@ export function EquipmentInstances({
       agentIdx++;
     }
 
-    // ─── count + needsUpdate (숨김 인스턴스 포함하여 MAX_AGENTS 고정) ───
+    // ─── count 기반 렌더링: 실제 사용된 인스턴스만 draw ───
+    // count=0인 IM은 GPU에서 완전히 스킵됨
     for (const geoType of HAT_GEOMETRY_TYPES) {
       const mesh = hatRefs.current[geoType];
       if (mesh) {
-        mesh.count = MAX_AGENTS;
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        const count = hatIndices[geoType];
+        mesh.count = count;
+        if (count > 0) {
+          mesh.instanceMatrix.needsUpdate = true;
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        }
       }
     }
     for (const geoType of WEAPON_GEOMETRY_TYPES) {
       const mesh = weaponRefs.current[geoType];
       if (mesh) {
-        mesh.count = MAX_AGENTS;
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        const count = weaponIndices[geoType];
+        mesh.count = count;
+        if (count > 0) {
+          mesh.instanceMatrix.needsUpdate = true;
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        }
       }
     }
     for (const geoType of BACK_GEOMETRY_TYPES) {
       const mesh = backRefs.current[geoType];
       if (mesh) {
-        mesh.count = MAX_AGENTS;
-        mesh.instanceMatrix.needsUpdate = true;
-        if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        const count = backIndices[geoType];
+        mesh.count = count;
+        if (count > 0) {
+          mesh.instanceMatrix.needsUpdate = true;
+          if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+        }
       }
     }
 

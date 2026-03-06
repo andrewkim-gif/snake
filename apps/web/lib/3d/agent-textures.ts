@@ -3,6 +3,10 @@
  * MC 스타일 Agent 파트별 텍스처 (Head, Body, Arm, Leg)
  * NearestFilter + no mipmaps → 픽셀 아트 렌더링
  * 기존 sprites.ts의 SKIN_PALETTE(DEFAULT_SKINS) 재사용
+ *
+ * @deprecated Phase 8: 이 모듈은 레거시 skinId 기반 텍스처 시스템입니다.
+ * 큐블링 시스템의 새 텍스처는 cubeling-textures.ts를 사용하세요.
+ * VoxelCharacter.tsx (로비 프리뷰)에서만 사용됩니다.
  */
 
 import * as THREE from 'three';

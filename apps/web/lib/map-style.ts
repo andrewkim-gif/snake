@@ -44,7 +44,7 @@ export const continentColors: Record<string, string> = {
 // 다크 맵 스타일 (MapLibre GL 용)
 export const darkMapStyle: maplibregl.StyleSpecification = {
   version: 8 as const,
-  name: 'AI World War Dark',
+  name: 'AI World War Light',
   sources: {
     countries: {
       type: 'geojson',
@@ -57,7 +57,7 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
       id: 'background',
       type: 'background',
       paint: {
-        'background-color': '#0A0F1A',
+        'background-color': '#E8F4FD',
       },
     },
     // 국가 fill
@@ -76,7 +76,7 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
       type: 'line',
       source: 'countries',
       paint: {
-        'line-color': '#1A2030',
+        'line-color': '#B0C4D8',
         'line-width': 1,
         'line-opacity': 0.8,
       },

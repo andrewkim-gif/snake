@@ -6,7 +6,7 @@
  */
 
 import type { RecentWinner } from '@agent-survivor/shared';
-import { SK, SKFont, headingFont, bodyFont, handDrawnRadius } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont, handDrawnRadius } from '@/lib/sketch-ui';
 
 function timeAgo(timestamp: number): string {
   const diff = Math.floor((Date.now() - timestamp) / 1000);
@@ -28,8 +28,8 @@ export function RecentWinnersPanel({ winners }: RecentWinnersPanelProps) {
   return (
     <div style={{ width: '100%' }}>
       <div style={{
-        fontFamily: headingFont, fontSize: SKFont.h2,
-        color: SK.gold, marginBottom: '10px',
+        fontFamily: bodyFont, fontWeight: 800, fontSize: SKFont.h2,
+        color: SK.textPrimary, marginBottom: '10px',
         letterSpacing: '2px',
       }}>
         KILL LEADERS
@@ -46,7 +46,7 @@ export function RecentWinnersPanel({ winners }: RecentWinnersPanelProps) {
           }}>
             {/* 순위 */}
             <span style={{
-              fontFamily: headingFont, fontSize: '13px',
+              fontFamily: bodyFont, fontWeight: 800, fontSize: '13px',
               color: RANK_COLORS[i] || SK.textMuted, minWidth: '32px',
             }}>
               {RANK_LABELS[i]}
@@ -64,7 +64,7 @@ export function RecentWinnersPanel({ winners }: RecentWinnersPanelProps) {
 
             {/* 점수 */}
             <span style={{
-              fontFamily: headingFont, fontSize: '15px',
+              fontFamily: bodyFont, fontWeight: 800, fontSize: '15px',
               color: SK.gold,
             }}>
               {w.score}

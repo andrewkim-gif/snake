@@ -66,7 +66,7 @@ export function WorldMap({
             {
               id: 'background',
               type: 'background',
-              paint: { 'background-color': '#0A0E14' },
+              paint: { 'background-color': '#E8F4FD' },
             },
           ],
         },
@@ -96,7 +96,7 @@ export function WorldMap({
           source: 'countries',
           paint: {
             'fill-color': sovereigntyColors.unclaimed,
-            'fill-opacity': 0.55,
+            'fill-opacity': 0.7,
           },
         });
 
@@ -106,9 +106,9 @@ export function WorldMap({
           type: 'line',
           source: 'countries',
           paint: {
-            'line-color': '#1E293B',
+            'line-color': '#B0C4D8',
             'line-width': 0.8,
-            'line-opacity': 0.7,
+            'line-opacity': 0.6,
           },
         });
 
@@ -304,28 +304,29 @@ export function WorldMap({
             position: 'absolute',
             left: tooltip.x + 12,
             top: tooltip.y - 40,
-            background: 'rgba(10, 14, 20, 0.92)',
-            border: '1px solid rgba(255, 255, 255, 0.15)',
-            borderRadius: '4px',
+            background: 'rgba(255, 255, 255, 0.95)',
+            border: '1px solid rgba(0, 0, 0, 0.08)',
+            borderRadius: '8px',
             padding: '8px 12px',
-            color: '#E8E0D4',
+            color: '#0F172A',
             fontSize: '13px',
-            fontFamily: '"Rajdhani", sans-serif',
+            fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
             pointerEvents: 'none',
             zIndex: 50,
             whiteSpace: 'nowrap',
-            backdropFilter: 'blur(4px)',
+            backdropFilter: 'blur(8px)',
+            boxShadow: '0 4px 12px rgba(0, 0, 0, 0.1)',
           }}
         >
-          <div style={{ fontWeight: 700, letterSpacing: '1px' }}>
+          <div style={{ fontWeight: 700, letterSpacing: '0.5px' }}>
             {tooltip.name}
             {tooltip.tier && (
-              <span style={{ marginLeft: 6, fontSize: '11px', opacity: 0.6 }}>
+              <span style={{ marginLeft: 6, fontSize: '11px', color: '#64748B' }}>
                 [{tooltip.tier}]
               </span>
             )}
           </div>
-          <div style={{ fontSize: '11px', opacity: 0.7, marginTop: 2 }}>
+          <div style={{ fontSize: '11px', color: '#64748B', marginTop: 2 }}>
             {tooltip.iso3}
             {tooltip.status && tooltip.status !== 'idle' && (
               <span

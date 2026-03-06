@@ -246,6 +246,11 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
 
     if (!armLMesh || !armRMesh || !legLMesh || !legRMesh || !sm) return;
 
+    // ─── 모바일 성능 최적화: 에이전트 수에 따른 애니메이션 축소 ───
+    // 20명 이하: full animation, 40명 이상: 간소화 (속도 추정 간격 축소)
+    const agentCount = agents.length;
+    const isHighLoad = agentCount > 40;
+
     // Body 패턴별 IM 참조 + 패턴별 에이전트 인덱스 추적
     const bodyMeshes: (THREE.InstancedMesh | null)[] = bodyRefs.current;
     const bodyIndices: number[] = new Array(BODY_PATTERN_COUNT).fill(0);
@@ -297,7 +302,10 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       }
 
       // ─── 상태 머신 업데이트: 입력 기반 전환 + 시간 진행 ───
-      sm.updateAgent(smIdx, { velocity: motion.velocity, boosting }, delta);
+      // 고부하(40+ 에이전트) 시: 2프레임 중 1프레임만 상태 머신 업데이트
+      if (!isHighLoad || (limbIdx % 2 === 0)) {
+        sm.updateAgent(smIdx, { velocity: motion.velocity, boosting }, isHighLoad ? delta * 2 : delta);
+      }
 
       // ─── 월드 좌표 + 스케일 ───
       const [worldX, , worldZ] = toWorld(x, y, 0);

@@ -70,27 +70,30 @@ export function toWorldUnits(gameUnits: number): number {
 /**
  * 로비 프리뷰용 월드유닛 치수 테이블
  * VoxelCharacter에서 직접 사용
+ *
+ * NOTE: 인라인 리터럴 사용 — webpack SSR 번들에서 모듈 연결 순서에 따라
+ * toWorldUnits() 호출이 GAME_TO_WORLD_RATIO 초기화 전에 실행되는 이슈 방지
  */
 export const LOBBY_DIMENSIONS = {
   head: {
-    w: toWorldUnits(10),  // 0.625
-    h: toWorldUnits(10),  // 0.625
-    d: toWorldUnits(8),   // 0.5
+    w: 10 / 16,  // 0.625
+    h: 10 / 16,  // 0.625
+    d: 8 / 16,   // 0.5
   },
   body: {
-    w: toWorldUnits(8),   // 0.5
-    h: toWorldUnits(7),   // 0.4375
-    d: toWorldUnits(5),   // 0.3125
+    w: 8 / 16,   // 0.5
+    h: 7 / 16,   // 0.4375
+    d: 5 / 16,   // 0.3125
   },
   arm: {
-    w: toWorldUnits(4),   // 0.25
-    h: toWorldUnits(7),   // 0.4375
-    d: toWorldUnits(4),   // 0.25
+    w: 4 / 16,   // 0.25
+    h: 7 / 16,   // 0.4375
+    d: 4 / 16,   // 0.25
   },
   leg: {
-    w: toWorldUnits(4),   // 0.25
-    h: toWorldUnits(7),   // 0.4375
-    d: toWorldUnits(4),   // 0.25
+    w: 4 / 16,   // 0.25
+    h: 7 / 16,   // 0.4375
+    d: 4 / 16,   // 0.25
   },
 } as const;
 
@@ -100,13 +103,13 @@ export const LOBBY_DIMENSIONS = {
  */
 export const LOBBY_OFFSETS = {
   /** 다리 상단 Y (= leg.h = 0.4375) */
-  legTop: toWorldUnits(7),
+  legTop: 7 / 16,
   /** 몸통 중심 Y (= legTop + body.h/2) */
-  bodyCenter: toWorldUnits(7) + toWorldUnits(7) / 2,
+  bodyCenter: 7 / 16 + 7 / 16 / 2,
   /** 어깨 Y (= legTop + body.h) */
-  shoulderY: toWorldUnits(7) + toWorldUnits(7),
+  shoulderY: 7 / 16 + 7 / 16,
   /** 머리 중심 Y (= shoulderY + head.h/2) */
-  headCenter: toWorldUnits(7) + toWorldUnits(7) + toWorldUnits(10) / 2,
+  headCenter: 7 / 16 + 7 / 16 + 10 / 16 / 2,
 } as const;
 
 // ─── BodyType별 스케일 적용 ───
