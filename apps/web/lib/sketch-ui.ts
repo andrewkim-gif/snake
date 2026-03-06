@@ -1,60 +1,60 @@
 /**
- * Tactical UI — Deep Navy Command Center 디자인 시스템
- * 네이비 블루 기반 + 골드 액센트 + 모던 가독성 (Inter UI 폰트)
+ * Modern Light UI — 밝고 클린한 디자인 시스템
+ * 라이트 톤 + 블루 액센트 + 모던 가독성 (Inter 폰트)
  */
 
-/** 전술 컬러 팔레트 (네이비 블루 기반 + 군사 액센트) */
+/** 라이트 컬러 팔레트 */
 export const SK = {
-  // 배경 — 네이비 블루 톤 (지구본 바다와 조화)
-  bg: '#0A0F1A',
-  bgWarm: '#111827',
-  cardBg: '#111827',
-  cardBgHover: '#1A2235',
-  overlay: 'rgba(8, 12, 24, 0.8)',
+  // 배경 — 밝은 톤
+  bg: '#F8FAFC',
+  bgWarm: '#F1F5F9',
+  cardBg: '#FFFFFF',
+  cardBgHover: '#F8FAFC',
+  overlay: 'rgba(0, 0, 0, 0.4)',
 
-  // 텍스트 — 높은 대비 + 차가운 톤
-  textPrimary: '#E2E8F0',
-  textSecondary: '#8494A7',
-  textMuted: '#4A5568',
-  textWhite: '#F1F5F9',
+  // 텍스트 — 다크 on 라이트
+  textPrimary: '#0F172A',
+  textSecondary: '#64748B',
+  textMuted: '#94A3B8',
+  textWhite: '#FFFFFF',
 
-  // 군사 액센트
-  orange: '#CC9933',
-  orangeLight: '#DDB044',
-  orangeDark: '#AA7722',
-  green: '#4A9E4A',
-  greenLight: '#5CB85C',
-  greenDark: '#337733',
-  red: '#CC3333',
-  redLight: '#DD5555',
-  redDark: '#AA2222',
-  gold: '#D4A843',
-  blue: '#4A90D9',
+  // 액센트
+  orange: '#D97706',
+  orangeLight: '#F59E0B',
+  orangeDark: '#B45309',
+  green: '#16A34A',
+  greenLight: '#22C55E',
+  greenDark: '#15803D',
+  red: '#DC2626',
+  redLight: '#EF4444',
+  redDark: '#B91C1C',
+  gold: '#D97706',
+  blue: '#3B82F6',
 
-  // 보더 — 블루 틴트
-  border: 'rgba(100, 160, 220, 0.15)',
-  borderDark: 'rgba(100, 160, 220, 0.08)',
-  borderFocus: 'rgba(212, 168, 67, 0.6)',
-  shadow: 'rgba(0, 0, 0, 0.3)',
-  shadowMd: 'rgba(0, 0, 0, 0.5)',
-  shadowLg: 'rgba(0, 0, 0, 0.7)',
+  // 보더
+  border: 'rgba(0, 0, 0, 0.08)',
+  borderDark: 'rgba(0, 0, 0, 0.04)',
+  borderFocus: 'rgba(59, 130, 246, 0.5)',
+  shadow: 'rgba(0, 0, 0, 0.04)',
+  shadowMd: 'rgba(0, 0, 0, 0.06)',
+  shadowLg: 'rgba(0, 0, 0, 0.1)',
 
   // 상태
-  statusOnline: '#5CB85C',
-  statusOffline: '#CC3333',
-  statusWaiting: '#4A5568',
-  statusLive: '#5CB85C',
-  statusStarting: '#CC9933',
-  statusEnding: '#CC3333',
+  statusOnline: '#22C55E',
+  statusOffline: '#EF4444',
+  statusWaiting: '#94A3B8',
+  statusLive: '#22C55E',
+  statusStarting: '#D97706',
+  statusEnding: '#DC2626',
 
   // 3D 씬 / 글로브
-  skyBg: '#0A0F1A',
-  ocean: '#101D2E',
-  land: '#3D7A9E',
+  skyBg: '#E8F4FD',
+  ocean: '#93B5CF',
+  land: '#E2E8F0',
 
   // 글래스모피즘 프리셋
-  glassBg: 'rgba(12, 18, 32, 0.85)',
-  glassBorder: 'rgba(100, 160, 220, 0.12)',
+  glassBg: 'rgba(255, 255, 255, 0.85)',
+  glassBorder: 'rgba(0, 0, 0, 0.06)',
 } as const;
 
 /** 폰트 사이즈 스케일 */
@@ -68,58 +68,51 @@ export const SKFont = {
   button: '16px',
 } as const;
 
-/** 밀리터리 스텐실 폰트 — 대형 제목/로고만 (18px+) */
-export const headingFont = '"Black Ops One", sans-serif';
+/** 타이틀 폰트 — Inter Heavy (Black Ops One 교체) */
+export const headingFont = '"Inter", -apple-system, BlinkMacSystemFont, sans-serif';
 
-/** UI 폰트 — 모든 본문, 라벨, 버튼, 인풋 (Inter = 모든 크기에서 가독성 보장) */
+/** UI 폰트 — Inter */
 export const bodyFont = '"Inter", -apple-system, BlinkMacSystemFont, sans-serif';
 
-/** 손그림 보더 라디우스 (비대칭 = 손그림 느낌) */
-export function handDrawnRadius(base = 3) {
-  return `${base}px ${base + 3}px ${base + 1}px ${base + 4}px`;
+/** 라운드 코너 */
+export function handDrawnRadius(base = 8) {
+  return `${base}px`;
 }
 
 /** 라운드 코너 프리셋 */
 export const radius = {
-  sm: '3px',
-  md: '4px',
-  lg: '6px',
-  xl: '8px',
+  sm: '4px',
+  md: '8px',
+  lg: '12px',
+  xl: '16px',
   pill: '9999px',
 } as const;
 
-/** 작전 지도 스타일 박스 섀도 (어두운 톤) */
+/** 박스 섀도 */
 export function sketchShadow(level: 'sm' | 'md' | 'lg' = 'md') {
   const shadows = {
-    sm: `0 1px 4px ${SK.shadow}`,
-    md: `0 2px 8px ${SK.shadowMd}`,
-    lg: `0 4px 16px ${SK.shadowLg}`,
+    sm: '0 1px 2px rgba(0, 0, 0, 0.05)',
+    md: '0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
+    lg: '0 4px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04)',
   };
   return shadows[level];
 }
 
-/** 스케치 보더 */
+/** 보더 */
 export function sketchBorder(color: string = SK.border) {
-  return `1.5px solid ${color}`;
+  return `1px solid ${color}`;
 }
 
-/** 전술 지도 그리드 + 그레인 텍스처 (카드 배경용) */
+/** 서브틀 배경 (카드 배경용 — 미니멀) */
 export function tacticalBg() {
-  return {
-    backgroundImage: [
-      'radial-gradient(circle, rgba(100,160,220,0.04) 1px, transparent 1px)',
-      'linear-gradient(rgba(100,160,220,0.03) 1px, transparent 1px)',
-      'linear-gradient(90deg, rgba(100,160,220,0.03) 1px, transparent 1px)',
-    ].join(', '),
-    backgroundSize: '3px 3px, 24px 24px, 24px 24px',
-  };
+  return {};
 }
 
-/** 상태별 색상 (군사 용어) */
+/** 상태별 색상 */
 export const statusColors = {
-  waiting: { text: 'STANDBY', color: SK.textMuted, bg: 'rgba(90, 84, 78, 0.2)' },
-  countdown: { text: 'DEPLOY', color: SK.gold, bg: 'rgba(204, 153, 51, 0.15)' },
-  playing: { text: 'ACTIVE', color: SK.green, bg: 'rgba(74, 158, 74, 0.15)' },
-  ending: { text: 'ENDING', color: SK.red, bg: 'rgba(204, 51, 51, 0.15)' },
-  cooldown: { text: 'RESET', color: SK.textSecondary, bg: 'rgba(138, 128, 120, 0.12)' },
+  waiting: { text: 'STANDBY', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)' },
+  countdown: { text: 'DEPLOY', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)' },
+  playing: { text: 'ACTIVE', color: '#16A34A', bg: 'rgba(22, 163, 74, 0.1)' },
+  ending: { text: 'ENDING', color: '#DC2626', bg: 'rgba(220, 38, 38, 0.1)' },
+  cooldown: { text: 'RESET', color: '#64748B', bg: 'rgba(100, 116, 139, 0.1)' },
 } as const;

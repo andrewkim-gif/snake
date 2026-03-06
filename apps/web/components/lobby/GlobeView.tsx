@@ -196,10 +196,10 @@ function GlobeObject({
   );
 }
 
-// 대기 글로우 이펙트 (듀얼 레이어: 외부 헤일로 + 내부 림 라이트)
+// 대기 글로우 이펙트 (FrontSide Fresnel: 가장자리 발광 + 중심 투명)
 function AtmosphereGlow() {
-  // 외부 글로우 — 부드러운 확산 헤일로 (지구본 주변의 은은한 푸른 빛)
-  const outerMaterial = useMemo(() => {
+  // 외부 대기 — 넓은 Fresnel 글로우 (가장자리에서 밝고 중심은 투명)
+  const atmosphereMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
@@ -211,17 +211,19 @@ function AtmosphereGlow() {
       fragmentShader: `
         varying vec3 vNormal;
         void main() {
-          float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
-          gl_FragColor = vec4(0.18, 0.45, 0.9, 1.0) * intensity * 0.6;
+          float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
+          float glow = pow(fresnel, 2.5) * 0.8;
+          gl_FragColor = vec4(0.2, 0.5, 1.0, glow);
         }
       `,
-      side: THREE.BackSide,
+      side: THREE.FrontSide,
       blending: THREE.AdditiveBlending,
       transparent: true,
+      depthWrite: false,
     });
   }, []);
 
-  // 내부 림 — 지구본 가장자리의 날카로운 발광 (세련된 에지 글로우)
+  // 내부 림 — 지표면 바로 위의 날카로운 에지 글로우
   const rimMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
       vertexShader: `
@@ -234,9 +236,9 @@ function AtmosphereGlow() {
       fragmentShader: `
         varying vec3 vNormal;
         void main() {
-          float rim = 1.0 - dot(vNormal, vec3(0, 0, 1.0));
-          float intensity = pow(rim, 3.5) * 0.5;
-          gl_FragColor = vec4(0.3, 0.55, 1.0, intensity);
+          float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
+          float rim = pow(fresnel, 4.0) * 0.5;
+          gl_FragColor = vec4(0.35, 0.6, 1.0, rim);
         }
       `,
       side: THREE.FrontSide,
@@ -248,22 +250,22 @@ function AtmosphereGlow() {
 
   return (
     <>
-      {/* 외부 확산 헤일로 — 지구본에 밀착 (r=104, globe=100) */}
-      <mesh material={outerMaterial}>
-        <sphereGeometry args={[104, 32, 32]} />
+      {/* 외부 대기 — 넓은 Fresnel 글로우 (r=112, globe=100) */}
+      <mesh material={atmosphereMaterial}>
+        <sphereGeometry args={[112, 64, 64]} />
       </mesh>
-      {/* 내부 림 글로우 — 표면 바로 위 (r=101) */}
+      {/* 내부 림 — 날카로운 에지 라이트 (r=103) */}
       <mesh material={rimMaterial}>
-        <sphereGeometry args={[101, 48, 48]} />
+        <sphereGeometry args={[103, 48, 48]} />
       </mesh>
     </>
   );
 }
 
-// 줌 레벨에 따라 회전 속도 동적 조절
+// 줌 레벨에 따라 회전 속도 동적 조절 (2차 곡선 — 줌인 시 급격히 느려짐)
 const MIN_DIST = 150;
 const MAX_DIST = 500;
-const MIN_ROTATE_SPEED = 0.1;
+const MIN_ROTATE_SPEED = 0.03;
 const MAX_ROTATE_SPEED = 0.5;
 
 function AdaptiveControls() {
@@ -274,8 +276,9 @@ function AdaptiveControls() {
     if (!controlsRef.current) return;
     const dist = camera.position.length();
     const t = Math.max(0, Math.min(1, (dist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
+    // 2차 곡선: 가까울수록 급격히 느려짐 (t=0→0.03, t=0.43→0.12, t=1→0.5)
     (controlsRef.current as unknown as { rotateSpeed: number }).rotateSpeed =
-      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t;
+      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t * t;
   });
 
   return (

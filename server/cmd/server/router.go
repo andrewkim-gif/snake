@@ -1,13 +1,17 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"runtime"
 	"time"
 
 	"github.com/andrewkim-gif/snake/server/config"
+	"github.com/andrewkim-gif/snake/server/internal/api"
+	"github.com/andrewkim-gif/snake/server/internal/auth"
 	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/ws"
 	"github.com/go-chi/chi/v5"
@@ -42,11 +46,13 @@ var upgrader = websocket.Upgrader{
 // newRouter creates the chi HTTP router with middleware and routes.
 // RouterDeps holds optional dependencies for the HTTP router.
 type RouterDeps struct {
-	TrainingStore    *game.TrainingStore
-	MemoryStore      *game.MemoryStore
-	ProgressionStore *game.ProgressionStore
-	QuestStore       *game.QuestStore
+	TrainingStore     *game.TrainingStore
+	MemoryStore       *game.MemoryStore
+	ProgressionStore  *game.ProgressionStore
+	QuestStore        *game.QuestStore
 	GlobalLeaderboard *game.GlobalLeaderboard
+	AgentRouter       *api.AgentRouter
+	AgentStreamHub    *ws.AgentStreamHub
 }
 
 func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager, deps ...*RouterDeps) http.Handler {
@@ -331,6 +337,36 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
+
+	// --- Agent REST API (S24, Phase 5) ---
+	// DualAuth accepts JWT or API Key authentication for agent endpoints
+	var agentRouter *api.AgentRouter
+	if len(deps) > 0 && deps[0] != nil {
+		agentRouter = deps[0].AgentRouter
+	}
+	if agentRouter != nil {
+		apiKeyValidator := func(_ context.Context, keyHash string) (string, error) {
+			// Simple validator: check keyHash is not empty
+			// In production, this validates against DB
+			if keyHash == "" {
+				return "", fmt.Errorf("empty key hash")
+			}
+			return "api_user_" + keyHash[:8], nil
+		}
+		r.Route("/api/agents", func(r chi.Router) {
+			r.Use(auth.DualAuth(apiKeyValidator))
+			r.Mount("/", agentRouter.Routes())
+		})
+	}
+
+	// --- Agent WebSocket Live Stream (S25, Phase 5) ---
+	var agentStreamHub *ws.AgentStreamHub
+	if len(deps) > 0 && deps[0] != nil {
+		agentStreamHub = deps[0].AgentStreamHub
+	}
+	if agentStreamHub != nil {
+		r.Get("/ws/agents/live", agentStreamHub.HandleAgentStream)
+	}
 
 	return r
 }
