@@ -52,9 +52,14 @@ import { SynergyPopup } from './SynergyPopup';
 import { CoachBubble } from './CoachBubble';
 import { AnalystPanel } from './AnalystPanel';
 import { GameMinimap } from './GameMinimap';
+import { MinimapHUD } from './MinimapHUD';
+import { FactionScoreboard } from './FactionScoreboard';
+import { KillFeedHUD } from './KillFeedHUD';
 import { BattleResultOverlay } from './BattleResultOverlay';
 import { SpectatorMode } from './SpectatorMode';
 import type { SpectatorTarget } from './SpectatorMode';
+import { useAudio } from '@/hooks/useAudio';
+import type { AmbienceTheme } from '@/hooks/useAudio';
 
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
@@ -97,6 +102,11 @@ export function GameCanvas3D({
   const [spectatorTarget, setSpectatorTarget] = useState<string | null>(null);
   const [battleCountdown, setBattleCountdown] = useState(10);
 
+  // v12 S24: Audio system
+  const { playSFX, startAmbience, stopAmbience, toggleMute, isMuted } = useAudio();
+  const prevKillCountRef = useRef(0);
+  const prevLevelRef = useRef(0);
+
   // ─── 테마 결정 (uiState.terrainTheme → 폴백 "forest") ───
   const terrainTheme = uiState.terrainTheme || 'forest';
 
@@ -109,6 +119,41 @@ export function GameCanvas3D({
       return () => clearTimeout(timer);
     }
   }, [terrainTheme]);
+
+  // v12 S24: 테마별 앰비언스 시작/정지
+  useEffect(() => {
+    const validThemes: AmbienceTheme[] = ['forest', 'desert', 'mountain', 'urban', 'arctic', 'island'];
+    if (validThemes.includes(terrainTheme as AmbienceTheme)) {
+      startAmbience(terrainTheme as AmbienceTheme);
+    }
+    return () => stopAmbience();
+  }, [terrainTheme, startAmbience, stopAmbience]);
+
+  // v12 S24: 킬 SFX (killFeed 변화 감지)
+  useEffect(() => {
+    const feed = dataRef.current.killFeed;
+    if (feed.length > prevKillCountRef.current) {
+      playSFX('kill');
+    }
+    prevKillCountRef.current = feed.length;
+  });
+
+  // v12 S24: 레벨업 SFX
+  useEffect(() => {
+    if (uiState.levelUp && uiState.levelUp.level > prevLevelRef.current) {
+      playSFX('level_up');
+    }
+    if (uiState.levelUp) {
+      prevLevelRef.current = uiState.levelUp.level;
+    }
+  }, [uiState.levelUp, playSFX]);
+
+  // v12 S24: 사망 SFX
+  useEffect(() => {
+    if (uiState.deathInfo && uiState.isSpectating) {
+      playSFX('death');
+    }
+  }, [uiState.isSpectating, uiState.deathInfo, playSFX]);
 
   // v12 S20: 배틀 결과 10초 카운트다운
   useEffect(() => {
@@ -454,6 +499,12 @@ export function GameCanvas3D({
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
 
+      {/* v12 S24: 킬피드 (좌측 상단) */}
+      <KillFeedHUD dataRef={dataRef} />
+
+      {/* v12 S24: 음소거 토글 버튼 (우상단) */}
+      <MuteButton isMuted={isMuted} onToggle={toggleMute} />
+
       {/* 전투 보너스 토스트 (입장 시 4초) */}
       {terrainToast && <TerrainBonusToast text={terrainToast} />}
 
@@ -535,6 +586,28 @@ export function GameCanvas3D({
           onChoose={chooseUpgrade}
         />
       )}
+
+      {/* ─── 팩션 스코어보드 (우측 상단) ─── */}
+      <FactionScoreboard dataRef={dataRef} />
+
+      {/* ─── 국가 이름 (미니맵 상단) ─── */}
+      <MinimapHUD
+        dataRef={dataRef}
+        arenaRadius={ARENA_CONFIG.radius}
+        shrinkData={uiState.arenaShrink}
+        countryName={(() => {
+          const iso = uiState.currentRoomId;
+          if (!iso) return undefined;
+          const cs = uiState.countryStates.get(iso);
+          return cs?.name ?? iso;
+        })()}
+        countryTier={(() => {
+          const iso = uiState.currentRoomId;
+          if (!iso) return undefined;
+          const cs = uiState.countryStates.get(iso);
+          return cs?.tier;
+        })()}
+      />
 
       {/* ─── 미니맵 (우하단) ─── */}
       <GameMinimap
@@ -622,6 +695,51 @@ function TerrainBonusToast({ text }: { text: string }) {
         }
       `}</style>
     </div>
+  );
+}
+
+/** v12 S24: 음소거 토글 버튼 */
+function MuteButton({ isMuted, onToggle }: { isMuted: boolean; onToggle: () => void }) {
+  return (
+    <button
+      onClick={onToggle}
+      style={{
+        position: 'absolute',
+        top: '12px',
+        right: '12px',
+        zIndex: 20,
+        width: '32px',
+        height: '32px',
+        backgroundColor: 'rgba(17, 17, 17, 0.7)',
+        border: '1px solid rgba(255, 255, 255, 0.2)',
+        borderRadius: '4px',
+        cursor: 'pointer',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: 0,
+        transition: 'background-color 200ms',
+      }}
+      title={isMuted ? 'Unmute' : 'Mute'}
+    >
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#E8E0D4" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        {isMuted ? (
+          <>
+            {/* 음소거 아이콘 */}
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="#E8E0D4" />
+            <line x1="23" y1="9" x2="17" y2="15" stroke="#FF5555" />
+            <line x1="17" y1="9" x2="23" y2="15" stroke="#FF5555" />
+          </>
+        ) : (
+          <>
+            {/* 스피커 아이콘 */}
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5" fill="#E8E0D4" />
+            <path d="M15.54 8.46a5 5 0 0 1 0 7.07" stroke="#55FF55" />
+            <path d="M19.07 4.93a10 10 0 0 1 0 14.14" stroke="#55FF55" />
+          </>
+        )}
+      </svg>
+    </button>
   );
 }
 
