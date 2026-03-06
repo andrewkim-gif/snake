@@ -876,10 +876,11 @@ export function generateHeadBottomBase(): THREE.CanvasTexture {
 
 /**
  * Head용 6-material 배열 생성 (BoxGeometry face order)
- * [0]+X=front(얼굴), [1]-X=back, [2]+Y=top, [3]-Y=bottom, [4]+Z=left, [5]-Z=right
+ * [0]+X=right side, [1]-X=left side, [2]+Y=top, [3]-Y=bottom, [4]+Z=front(face), [5]-Z=back
  * 모든 material.color = white -- setColorAt으로 틴팅
  *
  * Phase 3: hairStyle 파라미터 추가 -- 머리 비-앞면에 헤어스타일 반영
+ * S06 수정: face 텍스처를 index 4 (+Z)에 배치 (VoxelCharacter과 동일)
  */
 export function createHeadMaterials(
   eyeStyle: number,
@@ -893,13 +894,15 @@ export function createHeadMaterials(
   const bottomTex = generateHeadBottomBase();
   const sideTex = generateHeadSideBase(hairStyle);
 
+  // BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
+  // index 4 = +Z = 정면(얼굴), index 5 = -Z = 후면(뒷머리)
   return [
-    new THREE.MeshLambertMaterial({ map: frontTex, color: 0xffffff }),   // +X 앞면(얼굴)
-    new THREE.MeshLambertMaterial({ map: backTex, color: 0xffffff }),    // -X 뒷면
-    new THREE.MeshLambertMaterial({ map: topTex, color: 0xffffff }),     // +Y 정수리
-    new THREE.MeshLambertMaterial({ map: bottomTex, color: 0xffffff }), // -Y 턱
-    new THREE.MeshLambertMaterial({ map: sideTex, color: 0xffffff }),   // +Z 왼쪽
-    new THREE.MeshLambertMaterial({ map: sideTex, color: 0xffffff }),   // -Z 오른쪽
+    new THREE.MeshLambertMaterial({ map: sideTex, color: 0xffffff }),    // [0] +X right side
+    new THREE.MeshLambertMaterial({ map: sideTex, color: 0xffffff }),    // [1] -X left side
+    new THREE.MeshLambertMaterial({ map: topTex, color: 0xffffff }),     // [2] +Y top (hair)
+    new THREE.MeshLambertMaterial({ map: bottomTex, color: 0xffffff }), // [3] -Y bottom (chin)
+    new THREE.MeshLambertMaterial({ map: frontTex, color: 0xffffff }),   // [4] +Z front (face) ← 정면
+    new THREE.MeshLambertMaterial({ map: backTex, color: 0xffffff }),    // [5] -Z back (hair)
   ];
 }
 

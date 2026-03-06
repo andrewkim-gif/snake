@@ -271,12 +271,14 @@ export function GameCanvas3D({
     };
   }, [menuOpen, sendInput]);
 
-  // ─── 리스폰 핸들러 ───
+  // ─── 리스폰 핸들러 (v11: disabled in 1-life mode) ───
   const handleRespawn = useCallback(() => {
+    // v11: 1-life mode — no respawn when spectating
+    if (uiState.isSpectating) return;
     const rs = uiState.roomState;
     if (rs === 'ending' || rs === 'cooldown') return;
     respawn(playerName, skinId);
-  }, [respawn, playerName, skinId, uiState.roomState]);
+  }, [respawn, playerName, skinId, uiState.roomState, uiState.isSpectating]);
 
   const handleExitToLobby = useCallback(() => {
     onExit();

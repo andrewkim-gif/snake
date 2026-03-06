@@ -20,7 +20,7 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:        8000,
-		CORSOrigins: []string{"http://localhost:3000"},
+		CORSOrigins: []string{"http://localhost:3000", "http://localhost:9001"},
 		TickRate:    20,
 		MaxRooms:    5,
 		Environment: "development",

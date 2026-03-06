@@ -72,7 +72,7 @@ func DefaultWorldConfig() WorldConfig {
 		BattleDurationSec:   300,
 		BattleCooldownSec:   60,
 		MaxConcurrentArenas: 50,
-		CountdownSec:        10,
+		CountdownSec:        0, // v11 Phase 0: instant start (no countdown)
 		EndingSec:           5,
 		TickRate:            20,
 		RedisSyncEnabled:    false,
@@ -747,16 +747,27 @@ func (wm *WorldManager) reclaimIdleArenasLocked() {
 
 // buildRoomConfig creates a RoomConfig from country state.
 func (wm *WorldManager) buildRoomConfig(state *CountryState) game.RoomConfig {
+	// Reserve ~60% of slots for bots, but always allow at least 2 humans
+	bots := state.MaxAgents * 60 / 100
+	humans := state.MaxAgents - bots
+	if humans < 2 {
+		humans = 2
+		bots = state.MaxAgents - humans
+		if bots < 0 {
+			bots = 0
+		}
+	}
 	return game.RoomConfig{
 		MaxRooms:          1,
 		MaxPlayersPerRoom: state.MaxAgents,
-		MaxHumansPerRoom:  state.MaxAgents - 15,
-		MaxBotsPerRoom:    15,
+		MaxHumansPerRoom:  humans,
+		MaxBotsPerRoom:    bots,
 		RoundDurationSec:  wm.config.BattleDurationSec,
 		CountdownSec:      wm.config.CountdownSec,
 		EndingSec:         wm.config.EndingSec,
 		CooldownSec:       wm.config.BattleCooldownSec,
 		MinPlayersToStart: 1,
+		TerrainTheme:      state.TerrainTheme,
 	}
 }
 

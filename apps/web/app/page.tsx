@@ -112,6 +112,15 @@ export default function Home() {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [mode, uiState.currentRoomId]);
 
+  // v11: battle_complete 수신 → 10초 후 자동 leaveRoom
+  useEffect(() => {
+    if (!uiState.battleComplete || mode !== 'playing') return;
+    const timer = setTimeout(() => {
+      handleExit();
+    }, 10_000);
+    return () => clearTimeout(timer);
+  }, [uiState.battleComplete, mode, handleExit]);
+
   // --- 전환 화면 ---
   if (mode === 'transitioning') {
     return (

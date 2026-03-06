@@ -39,6 +39,7 @@ const (
 	EventArenaShrink      = "arena_shrink"
 	EventError            = "error"
 	EventCountriesState   = "countries_state"
+	EventBattleComplete   = "battle_complete" // v11: cooldown ended, return to lobby
 
 	// Agent-specific events (server → client)
 	EventAgentAuthResult    = "agent_auth_result"

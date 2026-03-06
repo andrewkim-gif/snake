@@ -108,7 +108,7 @@ function getSkinData(skinId: number) {
 
 // ─── Head 텍스처 생성 (면별 6개) ───
 
-/** FRONT (+X face): 얼굴 (눈/코/입) */
+/** FRONT (+Z face, index 4): 얼굴 (눈/코/입) */
 export function generateHeadFrontTexture(skinId: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas();
   const s = getSkinData(skinId);
@@ -132,7 +132,7 @@ export function generateHeadFrontTexture(skinId: number): THREE.CanvasTexture {
   return toCanvasTexture(canvas);
 }
 
-/** BACK (-X face): 뒷머리 (머리카락만) */
+/** BACK (-Z face, index 5): 뒷머리 (머리카락만) */
 export function generateHeadBackTexture(skinId: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas();
   const s = getSkinData(skinId);
@@ -149,7 +149,7 @@ export function generateHeadBackTexture(skinId: number): THREE.CanvasTexture {
   return toCanvasTexture(canvas);
 }
 
-/** SIDE (±Z faces): 옆머리 (귀 주변) */
+/** SIDE (±X faces, index 0,1): 옆머리 (귀 주변) */
 export function generateHeadSideTexture(skinId: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas();
   const s = getSkinData(skinId);
@@ -401,8 +401,8 @@ const headMaterialCache = new Map<number, THREE.MeshLambertMaterial[]>();
 
 /**
  * Head용 6-material 배열 생성 (BoxGeometry face order)
- * [0]+X=front(얼굴), [1]-X=back, [2]+Y=top, [3]-Y=bottom, [4]+Z=left, [5]-Z=right
- * → 캐릭터 forward = +X (headingToRotY convention)
+ * [0]+X=right side, [1]-X=left side, [2]+Y=top, [3]-Y=bottom, [4]+Z=front(얼굴), [5]-Z=back
+ * index 4 = +Z = 정면(얼굴)
  */
 export function getHeadMaterials(skinId: number): THREE.MeshLambertMaterial[] {
   const cached = headMaterialCache.get(skinId);
@@ -414,15 +414,15 @@ export function getHeadMaterials(skinId: number): THREE.MeshLambertMaterial[] {
   const bottomTex = generateHeadBottomTexture(skinId);
   const sideTex = generateHeadSideTexture(skinId);
 
-  // BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
-  // Head dims: w > d → +Z face is widest (visual "front")
+  // BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
+  // index 4 = +Z = 정면(얼굴), index 5 = -Z = 후면(뒷머리)
   const mats = [
-    new THREE.MeshLambertMaterial({ map: sideTex }),    // +X side (narrow)
-    new THREE.MeshLambertMaterial({ map: sideTex }),    // -X side (narrow)
-    new THREE.MeshLambertMaterial({ map: topTex }),     // +Y top
-    new THREE.MeshLambertMaterial({ map: bottomTex }),  // -Y bottom
-    new THREE.MeshLambertMaterial({ map: frontTex }),   // +Z front (face) ← 정면
-    new THREE.MeshLambertMaterial({ map: backTex }),    // -Z back
+    new THREE.MeshLambertMaterial({ map: sideTex }),    // [0] +X right side
+    new THREE.MeshLambertMaterial({ map: sideTex }),    // [1] -X left side
+    new THREE.MeshLambertMaterial({ map: topTex }),     // [2] +Y top (hair)
+    new THREE.MeshLambertMaterial({ map: bottomTex }),  // [3] -Y bottom (chin)
+    new THREE.MeshLambertMaterial({ map: frontTex }),   // [4] +Z front (face) ← 정면
+    new THREE.MeshLambertMaterial({ map: backTex }),    // [5] -Z back (hair)
   ];
 
   headMaterialCache.set(skinId, mats);

@@ -192,15 +192,16 @@ const (
 
 // RoomConfig holds room lifecycle timing constants.
 type RoomConfig struct {
-	MaxRooms          int // Phase 1: 5, max: 50
-	MaxPlayersPerRoom int // Humans + bots
+	MaxRooms          int    // Phase 1: 5, max: 50
+	MaxPlayersPerRoom int    // Humans + bots
 	MaxHumansPerRoom  int
 	MaxBotsPerRoom    int
-	RoundDurationSec  int // Playing phase length
-	CountdownSec      int // Countdown before round
-	EndingSec         int // Ending phase length
-	CooldownSec       int // Cooldown between rounds
-	MinPlayersToStart int // Min humans to start countdown
+	RoundDurationSec  int    // Playing phase length
+	CountdownSec      int    // Countdown before round
+	EndingSec         int    // Ending phase length
+	CooldownSec       int    // Cooldown between rounds
+	MinPlayersToStart int    // Min humans to start countdown
+	TerrainTheme      string // v11: country terrain theme (urban, desert, tundra, etc.)
 }
 
 // DefaultRoomConfig returns the default room configuration.

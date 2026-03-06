@@ -70,6 +70,7 @@ export interface JoinedPayload {
   tick: number;
   roomState: RoomStatus;
   timeRemaining: number;
+  terrainTheme?: string; // v11: country terrain theme (urban, desert, tundra, etc.)
 }
 
 /** 압축된 뱀 네트워크 데이터 */
@@ -182,6 +183,36 @@ export interface RoundEndPayload {
   finalLeaderboard: LeaderboardEntry[];
   yourRank: number;
   yourScore: number;
+  // v11: sovereignty battle results
+  winnerFaction?: string;
+  sovereigntyChange?: SovereigntyDelta;
+  topPlayers?: TopPlayerEntry[];
+}
+
+/** v11: Sovereignty change after a battle */
+export interface SovereigntyDelta {
+  countryIso: string;
+  oldFaction?: string;
+  newFaction: string;
+  newLevel: number;
+  isNewClaim: boolean;
+}
+
+/** v11: Summarized player entry for round_end */
+export interface TopPlayerEntry {
+  id: string;
+  name: string;
+  score: number;
+  kills: number;
+  level: number;
+  alive: boolean;
+  faction?: string;
+}
+
+/** v11: Battle complete event — cooldown ended, return to lobby */
+export interface BattleCompletePayload {
+  countryIso: string;
+  nextBattle?: number; // seconds until next battle
 }
 
 export interface RoundResetPayload {
@@ -373,4 +404,6 @@ export interface ServerToClientEvents {
   round_analysis: (data: RoundAnalysisPayload) => void;
   rp_update: (data: RPUpdatePayload) => void;
   quest_update: (data: QuestUpdatePayload) => void;
+  // v11: Battle complete — cooldown ended
+  battle_complete: (data: BattleCompletePayload) => void;
 }

@@ -156,11 +156,13 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
   }, [dataRef, angleRef]));
 
   const handleRespawn = useCallback(() => {
+    // v11: 1-life mode — no respawn when spectating
+    if (uiState.isSpectating) return;
     // playing/waiting/countdown 중에만 리스폰 허용
     const rs = uiState.roomState;
     if (rs === 'ending' || rs === 'cooldown') return;
     respawn(playerName, skinId);
-  }, [respawn, playerName, skinId, uiState.roomState]);
+  }, [respawn, playerName, skinId, uiState.roomState, uiState.isSpectating]);
 
   const handleExitToLobby = useCallback(() => {
     onExit();

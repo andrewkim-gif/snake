@@ -10,8 +10,8 @@
  *   → 표정별 IM (5종): HIT/DEATH/LEVELUP/VICTORY/BOOST 각각 별도 IM
  *
  * 구현:
- * - PlaneGeometry로 머리 앞면(+X) 바로 앞에 배치
- * - polygonOffset + 미세 Z-offset으로 Z-fighting 방지
+ * - PlaneGeometry로 머리 앞면(+Z) 바로 앞에 배치
+ * - polygonOffset + 미세 offset으로 Z-fighting 방지
  * - 에이전트별 비동기 깜빡임 (3~5초 랜덤 간격, 0.15초 duration)
  * - AnimState에 따른 표정 오버라이드 (표정 중에는 깜빡임 억제)
  *
@@ -47,15 +47,15 @@ const BLINK_RANDOM_RANGE = 2.0;
 
 /**
  * 눈 플레인 크기 (게임 유닛)
- * 머리 앞면은 10(H) x 8(D)
+ * 머리 앞면(+Z face)은 10(W, X축) x 10(H, Y축)
  * 전체 머리 앞면과 동일 크기로 매핑 (텍스처 좌표로 눈 위치 결정)
  */
-const EYE_PLANE_WIDTH = 8;   // 머리 앞면 너비 (Z축, depth=8)
+const EYE_PLANE_WIDTH = 10;  // 머리 앞면 너비 (X축, width=10)
 const EYE_PLANE_HEIGHT = 10; // 머리 앞면 높이 (Y축, height=10)
 
 /**
  * 눈 플레인 오프셋 (머리 앞면에서 살짝 앞으로)
- * 머리 BoxGeometry(10, 10, 8)에서 +X 면은 local x=+5
+ * 머리 BoxGeometry(10, 10, 8)에서 +Z 면은 local z=+4 (depth/2)
  * → 0.05 유닛 앞으로 offset하여 Z-fighting 최소화
  */
 const EYE_FORWARD_OFFSET = 0.05;
@@ -139,10 +139,10 @@ export function EyeInstances({
   // ─── Geometry: 머리 앞면 크기의 PlaneGeometry ───
   const eyePlaneGeo = useMemo(() => {
     const geo = new THREE.PlaneGeometry(EYE_PLANE_WIDTH, EYE_PLANE_HEIGHT);
-    // rotateY(-PI/2): 법선이 +X를 향함 (머리 앞면 방향)
-    geo.rotateY(-Math.PI / 2);
+    // PlaneGeometry 기본 법선: +Z → 이미 +Z 방향 (머리 앞면 방향)
+    // 회전 불필요 (Three.js 기본 PlaneGeometry는 법선이 +Z)
 
-    // UV 수평 반전: BoxGeometry +X face와 UV 방향 매칭
+    // UV 수평 반전: BoxGeometry +Z face와 UV 방향 매칭
     const uvAttr = geo.attributes.uv;
     for (let i = 0; i < uvAttr.count; i++) {
       uvAttr.setX(i, 1 - uvAttr.getX(i));
@@ -206,7 +206,7 @@ export function EyeInstances({
 
     const blinks = blinkStates.current;
     const P = CUBELING_PARTS.head;
-    const headHalfW = P.size[0] / 2; // 5
+    const headHalfD = P.size[2] / 2; // 4 (depth/2, +Z face 오프셋)
 
     let closedCount = 0;
     // 표정별 인스턴스 카운트 (5종)
@@ -296,11 +296,11 @@ export function EyeInstances({
         // 에이전트 heading quaternion
         _qAgent.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, rotY);
 
-        // 눈 플레인 위치: 머리 중심 + 앞면 half + 미세 offset
+        // 눈 플레인 위치: 머리 중심 + +Z face half(depth/2) + 미세 offset
         _pos.set(
-          (P.offset[0] + headPosX + headHalfW + EYE_FORWARD_OFFSET) * scale,
+          (P.offset[0] + headPosX) * scale,
           (P.offset[1] + headPosY) * scale,
-          (P.offset[2] + headPosZ) * scale,
+          (P.offset[2] + headPosZ + headHalfD + EYE_FORWARD_OFFSET) * scale,
         );
         _pos.applyQuaternion(_qAgent);
 

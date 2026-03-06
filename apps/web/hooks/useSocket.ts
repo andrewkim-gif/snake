@@ -14,7 +14,7 @@ import type {
   KillPayload, MinimapPayload, RoomInfo, RecentWinner,
   RoomStatus, RoundEndPayload, LeaderboardEntry,
   LevelUpPayload, ArenaShrinkPayload, SynergyActivatedPayload,
-  AgentNetworkData,
+  AgentNetworkData, BattleCompletePayload,
 } from '@agent-survivor/shared';
 import type { CountryClientState } from '@/lib/globe-data';
 
@@ -95,6 +95,10 @@ export interface UiState {
   roundAnalysis: RoundAnalysisData | null;
   // v11: 국가 상태 (1Hz broadcast from WorldManager)
   countryStates: Map<string, CountryClientState>;
+  // v11: terrain theme + spectating + battle complete
+  terrainTheme: string | null;
+  isSpectating: boolean;
+  battleComplete: BattleCompletePayload | null;
 }
 
 export function useSocket() {
@@ -118,6 +122,9 @@ export function useSocket() {
     coachMessage: null,
     roundAnalysis: null,
     countryStates: new Map(),
+    terrainTheme: null,
+    isSpectating: false,
+    battleComplete: null,
   });
 
   useEffect(() => {
@@ -155,6 +162,9 @@ export function useSocket() {
         ...prev, alive: true, deathInfo: null, roundEnd: null,
         currentRoomId: data.roomId, roomState: data.roomState,
         timeRemaining: data.timeRemaining,
+        terrainTheme: data.terrainTheme ?? null,
+        isSpectating: false,
+        battleComplete: null,
       }));
     });
 
@@ -173,7 +183,8 @@ export function useSocket() {
       dataRef.current.alive = false;
       dataRef.current.deathInfo = data;
       dataRef.current.levelUp = null;
-      setUiState(prev => ({ ...prev, alive: false, deathInfo: data, levelUp: null }));
+      // v11: 1-life mode — enter spectating on death (no respawn)
+      setUiState(prev => ({ ...prev, alive: false, deathInfo: data, levelUp: null, isSpectating: true }));
     });
 
     socket.on('respawned', () => {
@@ -304,6 +315,8 @@ export function useSocket() {
         synergyPopups: [],
         coachMessage: null,
         roundAnalysis: null,
+        isSpectating: false,
+        battleComplete: null,
       }));
     });
 
@@ -335,6 +348,11 @@ export function useSocket() {
 
     socket.on('round_analysis', (data: RoundAnalysisData) => {
       setUiState(prev => ({ ...prev, roundAnalysis: data }));
+    });
+
+    // v11: battle complete — cooldown ended, return to lobby
+    socket.on('battle_complete', (data: BattleCompletePayload) => {
+      setUiState(prev => ({ ...prev, battleComplete: data }));
     });
 
     // WebSocket 연결 시작 (ping은 GameSocket 내부에서 처리)
@@ -379,6 +397,9 @@ export function useSocket() {
       synergyPopups: [],
       coachMessage: null,
       roundAnalysis: null,
+      terrainTheme: null,
+      isSpectating: false,
+      battleComplete: null,
     }));
   }, []);
 

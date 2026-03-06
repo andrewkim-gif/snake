@@ -26,8 +26,9 @@ const (
 	RoomEvtState         RoomEventType = "state"
 	RoomEvtMinimap       RoomEventType = "minimap"
 	RoomEvtArenaShrink   RoomEventType = "arena_shrink"
-	RoomEvtCoachMessage  RoomEventType = "coach_message"
-	RoomEvtRoundAnalysis RoomEventType = "round_analysis"
+	RoomEvtCoachMessage   RoomEventType = "coach_message"
+	RoomEvtRoundAnalysis  RoomEventType = "round_analysis"
+	RoomEvtBattleComplete RoomEventType = "battle_complete" // v11: cooldown ended
 )
 
 // RoomEvent is a lifecycle event emitted by a Room.
@@ -236,6 +237,15 @@ func (r *Room) tickEnding() {
 func (r *Room) tickCooldown() {
 	r.stateTicksLeft--
 	if r.stateTicksLeft <= 0 {
+		// v11: emit battle_complete before resetting (tells clients to return to lobby)
+		r.emitEvents([]RoomEvent{{
+			RoomID: r.ID,
+			Type:   RoomEvtBattleComplete,
+			Data: domain.BattleCompleteEvent{
+				CountryISO: r.ID, // Room ID = country ISO in v11
+			},
+		}})
+
 		// Arena already stopped in endRound(); just reset for next round
 		r.transitionTo(domain.RoomStateWaiting)
 
@@ -349,6 +359,36 @@ func (r *Room) endRound() {
 		}
 	}
 
+	// Build top players list (up to 10) with battle scores
+	topCount := len(finalRanking)
+	if topCount > 10 {
+		topCount = 10
+	}
+	topPlayers := make([]domain.TopPlayerEntry, 0, topCount)
+	for i := 0; i < topCount; i++ {
+		entry := finalRanking[i]
+		agent, ok := agents[entry.ID]
+		if !ok {
+			continue
+		}
+		survivalSec := float64(r.Config.RoundDurationSec)
+		if !agent.Alive {
+			survivalSec = float64(time.Since(time.UnixMilli(agent.JoinedAt)).Seconds())
+			if survivalSec > float64(r.Config.RoundDurationSec) {
+				survivalSec = float64(r.Config.RoundDurationSec)
+			}
+		}
+		battleScore := CalcBattleScore(agent.Alive, agent.Kills, agent.Level, float64(agent.Score), survivalSec)
+		topPlayers = append(topPlayers, domain.TopPlayerEntry{
+			ID:    entry.ID,
+			Name:  entry.Name,
+			Score: battleScore,
+			Kills: entry.Kills,
+			Level: entry.Level,
+			Alive: agent.Alive,
+		})
+	}
+
 	// Emit round_end to each player with their personal rank
 	var events []RoomEvent
 	for pid := range r.players {
@@ -370,6 +410,7 @@ func (r *Room) endRound() {
 				FinalLeaderboard: finalRanking,
 				YourRank:         rank,
 				YourScore:        score,
+				TopPlayers:       topPlayers,
 			},
 		})
 	}
@@ -757,6 +798,7 @@ func (r *Room) GetJoinedEvent(playerID string) domain.JoinedEvent {
 		Tick:          tick,
 		RoomState:     r.state,
 		TimeRemaining: timeRemaining,
+		TerrainTheme:  r.Config.TerrainTheme,
 	}
 }
 

@@ -82,7 +82,6 @@ function GlobeObject({
       if (cancelled) return;
 
       const polys = geoData.features.filter((f) => f.geometry.type !== 'Point');
-
       const globe = new ThreeGlobeClass!()
         .globeImageUrl('/textures/earth-blue-marble.jpg')
         .showGlobe(true)
@@ -93,22 +92,28 @@ function GlobeObject({
           const iso3 = getCountryISO(f.properties);
           const state = countryStates?.get(iso3);
           if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.55);
-          return hexToRgba(sovereigntyColors.unclaimed, 0.45);
+          return hexToRgba(sovereigntyColors.unclaimed, 0.55);
         })
         .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
-        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.15)')
+        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.25)')
         .polygonAltitude((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
-          if (selectedCountry && iso3 === selectedCountry) return 0.004;
-          return 0.001;
+          if (selectedCountry && iso3 === selectedCountry) return 0.008;
+          return 0.006;
         });
 
-      // Globe material: 텍스처 원본 색감 보존, specular 제거 (우주에서 지구는 Phong 반사 없음)
+      // 폴리곤 전환 시간 0ms — 즉시 렌더링 (기본 1000ms면 altitude tween이
+      // scale 0.999에서 시작하여 지구 표면 안쪽에 위치 → z-fighting 발생)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (globe as any).polygonsTransitionDuration(0);
+
+      // Globe material: 텍스처 원본 색감 보존
+      // emissive를 올려서 밤 쪽도 은은하게 보이게 (MeshBasicMaterial 폴리곤과의 밝기 차이 축소)
       const globeMat = globe.globeMaterial() as THREE.MeshPhongMaterial;
       globeMat.color = new THREE.Color('#ffffff');
-      globeMat.emissive = new THREE.Color('#040810');
-      globeMat.emissiveIntensity = 0.02;
+      globeMat.emissive = new THREE.Color('#112244');
+      globeMat.emissiveIntensity = 0.18;
       globeMat.shininess = 0;
       globeMat.specular = new THREE.Color('#000000');
 
@@ -130,73 +135,122 @@ function GlobeObject({
         groupRef.current.add(globe as unknown as THREE.Object3D);
         globeRef.current = globe;
 
-        // 국가 이름 라벨 (커스텀 스프라이트 — TextGeometry 호환성 이슈 회피)
+        // 국가 이름 라벨: 단일 캔버스 재사용 (브라우저 캔버스 컨텍스트 제한 회피)
+        // 기존: 195개 캔버스 각각 getContext('2d') → 컨텍스트 제한 초과 시 TypeError
+        // 수정: 1개 캔버스 재사용 + DataTexture로 픽셀 데이터 복사
         const labelGroup = new THREE.Group();
         labelGroup.name = 'country-labels';
 
-        for (const f of polys) {
-          const name = (f.properties.NAME as string) || '';
-          if (!name) continue;
-          const centroid = computeCentroid(f.geometry);
-          if (!centroid) continue;
+        try {
+          const sharedCanvas = document.createElement('canvas');
+          const sharedCtx = sharedCanvas.getContext('2d');
+          if (!sharedCtx) throw new Error('Cannot create 2D canvas context');
 
-          // 캔버스에 텍스트 렌더링
-          const canvas = document.createElement('canvas');
-          const ctx = canvas.getContext('2d')!;
-          const fontSize = 36;
-          ctx.font = `600 ${fontSize}px "Rajdhani", "Segoe UI", sans-serif`;
-          const metrics = ctx.measureText(name);
-          const pw = Math.ceil(metrics.width) + 20;
-          const ph = fontSize + 16;
-          canvas.width = pw;
-          canvas.height = ph;
-          // canvas 리사이즈 후 font 재설정 필수
-          ctx.font = `600 ${fontSize}px "Rajdhani", "Segoe UI", sans-serif`;
-          ctx.textBaseline = 'middle';
-          ctx.textAlign = 'center';
-          // 다크 아웃라인 (가독성)
-          ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
-          ctx.lineWidth = 4;
-          ctx.lineJoin = 'round';
-          ctx.strokeText(name, pw / 2, ph / 2);
-          // 흰색 본문
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
-          ctx.fillText(name, pw / 2, ph / 2);
+          for (const f of polys) {
+            const name = (f.properties.NAME as string) || '';
+            if (!name) continue;
+            const centroid = computeCentroid(f.geometry);
+            if (!centroid) continue;
 
-          const texture = new THREE.CanvasTexture(canvas);
-          texture.minFilter = THREE.LinearFilter;
-          texture.magFilter = THREE.LinearFilter;
+            try {
+              const fontSize = 36;
+              const shadowPad = 14;
 
-          const mat = new THREE.SpriteMaterial({
-            map: texture,
-            transparent: true,
-            depthWrite: false,
-            sizeAttenuation: true,
-          });
-          const sprite = new THREE.Sprite(mat);
+              // 텍스트 측정 (캔버스 크기 결정)
+              sharedCtx.font = `700 ${fontSize}px "Rajdhani", "Segoe UI", sans-serif`;
+              const metrics = sharedCtx.measureText(name);
+              const pw = Math.ceil(metrics.width) + 24 + shadowPad * 2;
+              const ph = fontSize + 20 + shadowPad * 2;
 
-          // 위치: three-globe polar2Cartesian 공식
-          const alt = 0.015;
-          const phi = (90 - centroid.lat) * Math.PI / 180;
-          const theta = (90 - centroid.lng) * Math.PI / 180;
-          const r = 100 * (1 + alt);
-          sprite.position.set(
-            r * Math.sin(phi) * Math.cos(theta),
-            r * Math.cos(phi),
-            r * Math.sin(phi) * Math.sin(theta),
-          );
+              // 캔버스 리사이즈 (내용 리셋됨)
+              sharedCanvas.width = pw;
+              sharedCanvas.height = ph;
 
-          // 스케일: 텍스트 비율 유지, 기본 높이 5 world units
-          const baseH = 5;
-          sprite.scale.set(baseH * (pw / ph), baseH, 1);
+              // 리사이즈 후 상태 재설정 필수
+              sharedCtx.font = `700 ${fontSize}px "Rajdhani", "Segoe UI", sans-serif`;
+              sharedCtx.textBaseline = 'middle';
+              sharedCtx.textAlign = 'center';
+              const cx = pw / 2;
+              const cy = ph / 2;
 
-          labelGroup.add(sprite);
+              // 1단계: 소프트 다크 글로우
+              sharedCtx.shadowColor = 'rgba(0, 0, 0, 0.95)';
+              sharedCtx.shadowBlur = 12;
+              sharedCtx.shadowOffsetX = 0;
+              sharedCtx.shadowOffsetY = 0;
+              // 2단계: 두꺼운 다크 아웃라인
+              sharedCtx.strokeStyle = 'rgba(0, 0, 0, 0.85)';
+              sharedCtx.lineWidth = 6;
+              sharedCtx.lineJoin = 'round';
+              sharedCtx.strokeText(name, cx, cy);
+              // 3단계: 흰색 본문
+              sharedCtx.shadowBlur = 0;
+              sharedCtx.fillStyle = '#FFFFFF';
+              sharedCtx.fillText(name, cx, cy);
+
+              // ImageData → Uint8Array 복사 (캔버스 재사용을 위해 독립 복사본 생성)
+              const imageData = sharedCtx.getImageData(0, 0, pw, ph);
+              const pixels = new Uint8Array(imageData.data.length);
+              pixels.set(imageData.data);
+
+              // 상하 반전 (Canvas Y축: 위→아래, WebGL: 아래→위)
+              const rowBytes = pw * 4;
+              const halfH = Math.floor(ph / 2);
+              for (let y = 0; y < halfH; y++) {
+                const topOff = y * rowBytes;
+                const botOff = (ph - 1 - y) * rowBytes;
+                for (let x = 0; x < rowBytes; x++) {
+                  const tmp = pixels[topOff + x];
+                  pixels[topOff + x] = pixels[botOff + x];
+                  pixels[botOff + x] = tmp;
+                }
+              }
+
+              const texture = new THREE.DataTexture(pixels, pw, ph, THREE.RGBAFormat);
+              texture.needsUpdate = true;
+              texture.minFilter = THREE.LinearFilter;
+              texture.magFilter = THREE.LinearFilter;
+
+              const mat = new THREE.SpriteMaterial({
+                map: texture,
+                transparent: true,
+                depthWrite: false,
+                depthTest: false,
+                sizeAttenuation: true,
+              });
+              const sprite = new THREE.Sprite(mat);
+              sprite.renderOrder = 999;
+              sprite.raycast = () => {};
+
+              // 위치: three-globe polar2Cartesian 공식
+              const alt = 0.02;
+              const phi = (90 - centroid.lat) * Math.PI / 180;
+              const theta = (90 - centroid.lng) * Math.PI / 180;
+              const r = 100 * (1 + alt);
+              sprite.position.set(
+                r * Math.sin(phi) * Math.cos(theta),
+                r * Math.cos(phi),
+                r * Math.sin(phi) * Math.sin(theta),
+              );
+
+              const baseH = 8;
+              sprite.scale.set(baseH * (pw / ph), baseH, 1);
+              labelGroup.add(sprite);
+            } catch (labelErr) {
+              // 개별 라벨 실패는 무시하고 다음 라벨 진행
+              console.warn(`Label failed: ${name}`, labelErr);
+            }
+          }
+        } catch (err) {
+          console.error('Label system init failed:', err);
         }
 
+        // 라벨 생성 성공/실패 무관하게 씬에 추가
         groupRef.current.add(labelGroup);
         labelGroupRef.current = labelGroup;
       }
 
+      // 라벨 오류와 무관하게 항상 호출 (클릭 핸들러, 상태 업데이트 활성화)
       setGlobeReady(true);
     })();
 
@@ -224,29 +278,43 @@ function GlobeObject({
         const f = feat as { properties: Record<string, unknown> };
         const iso3 = getCountryISO(f.properties);
         const state = countryStates?.get(iso3);
-        if (state?.battleStatus === 'in_battle') return hexToRgba(sovereigntyColors.atWar, 0.55);
+        if (state?.battleStatus === 'in_battle') return hexToRgba(sovereigntyColors.atWar, 0.6);
         if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.55);
-        return hexToRgba(sovereigntyColors.unclaimed, 0.45);
+        return hexToRgba(sovereigntyColors.unclaimed, 0.55);
       })
       .polygonAltitude((feat: object) => {
         const f = feat as { properties: Record<string, unknown> };
         const iso3 = getCountryISO(f.properties);
-        if (selectedCountry && iso3 === selectedCountry) return 0.004;
-        return 0.001;
+        if (selectedCountry && iso3 === selectedCountry) return 0.008;
+        return 0.006;
       });
   }, [countryStates, selectedCountry, geoData, globeReady]);
 
-  // 라벨 거리 기반 페이드 (줌아웃 시 희미, 줌인 시 선명)
+  // 라벨 거리 페이드 + facing 기반 뒷면 숨김
+  // depthTest: false이므로 뒷면 라벨이 지구를 뚫고 보이는 문제를
+  // 카메라↔라벨 방향의 dot product로 해결 (뒷면 = dot < 0 → opacity 0)
+  const _camDir = useMemo(() => new THREE.Vector3(), []);
+  const _labelDir = useMemo(() => new THREE.Vector3(), []);
+
   useFrame(({ camera }) => {
     if (!labelGroupRef.current) return;
     const dist = camera.position.length();
-    // 350 이상: 투명, 200 이하: 불투명
-    const opacity = THREE.MathUtils.clamp((350 - dist) / 150, 0, 1);
-    labelGroupRef.current.visible = opacity > 0.01;
+    // 450 이상: 투명, 300 이하: 불투명 (기본 카메라 300 → 1.0)
+    const maxOpacity = THREE.MathUtils.clamp((450 - dist) / 150, 0, 1);
+    labelGroupRef.current.visible = maxOpacity > 0.01;
     if (!labelGroupRef.current.visible) return;
+
+    // 카메라 방향 벡터 (재할당 없이 재사용 — 프레임당 ~200개 Vector3 생성 방지)
+    _camDir.copy(camera.position).normalize();
+
     for (const child of labelGroupRef.current.children) {
       if (child instanceof THREE.Sprite) {
-        child.material.opacity = opacity;
+        // 라벨 위치 방향과 카메라 방향의 내적: 1=정면, 0=가장자리, -1=뒷면
+        _labelDir.copy(child.position).normalize();
+        const dot = _camDir.dot(_labelDir);
+        // smoothstep: dot -0.1 이하 → 0 (완전 투명), dot 0.2 이상 → 1 (완전 불투명)
+        const facing = THREE.MathUtils.smoothstep(dot, -0.1, 0.2);
+        child.material.opacity = maxOpacity * facing;
       }
     }
   });

@@ -11,6 +11,7 @@ type JoinedEvent struct {
 	Tick          uint64    `json:"tick"`
 	RoomState     RoomState `json:"roomState"`
 	TimeRemaining int       `json:"timeRemaining"`
+	TerrainTheme  string    `json:"terrainTheme,omitempty"` // v11: country terrain theme
 }
 
 // StateAgent is the per-tick serialized agent data sent to clients.
@@ -241,6 +242,36 @@ type RoundEndEvent struct {
 	FinalLeaderboard []LeaderboardEntry `json:"finalLeaderboard"`
 	YourRank         int                `json:"yourRank"`
 	YourScore        int                `json:"yourScore"`
+	// v11: sovereignty battle results
+	WinnerFaction     string             `json:"winnerFaction,omitempty"`
+	SovereigntyChange *SovereigntyDelta  `json:"sovereigntyChange,omitempty"`
+	TopPlayers        []TopPlayerEntry   `json:"topPlayers,omitempty"`
+}
+
+// SovereigntyDelta describes a sovereignty change after a battle.
+type SovereigntyDelta struct {
+	CountryISO   string `json:"countryIso"`
+	OldFaction   string `json:"oldFaction,omitempty"`
+	NewFaction   string `json:"newFaction"`
+	NewLevel     int    `json:"newLevel"`
+	IsNewClaim   bool   `json:"isNewClaim"`
+}
+
+// TopPlayerEntry is a summarized player entry for round_end.
+type TopPlayerEntry struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Score   int    `json:"score"`
+	Kills   int    `json:"kills"`
+	Level   int    `json:"level"`
+	Alive   bool   `json:"alive"`
+	Faction string `json:"faction,omitempty"`
+}
+
+// BattleCompleteEvent is sent when cooldown ends and players should return to lobby.
+type BattleCompleteEvent struct {
+	CountryISO string `json:"countryIso"`
+	NextBattle int    `json:"nextBattle,omitempty"` // seconds until next battle (0 = no scheduled)
 }
 
 // RoundResetEvent is sent when transitioning between rounds.

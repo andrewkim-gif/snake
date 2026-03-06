@@ -9,7 +9,7 @@
  * - 새 얼굴 조합 등장 시 IM 동적 생성, 미사용 30초 후 dispose
  * - 최대 ~12 활성 그룹 예상 (60명 중 다수가 같은 얼굴 공유)
  *
- * 6-face material array: [+X=front(얼굴), -X=back, +Y=top, -Y=bottom, +Z=left, -Z=right]
+ * 6-face material array: [+X=right, -X=left, +Y=top, -Y=bottom, +Z=front(얼굴), -Z=back]
  * material.color = white → setColorAt()이 최종 색상 결정
  *
  * CRITICAL: useFrame priority 0 — auto-render 유지!

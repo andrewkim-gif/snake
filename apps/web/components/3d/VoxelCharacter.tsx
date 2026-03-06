@@ -90,9 +90,9 @@ function lightenHex(hex: string, amount: number): string {
 }
 
 /**
- * 6-face head materials (얼굴은 +X 면에만 표시)
- * BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
- * +X = front (face), -X = back (hair), +Y = top (hair), -Y = chin, ±Z = sides
+ * 6-face head materials
+ * BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
+ * +Z = front (face), -Z = back (hair), +Y = top (hair), -Y = chin, ±X = sides
  */
 function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambertMaterial[] {
   const skinTone = SKIN_TONES[a.skinTone] ?? '#D4A574';
@@ -100,7 +100,7 @@ function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambert
   const darkHair = darkenHex(hairColor, 0.2);
   const darkSkin = darkenHex(skinTone, 0.1);
 
-  // +X: Front face (얼굴 — 눈/코/입 + 머리카락 상단)
+  // +Z: Front face (얼굴 — 눈/코/입 + 머리카락 상단) — material index 4
   const [fC, fX] = createCanvas();
   fX.fillStyle = skinTone;
   fX.fillRect(0, 0, 16, 16);
@@ -123,7 +123,7 @@ function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambert
   fX.fillStyle = darkenHex(skinTone, 0.2);
   fX.fillRect(6, 11, 4, 1);
 
-  // -X: Back face (뒷머리 — 머리카락 + 목)
+  // -Z: Back face (뒷머리 — 머리카락 + 목) — material index 5
   const [bC, bX] = createCanvas();
   bX.fillStyle = hairColor;
   bX.fillRect(0, 0, 16, 16);
@@ -147,7 +147,7 @@ function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambert
   btX.fillStyle = darkenHex(skinTone, 0.1);
   btX.fillRect(0, 0, 16, 16);
 
-  // ±Z: Side faces (옆머리 — 피부 + 머리카락 + 귀)
+  // ±X: Side faces (옆머리 — 피부 + 머리카락 + 귀) — material index 0, 1
   const [sC, sX] = createCanvas();
   sX.fillStyle = skinTone;
   sX.fillRect(0, 0, 16, 16);
@@ -160,15 +160,15 @@ function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambert
   sX.fillRect(7, 7, 2, 2);
 
   const sideTex = toCanvasTex(sC);
-  // BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
-  // Head dims: w=0.625(X) h=0.625(Y) d=0.5(Z) → +Z face is 0.625×0.625 (widest, visual "front")
+  // BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
+  // index 4 = +Z = 정면(얼굴), index 5 = -Z = 후면(뒷머리)
   return [
-    new THREE.MeshLambertMaterial({ map: sideTex }),            // +X side (narrow)
-    new THREE.MeshLambertMaterial({ map: sideTex }),            // -X side (narrow)
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(tC) }),    // +Y top (hair)
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(btC) }),   // -Y bottom (chin)
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(fC) }),    // +Z front (face) ← 정면
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(bC) }),    // -Z back (hair)
+    new THREE.MeshLambertMaterial({ map: sideTex }),            // [0] +X right side
+    new THREE.MeshLambertMaterial({ map: sideTex }),            // [1] -X left side
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(tC) }),    // [2] +Y top (hair)
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(btC) }),   // [3] -Y bottom (chin)
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(fC) }),    // [4] +Z front (face) ← 정면
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(bC) }),    // [5] -Z back (hair)
   ];
 }
 
@@ -364,7 +364,7 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
     return geo;
   }, []);
 
-  // Head: 6-face materials (얼굴은 +X 면에만)
+  // Head: 6-face materials (얼굴은 +Z 면 = index 4)
   const headMats = useMemo(() => {
     if (appearance) return createAppearanceHeadMaterials(appearance);
     return getHeadMaterials(skinId);
@@ -404,7 +404,7 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
         <boxGeometry args={[BODY.w, BODY.h, BODY.d]} />
       </mesh>
 
-      {/* Head -- 큐블링: 큰 머리(42%), 6-face materials (얼굴은 +X면) */}
+      {/* Head -- 큐블링: 큰 머리(42%), 6-face materials (얼굴은 +Z면 = index 4) */}
       <mesh ref={headRef} position={[0, HEAD_CENTER, 0]} material={headMats}>
         <boxGeometry args={[HEAD.w, HEAD.h, HEAD.d]} />
       </mesh>

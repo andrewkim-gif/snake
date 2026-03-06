@@ -211,102 +211,102 @@ export interface CubelingPreset {
   description: string;
 }
 
-/** 8개 프리셋 — 빠른 시작용 완성 캐릭터 */
+/** 8개 테마 프리셋 — 빠른 시작용 완성 캐릭터 */
 export const CHARACTER_PRESETS: readonly CubelingPreset[] = [
   {
-    id: 'nova', name: 'Nova',
-    description: '밝은 모험가',
-    appearance: {
-      bodyType: 'standard', bodySize: 'medium',
-      skinTone: 2, eyeStyle: 2, mouthStyle: 0, marking: 0,
-      topColor: 1, bottomColor: 6, pattern: 0,
-      hairStyle: 3, hairColor: 5,
-      hat: 7, weapon: 0, backItem: 0, footwear: 0,
-      trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
-    },
-  },
-  {
-    id: 'rex', name: 'Rex',
-    description: '터프 전사',
+    id: 'soldier', name: 'Soldier',
+    description: 'Camo veteran',
     appearance: {
       bodyType: 'chunky', bodySize: 'large',
       skinTone: 5, eyeStyle: 1, mouthStyle: 3, marking: 0,
-      topColor: 0, bottomColor: 7, pattern: 0,
-      hairStyle: 1, hairColor: 0,
-      hat: 1, weapon: 1, backItem: 0, footwear: 1,
+      topColor: 3, bottomColor: 7, pattern: 5,   // lime + charcoal, camo
+      hairStyle: 0, hairColor: 0,                  // buzz, black
+      hat: 1, weapon: 2, backItem: 4, footwear: 1, // iron helmet, iron axe, backpack, iron boots
       trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
     },
   },
   {
-    id: 'pixel', name: 'Pixel',
-    description: '기본 큐블링',
-    appearance: {
-      bodyType: 'standard', bodySize: 'medium',
-      skinTone: 3, eyeStyle: 0, mouthStyle: 0, marking: 0,
-      topColor: 4, bottomColor: 7, pattern: 0,
-      hairStyle: 0, hairColor: 7,
-      hat: 0, weapon: 0, backItem: 0, footwear: 0,
-      trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
-    },
-  },
-  {
-    id: 'ghost', name: 'Ghost',
-    description: '미스터리',
+    id: 'hacker', name: 'Hacker',
+    description: 'Cyber infiltrator',
     appearance: {
       bodyType: 'slim', bodySize: 'medium',
-      skinTone: 0, eyeStyle: 5, mouthStyle: 1, marking: 0,
-      topColor: 7, bottomColor: 5, pattern: 0,
-      hairStyle: 8, hairColor: 7,
-      hat: 0, weapon: 0, backItem: 0, footwear: 0,
+      skinTone: 0, eyeStyle: 10, mouthStyle: 1, marking: 0,
+      topColor: 7, bottomColor: 7, pattern: 0,    // charcoal + charcoal, solid
+      hairStyle: 15, hairColor: 0,                  // cap (hoodie), black
+      hat: 0, weapon: 0, backItem: 4, footwear: 4, // none, none, backpack (keyboard), speed shoes
       trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
     },
   },
   {
-    id: 'sage', name: 'Sage',
-    description: '지혜의 마법사',
+    id: 'scientist', name: 'Scientist',
+    description: 'Lab researcher',
     appearance: {
-      bodyType: 'tall', bodySize: 'medium',
-      skinTone: 2, eyeStyle: 3, mouthStyle: 1, marking: 0,
-      topColor: 5, bottomColor: 2, pattern: 0,
-      hairStyle: 12, hairColor: 7,
-      hat: 4, weapon: 3, backItem: 0, footwear: 0,
+      bodyType: 'standard', bodySize: 'medium',
+      skinTone: 2, eyeStyle: 3, mouthStyle: 0, marking: 0,
+      topColor: 6, bottomColor: 6, pattern: 0,    // white + white, solid (lab coat)
+      hairStyle: 14, hairColor: 1,                  // bald, dark brown
+      hat: 0, weapon: 3, backItem: 0, footwear: 0, // none, magic staff (test tube), none, none
       trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
     },
   },
   {
-    id: 'blitz', name: 'Blitz',
-    description: '스피드 닌자',
+    id: 'ninja', name: 'Ninja',
+    description: 'Shadow assassin',
     appearance: {
       bodyType: 'slim', bodySize: 'small',
-      skinTone: 4, eyeStyle: 10, mouthStyle: 1, marking: 0,
-      topColor: 7, bottomColor: 7, pattern: 0,
-      hairStyle: 5, hairColor: 0,
-      hat: 0, weapon: 2, backItem: 0, footwear: 4,
+      skinTone: 4, eyeStyle: 1, mouthStyle: 1, marking: 0,
+      topColor: 7, bottomColor: 7, pattern: 0,    // charcoal + charcoal, solid
+      hairStyle: 5, hairColor: 0,                   // mohawk, black
+      hat: 0, weapon: 1, backItem: 0, footwear: 4, // none, diamond sword (katana), none, speed shoes
       trailEffect: 1, auraEffect: 0, emote: 0, spawnEffect: 0,
     },
   },
   {
-    id: 'titan', name: 'Titan',
-    description: '중갑 탱커',
+    id: 'pilot', name: 'Pilot',
+    description: 'Sky commander',
     appearance: {
-      bodyType: 'chunky', bodySize: 'large',
-      skinTone: 6, eyeStyle: 1, mouthStyle: 4, marking: 0,
-      topColor: 6, bottomColor: 4, pattern: 0,
-      hairStyle: 0, hairColor: 15,
-      hat: 3, weapon: 1, backItem: 0, footwear: 3,
-      trailEffect: 0, auraEffect: 1, emote: 0, spawnEffect: 0,
+      bodyType: 'standard', bodySize: 'medium',
+      skinTone: 3, eyeStyle: 3, mouthStyle: 0, marking: 0,
+      topColor: 10, bottomColor: 7, pattern: 0,   // cocoa (leather jacket) + charcoal, solid
+      hairStyle: 2, hairColor: 3,                   // side, auburn
+      hat: 1, weapon: 0, backItem: 0, footwear: 1, // iron helmet (flight helmet), none, none, iron boots
+      trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
     },
   },
   {
-    id: 'phoenix', name: 'Phoenix',
-    description: '불사조 전사',
+    id: 'medic', name: 'Medic',
+    description: 'Field surgeon',
     appearance: {
       bodyType: 'standard', bodySize: 'medium',
-      skinTone: 4, eyeStyle: 7, mouthStyle: 2, marking: 0,
-      topColor: 0, bottomColor: 2, pattern: 3,
-      hairStyle: 7, hairColor: 8,
-      hat: 0, weapon: 0, backItem: 2, footwear: 6,
-      trailEffect: 2, auraEffect: 2, emote: 0, spawnEffect: 1,
+      skinTone: 1, eyeStyle: 2, mouthStyle: 0, marking: 0,
+      topColor: 6, bottomColor: 6, pattern: 1,    // white + white, striped (medical)
+      hairStyle: 7, hairColor: 8,                   // ponytail, red
+      hat: 0, weapon: 0, backItem: 4, footwear: 0, // none, none, backpack (medkit), none
+      trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
+    },
+  },
+  {
+    id: 'pirate', name: 'Pirate',
+    description: 'Sea raider',
+    appearance: {
+      bodyType: 'chunky', bodySize: 'medium',
+      skinTone: 5, eyeStyle: 4, mouthStyle: 5, marking: 0,
+      topColor: 0, bottomColor: 10, pattern: 1,   // red + cocoa, striped
+      hairStyle: 12, hairColor: 0,                  // shaggy, black
+      hat: 8, weapon: 1, backItem: 0, footwear: 5, // viking horns (pirate hat), diamond sword (hook), none, sandals
+      trailEffect: 0, auraEffect: 0, emote: 0, spawnEffect: 0,
+    },
+  },
+  {
+    id: 'robot', name: 'Robot',
+    description: 'Steel automaton',
+    appearance: {
+      bodyType: 'chunky', bodySize: 'large',
+      skinTone: 11, eyeStyle: 10, mouthStyle: 1, marking: 0,
+      topColor: 6, bottomColor: 6, pattern: 4,    // white + white, checker (metallic)
+      hairStyle: 1, hairColor: 15,                  // spiky (antenna), gray
+      hat: 3, weapon: 0, backItem: 0, footwear: 1, // diamond helmet (visor), none, none, iron boots
+      trailEffect: 0, auraEffect: 1, emote: 0, spawnEffect: 0,
     },
   },
 ] as const;
