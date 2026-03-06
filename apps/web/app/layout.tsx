@@ -35,6 +35,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+        <link
+          href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css"
+          rel="stylesheet"
+        />
       </head>
       <body
         style={{
