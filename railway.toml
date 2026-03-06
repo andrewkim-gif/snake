@@ -1,15 +1,15 @@
 # ============================================================
 # AI World War — Railway Deployment Configuration
 # ============================================================
-# Go server built and deployed on Railway (no Docker)
-# Existing project: https://snake-production-3b4e.up.railway.app
+# Go server built via Docker multi-stage (server/Dockerfile)
+# Project: https://snake-production-3b4e.up.railway.app
 
 [build]
-builder = "nixpacks"
-buildCommand = "cd server && go build -o /tmp/server ./cmd/server/"
+builder = "dockerfile"
+dockerfilePath = "server/Dockerfile"
+watchPatterns = ["server/**"]
 
 [deploy]
-startCommand = "/tmp/server"
 healthcheckPath = "/health"
 healthcheckTimeout = 30
 restartPolicyType = "ON_FAILURE"
