@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/andrewkim-gif/snake/server/config"
+	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -39,7 +40,7 @@ var upgrader = websocket.Upgrader{
 }
 
 // newRouter creates the chi HTTP router with middleware and routes.
-func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter) http.Handler {
+func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager) http.Handler {
 	r := chi.NewRouter()
 
 	// -- Middleware --
@@ -83,7 +84,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter) http.Han
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		resp := healthResponse{
 			Status:     "ok",
-			Rooms:      0,
+			Rooms:      rm.RoomCount(),
 			Players:    hub.ClientCount(),
 			Uptime:     time.Since(startTime).Truncate(time.Second).String(),
 			Goroutines: runtime.NumGoroutine(),
@@ -92,6 +93,16 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter) http.Han
 		w.WriteHeader(http.StatusOK)
 		if err := json.NewEncoder(w).Encode(resp); err != nil {
 			slog.Error("failed to encode health response", "error", err)
+		}
+	})
+
+	// Rooms list (REST endpoint for initial lobby load)
+	r.Get("/rooms", func(w http.ResponseWriter, r *http.Request) {
+		rooms := rm.GetRoomList()
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		if err := json.NewEncoder(w).Encode(rooms); err != nil {
+			slog.Error("failed to encode rooms response", "error", err)
 		}
 	})
 
@@ -105,6 +116,8 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter) http.Han
 
 		clientID := uuid.New().String()
 		client := ws.NewClient(clientID, hub, conn, router.HandleMessage, func(c *ws.Client) {
+			// On disconnect: clean up room membership
+			rm.LeaveRoom(c.ID)
 			slog.Info("client disconnected", "clientId", c.ID)
 		})
 

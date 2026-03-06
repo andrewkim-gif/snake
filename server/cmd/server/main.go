@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/andrewkim-gif/snake/server/config"
+	"github.com/andrewkim-gif/snake/server/internal/domain"
+	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/ws"
 	"golang.org/x/sync/errgroup"
 )
@@ -39,12 +41,20 @@ func main() {
 	// Create WebSocket hub
 	hub := ws.NewHub()
 
+	// Create RoomManager with default game config
+	roomCfg := game.DefaultRoomConfig()
+	roomCfg.MaxRooms = cfg.MaxRooms
+	roomManager := game.NewRoomManager(roomCfg)
+
+	// Wire RoomManager events → Hub messaging (bridge game→ws without circular import)
+	roomManager.OnEvents = createRoomEventHandler(hub)
+
 	// Create event router with handlers
 	eventRouter := ws.NewEventRouter()
-	registerEventHandlers(eventRouter, hub)
+	registerEventHandlers(eventRouter, hub, roomManager)
 
 	// Build HTTP router
-	router := newRouter(cfg, hub, eventRouter)
+	router := newRouter(cfg, hub, eventRouter, roomManager)
 
 	// HTTP server
 	httpServer := &http.Server{
@@ -65,6 +75,26 @@ func main() {
 	g.Go(func() error {
 		slog.Info("WS Hub starting")
 		hub.Run()
+		return nil
+	})
+
+	// RoomManager goroutine (starts all room loops)
+	g.Go(func() error {
+		slog.Info("RoomManager starting")
+		roomManager.Start(gCtx)
+		return nil
+	})
+
+	// Lobby broadcast goroutine (1Hz)
+	g.Go(func() error {
+		roomManager.StartLobbyBroadcast(gCtx, func(data domain.RoomsUpdateEvent) {
+			frame, err := ws.EncodeFrame(ws.EventRoomsUpdate, data)
+			if err != nil {
+				slog.Error("failed to encode rooms_update", "error", err)
+				return
+			}
+			hub.BroadcastToLobby(frame)
+		})
 		return nil
 	})
 
@@ -101,10 +131,13 @@ func main() {
 			return err
 		}
 
+		slog.Info("stopping RoomManager...")
+		roomManager.Stop()
+
 		slog.Info("stopping WS Hub...")
 		hub.Stop()
 
-		slog.Info("HTTP server stopped")
+		slog.Info("server stopped")
 		return nil
 	})
 
@@ -117,7 +150,7 @@ func main() {
 }
 
 // registerEventHandlers sets up all client→server event handlers.
-func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub) {
+func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomManager) {
 	// Ping/Pong
 	router.On(ws.EventPing, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.PingPayload
@@ -135,40 +168,154 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub) {
 		client.Send(frame)
 	})
 
-	// Join Room (placeholder — will be fully implemented with RoomManager)
+	// Join Room
 	router.On(ws.EventJoinRoom, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.JoinRoomPayload
 		if err := json.Unmarshal(data, &payload); err != nil {
 			slog.Warn("invalid join_room payload", "clientId", client.ID, "error", err)
 			return
 		}
+
 		slog.Info("join_room received",
 			"clientId", client.ID,
 			"roomId", payload.RoomID,
 			"name", payload.Name,
 		)
+
+		var roomID string
+		var err error
+
+		if payload.RoomID == "" {
+			// Quick join
+			roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID)
+		} else {
+			roomID, err = rm.JoinRoom(client.ID, payload.RoomID, payload.Name, payload.SkinID)
+		}
+
+		if err != nil {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "join_failed",
+				Message: err.Error(),
+			})
+			client.Send(errFrame)
+			return
+		}
+
 		// Move client to room in hub
-		hub.MoveClientToRoom(client.ID, payload.RoomID)
+		hub.MoveClientToRoom(client.ID, roomID)
+
+		// Send joined event
+		room := rm.GetRoom(roomID)
+		if room != nil {
+			joinedEvt := room.GetJoinedEvent(client.ID)
+			frame, err := ws.EncodeFrame(ws.EventJoined, joinedEvt)
+			if err == nil {
+				client.Send(frame)
+			}
+		}
 	})
 
-	// Leave Room (placeholder)
+	// Leave Room
 	router.On(ws.EventLeaveRoom, func(client *ws.Client, data json.RawMessage) {
 		slog.Info("leave_room received", "clientId", client.ID)
+		rm.LeaveRoom(client.ID)
 		hub.RegisterLobby(client)
 	})
 
-	// Input (placeholder — will forward to game room)
+	// Input
 	router.On(ws.EventInput, func(client *ws.Client, data json.RawMessage) {
-		// Will be forwarded to the Room's input channel
+		var payload ws.InputPayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+		boost := payload.Boost == 1
+		rm.RouteInput(client.ID, payload.Angle, boost)
 	})
 
-	// Respawn (placeholder)
+	// Respawn — disabled in 1-life mode, but handle gracefully
 	router.On(ws.EventRespawn, func(client *ws.Client, data json.RawMessage) {
-		slog.Info("respawn received", "clientId", client.ID)
+		slog.Info("respawn received (1-life mode, ignored)", "clientId", client.ID)
 	})
 
-	// Choose Upgrade (placeholder)
+	// Choose Upgrade
 	router.On(ws.EventChooseUpgrade, func(client *ws.Client, data json.RawMessage) {
-		slog.Info("choose_upgrade received", "clientId", client.ID)
+		var payload ws.ChooseUpgradePayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+
+		// Convert choiceId to index (choices are 0-indexed by their position)
+		// The client sends the choice ID; we find its index
+		// For simplicity, treat choice index as the ID suffix number
+		// Format: "tome_xp_1" or "ability_venom_aura_lv1" — just use position
+		// Better approach: iterate choices and find match
+		// For now, use a simple sequential index approach (0, 1, 2)
+		choiceIndex := 0
+		switch payload.ChoiceID {
+		case "0":
+			choiceIndex = 0
+		case "1":
+			choiceIndex = 1
+		case "2":
+			choiceIndex = 2
+		default:
+			// Try to parse as index
+			if len(payload.ChoiceID) > 0 {
+				if payload.ChoiceID[0] >= '0' && payload.ChoiceID[0] <= '9' {
+					choiceIndex = int(payload.ChoiceID[0] - '0')
+				}
+			}
+		}
+
+		rm.RouteChooseUpgrade(client.ID, choiceIndex)
 	})
+}
+
+// createRoomEventHandler creates the callback that bridges Room events to Hub messaging.
+func createRoomEventHandler(hub *ws.Hub) game.RoomEventCallback {
+	return func(events []game.RoomEvent) {
+		for _, evt := range events {
+			var wsEvent string
+			switch evt.Type {
+			case game.RoomEvtDeath:
+				wsEvent = ws.EventDeath
+			case game.RoomEvtKill:
+				wsEvent = ws.EventKill
+			case game.RoomEvtLevelUp:
+				wsEvent = ws.EventLevelUp
+			case game.RoomEvtSynergy:
+				wsEvent = ws.EventSynergyActivated
+			case game.RoomEvtShrinkWarn:
+				wsEvent = ws.EventArenaShrink
+			case game.RoomEvtRoundStart:
+				wsEvent = ws.EventRoundStart
+			case game.RoomEvtRoundEnd:
+				wsEvent = ws.EventRoundEnd
+			case game.RoomEvtRoundReset:
+				wsEvent = ws.EventRoundReset
+			case game.RoomEvtState:
+				wsEvent = ws.EventState
+			case game.RoomEvtMinimap:
+				wsEvent = ws.EventMinimap
+			case game.RoomEvtArenaShrink:
+				wsEvent = ws.EventArenaShrink
+			default:
+				continue
+			}
+
+			frame, err := ws.EncodeFrame(wsEvent, evt.Data)
+			if err != nil {
+				slog.Error("failed to encode event", "event", wsEvent, "error", err)
+				continue
+			}
+
+			if evt.TargetID != "" {
+				// Unicast to specific client
+				hub.SendToClient(evt.TargetID, frame)
+			} else {
+				// Broadcast to room
+				hub.BroadcastToRoom(evt.RoomID, frame)
+			}
+		}
+	}
 }
