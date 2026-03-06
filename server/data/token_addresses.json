@@ -1,0 +1,1550 @@
+{
+  "chainId": 0,
+  "chainName": "CROSS Mainnet",
+  "factoryAddress": "",
+  "defenseOracleAddress": "",
+  "governanceModuleAddress": "",
+  "awwTokenAddress": "",
+  "totalCountries": 171,
+  "tokens": {
+    "USA": {
+      "name": "United States Token",
+      "symbol": "USA",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CHN": {
+      "name": "China Token",
+      "symbol": "CHN",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "RUS": {
+      "name": "Russia Token",
+      "symbol": "RUS",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "IND": {
+      "name": "India Token",
+      "symbol": "IND",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BRA": {
+      "name": "Brazil Token",
+      "symbol": "BRA",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "JPN": {
+      "name": "Japan Token",
+      "symbol": "JPN",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "DEU": {
+      "name": "Germany Token",
+      "symbol": "DEU",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GBR": {
+      "name": "United Kingdom Token",
+      "symbol": "GBR",
+      "tier": "S",
+      "tierIndex": 0,
+      "initialSupply": "50000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KOR": {
+      "name": "South Korea Token",
+      "symbol": "KOR",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "FRA": {
+      "name": "France Token",
+      "symbol": "FRA",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CAN": {
+      "name": "Canada Token",
+      "symbol": "CAN",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "AUS": {
+      "name": "Australia Token",
+      "symbol": "AUS",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SAU": {
+      "name": "Saudi Arabia Token",
+      "symbol": "SAU",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TUR": {
+      "name": "Turkey Token",
+      "symbol": "TUR",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "IDN": {
+      "name": "Indonesia Token",
+      "symbol": "IDN",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MEX": {
+      "name": "Mexico Token",
+      "symbol": "MEX",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ITA": {
+      "name": "Italy Token",
+      "symbol": "ITA",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ESP": {
+      "name": "Spain Token",
+      "symbol": "ESP",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "IRN": {
+      "name": "Iran Token",
+      "symbol": "IRN",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "EGY": {
+      "name": "Egypt Token",
+      "symbol": "EGY",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PAK": {
+      "name": "Pakistan Token",
+      "symbol": "PAK",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NGA": {
+      "name": "Nigeria Token",
+      "symbol": "NGA",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ISR": {
+      "name": "Israel Token",
+      "symbol": "ISR",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "POL": {
+      "name": "Poland Token",
+      "symbol": "POL",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ZAF": {
+      "name": "South Africa Token",
+      "symbol": "ZAF",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "UKR": {
+      "name": "Ukraine Token",
+      "symbol": "UKR",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NLD": {
+      "name": "Netherlands Token",
+      "symbol": "NLD",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SWE": {
+      "name": "Sweden Token",
+      "symbol": "SWE",
+      "tier": "A",
+      "tierIndex": 1,
+      "initialSupply": "30000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "THA": {
+      "name": "Thailand Token",
+      "symbol": "THA",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ARG": {
+      "name": "Argentina Token",
+      "symbol": "ARG",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "COL": {
+      "name": "Colombia Token",
+      "symbol": "COL",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MYS": {
+      "name": "Malaysia Token",
+      "symbol": "MYS",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PHL": {
+      "name": "Philippines Token",
+      "symbol": "PHL",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "VNM": {
+      "name": "Vietnam Token",
+      "symbol": "VNM",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BGD": {
+      "name": "Bangladesh Token",
+      "symbol": "BGD",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NOR": {
+      "name": "Norway Token",
+      "symbol": "NOR",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CHE": {
+      "name": "Switzerland Token",
+      "symbol": "CHE",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "AUT": {
+      "name": "Austria Token",
+      "symbol": "AUT",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BEL": {
+      "name": "Belgium Token",
+      "symbol": "BEL",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CHL": {
+      "name": "Chile Token",
+      "symbol": "CHL",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PER": {
+      "name": "Peru Token",
+      "symbol": "PER",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "VEN": {
+      "name": "Venezuela Token",
+      "symbol": "VEN",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "IRQ": {
+      "name": "Iraq Token",
+      "symbol": "IRQ",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KWT": {
+      "name": "Kuwait Token",
+      "symbol": "KWT",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ARE": {
+      "name": "United Arab Emirates Token",
+      "symbol": "ARE",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "QAT": {
+      "name": "Qatar Token",
+      "symbol": "QAT",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SGP": {
+      "name": "Singapore Token",
+      "symbol": "SGP",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "FIN": {
+      "name": "Finland Token",
+      "symbol": "FIN",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "DNK": {
+      "name": "Denmark Token",
+      "symbol": "DNK",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "IRL": {
+      "name": "Ireland Token",
+      "symbol": "IRL",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PRT": {
+      "name": "Portugal Token",
+      "symbol": "PRT",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GRC": {
+      "name": "Greece Token",
+      "symbol": "GRC",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CZE": {
+      "name": "Czech Republic Token",
+      "symbol": "CZE",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ROU": {
+      "name": "Romania Token",
+      "symbol": "ROU",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NZL": {
+      "name": "New Zealand Token",
+      "symbol": "NZL",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KAZ": {
+      "name": "Kazakhstan Token",
+      "symbol": "KAZ",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ETH": {
+      "name": "Ethiopia Token",
+      "symbol": "ETH",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "DZA": {
+      "name": "Algeria Token",
+      "symbol": "DZA",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MAR": {
+      "name": "Morocco Token",
+      "symbol": "MAR",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KEN": {
+      "name": "Kenya Token",
+      "symbol": "KEN",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MMR": {
+      "name": "Myanmar Token",
+      "symbol": "MMR",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TWN": {
+      "name": "Taiwan Token",
+      "symbol": "TWN",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "HUN": {
+      "name": "Hungary Token",
+      "symbol": "HUN",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PRK": {
+      "name": "North Korea Token",
+      "symbol": "PRK",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CUB": {
+      "name": "Cuba Token",
+      "symbol": "CUB",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LBY": {
+      "name": "Libya Token",
+      "symbol": "LBY",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "AGO": {
+      "name": "Angola Token",
+      "symbol": "AGO",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "COD": {
+      "name": "DR Congo Token",
+      "symbol": "COD",
+      "tier": "B",
+      "tierIndex": 2,
+      "initialSupply": "20000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SVK": {
+      "name": "Slovakia Token",
+      "symbol": "SVK",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SVN": {
+      "name": "Slovenia Token",
+      "symbol": "SVN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "HRV": {
+      "name": "Croatia Token",
+      "symbol": "HRV",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SRB": {
+      "name": "Serbia Token",
+      "symbol": "SRB",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BGR": {
+      "name": "Bulgaria Token",
+      "symbol": "BGR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LTU": {
+      "name": "Lithuania Token",
+      "symbol": "LTU",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LVA": {
+      "name": "Latvia Token",
+      "symbol": "LVA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "EST": {
+      "name": "Estonia Token",
+      "symbol": "EST",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BLR": {
+      "name": "Belarus Token",
+      "symbol": "BLR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GEO": {
+      "name": "Georgia Token",
+      "symbol": "GEO",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ARM": {
+      "name": "Armenia Token",
+      "symbol": "ARM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "AZE": {
+      "name": "Azerbaijan Token",
+      "symbol": "AZE",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "UZB": {
+      "name": "Uzbekistan Token",
+      "symbol": "UZB",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TKM": {
+      "name": "Turkmenistan Token",
+      "symbol": "TKM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KGZ": {
+      "name": "Kyrgyzstan Token",
+      "symbol": "KGZ",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TJK": {
+      "name": "Tajikistan Token",
+      "symbol": "TJK",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "AFG": {
+      "name": "Afghanistan Token",
+      "symbol": "AFG",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NPL": {
+      "name": "Nepal Token",
+      "symbol": "NPL",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LKA": {
+      "name": "Sri Lanka Token",
+      "symbol": "LKA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KHM": {
+      "name": "Cambodia Token",
+      "symbol": "KHM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LAO": {
+      "name": "Laos Token",
+      "symbol": "LAO",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MNG": {
+      "name": "Mongolia Token",
+      "symbol": "MNG",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "JOR": {
+      "name": "Jordan Token",
+      "symbol": "JOR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LBN": {
+      "name": "Lebanon Token",
+      "symbol": "LBN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SYR": {
+      "name": "Syria Token",
+      "symbol": "SYR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "YEM": {
+      "name": "Yemen Token",
+      "symbol": "YEM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "OMN": {
+      "name": "Oman Token",
+      "symbol": "OMN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BHR": {
+      "name": "Bahrain Token",
+      "symbol": "BHR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ECU": {
+      "name": "Ecuador Token",
+      "symbol": "ECU",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BOL": {
+      "name": "Bolivia Token",
+      "symbol": "BOL",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PRY": {
+      "name": "Paraguay Token",
+      "symbol": "PRY",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "URY": {
+      "name": "Uruguay Token",
+      "symbol": "URY",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GUY": {
+      "name": "Guyana Token",
+      "symbol": "GUY",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SUR": {
+      "name": "Suriname Token",
+      "symbol": "SUR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PAN": {
+      "name": "Panama Token",
+      "symbol": "PAN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CRI": {
+      "name": "Costa Rica Token",
+      "symbol": "CRI",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GTM": {
+      "name": "Guatemala Token",
+      "symbol": "GTM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "HND": {
+      "name": "Honduras Token",
+      "symbol": "HND",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SLV": {
+      "name": "El Salvador Token",
+      "symbol": "SLV",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NIC": {
+      "name": "Nicaragua Token",
+      "symbol": "NIC",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "DOM": {
+      "name": "Dominican Republic Token",
+      "symbol": "DOM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "HTI": {
+      "name": "Haiti Token",
+      "symbol": "HTI",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "JAM": {
+      "name": "Jamaica Token",
+      "symbol": "JAM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TTO": {
+      "name": "Trinidad and Tobago Token",
+      "symbol": "TTO",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SDN": {
+      "name": "Sudan Token",
+      "symbol": "SDN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TZA": {
+      "name": "Tanzania Token",
+      "symbol": "TZA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GHA": {
+      "name": "Ghana Token",
+      "symbol": "GHA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CIV": {
+      "name": "Ivory Coast Token",
+      "symbol": "CIV",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CMR": {
+      "name": "Cameroon Token",
+      "symbol": "CMR",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TUN": {
+      "name": "Tunisia Token",
+      "symbol": "TUN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "UGA": {
+      "name": "Uganda Token",
+      "symbol": "UGA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SEN": {
+      "name": "Senegal Token",
+      "symbol": "SEN",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ZMB": {
+      "name": "Zambia Token",
+      "symbol": "ZMB",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ZWE": {
+      "name": "Zimbabwe Token",
+      "symbol": "ZWE",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MOZ": {
+      "name": "Mozambique Token",
+      "symbol": "MOZ",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MDG": {
+      "name": "Madagascar Token",
+      "symbol": "MDG",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MDA": {
+      "name": "Moldova Token",
+      "symbol": "MDA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ALB": {
+      "name": "Albania Token",
+      "symbol": "ALB",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MKD": {
+      "name": "North Macedonia Token",
+      "symbol": "MKD",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MNE": {
+      "name": "Montenegro Token",
+      "symbol": "MNE",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BIH": {
+      "name": "Bosnia and Herzegovina Token",
+      "symbol": "BIH",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TCD": {
+      "name": "Chad Token",
+      "symbol": "TCD",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NER": {
+      "name": "Niger Token",
+      "symbol": "NER",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MLI": {
+      "name": "Mali Token",
+      "symbol": "MLI",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BFA": {
+      "name": "Burkina Faso Token",
+      "symbol": "BFA",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SOM": {
+      "name": "Somalia Token",
+      "symbol": "SOM",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CAF": {
+      "name": "Central African Republic Token",
+      "symbol": "CAF",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SSD": {
+      "name": "South Sudan Token",
+      "symbol": "SSD",
+      "tier": "C",
+      "tierIndex": 3,
+      "initialSupply": "10000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ISL": {
+      "name": "Iceland Token",
+      "symbol": "ISL",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LUX": {
+      "name": "Luxembourg Token",
+      "symbol": "LUX",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MLT": {
+      "name": "Malta Token",
+      "symbol": "MLT",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CYP": {
+      "name": "Cyprus Token",
+      "symbol": "CYP",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BRN": {
+      "name": "Brunei Token",
+      "symbol": "BRN",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BTN": {
+      "name": "Bhutan Token",
+      "symbol": "BTN",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TLS": {
+      "name": "Timor-Leste Token",
+      "symbol": "TLS",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MDV": {
+      "name": "Maldives Token",
+      "symbol": "MDV",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "FJI": {
+      "name": "Fiji Token",
+      "symbol": "FJI",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PNG": {
+      "name": "Papua New Guinea Token",
+      "symbol": "PNG",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BLZ": {
+      "name": "Belize Token",
+      "symbol": "BLZ",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BHS": {
+      "name": "Bahamas Token",
+      "symbol": "BHS",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GNQ": {
+      "name": "Equatorial Guinea Token",
+      "symbol": "GNQ",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GAB": {
+      "name": "Gabon Token",
+      "symbol": "GAB",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "COG": {
+      "name": "Republic of Congo Token",
+      "symbol": "COG",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NAM": {
+      "name": "Namibia Token",
+      "symbol": "NAM",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BWA": {
+      "name": "Botswana Token",
+      "symbol": "BWA",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SWZ": {
+      "name": "Eswatini Token",
+      "symbol": "SWZ",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LSO": {
+      "name": "Lesotho Token",
+      "symbol": "LSO",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MWI": {
+      "name": "Malawi Token",
+      "symbol": "MWI",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "RWA": {
+      "name": "Rwanda Token",
+      "symbol": "RWA",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BDI": {
+      "name": "Burundi Token",
+      "symbol": "BDI",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ERI": {
+      "name": "Eritrea Token",
+      "symbol": "ERI",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "DJI": {
+      "name": "Djibouti Token",
+      "symbol": "DJI",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LBR": {
+      "name": "Liberia Token",
+      "symbol": "LBR",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SLE": {
+      "name": "Sierra Leone Token",
+      "symbol": "SLE",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GIN": {
+      "name": "Guinea Token",
+      "symbol": "GIN",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GNB": {
+      "name": "Guinea-Bissau Token",
+      "symbol": "GNB",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GMB": {
+      "name": "Gambia Token",
+      "symbol": "GMB",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MRT": {
+      "name": "Mauritania Token",
+      "symbol": "MRT",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TGO": {
+      "name": "Togo Token",
+      "symbol": "TGO",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BEN": {
+      "name": "Benin Token",
+      "symbol": "BEN",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PSE": {
+      "name": "Palestine Token",
+      "symbol": "PSE",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "XKX": {
+      "name": "Kosovo Token",
+      "symbol": "XKX",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GUF": {
+      "name": "French Guiana Token",
+      "symbol": "GUF",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    }
+  }
+}

@@ -12,19 +12,19 @@ import (
 func newTestAgent(id, name string) *domain.Agent {
 	pos := domain.Position{X: 0, Y: 0}
 	skin := domain.DefaultSkin()
-	return NewAgent(id, name, pos, skin, false, 0)
+	return NewAgent(id, name, pos, skin, false, 0, "")
 }
 
 func newTestAgentAt(id, name string, x, y float64) *domain.Agent {
 	pos := domain.Position{X: x, Y: y}
 	skin := domain.DefaultSkin()
-	return NewAgent(id, name, pos, skin, false, 0)
+	return NewAgent(id, name, pos, skin, false, 0, "")
 }
 
 func newTestBotAgent(id, name string) *domain.Agent {
 	pos := domain.Position{X: 0, Y: 0}
 	skin := domain.DefaultSkin()
-	return NewAgent(id, name, pos, skin, true, 0)
+	return NewAgent(id, name, pos, skin, true, 0, "")
 }
 
 // --- TestNewAgent ---
@@ -66,7 +66,7 @@ func TestNewAgent(t *testing.T) {
 	})
 
 	t.Run("grace period set", func(t *testing.T) {
-		a := NewAgent("p1", "Test", domain.Position{}, domain.DefaultSkin(), false, 100)
+		a := NewAgent("p1", "Test", domain.Position{}, domain.DefaultSkin(), false, 100, "")
 		expected := uint64(100 + GracePeriodTicks)
 		if a.GracePeriodEnd != expected {
 			t.Errorf("gracePeriodEnd = %v, want %v", a.GracePeriodEnd, expected)

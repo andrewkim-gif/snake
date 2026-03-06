@@ -29,6 +29,7 @@ import { textureCacheManager } from '@/lib/3d/cubeling-textures';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
 import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import { resolveAppearance } from '@/lib/3d/skin-migration';
+import { getCachedNetworkAppearance } from '@/lib/3d/appearance-cache';
 import { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { HeadGroupManager } from './HeadGroupManager';
 import { EyeInstances } from './EyeInstances';
@@ -67,14 +68,25 @@ const motionCache = new Map<string, AgentMotionState>();
 
 // ─── appearance 캐시 (skinId → CubelingAppearance) ───
 
-const appearanceCache = new Map<number, CubelingAppearance>();
+const skinAppearanceCache = new Map<number, CubelingAppearance>();
 
-/** skinId → CubelingAppearance 해석 (캐시 포함) */
-function getCachedAppearance(skinId: number): CubelingAppearance {
-  let cached = appearanceCache.get(skinId);
+/**
+ * agentId + skinId → CubelingAppearance 해석
+ * 1. 네트워크 캐시 (서버에서 받은 실제 유저 appearance) 우선
+ * 2. 캐시 미스 시 skinId 기반 레거시 변환 (봇 또는 구 클라이언트)
+ */
+function getCachedAppearance(skinId: number, agentId?: string): CubelingAppearance {
+  // Phase 2: 네트워크 appearance 캐시에서 실제 유저 설정 확인
+  if (agentId) {
+    const networkCached = getCachedNetworkAppearance(agentId);
+    if (networkCached) return networkCached;
+  }
+
+  // Fallback: skinId 기반 결정적 변환 (봇, 구 클라이언트)
+  let cached = skinAppearanceCache.get(skinId);
   if (cached) return cached;
   cached = resolveAppearance(skinId);
-  appearanceCache.set(skinId, cached);
+  skinAppearanceCache.set(skinId, cached);
   return cached;
 }
 
@@ -228,7 +240,7 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       limbMaterials.arm.dispose();
       limbMaterials.leg.dispose();
       motionCache.clear();
-      appearanceCache.clear();
+      skinAppearanceCache.clear();
       agentIndexMapRef.current.clear();
       stateMachineRef.current = null;
     };
@@ -268,8 +280,8 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       const { x, y, h, m, b: boosting, k: skinId, i: id } = agent;
       activeIds.add(id);
 
-      // ─── appearance 해석 ───
-      const appearance = getCachedAppearance(skinId);
+      // ─── appearance 해석 (네트워크 캐시 우선, fallback: skinId 레거시 변환) ───
+      const appearance = getCachedAppearance(skinId, id);
 
       // ─── 속도 추정 ───
       let motion = motionCache.get(id);

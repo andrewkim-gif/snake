@@ -37,6 +37,7 @@ import {
 import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
 import { resolveAppearance } from '@/lib/3d/skin-migration';
+import { getCachedNetworkAppearance } from '@/lib/3d/appearance-cache';
 import {
   EQUIPMENT_GEOMETRIES,
   ATTACH_POINTS,
@@ -73,7 +74,13 @@ const velocityCache = new Map<string, { prevX: number; prevY: number; velocity: 
 
 // ─── appearance 캐시 ───
 const eqAppearanceCache = new Map<number, CubelingAppearance>();
-function getCachedAppearance(skinId: number): CubelingAppearance {
+function getCachedAppearance(skinId: number, agentId?: string): CubelingAppearance {
+  // 네트워크 캐시 우선 (실제 유저 외형)
+  if (agentId) {
+    const netCached = getCachedNetworkAppearance(agentId);
+    if (netCached) return netCached;
+  }
+  // 폴백: skinId 기반 결정론적 변환 (봇/레거시)
   let cached = eqAppearanceCache.get(skinId);
   if (cached) return cached;
   cached = resolveAppearance(skinId);
@@ -281,7 +288,7 @@ export function EquipmentInstances({
       if (agentIdx >= MAX_AGENTS) break;
 
       const { x, y, h, m, b: boosting, k: skinId, i: id } = agent;
-      const appearance = getCachedAppearance(skinId);
+      const appearance = getCachedAppearance(skinId, id);
 
       // 속도 추정
       let vel = velocityCache.get(id);

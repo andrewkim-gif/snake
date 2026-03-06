@@ -51,7 +51,7 @@ func TestRoomStateTransitions(t *testing.T) {
 		r := newTestRoom()
 		collectRoomEvents(r)
 
-		err := r.AddPlayer("p1", "Player1", 0)
+		err := r.AddPlayer("p1", "Player1", 0, "")
 		if err != nil {
 			t.Fatalf("AddPlayer failed: %v", err)
 		}
@@ -71,7 +71,7 @@ func TestRoomStateTransitions(t *testing.T) {
 		r := NewRoom("test", "Test", cfg)
 		collectRoomEvents(r)
 
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 		r.tick()
 
 		state := r.GetState()
@@ -86,7 +86,7 @@ func TestRoomStateTransitions(t *testing.T) {
 		r := NewRoom("test", "Test", cfg)
 		collectRoomEvents(r)
 
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 		r.tick() // transitions to countdown
 
 		// Tick through the countdown (TickRate ticks)
@@ -158,7 +158,7 @@ func TestAddRemovePlayer(t *testing.T) {
 	t.Run("add player", func(t *testing.T) {
 		r := newTestRoom()
 
-		err := r.AddPlayer("p1", "Player1", 0)
+		err := r.AddPlayer("p1", "Player1", 0, "")
 		if err != nil {
 			t.Fatalf("AddPlayer failed: %v", err)
 		}
@@ -173,7 +173,7 @@ func TestAddRemovePlayer(t *testing.T) {
 
 	t.Run("remove player", func(t *testing.T) {
 		r := newTestRoom()
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 		r.RemovePlayer("p1")
 
 		if r.HasPlayer("p1") {
@@ -189,9 +189,9 @@ func TestAddRemovePlayer(t *testing.T) {
 		cfg.MaxHumansPerRoom = 2
 		r := NewRoom("test", "Test", cfg)
 
-		r.AddPlayer("p1", "Player1", 0)
-		r.AddPlayer("p2", "Player2", 0)
-		err := r.AddPlayer("p3", "Player3", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
+		r.AddPlayer("p2", "Player2", 0, "")
+		err := r.AddPlayer("p3", "Player3", 0, "")
 
 		if err == nil {
 			t.Error("expected error when adding player to full room")
@@ -202,7 +202,7 @@ func TestAddRemovePlayer(t *testing.T) {
 		r := newTestRoom()
 		collectRoomEvents(r)
 
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 		r.tick() // transitions to playing
 
 		// Verify agent exists in arena
@@ -216,7 +216,7 @@ func TestAddRemovePlayer(t *testing.T) {
 		}
 
 		// Add second player during play
-		r.AddPlayer("p2", "Player2", 0)
+		r.AddPlayer("p2", "Player2", 0, "")
 		agent2, ok2 := arena.GetAgent("p2")
 		if !ok2 {
 			t.Fatal("late-joining player agent should be spawned immediately")
@@ -234,7 +234,7 @@ func TestEndRound(t *testing.T) {
 		r := newTestRoom()
 		events := collectRoomEvents(r)
 
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 		r.tick() // start round
 
 		// Give player a high score
@@ -284,7 +284,7 @@ func TestEndRound(t *testing.T) {
 func TestGetInfo(t *testing.T) {
 	t.Run("returns correct room info", func(t *testing.T) {
 		r := newTestRoom()
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 
 		info := r.GetInfo()
 
@@ -311,7 +311,7 @@ func TestGetInfo(t *testing.T) {
 func TestGetJoinedEvent(t *testing.T) {
 	t.Run("returns joined event with correct fields", func(t *testing.T) {
 		r := newTestRoom()
-		r.AddPlayer("p1", "Player1", 0)
+		r.AddPlayer("p1", "Player1", 0, "")
 
 		evt := r.GetJoinedEvent("p1")
 

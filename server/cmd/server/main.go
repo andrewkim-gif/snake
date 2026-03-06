@@ -88,14 +88,9 @@ func main() {
 	}
 
 	// ================================================================
-	// 5. v10 Core: WebSocket Hub + RoomManager (backward compatible)
+	// 5. v11 Core: WebSocket Hub (RoomManager replaced by WorldManager)
 	// ================================================================
 	hub := ws.NewHub()
-
-	roomCfg := game.DefaultRoomConfig()
-	roomCfg.MaxRooms = cfg.MaxRooms
-	roomManager := game.NewRoomManager(roomCfg)
-	roomManager.OnEvents = createRoomEventHandler(hub)
 
 	// v10 Agent subsystems
 	agentCmdRouter := game.NewAgentCommandRouter()
@@ -138,6 +133,9 @@ func main() {
 			"actual", countryCount,
 		)
 	}
+
+	// Wire WorldManager events to Hub (replaces createRoomEventHandler)
+	worldManager.OnEvents = createWorldEventHandler(hub)
 
 	slog.Info("v11 world initialized",
 		"countries", countryCount,
@@ -262,12 +260,12 @@ func main() {
 	// 9. Event Router (client→server WebSocket events)
 	// ================================================================
 	eventRouter := ws.NewEventRouter()
-	registerEventHandlers(eventRouter, hub, roomManager, agentCmdRouter)
+	registerEventHandlers(eventRouter, hub, worldManager, agentCmdRouter)
 
 	// ================================================================
 	// 10. HTTP Router (all routes)
 	// ================================================================
-	router := newRouter(cfg, hub, eventRouter, roomManager, &RouterDeps{
+	router := newRouter(cfg, hub, eventRouter, worldManager, &RouterDeps{
 		TrainingStore:     trainingStore,
 		MemoryStore:       memoryStore,
 		ProgressionStore:  progressionStore,
@@ -327,25 +325,7 @@ func main() {
 		return nil
 	})
 
-	// --- v10 RoomManager (backward compatible) ---
-	g.Go(func() error {
-		slog.Info("v10 RoomManager starting")
-		roomManager.Start(gCtx)
-		return nil
-	})
-
-	// --- v10 Lobby broadcast (1Hz) ---
-	g.Go(func() error {
-		roomManager.StartLobbyBroadcast(gCtx, func(data domain.RoomsUpdateEvent) {
-			frame, err := ws.EncodeFrame(ws.EventRoomsUpdate, data)
-			if err != nil {
-				slog.Error("failed to encode rooms_update", "error", err)
-				return
-			}
-			hub.BroadcastToLobby(frame)
-		})
-		return nil
-	})
+	// NOTE: v10 RoomManager removed — all game rooms managed by WorldManager
 
 	// --- v11 WorldManager (195 countries) ---
 	g.Go(func() error {
@@ -427,9 +407,6 @@ func main() {
 		eventEngine.Stop()
 		worldManager.Stop()
 
-		slog.Info("stopping v10 RoomManager...")
-		roomManager.Stop()
-
 		slog.Info("stopping WS Hub...")
 		hub.Stop()
 
@@ -442,9 +419,9 @@ func main() {
 	// ================================================================
 	slog.Info("=== AI World War v11 Server ===",
 		"version", "11.0.0",
-		"v10_rooms", cfg.MaxRooms,
 		"v11_countries", world.CountryCount(),
 		"v11_meta_modules", 16,
+		"maxConcurrentArenas", worldCfg.MaxConcurrentArenas,
 		"addr", cfg.Addr(),
 	)
 
@@ -463,7 +440,8 @@ func main() {
 }
 
 // registerEventHandlers sets up all client→server event handlers.
-func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomManager, agentCmdRouter *game.AgentCommandRouter) {
+// v11: Routes through WorldManager (195 countries) instead of v10 RoomManager (5 rooms).
+func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldManager, agentCmdRouter *game.AgentCommandRouter) {
 	// Ping/Pong
 	router.On(ws.EventPing, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.PingPayload
@@ -481,7 +459,7 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 		client.Send(frame)
 	})
 
-	// Join Room
+	// Join Room (v11: country ISO3 code as roomId)
 	router.On(ws.EventJoinRoom, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.JoinRoomPayload
 		if err := json.Unmarshal(data, &payload); err != nil {
@@ -489,30 +467,29 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			return
 		}
 
+		countryISO := payload.RoomID
 		slog.Info("join_room received",
 			"clientId", client.ID,
-			"roomId", payload.RoomID,
+			"country", countryISO,
 			"name", payload.Name,
 		)
 
-		var roomID string
-		var err error
-
-		if payload.RoomID == "" || payload.RoomID == "quick" {
-			roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID, payload.Appearance)
-		} else {
-			roomID, err = rm.JoinRoom(client.ID, payload.RoomID, payload.Name, payload.SkinID, payload.Appearance)
-			if err != nil {
-				// Room not found (e.g. ISO3 country code) → fallback to QuickJoin
-				slog.Info("room not found, falling back to QuickJoin",
-					"requestedRoom", payload.RoomID,
-					"clientId", client.ID,
-				)
-				roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID, payload.Appearance)
-			}
+		if countryISO == "" || countryISO == "quick" {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "join_failed",
+				Message: "country ISO3 code required (click a country on the map)",
+			})
+			client.Send(errFrame)
+			return
 		}
 
-		if err != nil {
+		// Join country arena via WorldManager (creates arena on-demand)
+		if err := wm.JoinCountry(client.ID, countryISO, payload.Name, payload.SkinID, payload.Appearance); err != nil {
+			slog.Warn("join_country failed",
+				"clientId", client.ID,
+				"country", countryISO,
+				"error", err,
+			)
 			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
 				Code:    "join_failed",
 				Message: err.Error(),
@@ -521,11 +498,13 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			return
 		}
 
-		hub.MoveClientToRoom(client.ID, roomID)
+		// Move client from lobby to country room in WS Hub
+		hub.MoveClientToRoom(client.ID, countryISO)
 
-		room := rm.GetRoom(roomID)
-		if room != nil {
-			joinedEvt := room.GetJoinedEvent(client.ID)
+		// Send joined event
+		arena := wm.GetActiveArena(countryISO)
+		if arena != nil {
+			joinedEvt := arena.GetJoinedEvent(client.ID)
 			frame, err := ws.EncodeFrame(ws.EventJoined, joinedEvt)
 			if err == nil {
 				client.Send(frame)
@@ -536,7 +515,8 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 	// Leave Room
 	router.On(ws.EventLeaveRoom, func(client *ws.Client, data json.RawMessage) {
 		slog.Info("leave_room received", "clientId", client.ID)
-		rm.LeaveRoom(client.ID)
+		wm.LeaveCountry(client.ID)
+		wm.LeaveSpectate(client.ID)
 		hub.RegisterLobby(client)
 	})
 
@@ -547,7 +527,7 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			return
 		}
 		boost := payload.Boost == 1
-		rm.RouteInput(client.ID, payload.Angle, boost)
+		wm.RouteInput(client.ID, payload.Angle, boost)
 	})
 
 	// Respawn — disabled in 1-life mode
@@ -578,7 +558,7 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			}
 		}
 
-		rm.RouteChooseUpgrade(client.ID, choiceIndex)
+		wm.RouteChooseUpgrade(client.ID, choiceIndex)
 	})
 
 	// --- Agent-specific event handlers ---
@@ -640,7 +620,7 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			)
 		}
 
-		rm.RouteChooseUpgrade(client.ID, payload.ChoiceIndex)
+		wm.RouteChooseUpgrade(client.ID, payload.ChoiceIndex)
 	})
 
 	// Agent Commander Mode Command
@@ -659,21 +639,21 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			return
 		}
 
-		roomID := rm.GetPlayerRoom(client.ID)
-		if roomID == "" {
+		countryISO := wm.GetPlayerCountry(client.ID)
+		if countryISO == "" {
 			return
 		}
-		room := rm.GetRoom(roomID)
-		if room == nil {
+		arena := wm.GetActiveArena(countryISO)
+		if arena == nil {
 			return
 		}
 
-		agent, ok := room.GetArena().GetAgent(client.ID)
+		agent, ok := arena.GetArena().GetAgent(client.ID)
 		if !ok || !agent.Alive {
 			return
 		}
 
-		if err := agentCmdRouter.ExecuteCommand(client.ID, agent, room.GetArena(), payload.Cmd, payload.Data); err != nil {
+		if err := agentCmdRouter.ExecuteCommand(client.ID, agent, arena.GetArena(), payload.Cmd, payload.Data); err != nil {
 			slog.Warn("agent command failed",
 				"agentId", client.AgentID,
 				"cmd", payload.Cmd,
@@ -698,26 +678,26 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 			return
 		}
 
-		roomID := rm.GetPlayerRoom(client.ID)
-		if roomID == "" {
+		countryISO := wm.GetPlayerCountry(client.ID)
+		if countryISO == "" {
 			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
 				Code:    "not_in_room",
-				Message: "observe_game: not in a room",
+				Message: "observe_game: not in a country arena",
 			})
 			client.Send(errFrame)
 			return
 		}
-		room := rm.GetRoom(roomID)
-		if room == nil {
+		arena := wm.GetActiveArena(countryISO)
+		if arena == nil {
 			return
 		}
 
-		agent, ok := room.GetArena().GetAgent(client.ID)
+		agent, ok := arena.GetArena().GetAgent(client.ID)
 		if !ok {
 			return
 		}
 
-		observation := game.BuildObserveGameResponse(agent, room.GetArena())
+		observation := game.BuildObserveGameResponse(agent, arena.GetArena())
 		if observation != nil {
 			frame, err := ws.EncodeFrame(ws.EventAgentObserveGame, observation)
 			if err == nil {
@@ -727,54 +707,99 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 	})
 }
 
-// createRoomEventHandler creates the callback that bridges Room events to Hub messaging.
-func createRoomEventHandler(hub *ws.Hub) game.RoomEventCallback {
-	return func(events []game.RoomEvent) {
-		for _, evt := range events {
-			var wsEvent string
-			switch evt.Type {
-			case game.RoomEvtDeath:
-				wsEvent = ws.EventDeath
-			case game.RoomEvtKill:
-				wsEvent = ws.EventKill
-			case game.RoomEvtLevelUp:
-				wsEvent = ws.EventLevelUp
-			case game.RoomEvtSynergy:
-				wsEvent = ws.EventSynergyActivated
-			case game.RoomEvtAgentLevelUp:
-				wsEvent = ws.EventAgentLevelUp
-			case game.RoomEvtShrinkWarn:
-				wsEvent = ws.EventArenaShrink
-			case game.RoomEvtRoundStart:
-				wsEvent = ws.EventRoundStart
-			case game.RoomEvtRoundEnd:
-				wsEvent = ws.EventRoundEnd
-			case game.RoomEvtRoundReset:
-				wsEvent = ws.EventRoundReset
-			case game.RoomEvtState:
-				wsEvent = ws.EventState
-			case game.RoomEvtMinimap:
-				wsEvent = ws.EventMinimap
-			case game.RoomEvtArenaShrink:
-				wsEvent = ws.EventArenaShrink
-			case game.RoomEvtCoachMessage:
-				wsEvent = ws.EventCoachMessage
-			case game.RoomEvtRoundAnalysis:
-				wsEvent = ws.EventRoundAnalysis
-			default:
-				continue
-			}
+// createWorldEventHandler bridges WorldManager events to the WebSocket Hub.
+// Handles two types of events:
+// 1. WorldEvtCountryUpdate — wraps game.RoomEvent, forwarded to room/client
+// 2. WorldEvtCountriesState — 1Hz country state broadcast to lobby
+func createWorldEventHandler(hub *ws.Hub) world.WorldEventCallback {
+	return func(events []world.WorldEvent) {
+		for _, wEvt := range events {
+			switch wEvt.Type {
+			case world.WorldEvtCountriesState:
+				// Broadcast country states to all lobby clients
+				frame, err := ws.EncodeFrame(ws.EventCountriesState, wEvt.Data)
+				if err != nil {
+					slog.Error("failed to encode countries_state", "error", err)
+					continue
+				}
+				hub.BroadcastToLobby(frame)
 
-			frame, err := ws.EncodeFrame(wsEvent, evt.Data)
-			if err != nil {
-				slog.Error("failed to encode event", "event", wsEvent, "error", err)
-				continue
-			}
+			case world.WorldEvtCountryUpdate:
+				// Unwrap the embedded game.RoomEvent
+				roomEvt, ok := wEvt.Data.(game.RoomEvent)
+				if !ok {
+					continue
+				}
 
-			if evt.TargetID != "" {
-				hub.SendToClient(evt.TargetID, frame)
-			} else {
-				hub.BroadcastToRoom(evt.RoomID, frame)
+				var wsEvent string
+				switch roomEvt.Type {
+				case game.RoomEvtDeath:
+					wsEvent = ws.EventDeath
+				case game.RoomEvtKill:
+					wsEvent = ws.EventKill
+				case game.RoomEvtLevelUp:
+					wsEvent = ws.EventLevelUp
+				case game.RoomEvtSynergy:
+					wsEvent = ws.EventSynergyActivated
+				case game.RoomEvtAgentLevelUp:
+					wsEvent = ws.EventAgentLevelUp
+				case game.RoomEvtShrinkWarn:
+					wsEvent = ws.EventArenaShrink
+				case game.RoomEvtRoundStart:
+					wsEvent = ws.EventRoundStart
+				case game.RoomEvtRoundEnd:
+					wsEvent = ws.EventRoundEnd
+				case game.RoomEvtRoundReset:
+					wsEvent = ws.EventRoundReset
+				case game.RoomEvtState:
+					wsEvent = ws.EventState
+				case game.RoomEvtMinimap:
+					wsEvent = ws.EventMinimap
+				case game.RoomEvtArenaShrink:
+					wsEvent = ws.EventArenaShrink
+				case game.RoomEvtCoachMessage:
+					wsEvent = ws.EventCoachMessage
+				case game.RoomEvtRoundAnalysis:
+					wsEvent = ws.EventRoundAnalysis
+				default:
+					continue
+				}
+
+				frame, err := ws.EncodeFrame(wsEvent, roomEvt.Data)
+				if err != nil {
+					slog.Error("failed to encode event", "event", wsEvent, "error", err)
+					continue
+				}
+
+				if roomEvt.TargetID != "" {
+					hub.SendToClient(roomEvt.TargetID, frame)
+				} else {
+					// RoomID = country ISO code
+					hub.BroadcastToRoom(roomEvt.RoomID, frame)
+				}
+
+			case world.WorldEvtBattleStart, world.WorldEvtBattleEnd:
+				// Broadcast battle lifecycle events to the specific country room
+				frame, err := ws.EncodeFrame(string(wEvt.Type), wEvt.Data)
+				if err != nil {
+					continue
+				}
+				if wEvt.CountryISO != "" {
+					hub.BroadcastToRoom(wEvt.CountryISO, frame)
+				}
+				// Also notify lobby clients
+				hub.BroadcastToLobby(frame)
+
+			case world.WorldEvtSovereigntyChange:
+				// Broadcast sovereignty changes to everyone
+				frame, err := ws.EncodeFrame(string(wEvt.Type), wEvt.Data)
+				if err != nil {
+					continue
+				}
+				hub.BroadcastToLobby(frame)
+				if wEvt.CountryISO != "" {
+					hub.BroadcastToRoom(wEvt.CountryISO, frame)
+				}
 			}
 		}
 	}

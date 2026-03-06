@@ -32,6 +32,25 @@ function hexToRgba(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
+// GeoJSON geometry → centroid (lat/lng) 계산
+function computeCentroid(geometry: { type: string; coordinates: unknown }): { lat: number; lng: number } | null {
+  let ring: number[][];
+  if (geometry.type === 'Polygon') {
+    ring = (geometry.coordinates as number[][][])[0];
+  } else if (geometry.type === 'MultiPolygon') {
+    const polys = geometry.coordinates as number[][][][];
+    let maxLen = 0;
+    ring = [];
+    for (const p of polys) {
+      if (p[0].length > maxLen) { maxLen = p[0].length; ring = p[0]; }
+    }
+  } else return null;
+  if (!ring.length) return null;
+  let sLng = 0, sLat = 0;
+  for (const [lng, lat] of ring) { sLng += lng; sLat += lat; }
+  return { lng: sLng / ring.length, lat: sLat / ring.length };
+}
+
 // Globe 3D 오브젝트 컴포넌트
 function GlobeObject({
   countryStates,
@@ -40,23 +59,13 @@ function GlobeObject({
 }: Omit<GlobeViewProps, 'style' | 'autoRotate'>) {
   const globeRef = useRef<ThreeGlobeInstance | null>(null);
   const groupRef = useRef<THREE.Group>(null);
+  const labelGroupRef = useRef<THREE.Group | null>(null);
   const [geoData, setGeoData] = useState<GeoJSONData | null>(null);
   const [globeReady, setGlobeReady] = useState(false);
-  const featureMapRef = useRef<Map<number, { iso3: string; name: string }>>(new Map());
 
   // GeoJSON 로딩
   useEffect(() => {
-    loadGeoJSON().then((data) => {
-      setGeoData(data);
-      const map = new Map<number, { iso3: string; name: string }>();
-      const polys = data.features.filter((f) => f.geometry.type !== 'Point');
-      polys.forEach((f, i) => {
-        const iso3 = getCountryISO(f.properties);
-        const name = (f.properties.NAME as string) || (f.properties.ADMIN as string) || 'Unknown';
-        map.set(i, { iso3, name });
-      });
-      featureMapRef.current = map;
-    }).catch(console.error);
+    loadGeoJSON().then(setGeoData).catch(console.error);
   }, []);
 
   // three-globe 인스턴스 생성
@@ -72,20 +81,22 @@ function GlobeObject({
       }
       if (cancelled) return;
 
+      const polys = geoData.features.filter((f) => f.geometry.type !== 'Point');
+
       const globe = new ThreeGlobeClass!()
         .globeImageUrl('/textures/earth-blue-marble.jpg')
         .showGlobe(true)
         .showAtmosphere(false)
-        .polygonsData(geoData.features.filter((f) => f.geometry.type !== 'Point'))
+        .polygonsData(polys)
         .polygonCapColor((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
           const state = countryStates?.get(iso3);
-          if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.35);
-          return hexToRgba(sovereigntyColors.unclaimed, 0.15);
+          if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.55);
+          return hexToRgba(sovereigntyColors.unclaimed, 0.45);
         })
         .polygonSideColor(() => 'rgba(0, 0, 0, 0)')
-        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.06)')
+        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.15)')
         .polygonAltitude((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
@@ -105,8 +116,85 @@ function GlobeObject({
         if (globeRef.current) {
           groupRef.current.remove(globeRef.current as unknown as THREE.Object3D);
         }
+        // 이전 라벨 그룹 제거
+        if (labelGroupRef.current) {
+          labelGroupRef.current.traverse((child) => {
+            if (child instanceof THREE.Sprite) {
+              child.material.map?.dispose();
+              child.material.dispose();
+            }
+          });
+          groupRef.current.remove(labelGroupRef.current);
+        }
+
         groupRef.current.add(globe as unknown as THREE.Object3D);
         globeRef.current = globe;
+
+        // 국가 이름 라벨 (커스텀 스프라이트 — TextGeometry 호환성 이슈 회피)
+        const labelGroup = new THREE.Group();
+        labelGroup.name = 'country-labels';
+
+        for (const f of polys) {
+          const name = (f.properties.NAME as string) || '';
+          if (!name) continue;
+          const centroid = computeCentroid(f.geometry);
+          if (!centroid) continue;
+
+          // 캔버스에 텍스트 렌더링
+          const canvas = document.createElement('canvas');
+          const ctx = canvas.getContext('2d')!;
+          const fontSize = 36;
+          ctx.font = `600 ${fontSize}px "Rajdhani", "Segoe UI", sans-serif`;
+          const metrics = ctx.measureText(name);
+          const pw = Math.ceil(metrics.width) + 20;
+          const ph = fontSize + 16;
+          canvas.width = pw;
+          canvas.height = ph;
+          // canvas 리사이즈 후 font 재설정 필수
+          ctx.font = `600 ${fontSize}px "Rajdhani", "Segoe UI", sans-serif`;
+          ctx.textBaseline = 'middle';
+          ctx.textAlign = 'center';
+          // 다크 아웃라인 (가독성)
+          ctx.strokeStyle = 'rgba(0, 0, 0, 0.7)';
+          ctx.lineWidth = 4;
+          ctx.lineJoin = 'round';
+          ctx.strokeText(name, pw / 2, ph / 2);
+          // 흰색 본문
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.92)';
+          ctx.fillText(name, pw / 2, ph / 2);
+
+          const texture = new THREE.CanvasTexture(canvas);
+          texture.minFilter = THREE.LinearFilter;
+          texture.magFilter = THREE.LinearFilter;
+
+          const mat = new THREE.SpriteMaterial({
+            map: texture,
+            transparent: true,
+            depthWrite: false,
+            sizeAttenuation: true,
+          });
+          const sprite = new THREE.Sprite(mat);
+
+          // 위치: three-globe polar2Cartesian 공식
+          const alt = 0.015;
+          const phi = (90 - centroid.lat) * Math.PI / 180;
+          const theta = (90 - centroid.lng) * Math.PI / 180;
+          const r = 100 * (1 + alt);
+          sprite.position.set(
+            r * Math.sin(phi) * Math.cos(theta),
+            r * Math.cos(phi),
+            r * Math.sin(phi) * Math.sin(theta),
+          );
+
+          // 스케일: 텍스트 비율 유지, 기본 높이 5 world units
+          const baseH = 5;
+          sprite.scale.set(baseH * (pw / ph), baseH, 1);
+
+          labelGroup.add(sprite);
+        }
+
+        groupRef.current.add(labelGroup);
+        labelGroupRef.current = labelGroup;
       }
 
       setGlobeReady(true);
@@ -114,6 +202,15 @@ function GlobeObject({
 
     return () => {
       cancelled = true;
+      // 라벨 텍스처 메모리 해제
+      if (labelGroupRef.current) {
+        labelGroupRef.current.traverse((child) => {
+          if (child instanceof THREE.Sprite) {
+            child.material.map?.dispose();
+            child.material.dispose();
+          }
+        });
+      }
     };
   }, [geoData]); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -127,9 +224,9 @@ function GlobeObject({
         const f = feat as { properties: Record<string, unknown> };
         const iso3 = getCountryISO(f.properties);
         const state = countryStates?.get(iso3);
-        if (state?.battleStatus === 'in_battle') return hexToRgba(sovereigntyColors.atWar, 0.45);
-        if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.35);
-        return hexToRgba(sovereigntyColors.unclaimed, 0.15);
+        if (state?.battleStatus === 'in_battle') return hexToRgba(sovereigntyColors.atWar, 0.55);
+        if (state?.sovereignFaction) return hexToRgba(sovereigntyColors.neutral, 0.55);
+        return hexToRgba(sovereigntyColors.unclaimed, 0.45);
       })
       .polygonAltitude((feat: object) => {
         const f = feat as { properties: Record<string, unknown> };
@@ -139,8 +236,20 @@ function GlobeObject({
       });
   }, [countryStates, selectedCountry, geoData, globeReady]);
 
-  // tick 유지
-  useFrame(() => {});
+  // 라벨 거리 기반 페이드 (줌아웃 시 희미, 줌인 시 선명)
+  useFrame(({ camera }) => {
+    if (!labelGroupRef.current) return;
+    const dist = camera.position.length();
+    // 350 이상: 투명, 200 이하: 불투명
+    const opacity = THREE.MathUtils.clamp((350 - dist) / 150, 0, 1);
+    labelGroupRef.current.visible = opacity > 0.01;
+    if (!labelGroupRef.current.visible) return;
+    for (const child of labelGroupRef.current.children) {
+      if (child instanceof THREE.Sprite) {
+        child.material.opacity = opacity;
+      }
+    }
+  });
 
   // DOM 이벤트 기반 클릭 감지 (R3F 이벤트는 imperatively 추가된 three-globe 메시를 감지 못함)
   const { gl, camera } = useThree();
@@ -181,28 +290,20 @@ function GlobeObject({
 
       if (intersects.length === 0) return;
 
-      const intersected = intersects[0].object;
-
-      // 폴리곤 그룹 찾기 (three-globe이 생성한 국가 메시 그룹)
-      const polygonGroup = globeObj.children.find(
-        (c) => c.type === 'Group' && c.children.length > 10
-      );
-
-      if (polygonGroup) {
-        // 직접 자식에서 먼저 찾기
-        let meshIdx = polygonGroup.children.indexOf(intersected);
-
-        // 중첩된 경우 부모를 타고 올라가기
-        if (meshIdx < 0 && intersected.parent && intersected.parent !== polygonGroup) {
-          meshIdx = polygonGroup.children.indexOf(intersected.parent);
-        }
-
-        if (meshIdx >= 0) {
-          const info = featureMapRef.current.get(meshIdx);
-          if (info) {
-            onCountryClick(info.iso3, info.name);
+      // three-globe은 각 polygon 메시의 __data에 원본 GeoJSON feature를 저장
+      let target: THREE.Object3D | null = intersects[0].object;
+      while (target) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const feat = (target as any).__data;
+        if (feat?.properties) {
+          const iso3 = getCountryISO(feat.properties);
+          const name = (feat.properties.NAME as string) || (feat.properties.ADMIN as string) || 'Unknown';
+          if (iso3) {
+            onCountryClick(iso3, name);
           }
+          break;
         }
+        target = target.parent;
       }
     };
 
@@ -396,34 +497,103 @@ function Starfield() {
   return <points geometry={geometry} material={material} />;
 }
 
-// 줌 레벨에 따라 회전 속도 동적 조절
+// 카메라 모션 설정
 const MIN_DIST = 150;
 const MAX_DIST = 500;
-const MIN_ROTATE_SPEED = 0.03;
+const MIN_ROTATE_SPEED = 0.15;     // 줌인 시 회전 속도 (0.03→0.15: 5배 향상)
 const MAX_ROTATE_SPEED = 0.5;
+const ROTATION_DAMPING = 0.015;    // 회전 관성 감쇠
+const ZOOM_FRICTION = 0.92;        // 줌 속도 감쇠 (프레임당 8% 감속)
+const ZOOM_IMPULSE = 0.00004;      // 스크롤 1px당 속도 누적
+const ZOOM_MAX_VEL = 0.03;         // 줌 최대 속도 (프레임당 3%)
 
 function AdaptiveControls() {
   const controlsRef = useRef<React.ComponentRef<typeof OrbitControls>>(null);
-  const { camera } = useThree();
+  const { camera, gl } = useThree();
+  const zoomVel = useRef(0);
+  const pinchRef = useRef(0);
+
+  // 모멘텀 기반 줌 (휠 + 터치 핀치)
+  useEffect(() => {
+    const canvas = gl.domElement;
+
+    // 마우스 휠 / 트랙패드: 속도 누적 → 자연스러운 가감속
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      let delta = e.deltaY;
+      if (e.deltaMode === 1) delta *= 40;
+      if (e.deltaMode === 2) delta *= 800;
+      zoomVel.current += THREE.MathUtils.clamp(delta, -150, 150) * ZOOM_IMPULSE;
+      zoomVel.current = THREE.MathUtils.clamp(zoomVel.current, -ZOOM_MAX_VEL, ZOOM_MAX_VEL);
+    };
+
+    // 터치 핀치: 핀치 비율 → 속도 변환
+    const onTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        pinchRef.current = Math.sqrt(dx * dx + dy * dy);
+      }
+    };
+    const onTouchMove = (e: TouchEvent) => {
+      if (e.touches.length === 2 && pinchRef.current > 0) {
+        const dx = e.touches[0].clientX - e.touches[1].clientX;
+        const dy = e.touches[0].clientY - e.touches[1].clientY;
+        const dist = Math.sqrt(dx * dx + dy * dy);
+        zoomVel.current += (1 - dist / pinchRef.current) * 0.06;
+        zoomVel.current = THREE.MathUtils.clamp(zoomVel.current, -0.05, 0.05);
+        pinchRef.current = dist;
+      }
+    };
+    const onTouchEnd = () => { pinchRef.current = 0; };
+
+    canvas.addEventListener('wheel', onWheel, { passive: false });
+    canvas.addEventListener('touchstart', onTouchStart, { passive: true });
+    canvas.addEventListener('touchmove', onTouchMove, { passive: true });
+    canvas.addEventListener('touchend', onTouchEnd, { passive: true });
+
+    return () => {
+      canvas.removeEventListener('wheel', onWheel);
+      canvas.removeEventListener('touchstart', onTouchStart);
+      canvas.removeEventListener('touchmove', onTouchMove);
+      canvas.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [gl]);
 
   useFrame(() => {
     if (!controlsRef.current) return;
-    const dist = camera.position.length();
-    const t = Math.max(0, Math.min(1, (dist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
+    const currentDist = camera.position.length();
+
+    // 모멘텀 줌: 속도 적분 + 마찰 감쇠 (스크롤 멈춰도 관성으로 서서히 정지)
+    if (Math.abs(zoomVel.current) > 0.00005) {
+      const newDist = THREE.MathUtils.clamp(
+        currentDist * (1 + zoomVel.current), MIN_DIST, MAX_DIST,
+      );
+      // 경계 도달 시 해당 방향 속도 즉시 소멸 (반발 방지)
+      if (newDist >= MAX_DIST && zoomVel.current > 0) zoomVel.current = 0;
+      if (newDist <= MIN_DIST && zoomVel.current < 0) zoomVel.current = 0;
+      camera.position.normalize().multiplyScalar(newDist);
+      zoomVel.current *= ZOOM_FRICTION;
+    } else {
+      zoomVel.current = 0;
+    }
+
+    // 적응형 회전 속도 (√ 커브: 줌인 시에도 답답하지 않게)
+    const t = Math.max(0, Math.min(1, (currentDist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
     (controlsRef.current as unknown as { rotateSpeed: number }).rotateSpeed =
-      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t * t;
+      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * Math.sqrt(t);
   });
 
   return (
     <OrbitControls
       ref={controlsRef}
       enablePan={false}
+      enableZoom={false}
       minDistance={MIN_DIST}
       maxDistance={MAX_DIST}
       enableDamping
-      dampingFactor={0.05}
+      dampingFactor={ROTATION_DAMPING}
       rotateSpeed={MAX_ROTATE_SPEED}
-      zoomSpeed={0.8}
     />
   );
 }

@@ -10,7 +10,7 @@ import (
 // These operate on domain.Agent pointers, keeping domain package free of game logic imports.
 
 // NewAgent creates a new Agent with default values at the given position.
-func NewAgent(id, name string, pos domain.Position, skin domain.AgentSkin, isBot bool, currentTick uint64) *domain.Agent {
+func NewAgent(id, name string, pos domain.Position, skin domain.AgentSkin, isBot bool, currentTick uint64, appearance string) *domain.Agent {
 	return &domain.Agent{
 		ID:       id,
 		Name:     name,
@@ -31,6 +31,7 @@ func NewAgent(id, name string, pos domain.Position, skin domain.AgentSkin, isBot
 		},
 		ActiveSynergies: make([]string, 0),
 		Skin:            skin,
+		Appearance:      appearance,
 		ActiveEffects:   make([]domain.ActiveEffect, 0),
 		EffectCooldowns: make([]domain.EffectCooldown, 0),
 		Score:           0,

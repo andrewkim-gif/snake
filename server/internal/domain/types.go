@@ -443,6 +443,7 @@ type Agent struct {
 	Build           PlayerBuild  `json:"build"`
 	ActiveSynergies []string     `json:"activeSynergies"`
 	Skin            AgentSkin    `json:"skin"`
+	Appearance      string       `json:"appearance,omitempty"` // v10 Phase 2: packed BigInt string (pass-through from client)
 	ActiveEffects   []ActiveEffect   `json:"activeEffects"`
 	EffectCooldowns []EffectCooldown `json:"effectCooldowns"`
 	Score           int          `json:"score"`

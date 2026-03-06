@@ -151,6 +151,10 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 	if bt != "balanced" {
 		sa.BuildType = bt
 	}
+	// v10 Phase 2: appearance pass-through (매 state에 항상 포함)
+	if a.Appearance != "" {
+		sa.Appearance = a.Appearance
+	}
 	return sa
 }
 

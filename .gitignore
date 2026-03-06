@@ -39,3 +39,4 @@ coverage/
 *.log
 .claude/
 .serena/
+.vercel

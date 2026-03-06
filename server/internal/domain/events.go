@@ -30,6 +30,7 @@ type StateAgent struct {
 	KillStreak  int      `json:"ks,omitempty"`
 	HitboxRadius float64 `json:"hr"`
 	BuildType   string   `json:"bt,omitempty"` // v10: dominant build type (berserker/tank/speedster/farmer/balanced)
+	Appearance  string   `json:"ap,omitempty"` // v10 Phase 2: packed BigInt string (매 state에 항상 포함)
 }
 
 // StateOrb is the per-tick serialized orb data sent to clients.

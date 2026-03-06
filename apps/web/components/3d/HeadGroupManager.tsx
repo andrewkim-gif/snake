@@ -62,8 +62,8 @@ interface HeadGroupManagerProps {
   agentsRef: React.MutableRefObject<AgentNetworkData[]>;
   /** 경과 시간 ref (초 단위 누적) */
   elapsedRef: React.MutableRefObject<number>;
-  /** appearance 해석 함수 */
-  resolveAppearanceFn: (skinId: number) => CubelingAppearance;
+  /** appearance 해석 함수 (skinId, agentId?) */
+  resolveAppearanceFn: (skinId: number, agentId?: string) => CubelingAppearance;
   /** 애니메이션 상태 머신 ref (head 변환 적용) */
   stateMachineRef: React.MutableRefObject<AnimationStateMachine | null>;
   /** 에이전트 ID → 상태 머신 인덱스 매핑 */
@@ -125,7 +125,7 @@ export function HeadGroupManager({
     let agentCount = 0;
     for (const agent of agents) {
       if (agentCount >= MAX_AGENTS) break;
-      const appearance = resolveAppearanceFn(agent.k);
+      const appearance = resolveAppearanceFn(agent.k, agent.i);
       // Phase 3: faceKey에 hairStyle 포함 (같은 얼굴+헤어만 같은 IM 공유)
       const headGroupKey = `${appearance.eyeStyle}-${appearance.mouthStyle}-h${appearance.hairStyle}`;
 

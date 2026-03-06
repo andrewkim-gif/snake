@@ -31,7 +31,8 @@ var startTime = time.Now()
 type healthResponse struct {
 	Status       string `json:"status"`
 	Version      string `json:"version"`
-	Rooms        int    `json:"rooms"`
+	Rooms        int    `json:"rooms"`       // deprecated: use ActiveArenas
+	ActiveArenas int    `json:"activeArenas"`
 	Players      int    `json:"players"`
 	Countries    int    `json:"countries"`
 	MetaModules  int    `json:"meta_modules"`
@@ -89,7 +90,7 @@ type RouterDeps struct {
 	Metrics *observability.Metrics
 }
 
-func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager, deps ...*RouterDeps) http.Handler {
+func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *world.WorldManager, deps ...*RouterDeps) http.Handler {
 	// Unpack dependencies
 	var d *RouterDeps
 	if len(deps) > 0 && deps[0] != nil {
@@ -149,14 +150,15 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 	// ==============================================================
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		resp := healthResponse{
-			Status:      "ok",
-			Version:     "11.0.0",
-			Rooms:       rm.RoomCount(),
-			Players:     hub.ClientCount(),
-			Countries:   world.CountryCount(),
-			MetaModules: 16,
-			Uptime:      time.Since(startTime).Truncate(time.Second).String(),
-			Goroutines:  runtime.NumGoroutine(),
+			Status:       "ok",
+			Version:      "11.0.0",
+			Rooms:        wm.GetActiveArenaCount(),
+			ActiveArenas: wm.GetActiveArenaCount(),
+			Players:      hub.ClientCount(),
+			Countries:    world.CountryCount(),
+			MetaModules:  16,
+			Uptime:       time.Since(startTime).Truncate(time.Second).String(),
+			Goroutines:   runtime.NumGoroutine(),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -173,14 +175,36 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 	}
 
 	// ==============================================================
-	// v10 Rooms API (backward compatible)
+	// v11 Countries API (replaces v10 rooms)
 	// ==============================================================
 	r.Get("/rooms", func(w http.ResponseWriter, r *http.Request) {
-		rooms := rm.GetRoomList()
+		// Return active country arenas (backward-compatible shape)
+		countries := wm.GetAllCountries()
+		type countryInfo struct {
+			ID            string `json:"id"`
+			Name          string `json:"name"`
+			BattleStatus  string `json:"battleStatus"`
+			ActiveAgents  int    `json:"activeAgents"`
+			SpectatorCount int   `json:"spectatorCount"`
+			Tier          string `json:"tier"`
+			Continent     string `json:"continent"`
+		}
+		list := make([]countryInfo, 0, len(countries))
+		for _, c := range countries {
+			list = append(list, countryInfo{
+				ID:             c.ISO3,
+				Name:           c.Name,
+				BattleStatus:   c.BattleStatus,
+				ActiveAgents:   c.ActiveAgents,
+				SpectatorCount: c.SpectatorCount,
+				Tier:           string(c.Tier),
+				Continent:      c.Continent,
+			})
+		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		if err := json.NewEncoder(w).Encode(rooms); err != nil {
-			slog.Error("failed to encode rooms response", "error", err)
+		if err := json.NewEncoder(w).Encode(list); err != nil {
+			slog.Error("failed to encode countries response", "error", err)
 		}
 	})
 
@@ -196,7 +220,8 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 
 		clientID := uuid.New().String()
 		client := ws.NewClient(clientID, hub, conn, router.HandleMessage, func(c *ws.Client) {
-			rm.LeaveRoom(c.ID)
+			wm.LeaveCountry(c.ID)
+			wm.LeaveSpectate(c.ID)
 			slog.Info("client disconnected", "clientId", c.ID)
 		})
 

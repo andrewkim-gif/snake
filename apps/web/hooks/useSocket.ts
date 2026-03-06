@@ -16,6 +16,7 @@ import type {
   LevelUpPayload, ArenaShrinkPayload, SynergyActivatedPayload,
   AgentNetworkData,
 } from '@agent-survivor/shared';
+import type { CountryClientState } from '@/lib/globe-data';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
 
@@ -92,6 +93,8 @@ export interface UiState {
   // v10 Phase 5: coach + analyst
   coachMessage: CoachMessageData | null;
   roundAnalysis: RoundAnalysisData | null;
+  // v11: 국가 상태 (1Hz broadcast from WorldManager)
+  countryStates: Map<string, CountryClientState>;
 }
 
 export function useSocket() {
@@ -114,6 +117,7 @@ export function useSocket() {
     synergyPopups: [],
     coachMessage: null,
     roundAnalysis: null,
+    countryStates: new Map(),
   });
 
   useEffect(() => {
@@ -213,6 +217,52 @@ export function useSocket() {
       }
     });
 
+    // v11: 국가 상태 1Hz 브로드캐스트 (WorldManager → lobby)
+    socket.on('countries_state', (data: Array<{
+      iso3: string;
+      battleStatus: string;
+      sovereignFaction: string;
+      sovereigntyLevel: number;
+      activeAgents: number;
+      spectatorCount: number;
+    }>) => {
+      setUiState(prev => {
+        const next = new Map(prev.countryStates);
+        for (const cs of data) {
+          const existing = next.get(cs.iso3);
+          if (existing) {
+            // 서버 데이터로 동적 필드 업데이트 (정적 필드 유지)
+            next.set(cs.iso3, {
+              ...existing,
+              battleStatus: cs.battleStatus as CountryClientState['battleStatus'],
+              sovereignFaction: cs.sovereignFaction,
+              sovereigntyLevel: cs.sovereigntyLevel,
+              activeAgents: cs.activeAgents,
+            });
+          } else {
+            // 새로운 국가 — 최소 데이터로 생성 (GeoJSON fallback이 이후 보강)
+            next.set(cs.iso3, {
+              iso3: cs.iso3,
+              name: cs.iso3,
+              continent: '',
+              tier: 'C',
+              sovereignFaction: cs.sovereignFaction,
+              sovereigntyLevel: cs.sovereigntyLevel,
+              gdp: 0,
+              battleStatus: cs.battleStatus as CountryClientState['battleStatus'],
+              activeAgents: cs.activeAgents,
+              resources: { oil: 0, minerals: 0, food: 0, tech: 0, manpower: 0 },
+              latitude: 0,
+              longitude: 0,
+              capitalName: '',
+              terrainTheme: 'plains',
+            });
+          }
+        }
+        return { ...prev, countryStates: next };
+      });
+    });
+
     socket.on('round_start', (data: { countdown: number }) => {
       dataRef.current.roomState = data.countdown > 0 ? 'countdown' : 'playing';
       setUiState(prev => ({
@@ -299,8 +349,8 @@ export function useSocket() {
 
   // ─── 액션 함수 ───
 
-  const joinRoom = useCallback((roomId: string, name: string, skinId?: number) => {
-    socketRef.current?.emit('join_room', { roomId, name, skinId });
+  const joinRoom = useCallback((roomId: string, name: string, skinId?: number, appearance?: string) => {
+    socketRef.current?.emit('join_room', { roomId, name, skinId, appearance });
   }, []);
 
   const leaveRoom = useCallback(() => {
@@ -336,8 +386,8 @@ export function useSocket() {
     socketRef.current?.emit('input', { a: angle, b: boost ? 1 : 0, s: seq });
   }, []);
 
-  const respawn = useCallback((name?: string, skinId?: number) => {
-    socketRef.current?.emit('respawn', { name, skinId });
+  const respawn = useCallback((name?: string, skinId?: number, appearance?: string) => {
+    socketRef.current?.emit('respawn', { name, skinId, appearance });
   }, []);
 
   const disconnect = useCallback(() => {

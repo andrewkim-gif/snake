@@ -143,8 +143,8 @@ func (ca *CountryArena) Stop() {
 // --- Player management (delegates to Room) ---
 
 // AddPlayer adds a human player to the arena with faction tracking.
-func (ca *CountryArena) AddPlayer(clientID, name string, skinID int) {
-	if err := ca.room.AddPlayer(clientID, name, skinID); err != nil {
+func (ca *CountryArena) AddPlayer(clientID, name string, skinID int, appearance string) {
+	if err := ca.room.AddPlayer(clientID, name, skinID, appearance); err != nil {
 		slog.Warn("failed to add player to country arena",
 			"country", ca.CountryISO,
 			"clientId", clientID,
@@ -154,8 +154,8 @@ func (ca *CountryArena) AddPlayer(clientID, name string, skinID int) {
 }
 
 // AddPlayerWithFaction adds a player and tracks their faction for scoring.
-func (ca *CountryArena) AddPlayerWithFaction(clientID, name string, skinID int, factionID string) {
-	ca.AddPlayer(clientID, name, skinID)
+func (ca *CountryArena) AddPlayerWithFaction(clientID, name string, skinID int, appearance string, factionID string) {
+	ca.AddPlayer(clientID, name, skinID, appearance)
 	if factionID != "" {
 		ca.mu.Lock()
 		ca.agentFaction[clientID] = factionID

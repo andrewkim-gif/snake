@@ -44,9 +44,10 @@ type RoomEventCallback func(events []RoomEvent)
 
 // PlayerInfo holds metadata about a human player in a room.
 type PlayerInfo struct {
-	ID     string
-	Name   string
-	SkinID int
+	ID         string
+	Name       string
+	SkinID     int
+	Appearance string // v10 Phase 2: packed BigInt string (pass-through)
 }
 
 // Room wraps an Arena with a state machine for round lifecycle management.
@@ -428,7 +429,7 @@ func (r *Room) stopArena() {
 // --- Player management ---
 
 // AddPlayer adds a human player to the room.
-func (r *Room) AddPlayer(id, name string, skinID int) error {
+func (r *Room) AddPlayer(id, name string, skinID int, appearance string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
 
@@ -437,9 +438,10 @@ func (r *Room) AddPlayer(id, name string, skinID int) error {
 	}
 
 	p := &PlayerInfo{
-		ID:     id,
-		Name:   name,
-		SkinID: skinID,
+		ID:         id,
+		Name:       name,
+		SkinID:     skinID,
+		Appearance: appearance,
 	}
 	r.players[id] = p
 
@@ -484,7 +486,7 @@ func (r *Room) HasPlayer(id string) bool {
 func (r *Room) spawnPlayerAgent(p *PlayerInfo) {
 	pos := r.arena.RandomSpawnPosition()
 	skin := domain.GetSkinByID(p.SkinID)
-	agent := NewAgent(p.ID, p.Name, pos, skin, false, r.arena.GetTick())
+	agent := NewAgent(p.ID, p.Name, pos, skin, false, r.arena.GetTick(), p.Appearance)
 	r.arena.AddAgent(agent)
 }
 

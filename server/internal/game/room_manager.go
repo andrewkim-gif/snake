@@ -83,7 +83,7 @@ func (rm *RoomManager) forwardEvents(events []RoomEvent) {
 
 // QuickJoin auto-assigns a client to the most appropriate room.
 // Priority: waiting/countdown rooms > playing rooms, fewest players first.
-func (rm *RoomManager) QuickJoin(clientID, name string, skinID int) (string, error) {
+func (rm *RoomManager) QuickJoin(clientID, name string, skinID int, appearance string) (string, error) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
 
@@ -135,14 +135,14 @@ func (rm *RoomManager) QuickJoin(clientID, name string, skinID int) (string, err
 	})
 
 	best := candidates[0]
-	return rm.joinRoomLocked(clientID, best.roomID, name, skinID)
+	return rm.joinRoomLocked(clientID, best.roomID, name, skinID, appearance)
 }
 
 // JoinRoom assigns a client to a specific room.
-func (rm *RoomManager) JoinRoom(clientID, roomID, name string, skinID int) (string, error) {
+func (rm *RoomManager) JoinRoom(clientID, roomID, name string, skinID int, appearance string) (string, error) {
 	// Quick join if roomID is empty (separate lock path to avoid double-unlock)
 	if roomID == "" {
-		return rm.QuickJoin(clientID, name, skinID)
+		return rm.QuickJoin(clientID, name, skinID, appearance)
 	}
 
 	rm.mu.Lock()
@@ -156,17 +156,17 @@ func (rm *RoomManager) JoinRoom(clientID, roomID, name string, skinID int) (stri
 		delete(rm.playerRoom, clientID)
 	}
 
-	return rm.joinRoomLocked(clientID, roomID, name, skinID)
+	return rm.joinRoomLocked(clientID, roomID, name, skinID, appearance)
 }
 
 // joinRoomLocked performs the actual join (caller must hold rm.mu write lock).
-func (rm *RoomManager) joinRoomLocked(clientID, roomID, name string, skinID int) (string, error) {
+func (rm *RoomManager) joinRoomLocked(clientID, roomID, name string, skinID int, appearance string) (string, error) {
 	room, ok := rm.rooms[roomID]
 	if !ok {
 		return "", fmt.Errorf("room %s not found", roomID)
 	}
 
-	if err := room.AddPlayer(clientID, name, skinID); err != nil {
+	if err := room.AddPlayer(clientID, name, skinID, appearance); err != nil {
 		return "", err
 	}
 

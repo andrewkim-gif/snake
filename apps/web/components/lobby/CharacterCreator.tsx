@@ -17,8 +17,7 @@
  * MC 테마: SK 팔레트 + bodyFont
  */
 
-import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
-import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import type { CubelingAppearance, BodyType } from '@agent-survivor/shared';
 import {
   createDefaultAppearance,
@@ -35,7 +34,7 @@ import {
   CHARACTER_PRESETS,
 } from '@agent-survivor/shared';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
-import { VoxelCharacter } from '@/components/3d/VoxelCharacter';
+import { CharacterPreviewPanel } from './CharacterPreviewPanel';
 
 // ─── 상수 ───
 
@@ -50,14 +49,14 @@ const BODY_TYPES: { value: BodyType; label: string }[] = [
 
 type TabId = 'body' | 'colors' | 'face' | 'hair' | 'equip' | 'fx' | 'preset';
 
-const TABS: { id: TabId; label: string }[] = [
-  { id: 'body', label: 'BODY' },
-  { id: 'colors', label: 'CLR' },
-  { id: 'face', label: 'FACE' },
-  { id: 'hair', label: 'HAIR' },
-  { id: 'equip', label: 'EQP' },
-  { id: 'fx', label: 'FX' },
-  { id: 'preset', label: 'PRE' },
+const TABS: { id: TabId; label: string; icon: string }[] = [
+  { id: 'body', label: 'BODY', icon: '\u{1F9CD}' },
+  { id: 'colors', label: 'CLR', icon: '\u{1F3A8}' },
+  { id: 'face', label: 'FACE', icon: '\u{1F600}' },
+  { id: 'hair', label: 'HAIR', icon: '\u{1F487}' },
+  { id: 'equip', label: 'EQP', icon: '\u{2694}' },
+  { id: 'fx', label: 'FX', icon: '\u{2728}' },
+  { id: 'preset', label: 'PRE', icon: '\u{1F4E6}' },
 ];
 
 /** 16종 헤어스타일 이름 */
@@ -154,8 +153,8 @@ const gridItemBase: React.CSSProperties = {
   letterSpacing: '0.5px',
 };
 
-const selectedBorder = `2px solid ${SK.gold}`;
-const selectedShadow = `0 0 0 1px ${SK.gold}40`;
+const selectedBorder = `2.5px solid ${SK.gold}`;
+const selectedShadow = `0 0 0 2px ${SK.gold}50, 0 0 6px ${SK.gold}30`;
 
 const sectionLabelStyle: React.CSSProperties = {
   fontFamily: bodyFont,
@@ -223,71 +222,81 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
       gap: '8px',
       width: '100%',
     }}>
-      {/* 프리뷰 + 정보 */}
+      {/* 3D 프리뷰 패널 (풀 너비) */}
+      <CharacterPreviewPanel appearance={appearance} skinId={skinId} />
+
+      {/* 캐릭터 정보 + 액션 버튼 */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '10px',
+        justifyContent: 'space-between',
       }}>
-        <AgentPreview3D appearance={appearance} skinId={skinId} />
-        <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{
+        <div>
+          <span style={{
             fontFamily: bodyFont,
             fontWeight: 800,
             fontSize: '10px',
             color: SK.blue,
             letterSpacing: '2px',
-            marginBottom: '2px',
           }}>
             CUBELING
-          </div>
-          <div style={{
+          </span>
+          <span style={{
             fontFamily: bodyFont,
             fontSize: '10px',
             fontWeight: 600,
             color: SK.textSecondary,
-            marginBottom: '6px',
+            marginLeft: '8px',
           }}>
             {appearance.bodyType.toUpperCase()} / {HAIR_STYLE_NAMES[appearance.hairStyle] ?? 'DEFAULT'}
-          </div>
-          {/* 액션 버튼 */}
-          <div style={{ display: 'flex', gap: '4px' }}>
-            <SmallButton onClick={handleRandom} color={SK.blue}>RND</SmallButton>
-            <SmallButton onClick={handleReset} color={SK.red}>RST</SmallButton>
-          </div>
+          </span>
+        </div>
+        <div style={{ display: 'flex', gap: '4px' }}>
+          <SmallButton onClick={handleRandom} color={SK.blue}>{'\u{1F3B2}'} RND</SmallButton>
+          <SmallButton onClick={handleReset} color={SK.red}>{'\u{1F504}'} RST</SmallButton>
         </div>
       </div>
 
       {/* 탭 바 */}
       <div style={{
         display: 'flex',
-        gap: '2px',
-        flexWrap: 'wrap',
+        gap: '1px',
+        borderBottom: `1px solid ${SK.border}`,
+        paddingBottom: '0',
       }}>
-        {TABS.map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            style={{
-              fontFamily: bodyFont,
-              fontWeight: activeTab === tab.id ? 700 : 500,
-              fontSize: '8px',
-              padding: '3px 6px',
-              backgroundColor: activeTab === tab.id ? `${SK.gold}15` : 'transparent',
-              color: activeTab === tab.id ? SK.gold : SK.textMuted,
-              border: activeTab === tab.id
-                ? `1px solid ${SK.gold}40`
-                : '1px solid transparent',
-              borderRadius: '2px',
-              cursor: 'pointer',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-              transition: 'all 120ms ease',
-            }}
-          >
-            {tab.label}
-          </button>
-        ))}
+        {TABS.map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                flex: 1,
+                fontFamily: bodyFont,
+                fontWeight: isActive ? 700 : 500,
+                fontSize: '7px',
+                padding: '4px 2px 5px',
+                backgroundColor: 'transparent',
+                color: isActive ? SK.gold : SK.textMuted,
+                border: 'none',
+                borderBottom: isActive
+                  ? `2px solid ${SK.gold}`
+                  : '2px solid transparent',
+                cursor: 'pointer',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+                transition: 'all 120ms ease',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '1px',
+              }}
+            >
+              <span style={{ fontSize: '11px', lineHeight: 1 }}>{tab.icon}</span>
+              <span>{tab.label}</span>
+            </button>
+          );
+        })}
       </div>
 
       {/* 탭 콘텐츠 */}
@@ -354,51 +363,7 @@ function SmallButton({ onClick, children, color }: {
   );
 }
 
-// ─── 3D 프리뷰 ───
-
-function PreviewCamera() {
-  const { camera } = useThree();
-  useFrame((state) => {
-    const t = state.clock.elapsedTime * 0.5;
-    const r = 3.5;
-    camera.position.set(Math.cos(t) * r, 2.2, Math.sin(t) * r);
-    camera.lookAt(0, 1.0, 0);
-  });
-  return null;
-}
-
-function AgentPreview3D({ appearance, skinId }: { appearance: CubelingAppearance; skinId: number }) {
-  return (
-    <div style={{
-      width: '90px',
-      height: '90px',
-      borderRadius: '8px',
-      border: `1px solid ${SK.border}`,
-      backgroundColor: SK.bgWarm,
-      overflow: 'hidden',
-      flexShrink: 0,
-    }}>
-      <Canvas
-        dpr={[1, 1.5]}
-        gl={{ antialias: true, alpha: true }}
-        style={{ width: '100%', height: '100%' }}
-      >
-        <ambientLight intensity={0.6} />
-        <directionalLight position={[3, 5, 3]} intensity={0.7} />
-        <PreviewCamera />
-        <Suspense fallback={null}>
-          <VoxelCharacter
-            skinId={skinId}
-            appearance={appearance}
-            position={[0, 0, 0]}
-            rotation={0}
-            phaseOffset={0}
-          />
-        </Suspense>
-      </Canvas>
-    </div>
-  );
-}
+// (3D 프리뷰는 CharacterPreviewPanel로 이동)
 
 // ─── 색상 원형 선택기 ───
 
@@ -496,7 +461,7 @@ function TabColors({ appearance, onChange }: {
       {/* 상의 색 */}
       <div>
         <div style={sectionLabelStyle}>TOP COLOR</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '4px' }}>
           {VIVID_PALETTE.map((color, i) => (
             <ColorCircle
               key={i}
@@ -510,7 +475,7 @@ function TabColors({ appearance, onChange }: {
       {/* 하의 색 */}
       <div>
         <div style={sectionLabelStyle}>BOTTOM COLOR</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(6, 1fr)', gap: '4px' }}>
           {VIVID_PALETTE.map((color, i) => (
             <ColorCircle
               key={i}
@@ -707,10 +672,31 @@ function TabHair({ appearance, onChange }: {
 
 // ─── Tab 5: Equipment (모자/무기/등/신발) ───
 
+function EquipmentSelectedLabel({ name }: { name: string }) {
+  if (!name || name === 'None') return null;
+  return (
+    <div style={{
+      fontFamily: bodyFont,
+      fontSize: '8px',
+      fontWeight: 600,
+      color: SK.gold,
+      marginTop: '3px',
+      letterSpacing: '0.5px',
+    }}>
+      {name}
+    </div>
+  );
+}
+
 function TabEquipment({ appearance, onChange }: {
   appearance: CubelingAppearance;
   onChange: (p: Partial<CubelingAppearance>) => void;
 }) {
+  const selectedHat = HAT_DEFS.find(h => h.id === appearance.hat);
+  const selectedWeapon = WEAPON_DEFS.find(w => w.id === appearance.weapon);
+  const selectedBack = BACK_ITEM_DEFS.find(b => b.id === appearance.backItem);
+  const selectedFoot = FOOTWEAR_DEFS.find(f => f.id === appearance.footwear);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
       {/* 모자 */}
@@ -731,6 +717,7 @@ function TabEquipment({ appearance, onChange }: {
             />
           ))}
         </div>
+        <EquipmentSelectedLabel name={selectedHat?.name ?? ''} />
       </div>
       {/* 무기 */}
       <div>
@@ -750,6 +737,7 @@ function TabEquipment({ appearance, onChange }: {
             />
           ))}
         </div>
+        <EquipmentSelectedLabel name={selectedWeapon?.name ?? ''} />
       </div>
       {/* 등 장비 */}
       <div>
@@ -769,6 +757,7 @@ function TabEquipment({ appearance, onChange }: {
             />
           ))}
         </div>
+        <EquipmentSelectedLabel name={selectedBack?.name ?? ''} />
       </div>
       {/* 신발 */}
       <div>
@@ -788,6 +777,7 @@ function TabEquipment({ appearance, onChange }: {
             />
           ))}
         </div>
+        <EquipmentSelectedLabel name={selectedFoot?.name ?? ''} />
       </div>
     </div>
   );
@@ -852,15 +842,20 @@ function TabPresets({ onSelect }: { onSelect: (a: CubelingAppearance) => void })
               textAlign: 'left' as const,
             }}
           >
-            {/* 색상 미니 아이콘 */}
+            {/* 색상 미니 아이콘 (top+bottom 2톤) */}
             <div style={{
-              width: '16px',
-              height: '16px',
-              borderRadius: '2px',
-              backgroundColor: VIVID_PALETTE[preset.appearance.topColor] ?? '#888',
-              border: `1px solid ${VIVID_PALETTE[preset.appearance.bottomColor] ?? '#444'}`,
+              width: '20px',
+              height: '20px',
+              borderRadius: '3px',
+              overflow: 'hidden',
               flexShrink: 0,
-            }} />
+              border: `1px solid ${SK.border}`,
+              display: 'flex',
+              flexDirection: 'column',
+            }}>
+              <div style={{ flex: 1, backgroundColor: VIVID_PALETTE[preset.appearance.topColor] ?? '#888' }} />
+              <div style={{ flex: 1, backgroundColor: VIVID_PALETTE[preset.appearance.bottomColor] ?? '#444' }} />
+            </div>
             <div>
               <div style={{
                 fontFamily: bodyFont,

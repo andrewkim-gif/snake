@@ -106,7 +106,7 @@ func (bm *BotManager) spawnOneBot() {
 	pos := bm.arena.RandomSpawnPosition()
 	skinID := rand.Intn(12) // common skins 0-11
 	skin := domain.GetSkinByID(skinID)
-	agent := NewAgent(id, name, pos, skin, true, bm.arena.GetTick())
+	agent := NewAgent(id, name, pos, skin, true, bm.arena.GetTick(), "") // 봇: 빈 appearance → 클라이언트에서 skinId fallback
 	bm.arena.AddAgent(agent)
 
 	buildPath := AllBuildPaths[rand.Intn(len(AllBuildPaths))]

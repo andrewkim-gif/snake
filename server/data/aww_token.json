@@ -1,0 +1,37 @@
+{
+  "name": "AI World War",
+  "symbol": "AWW",
+  "decimals": 18,
+  "totalSupply": "1000000000",
+  "chainId": 0,
+  "chainName": "CROSS Mainnet",
+  "distribution": {
+    "ecosystem": { "percent": 40, "amount": "400000000", "description": "Ecosystem rewards (staking, play-to-earn)" },
+    "community": { "percent": 25, "amount": "250000000", "description": "Community incentives (airdrops, events)" },
+    "team": { "percent": 15, "amount": "150000000", "description": "Team allocation (2-year linear vesting)" },
+    "liquidity": { "percent": 10, "amount": "100000000", "description": "DEX liquidity provision" },
+    "treasury": { "percent": 10, "amount": "100000000", "description": "Protocol treasury reserve" }
+  },
+  "features": {
+    "burnable": true,
+    "permit": true,
+    "vesting": {
+      "team": {
+        "duration": "730 days",
+        "type": "linear",
+        "cliff": "none"
+      }
+    }
+  },
+  "contracts": {
+    "awwToken": "",
+    "nationalTokenFactory": "",
+    "defenseOracle": "",
+    "governanceModule": ""
+  },
+  "links": {
+    "website": "https://aiworldwar.io",
+    "docs": "https://docs.aiworldwar.io",
+    "explorer": ""
+  }
+}

@@ -159,6 +159,7 @@ export default function Home() {
       {/* 전체 화면 지구본/맵 */}
       <WorldView
         viewMode={viewMode}
+        countryStates={uiState.countryStates}
         onEnterArena={handleEnterArena}
         onSpectate={handleSpectate}
         bottomOffset={NEWS_FEED_HEIGHT}

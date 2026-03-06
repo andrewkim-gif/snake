@@ -116,9 +116,11 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
 } as unknown as maplibregl.StyleSpecification;
 
 // 국가 속성에서 ISO3 코드 추출 (GeoJSON property name varies)
+// Natural Earth에서 France/Norway/Kosovo 등은 ISO_A3="-99"이므로 ADM0_A3로 fallback
 export function getCountryISO(properties: Record<string, unknown>): string {
+  const iso = properties.ISO_A3 as string;
+  if (iso && iso !== '-99') return iso;
   return (
-    (properties.ISO_A3 as string) ||
     (properties.ADM0_A3 as string) ||
     (properties.iso_a3 as string) ||
     ''

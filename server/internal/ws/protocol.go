@@ -38,6 +38,7 @@ const (
 	EventSynergyActivated = "synergy_activated"
 	EventArenaShrink      = "arena_shrink"
 	EventError            = "error"
+	EventCountriesState   = "countries_state"
 
 	// Agent-specific events (server → client)
 	EventAgentAuthResult    = "agent_auth_result"
@@ -128,9 +129,10 @@ func (r *EventRouter) HandleMessage(client *Client, raw []byte) {
 
 // JoinRoomPayload is sent by the client to join a game room.
 type JoinRoomPayload struct {
-	RoomID string `json:"roomId"`
-	Name   string `json:"name"`
-	SkinID int    `json:"skinId"`
+	RoomID     string `json:"roomId"`
+	Name       string `json:"name"`
+	SkinID     int    `json:"skinId"`
+	Appearance string `json:"appearance,omitempty"` // v10 Phase 2: packed BigInt string (pass-through)
 }
 
 // InputPayload is sent by the client at 30Hz with movement data.
@@ -142,8 +144,9 @@ type InputPayload struct {
 
 // RespawnPayload is sent by the client to request respawn.
 type RespawnPayload struct {
-	Name   string `json:"name,omitempty"`
-	SkinID int    `json:"skinId,omitempty"`
+	Name       string `json:"name,omitempty"`
+	SkinID     int    `json:"skinId,omitempty"`
+	Appearance string `json:"appearance,omitempty"` // v10 Phase 2: packed BigInt string (pass-through)
 }
 
 // PingPayload is sent by the client for latency measurement.

@@ -414,13 +414,15 @@ export function getHeadMaterials(skinId: number): THREE.MeshLambertMaterial[] {
   const bottomTex = generateHeadBottomTexture(skinId);
   const sideTex = generateHeadSideTexture(skinId);
 
+  // BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
+  // Head dims: w > d → +Z face is widest (visual "front")
   const mats = [
-    new THREE.MeshLambertMaterial({ map: frontTex }),   // +X front (face)
-    new THREE.MeshLambertMaterial({ map: backTex }),    // -X back
+    new THREE.MeshLambertMaterial({ map: sideTex }),    // +X side (narrow)
+    new THREE.MeshLambertMaterial({ map: sideTex }),    // -X side (narrow)
     new THREE.MeshLambertMaterial({ map: topTex }),     // +Y top
     new THREE.MeshLambertMaterial({ map: bottomTex }),  // -Y bottom
-    new THREE.MeshLambertMaterial({ map: sideTex }),    // +Z left side
-    new THREE.MeshLambertMaterial({ map: sideTex }),    // -Z right side
+    new THREE.MeshLambertMaterial({ map: frontTex }),   // +Z front (face) ← 정면
+    new THREE.MeshLambertMaterial({ map: backTex }),    // -Z back
   ];
 
   headMaterialCache.set(skinId, mats);

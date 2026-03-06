@@ -18,6 +18,7 @@ import { Canvas } from '@react-three/fiber';
 import type { GameData, UiState } from '@/hooks/useSocket';
 import type { AgentNetworkData, OrbNetworkData } from '@agent-survivor/shared';
 import { ARENA_CONFIG } from '@agent-survivor/shared';
+import { populateAppearanceCache, clearAppearanceCache } from '@/lib/3d/appearance-cache';
 
 // 3D 컴포넌트
 import { Scene } from '@/components/3d/Scene';
@@ -87,19 +88,27 @@ export function GameCanvas3D({
   const agentIndexMapRef = useRef<Map<string, number>>(new Map());
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // 경과 시간 업데이트 + 오브 데이터 동기화 (rAF 기반)
+  // 경과 시간 업데이트 + 오브 데이터 동기화 + appearance 캐시 (rAF 기반)
   useEffect(() => {
     let raf = 0;
     let lastTime = performance.now();
     const tick = (now: number) => {
       elapsedRef.current += (now - lastTime) / 1000;
       lastTime = now;
+      const state = dataRef.current.latestState;
       // 오브 데이터를 서버 state에서 동기화
-      orbsRef.current = dataRef.current.latestState?.o ?? [];
+      orbsRef.current = state?.o ?? [];
+      // appearance 캐시: state의 ap 필드에서 unpack하여 캐싱
+      if (state?.s) {
+        populateAppearanceCache(state.s);
+      }
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      clearAppearanceCache();
+    };
   }, [dataRef]);
 
   // ─── 입력 처리 (마우스 + 키보드 + 터치) ───

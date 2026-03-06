@@ -263,7 +263,7 @@ func (wm *WorldManager) GetActiveArena(countryISO string) *CountryArena {
 // --- Player management ---
 
 // JoinCountry places a player into a country's arena (creating it on-demand).
-func (wm *WorldManager) JoinCountry(clientID, countryISO, name string, skinID int) error {
+func (wm *WorldManager) JoinCountry(clientID, countryISO, name string, skinID int, appearance string) error {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
@@ -291,7 +291,7 @@ func (wm *WorldManager) JoinCountry(clientID, countryISO, name string, skinID in
 	}
 
 	// Add player to arena
-	arena.AddPlayer(clientID, name, skinID)
+	arena.AddPlayer(clientID, name, skinID, appearance)
 	wm.playerCountry[clientID] = countryISO
 
 	slog.Info("player joined country",

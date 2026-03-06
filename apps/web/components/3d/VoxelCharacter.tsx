@@ -22,8 +22,8 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { CubelingAppearance } from '@agent-survivor/shared';
-import { VIVID_PALETTE, SKIN_TONES } from '@agent-survivor/shared';
-import { getAgentTextures } from '@/lib/3d/agent-textures';
+import { VIVID_PALETTE, SKIN_TONES, HAIR_COLORS, HAT_DEFS, WEAPON_DEFS, BACK_ITEM_DEFS } from '@agent-survivor/shared';
+import { getAgentTextures, getHeadMaterials } from '@/lib/3d/agent-textures';
 import { LOBBY_DIMENSIONS, LOBBY_OFFSETS } from '@/lib/3d/cubeling-proportions';
 
 interface VoxelCharacterProps {
@@ -90,8 +90,91 @@ function lightenHex(hex: string, amount: number): string {
 }
 
 /**
- * appearance 기반 텍스처 세트 생성
- * 간단한 색상 매핑으로 프리뷰 목적에 충분한 품질
+ * 6-face head materials (얼굴은 +X 면에만 표시)
+ * BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
+ * +X = front (face), -X = back (hair), +Y = top (hair), -Y = chin, ±Z = sides
+ */
+function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambertMaterial[] {
+  const skinTone = SKIN_TONES[a.skinTone] ?? '#D4A574';
+  const hairColor = HAIR_COLORS[a.hairColor] ?? '#4A3728';
+  const darkHair = darkenHex(hairColor, 0.2);
+  const darkSkin = darkenHex(skinTone, 0.1);
+
+  // +X: Front face (얼굴 — 눈/코/입 + 머리카락 상단)
+  const [fC, fX] = createCanvas();
+  fX.fillStyle = skinTone;
+  fX.fillRect(0, 0, 16, 16);
+  fX.fillStyle = hairColor;
+  fX.fillRect(0, 0, 16, 4);
+  fX.fillStyle = darkHair;
+  fX.fillRect(0, 4, 2, 4);
+  fX.fillRect(14, 4, 2, 4);
+  // 눈
+  fX.fillStyle = '#FFFFFF';
+  fX.fillRect(4, 5, 3, 3);
+  fX.fillRect(9, 5, 3, 3);
+  fX.fillStyle = '#3A3028';
+  fX.fillRect(5, 6, 1, 1);
+  fX.fillRect(10, 6, 1, 1);
+  // 코
+  fX.fillStyle = darkSkin;
+  fX.fillRect(7, 9, 2, 1);
+  // 입
+  fX.fillStyle = darkenHex(skinTone, 0.2);
+  fX.fillRect(6, 11, 4, 1);
+
+  // -X: Back face (뒷머리 — 머리카락 + 목)
+  const [bC, bX] = createCanvas();
+  bX.fillStyle = hairColor;
+  bX.fillRect(0, 0, 16, 16);
+  bX.fillStyle = skinTone;
+  bX.fillRect(3, 13, 10, 3);
+  bX.fillStyle = darkHair;
+  for (let y = 0; y < 16; y++) {
+    bX.fillRect(0, y, 1, 1);
+    bX.fillRect(15, y, 1, 1);
+  }
+
+  // +Y: Top (정수리 — 머리카락)
+  const [tC, tX] = createCanvas();
+  tX.fillStyle = hairColor;
+  tX.fillRect(0, 0, 16, 16);
+  tX.fillStyle = darkHair;
+  tX.fillRect(7, 0, 2, 16);
+
+  // -Y: Bottom (턱)
+  const [btC, btX] = createCanvas();
+  btX.fillStyle = darkenHex(skinTone, 0.1);
+  btX.fillRect(0, 0, 16, 16);
+
+  // ±Z: Side faces (옆머리 — 피부 + 머리카락 + 귀)
+  const [sC, sX] = createCanvas();
+  sX.fillStyle = skinTone;
+  sX.fillRect(0, 0, 16, 16);
+  sX.fillStyle = hairColor;
+  sX.fillRect(0, 0, 16, 5);
+  sX.fillStyle = darkHair;
+  sX.fillRect(0, 5, 3, 3);
+  sX.fillRect(13, 5, 3, 3);
+  sX.fillStyle = darkSkin;
+  sX.fillRect(7, 7, 2, 2);
+
+  const sideTex = toCanvasTex(sC);
+  // BoxGeometry face order: [+X, -X, +Y, -Y, +Z, -Z]
+  // Head dims: w=0.625(X) h=0.625(Y) d=0.5(Z) → +Z face is 0.625×0.625 (widest, visual "front")
+  return [
+    new THREE.MeshLambertMaterial({ map: sideTex }),            // +X side (narrow)
+    new THREE.MeshLambertMaterial({ map: sideTex }),            // -X side (narrow)
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(tC) }),    // +Y top (hair)
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(btC) }),   // -Y bottom (chin)
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(fC) }),    // +Z front (face) ← 정면
+    new THREE.MeshLambertMaterial({ map: toCanvasTex(bC) }),    // -Z back (hair)
+  ];
+}
+
+/**
+ * appearance 기반 텍스처 세트 생성 (body/arm/leg만)
+ * head는 createAppearanceHeadMaterials에서 6-face로 생성
  */
 function createAppearanceTextures(a: CubelingAppearance) {
   const topColor = VIVID_PALETTE[a.topColor] ?? '#4488FF';
@@ -100,30 +183,6 @@ function createAppearanceTextures(a: CubelingAppearance) {
   const darkTop = darkenHex(topColor, 0.25);
   const lightTop = lightenHex(topColor, 0.2);
   const darkBottom = darkenHex(bottomColor, 0.25);
-
-  // Head 텍스처 (얼굴)
-  const [hCanvas, hCtx] = createCanvas();
-  hCtx.fillStyle = skinTone;
-  hCtx.fillRect(0, 0, 16, 16);
-  // 머리카락 상단
-  hCtx.fillStyle = topColor;
-  hCtx.fillRect(0, 0, 16, 4);
-  hCtx.fillStyle = darkTop;
-  hCtx.fillRect(0, 4, 2, 4);
-  hCtx.fillRect(14, 4, 2, 4);
-  // 눈 (간단 기본)
-  hCtx.fillStyle = '#FFFFFF';
-  hCtx.fillRect(4, 5, 3, 3);
-  hCtx.fillRect(9, 5, 3, 3);
-  hCtx.fillStyle = '#3A3028';
-  hCtx.fillRect(5, 6, 1, 1);
-  hCtx.fillRect(10, 6, 1, 1);
-  // 코
-  hCtx.fillStyle = darkenHex(skinTone, 0.1);
-  hCtx.fillRect(7, 9, 2, 1);
-  // 입
-  hCtx.fillStyle = darkenHex(skinTone, 0.2);
-  hCtx.fillRect(6, 11, 4, 1);
 
   // Body 텍스처
   const [bCanvas, bCtx] = createCanvas();
@@ -193,7 +252,6 @@ function createAppearanceTextures(a: CubelingAppearance) {
   }
 
   return {
-    head: toCanvasTex(hCanvas),
     body: toCanvasTex(bCanvas),
     arm: toCanvasTex(aCanvas),
     leg: toCanvasTex(lCanvas),
@@ -205,8 +263,76 @@ function createAppearanceTextures(a: CubelingAppearance) {
  * topColor, bottomColor, skinTone, pattern만으로 텍스처 결정
  */
 function appearanceTexKey(a: CubelingAppearance): string {
-  return `${a.topColor}-${a.bottomColor}-${a.skinTone}-${a.pattern}`;
+  return `${a.topColor}-${a.bottomColor}-${a.skinTone}-${a.pattern}-${a.hairColor}`;
 }
+
+// ─── 게임유닛 → 월드유닛 변환 (16gu = 1wu) ───
+const GU = 1 / 16;
+
+// ─── 장비 그룹 (로비 프리뷰) ───
+
+function EquipmentGroup({ appearance: a }: { appearance: CubelingAppearance }) {
+  const hatDef = a.hat > 0 ? HAT_DEFS.find(h => h.id === a.hat) : null;
+  const weaponDef = a.weapon > 0 ? WEAPON_DEFS.find(w => w.id === a.weapon) : null;
+  const backDef = a.backItem > 0 ? BACK_ITEM_DEFS.find(b => b.id === a.backItem) : null;
+
+  // 머리 상단 Y (월드유닛)
+  const headTopY = HEAD_CENTER + HEAD.h / 2;
+  // 어깨+팔 끝 (월드유닛)
+  const handY = SHOULDER_Y - ARM.h;
+
+  return (
+    <>
+      {/* 모자: 머리 위에 배치 */}
+      {hatDef && (() => {
+        const geo = EQUIPMENT_SIZES[hatDef.geometryType];
+        if (!geo) return null;
+        return (
+          <mesh position={[0, headTopY + geo[1] / 2, 0]}>
+            <boxGeometry args={geo} />
+            <meshLambertMaterial color={hatDef.baseColor} />
+          </mesh>
+        );
+      })()}
+
+      {/* 무기: 오른손에 배치 */}
+      {weaponDef && (() => {
+        const geo = EQUIPMENT_SIZES[weaponDef.geometryType];
+        if (!geo) return null;
+        return (
+          <mesh position={[BODY.w / 2 + ARM.w / 2, handY - geo[1] * 0.3, ARM.d / 2 + 0.05]}>
+            <boxGeometry args={geo} />
+            <meshLambertMaterial color={weaponDef.baseColor} />
+          </mesh>
+        );
+      })()}
+
+      {/* 등 아이템: 몸통 뒤에 배치 */}
+      {backDef && (() => {
+        const geo = EQUIPMENT_SIZES[backDef.geometryType];
+        if (!geo) return null;
+        return (
+          <mesh position={[0, BODY_CENTER, -(BODY.d / 2 + geo[2] / 2)]}>
+            <boxGeometry args={geo} />
+            <meshLambertMaterial color={backDef.baseColor} />
+          </mesh>
+        );
+      })()}
+    </>
+  );
+}
+
+/** 장비 타입별 월드유닛 [W, H, D] */
+const EQUIPMENT_SIZES: Record<string, [number, number, number]> = {
+  helmet: [11 * GU, 6 * GU, 9 * GU],
+  hat:    [12 * GU, 4 * GU, 12 * GU],
+  crown:  [10 * GU, 3 * GU, 10 * GU],
+  blade:  [2 * GU, 14 * GU, 1 * GU],
+  staff:  [1 * GU, 14 * GU, 1 * GU],
+  cape:   [6 * GU, 8 * GU, 0.5 * GU],
+  wings:  [14 * GU, 8 * GU, 0.5 * GU],
+  pack:   [4 * GU, 5 * GU, 3 * GU],
+};
 
 export function VoxelCharacter({ skinId, appearance, position, rotation = 0, phaseOffset = 0 }: VoxelCharacterProps) {
   const leftArmRef = useRef<THREE.Mesh>(null!);
@@ -238,8 +364,14 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
     return geo;
   }, []);
 
+  // Head: 6-face materials (얼굴은 +X 면에만)
+  const headMats = useMemo(() => {
+    if (appearance) return createAppearanceHeadMaterials(appearance);
+    return getHeadMaterials(skinId);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [texKey]);
+
   // 재질
-  const headMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.head }), [textures]);
   const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.body }), [textures]);
   const armMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.arm }), [textures]);
   const legMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.leg }), [textures]);
@@ -272,8 +404,8 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
         <boxGeometry args={[BODY.w, BODY.h, BODY.d]} />
       </mesh>
 
-      {/* Head -- 큐블링: 큰 머리(42%) */}
-      <mesh ref={headRef} position={[0, HEAD_CENTER, 0]} material={headMat}>
+      {/* Head -- 큐블링: 큰 머리(42%), 6-face materials (얼굴은 +X면) */}
+      <mesh ref={headRef} position={[0, HEAD_CENTER, 0]} material={headMats}>
         <boxGeometry args={[HEAD.w, HEAD.h, HEAD.d]} />
       </mesh>
 
@@ -308,6 +440,9 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
         geometry={legGeo}
         material={legMat}
       />
+
+      {/* Equipment (appearance가 있을 때만) */}
+      {appearance && <EquipmentGroup appearance={appearance} />}
     </group>
   );
 }
