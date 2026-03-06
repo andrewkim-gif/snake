@@ -1,11 +1,40 @@
+# Dependencies
 node_modules/
-dist/
+
+# Build outputs
 .next/
-.turbo/
+dist/
+out/
 *.tsbuildinfo
+
+# Go
+server/agent-survivor
+*.exe
+
+# Environment
 .env
 .env.local
 .env.production
+.env.*.local
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
 .DS_Store
+Thumbs.db
+
+# Build tools
+.turbo/
 coverage/
-.vercel
+
+# Vercel
+.vercel/
+
+# Misc
+*.log
+.claude/
+.serena/
