@@ -202,6 +202,7 @@ export interface AgentNetworkData {
   ks?: number;            // kill streak
   hr: number;             // hitbox radius
   e?: number[];           // activeEffects (legacy 2D renderer compat)
+  bt?: string;            // v10: dominant build type (berserker/tank/speedster/farmer/balanced)
 }
 
 // ─── v10 Upgrade Events ───

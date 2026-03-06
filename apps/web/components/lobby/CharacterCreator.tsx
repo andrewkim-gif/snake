@@ -40,8 +40,8 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
           {(['skin', 'color', 'face', 'equip'] as const).map(tab => (
             <button key={tab} onClick={() => setActiveTab(tab)} style={{
               fontFamily: pixelFont,
-              fontSize: '0.25rem',
-              padding: '3px 8px',
+              fontSize: '9px',
+              padding: '5px 12px',
               backgroundColor: activeTab === tab ? 'rgba(255,170,0,0.2)' : 'rgba(255,255,255,0.05)',
               color: activeTab === tab ? MC.textGold : MC.textGray,
               border: activeTab === tab ? `1px solid ${MC.textGold}40` : `1px solid transparent`,
@@ -60,8 +60,8 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
         {activeTab === 'skin' && (
           <>
             <div style={{
-              fontFamily: pixelFont, fontSize: '0.3rem',
-              color: MC.textSecondary, letterSpacing: '0.06em',
+              fontFamily: pixelFont, fontSize: '11px',
+              color: MC.textSecondary, letterSpacing: '1px',
             }}>
               SELECT SKIN
             </div>
@@ -70,7 +70,7 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
         )}
         {activeTab !== 'skin' && (
           <div style={{
-            fontFamily: pixelFont, fontSize: '0.25rem',
+            fontFamily: pixelFont, fontSize: '9px',
             color: MC.textGray, padding: '1rem 0', textAlign: 'center',
           }}>
             COMING SOON
@@ -102,8 +102,8 @@ function PreviewCamera() {
 function AgentPreview3D({ skinId }: { skinId: number }) {
   return (
     <div style={{
-      width: '120px',
-      height: '120px',
+      width: '140px',
+      height: '140px',
       borderRadius: MCModern.radiusSm,
       border: `1px solid ${MCModern.glassBorder}`,
       backgroundColor: 'rgba(0,0,0,0.3)',
@@ -170,7 +170,7 @@ function SkinThumbnail({ skinId, selected, onClick }: {
       onClick={onClick}
       aria-label={`Skin ${skinId + 1}`}
       style={{
-        width: 28, height: 28, padding: 0,
+        width: 34, height: 34, padding: 0,
         border: selected ? `2px solid ${MC.textGold}` : `1px solid rgba(255,255,255,0.1)`,
         borderRadius: 0,
         backgroundColor: 'transparent',

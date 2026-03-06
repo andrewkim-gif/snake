@@ -3,11 +3,11 @@
 /**
  * McButton — MC 스타일 3D 엠보스 버튼
  * 석재(default) / 초록(green) / 빨강(red) 3변형
- * Hover: 밝아짐 / Pressed: 엠보스 반전 (눌린 효과)
+ * 3px 엠보스 보더 + Hover 밝아짐 + Pressed 반전
  */
 
 import { useState, type CSSProperties, type ReactNode, type ButtonHTMLAttributes } from 'react';
-import { MC, pixelFont } from '@/lib/minecraft-ui';
+import { MC, MCFont, pixelFont } from '@/lib/minecraft-ui';
 
 interface McButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'green' | 'red';
@@ -28,11 +28,9 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
   const c = V[variant];
   const isActive = !disabled;
   const bg = pressed && isActive ? c.dark : hovered && isActive ? c.hover : c.bg;
-  // 일반: 밝은색 좌상단 + 어두운색 우하단 (볼록)
-  // 눌림: 어두운색 좌상단 + 밝은색 우하단 (오목)
   const shadow = pressed && isActive
-    ? `inset 2px 2px 0 ${c.dark}, inset -2px -2px 0 ${c.light}`
-    : `inset 2px 2px 0 ${c.light}, inset -2px -2px 0 ${c.dark}`;
+    ? `inset 3px 3px 0 ${c.dark}, inset -3px -3px 0 ${c.light}`
+    : `inset 3px 3px 0 ${c.light}, inset -3px -3px 0 ${c.dark}`;
 
   return (
     <button
@@ -43,11 +41,11 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
         border: 'none',
         color: disabled ? MC.textGray : MC.textPrimary,
         fontFamily: pixelFont,
-        fontSize: '0.65rem',
-        padding: '0.6rem 1rem',
+        fontSize: MCFont.button,
+        padding: '10px 24px',
         cursor: disabled ? 'default' : 'pointer',
         textTransform: 'uppercase',
-        letterSpacing: '0.05em',
+        letterSpacing: '1px',
         opacity: disabled ? 0.5 : 1,
         textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
         ...style,

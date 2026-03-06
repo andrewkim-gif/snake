@@ -7,7 +7,7 @@
 
 import { useState } from 'react';
 import type { RoomInfo, RoomStatus } from '@snake-arena/shared';
-import { MC, mcBorder, pixelFont } from '@/lib/minecraft-ui';
+import { MC, MCFont, mcBorder, pixelFont } from '@/lib/minecraft-ui';
 
 const STATUS_CONFIG: Record<RoomStatus, { text: string; color: string }> = {
   waiting: { text: 'WAITING', color: MC.textGray },
@@ -50,8 +50,8 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '0.5rem',
-        padding: '0.45rem 0.6rem',
+        gap: '10px',
+        padding: '8px 12px',
         backgroundColor: hovered && joinable ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.5)',
         boxShadow: mcBorder('#484848', '#1A1A1A', 1),
         border: 'none',
@@ -65,22 +65,22 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
     >
       {/* Arena 이름 */}
       <span style={{
-        fontFamily: pixelFont, fontSize: '0.28rem',
-        color: MC.textSecondary, minWidth: '70px',
+        fontFamily: pixelFont, fontSize: MCFont.body,
+        color: MC.textSecondary, minWidth: '85px',
       }}>
         Arena {index + 1}
       </span>
 
       {/* 상태 [LIVE] */}
       <span style={{
-        fontFamily: pixelFont, fontSize: '0.22rem', color: status.color,
+        fontFamily: pixelFont, fontSize: MCFont.sm, color: status.color,
       }}>
         [{status.text}]
       </span>
 
       {/* 플레이어 수 */}
       <span style={{
-        fontFamily: pixelFont, fontSize: '0.22rem',
+        fontFamily: pixelFont, fontSize: MCFont.sm,
         color: MC.textSecondary, marginLeft: 'auto',
       }}>
         {room.playerCount}/{room.maxPlayers}
@@ -89,8 +89,8 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
       {/* 시간 */}
       {room.state !== 'waiting' && (
         <span style={{
-          fontFamily: pixelFont, fontSize: '0.22rem',
-          color: MC.textGray, minWidth: '35px', textAlign: 'right',
+          fontFamily: pixelFont, fontSize: MCFont.xs,
+          color: MC.textGray, minWidth: '44px', textAlign: 'right',
         }}>
           {formatTime(room.timeRemaining)}
         </span>
@@ -99,8 +99,8 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
       {/* 우승자 */}
       {room.winner && (room.state === 'ending' || room.state === 'cooldown') && (
         <span style={{
-          fontFamily: pixelFont, fontSize: '0.2rem',
-          color: MC.textGold, maxWidth: '60px',
+          fontFamily: pixelFont, fontSize: MCFont.xs,
+          color: MC.textGold, maxWidth: '70px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {room.winner.name}

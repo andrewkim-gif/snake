@@ -1,6 +1,6 @@
 /** Minecraft UI 팔레트 + 스타일 헬퍼 */
 export const MC = {
-  panelBg: 'rgba(0, 0, 0, 0.75)',
+  panelBg: 'rgba(0, 0, 0, 0.78)',
   panelBorderLight: '#5A5A5A',
   panelBorderDark: '#2A2A2A',
   btnDefault: '#8B8B8B',
@@ -20,12 +20,12 @@ export const MC = {
   textYellow: '#FFFF55',
   textGray: '#888888',
   inputBg: 'rgba(0, 0, 0, 0.65)',
-  inputBorder: '#666666',
+  inputBorder: '#555555',
   inputFocusBorder: '#AAAAAA',
   skyBg: '#87CEEB',
 } as const;
 
-/** MC 게임 UI 토큰 (인벤토리/서버 리스트 스타일) */
+/** MC 게임 UI 토큰 */
 export const MCModern = {
   glassBg: MC.panelBg,
   glassBgLight: 'rgba(0, 0, 0, 0.6)',
@@ -47,12 +47,23 @@ export const MCModern = {
   statusEnding: 'rgba(255, 85, 85, 0.2)',
 } as const;
 
+/** 픽셀 폰트 사이즈 스케일 (px, "Press Start 2P" 최적화) */
+export const MCFont = {
+  h1: '16px',
+  h2: '13px',
+  h3: '11px',
+  body: '10px',
+  sm: '9px',
+  xs: '8px',
+  button: '12px',
+} as const;
+
 /** 마크 인벤토리 스타일 3D 엠보스 보더 생성 */
 export function mcBorder(light: string, dark: string, width = 2) {
   return `inset ${width}px ${width}px 0 ${light}, inset -${width}px -${width}px 0 ${dark}`;
 }
 
-/** 마크 버튼 3D 엠보스 박스 섀도 */
+/** 마크 버튼 3D 엠보스 박스 섀도 (3px 두께) */
 export function mcButtonShadow(variant: 'default' | 'green' | 'red' = 'default') {
   const colors = {
     default: { light: MC.btnDefaultLight, dark: MC.btnDefaultDark },
@@ -60,12 +71,12 @@ export function mcButtonShadow(variant: 'default' | 'green' | 'red' = 'default')
     red: { light: MC.btnRedLight, dark: MC.btnRedDark },
   };
   const c = colors[variant];
-  return `inset 2px 2px 0 ${c.light}, inset -2px -2px 0 ${c.dark}`;
+  return `inset 3px 3px 0 ${c.light}, inset -3px -3px 0 ${c.dark}`;
 }
 
-/** 마크 패널 박스 섀도 (엠보스 인셋 보더) */
+/** 마크 패널 박스 섀도 (3px 엠보스 인셋 보더) */
 export function mcPanelShadow() {
-  return `inset 2px 2px 0 ${MC.panelBorderLight}, inset -2px -2px 0 ${MC.panelBorderDark}`;
+  return `inset 3px 3px 0 ${MC.panelBorderLight}, inset -3px -3px 0 ${MC.panelBorderDark}`;
 }
 
 /** 픽셀 폰트 스타일 (제목/버튼) */

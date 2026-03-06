@@ -2,7 +2,7 @@
 
 /**
  * McInput — MC 스타일 다크 입력 필드
- * 솔리드 보더 + 포커스 시 밝은 보더
+ * 3px 솔리드 보더 + 포커스 시 밝은 보더
  */
 
 import { useState, type InputHTMLAttributes } from 'react';
@@ -17,11 +17,11 @@ export function McInput({ style, ...rest }: McInputProps) {
     <input
       style={{
         backgroundColor: MC.inputBg,
-        border: `2px solid ${focused ? MC.inputFocusBorder : MC.inputBorder}`,
+        border: `3px solid ${focused ? MC.inputFocusBorder : MC.inputBorder}`,
         color: MC.textPrimary,
         fontFamily: bodyFont,
-        fontSize: '0.95rem',
-        padding: '0.6rem 0.8rem',
+        fontSize: '15px',
+        padding: '10px 14px',
         outline: 'none',
         width: '100%',
         boxSizing: 'border-box',

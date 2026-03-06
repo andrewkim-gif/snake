@@ -29,6 +29,7 @@ type StateAgent struct {
 	IsBot       bool     `json:"bot,omitempty"`
 	KillStreak  int      `json:"ks,omitempty"`
 	HitboxRadius float64 `json:"hr"`
+	BuildType   string   `json:"bt,omitempty"` // v10: dominant build type (berserker/tank/speedster/farmer/balanced)
 }
 
 // StateOrb is the per-tick serialized orb data sent to clients.

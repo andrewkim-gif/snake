@@ -2,9 +2,7 @@
 
 /**
  * Agent Survivor — Main Page
- * v10: 3D 로비 + 글래스모피즘 UI + 게임 모드 전환
- * LobbyScene3D 동적 임포트 (SSR 불가)
- * useSocket을 page.tsx에서 lift하여 lobby/playing 모드에 props 전달
+ * v10: 3D 로비 + MC 레트로 UI + 게임 모드 전환
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -16,9 +14,10 @@ import { McButton } from '@/components/lobby/McButton';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
+import { PixelLogo } from '@/components/lobby/PixelLogo';
 import { useSocket } from '@/hooks/useSocket';
-import { MC, pixelFont } from '@/lib/minecraft-ui';
-// Three.js / R3F SSR 불가 → 동적 임포트
+import { MC, MCFont, pixelFont } from '@/lib/minecraft-ui';
+
 const LobbyScene3D = dynamic(
   () => import('@/components/3d/LobbyScene3D').then(m => ({ default: m.LobbyScene3D })),
   { ssr: false },
@@ -28,7 +27,6 @@ const GameCanvas3D = dynamic(
   { ssr: false },
 );
 
-/* ── 메인 홈 컴포넌트 ── */
 export default function Home() {
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing'>('lobby');
   const [playerName, setPlayerName] = useState('');
@@ -39,7 +37,6 @@ export default function Home() {
     respawn, chooseUpgrade, dismissSynergyPopup,
   } = useSocket();
 
-  // localStorage에서 이름/스킨 복원
   useEffect(() => {
     const savedName = localStorage.getItem('agent-survivor-name');
     const savedSkin = localStorage.getItem('agent-survivor-skin');
@@ -47,7 +44,6 @@ export default function Home() {
     if (savedSkin) setSkinId(parseInt(savedSkin, 10) || 0);
   }, []);
 
-  // 이름/스킨 저장
   useEffect(() => {
     if (playerName) localStorage.setItem('agent-survivor-name', playerName);
   }, [playerName]);
@@ -80,7 +76,6 @@ export default function Home() {
     setMode('lobby');
   }, [leaveRoom]);
 
-  // Lobby → Game 전환 시 WebGL context 충돌 방지 (200ms 딜레이)
   useEffect(() => {
     if (mode !== 'transitioning') return;
     let cancelled = false;
@@ -96,9 +91,10 @@ export default function Home() {
         width: '100vw', height: '100vh', display: 'flex',
         alignItems: 'center', justifyContent: 'center',
         backgroundColor: '#87CEEB', fontFamily: pixelFont,
-        fontSize: '0.6rem', color: '#FFF',
+        fontSize: '16px', color: '#FFF',
+        textShadow: '2px 2px 0 rgba(0,0,0,0.3)',
       }}>
-        Loading game...
+        Loading arena...
       </div>
     );
   }
@@ -119,7 +115,6 @@ export default function Home() {
     );
   }
 
-  // ─── LOBBY ───
   return (
     <div style={{
       width: '100vw',
@@ -130,8 +125,6 @@ export default function Home() {
       transition: 'opacity 300ms ease',
     }}>
       <WelcomeTutorial />
-
-      {/* 3D 배경 씬 */}
       <LobbyScene3D />
 
       {/* UI 오버레이 */}
@@ -140,58 +133,48 @@ export default function Home() {
         width: '100%', height: '100%',
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
-        gap: '0.8rem',
-        padding: '1rem',
+        gap: '14px',
+        padding: '20px',
       }}>
         {/* 로고 */}
-        <div style={{
-          fontFamily: pixelFont,
-          fontSize: '1.2rem',
-          color: MC.textGold,
-          textShadow: '3px 3px 0 #553300, -1px -1px 0 #000, 0 0 20px rgba(255,170,0,0.3)',
-          letterSpacing: '0.1em',
-          textTransform: 'uppercase',
-          marginBottom: '0.3rem',
-        }}>
-          Agent Survivor
-        </div>
-        <div style={{
-          fontFamily: pixelFont,
-          fontSize: '0.3rem',
-          color: 'rgba(255,255,255,0.7)',
-          letterSpacing: '0.08em',
-          marginBottom: '0.5rem',
-          textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
-        }}>
-          Survival Roguelike Auto-Battler
-        </div>
+        <PixelLogo />
 
         {/* 연결 상태 */}
         <div style={{
-          fontFamily: pixelFont,
-          fontSize: '0.25rem',
-          color: uiState.connected ? MC.textGreen : MC.textRed,
-          textShadow: uiState.connected
-            ? '0 0 8px rgba(85,255,85,0.4)'
-            : '0 0 8px rgba(255,85,85,0.4)',
+          display: 'flex', alignItems: 'center', gap: '6px',
         }}>
-          {uiState.connected ? 'CONNECTED' : 'CONNECTING...'}
+          <div style={{
+            width: '8px', height: '8px',
+            backgroundColor: uiState.connected ? MC.textGreen : MC.textRed,
+            boxShadow: uiState.connected
+              ? '0 0 8px rgba(85,255,85,0.6)'
+              : '0 0 8px rgba(255,85,85,0.6)',
+          }} />
+          <span style={{
+            fontFamily: pixelFont,
+            fontSize: MCFont.sm,
+            color: uiState.connected ? MC.textGreen : MC.textRed,
+            textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
+          }}>
+            {uiState.connected ? 'ONLINE' : 'CONNECTING...'}
+          </span>
         </div>
 
         {/* 메인 패널: 2열 레이아웃 */}
         <div style={{
           display: 'flex',
-          gap: '0.8rem',
-          maxWidth: '800px',
+          gap: '16px',
+          maxWidth: '860px',
           width: '100%',
           flexWrap: 'wrap',
           justifyContent: 'center',
         }}>
           {/* 좌: 플레이어 설정 + 참가 */}
-          <McPanel style={{ flex: '1 1 320px', maxWidth: '400px', padding: '1rem' }}>
+          <McPanel style={{ flex: '1 1 340px', maxWidth: '420px', padding: '16px' }}>
             <div style={{
-              fontFamily: pixelFont, fontSize: '0.35rem', color: MC.textSecondary,
-              marginBottom: '0.5rem', letterSpacing: '0.06em',
+              fontFamily: pixelFont, fontSize: MCFont.h2, color: MC.textGold,
+              marginBottom: '12px', letterSpacing: '1px',
+              textShadow: '1px 1px 0 #553300',
             }}>
               AGENT SETUP
             </div>
@@ -200,42 +183,54 @@ export default function Home() {
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Enter agent name..."
-              style={{ marginBottom: '0.6rem' }}
+              style={{ marginBottom: '14px' }}
             />
 
             <CharacterCreator skinId={skinId} onSelect={setSkinId} />
 
-            <div style={{ marginTop: '0.8rem' }}>
+            <div style={{ marginTop: '16px' }}>
               <McButton
                 variant="green"
                 onClick={handleQuickJoin}
                 disabled={!uiState.connected}
-                style={{ width: '100%', padding: '8px 0' }}
+                style={{ width: '100%', padding: '12px 0', fontSize: MCFont.h2 }}
               >
-                QUICK JOIN
+                ⚔ QUICK JOIN ⚔
               </McButton>
             </div>
           </McPanel>
 
           {/* 우: 룸 리스트 + 최근 우승자 */}
-          <div style={{ flex: '1 1 320px', maxWidth: '400px', display: 'flex', flexDirection: 'column', gap: '0.6rem' }}>
-            <McPanel style={{ padding: '0.8rem' }}>
+          <div style={{
+            flex: '1 1 340px', maxWidth: '420px',
+            display: 'flex', flexDirection: 'column', gap: '12px',
+          }}>
+            <McPanel style={{ padding: '14px' }}>
               <div style={{
-                fontFamily: pixelFont, fontSize: '0.35rem', color: MC.textSecondary,
-                marginBottom: '0.4rem', letterSpacing: '0.06em',
+                fontFamily: pixelFont, fontSize: MCFont.h2, color: MC.textGold,
+                marginBottom: '10px', letterSpacing: '1px',
+                textShadow: '1px 1px 0 #553300',
               }}>
                 GAME ROOMS
               </div>
-              <RoomList
-                rooms={uiState.rooms}
-                onJoin={handleJoinRoom}
-              />
+              <RoomList rooms={uiState.rooms} onJoin={handleJoinRoom} />
             </McPanel>
 
-            <McPanel style={{ padding: '0.8rem' }}>
+            <McPanel style={{ padding: '14px' }}>
               <RecentWinnersPanel winners={uiState.recentWinners} />
             </McPanel>
           </div>
+        </div>
+
+        {/* 하단 버전 배지 */}
+        <div style={{
+          fontFamily: pixelFont,
+          fontSize: MCFont.xs,
+          color: 'rgba(255,255,255,0.25)',
+          textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
+          letterSpacing: '1px',
+        }}>
+          v10.0 ALPHA
         </div>
       </div>
     </div>

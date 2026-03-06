@@ -146,6 +146,11 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 	if a.KillStreak > 0 {
 		sa.KillStreak = a.KillStreak
 	}
+	// v10: dominant build type for client visual effects
+	bt := classifyBuildType(a.Build)
+	if bt != "balanced" {
+		sa.BuildType = bt
+	}
 	return sa
 }
 

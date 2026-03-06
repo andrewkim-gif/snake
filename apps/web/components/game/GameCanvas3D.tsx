@@ -33,6 +33,7 @@ import { OrbInstances } from '@/components/3d/OrbInstances';
 import { MCParticles } from '@/components/3d/MCParticles';
 import type { MCParticlesHandle } from '@/components/3d/MCParticles';
 import { AuraRings } from '@/components/3d/AuraRings';
+import { BuildEffects } from '@/components/3d/BuildEffects';
 
 // 기존 HUD 오버레이 (Canvas 밖 HTML)
 import { DeathOverlay } from './DeathOverlay';
@@ -290,6 +291,9 @@ export function GameCanvas3D({
 
         {/* 12. AuraRings — Agent 전투 오라 시각화 */}
         <AuraRings agentsRef={agentsRef} />
+
+        {/* 13. BuildEffects — 빌드별 시각 이펙트 (글로우/잔상/보호막) */}
+        <BuildEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
       </Canvas>
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}

@@ -2,11 +2,12 @@
 
 /**
  * WelcomeTutorial — 첫 방문 시 3단계 가이드 모달
- * Phase 1 MVP: 간단한 텍스트 가이드
+ * MC 패널 + McButton 사용
  */
 
 import { useState, useEffect } from 'react';
-import { MC, mcPanelShadow, pixelFont, bodyFont } from '@/lib/minecraft-ui';
+import { MC, MCFont, mcPanelShadow, pixelFont, bodyFont } from '@/lib/minecraft-ui';
+import { McButton } from './McButton';
 
 const STEPS = [
   {
@@ -48,47 +49,49 @@ export function WelcomeTutorial() {
     }}>
       <div style={{
         backgroundColor: MC.panelBg, boxShadow: mcPanelShadow(),
-        border: `2px solid ${MC.panelBorderDark}`, padding: '1.5rem',
-        maxWidth: '400px', width: '90%', textAlign: 'center',
+        border: `3px solid ${MC.panelBorderDark}`, padding: '24px',
+        maxWidth: '440px', width: '90%', textAlign: 'center',
       }}>
+        {/* 단계 표시 */}
         <div style={{
-          fontFamily: pixelFont, fontSize: '0.5rem', color: MC.textGold,
-          marginBottom: '0.8rem', textShadow: '1px 1px 0 #553300',
+          fontFamily: pixelFont, fontSize: MCFont.xs, color: MC.textGray,
+          marginBottom: '8px', letterSpacing: '1px',
+        }}>
+          {step + 1} / {STEPS.length}
+        </div>
+
+        {/* 제목 */}
+        <div style={{
+          fontFamily: pixelFont, fontSize: MCFont.h1, color: MC.textGold,
+          marginBottom: '14px', textShadow: '2px 2px 0 #553300',
+          lineHeight: 1.4,
         }}>
           {current.title}
         </div>
+
+        {/* 본문 */}
         <div style={{
-          fontFamily: bodyFont, fontSize: '0.9rem', color: MC.textSecondary,
-          lineHeight: '1.5', marginBottom: '1rem',
+          fontFamily: bodyFont, fontSize: '15px', color: MC.textSecondary,
+          lineHeight: 1.6, marginBottom: '20px',
         }}>
           {current.text}
         </div>
-        <div style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem' }}>
+
+        {/* 버튼 */}
+        <div style={{ display: 'flex', justifyContent: 'center', gap: '10px' }}>
           {step < STEPS.length - 1 ? (
-            <button onClick={() => setStep(s => s + 1)} style={{
-              fontFamily: pixelFont, fontSize: '0.35rem', color: '#FFF',
-              backgroundColor: MC.btnGreen, padding: '6px 20px',
-              border: 'none', cursor: 'pointer',
-            }}>
-              NEXT ({step + 1}/{STEPS.length})
-            </button>
+            <McButton variant="green" onClick={() => setStep(s => s + 1)}>
+              NEXT
+            </McButton>
           ) : (
-            <button onClick={dismiss} style={{
-              fontFamily: pixelFont, fontSize: '0.35rem', color: '#FFF',
-              backgroundColor: MC.btnGreen, padding: '6px 20px',
-              border: 'none', cursor: 'pointer',
-            }}>
-              LET'S GO!
-            </button>
+            <McButton variant="green" onClick={dismiss}>
+              LET&#39;S GO!
+            </McButton>
           )}
           {step < STEPS.length - 1 && (
-            <button onClick={dismiss} style={{
-              fontFamily: pixelFont, fontSize: '0.3rem', color: MC.textGray,
-              backgroundColor: 'transparent', padding: '6px 12px',
-              border: `1px solid ${MC.panelBorderLight}`, cursor: 'pointer',
-            }}>
+            <McButton variant="default" onClick={dismiss}>
               SKIP
-            </button>
+            </McButton>
           )}
         </div>
       </div>
