@@ -37,7 +37,6 @@ import { AuraRings } from '@/components/3d/AuraRings';
 // 기존 HUD 오버레이 (Canvas 밖 HTML)
 import { DeathOverlay } from './DeathOverlay';
 import { RoundTimerHUD } from './RoundTimerHUD';
-import { CountdownOverlay } from './CountdownOverlay';
 import { RoundResultOverlay } from './RoundResultOverlay';
 import { LevelUpOverlay } from './LevelUpOverlay';
 import { BuildHUD } from './BuildHUD';

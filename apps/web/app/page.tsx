@@ -17,12 +17,14 @@ import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { useSocket } from '@/hooks/useSocket';
-import { MC, MCModern, pixelFont } from '@/lib/minecraft-ui';
-import { GameCanvas } from '@/components/game/GameCanvas';
-
-// Three.js SSR 불가 → 동적 임포트
+import { MC, pixelFont } from '@/lib/minecraft-ui';
+// Three.js / R3F SSR 불가 → 동적 임포트
 const LobbyScene3D = dynamic(
   () => import('@/components/3d/LobbyScene3D').then(m => ({ default: m.LobbyScene3D })),
+  { ssr: false },
+);
+const GameCanvas3D = dynamic(
+  () => import('@/components/game/GameCanvas3D').then(m => ({ default: m.GameCanvas3D })),
   { ssr: false },
 );
 
@@ -103,7 +105,7 @@ export default function Home() {
 
   if (mode === 'playing') {
     return (
-      <GameCanvas
+      <GameCanvas3D
         dataRef={dataRef}
         uiState={uiState}
         sendInput={sendInput}
