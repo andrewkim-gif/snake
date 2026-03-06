@@ -21,6 +21,7 @@ import * as THREE from 'three';
 import { textureCacheManager } from '@/lib/3d/cubeling-textures';
 import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
+import type { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { SKIN_TONES, HAIR_COLORS } from '@agent-survivor/shared';
 import type { AgentNetworkData, CubelingAppearance, FaceKey } from '@agent-survivor/shared';
 
@@ -34,7 +35,10 @@ const DISPOSE_TIMEOUT = 30_000;
 
 const _obj = new THREE.Object3D();
 const _pos = new THREE.Vector3();
+const _euler = new THREE.Euler();
 const _qAgent = new THREE.Quaternion();
+const _qPart = new THREE.Quaternion();
+const _qCombined = new THREE.Quaternion();
 const _color = new THREE.Color();
 
 // ─── 얼굴 그룹 데이터 ───
@@ -59,6 +63,10 @@ interface HeadGroupManagerProps {
   elapsedRef: React.MutableRefObject<number>;
   /** appearance 해석 함수 */
   resolveAppearanceFn: (skinId: number) => CubelingAppearance;
+  /** 애니메이션 상태 머신 ref (head 변환 적용) */
+  stateMachineRef: React.MutableRefObject<AnimationStateMachine | null>;
+  /** 에이전트 ID → 상태 머신 인덱스 매핑 */
+  agentIndexMapRef: React.MutableRefObject<Map<string, number>>;
 }
 
 // ─── Component ───
@@ -67,6 +75,8 @@ export function HeadGroupManager({
   agentsRef,
   elapsedRef,
   resolveAppearanceFn,
+  stateMachineRef,
+  agentIndexMapRef,
 }: HeadGroupManagerProps) {
   const groupRef = useRef<THREE.Group>(null!);
 
@@ -162,26 +172,63 @@ export function HeadGroupManager({
 
       // 에이전트 매트릭스 + 색상 설정
       let idx = 0;
+      const sm = stateMachineRef.current;
+      const indexMap = agentIndexMapRef.current;
+
       for (const { agent, appearance } of agentList) {
         if (idx >= MAX_AGENTS) break;
 
-        const { x, y, h, m } = agent;
+        const { x, y, h, m, i: id } = agent;
 
         const [worldX, , worldZ] = toWorld(x, y, 0);
         const rotY = headingToRotY(h);
         const scale = getAgentScale(m);
         const P = CUBELING_PARTS.head;
 
+        // ─── head 애니메이션 변환 조회 ───
+        let headRotX = 0;
+        let headRotY = 0;
+        let headRotZ = 0;
+        let headPosX = 0;
+        let headPosY = 0;
+        let headPosZ = 0;
+        let headScaleX = 1;
+        let headScaleY = 1;
+
+        if (sm && indexMap) {
+          const smIdx = indexMap.get(id);
+          if (smIdx !== undefined && sm.isActive(smIdx)) {
+            const transforms = sm.getTransforms(smIdx, 0, false);
+            headRotX = transforms.head.rotX;
+            headRotY = transforms.head.rotY;
+            headRotZ = transforms.head.rotZ;
+            headPosX = transforms.head.posX;
+            headPosY = transforms.head.posY;
+            headPosZ = transforms.head.posZ;
+            headScaleX = transforms.head.scaleX;
+            headScaleY = transforms.head.scaleY;
+          }
+        }
+
         // heading quaternion
         _qAgent.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, rotY);
 
-        // head 오프셋을 heading으로 회전
-        _pos.set(P.offset[0] * scale, P.offset[1] * scale, P.offset[2] * scale);
+        // head 오프셋 + 애니메이션 위치를 에이전트 로컬 좌표로
+        _pos.set(
+          (P.offset[0] + headPosX) * scale,
+          (P.offset[1] + headPosY) * scale,
+          (P.offset[2] + headPosZ) * scale,
+        );
         _pos.applyQuaternion(_qAgent);
 
         _obj.position.set(worldX + _pos.x, _pos.y, worldZ + _pos.z);
-        _obj.quaternion.copy(_qAgent);
-        _obj.scale.setScalar(scale);
+
+        // head 로컬 회전 (X → Y → Z)
+        _qPart.setFromEuler(_euler.set(headRotX, headRotY, headRotZ));
+        _qCombined.copy(_qAgent).multiply(_qPart);
+        _obj.quaternion.copy(_qCombined);
+
+        _obj.scale.set(scale * headScaleX, scale * headScaleY, scale);
         _obj.updateMatrix();
 
         group.mesh.setMatrixAt(idx, _obj.matrix);
