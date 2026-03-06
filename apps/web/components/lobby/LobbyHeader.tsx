@@ -2,12 +2,14 @@
 
 /**
  * LobbyHeader — 프리미엄 다크 헤더 바
- * 다크 글래스모피즘 + 로고 + 상태 + 뷰 토글
+ * 다크 글래스모피즘 + 로고 + 네비게이션 + 상태 + 뷰 토글
+ * v13: TopNavBar 중앙 삽입 + Wallet 자리 마련
  */
 
 import { useState } from 'react';
 import Image from 'next/image';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
+import { TopNavBar } from '@/components/navigation/TopNavBar';
 
 interface LobbyHeaderProps {
   connected: boolean;
@@ -85,13 +87,21 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
         </span>
       </div>
 
-      {/* 우측: 상태 + 뷰 토글 */}
+      {/* 중앙: TopNavBar (데스크탑만 표시 — 컴포넌트 내부에서 md:flex) */}
+      <div style={{ pointerEvents: 'auto', height: '100%' }}>
+        <TopNavBar />
+      </div>
+
+      {/* 우측: Wallet 자리 + 상태 + 뷰 토글 */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
         gap: '16px',
         pointerEvents: 'auto',
       }}>
+        {/* Wallet Connect 버튼 자리 (Phase 3에서 WalletConnectButton import) */}
+        {/* <WalletConnectButton /> */}
+
         {/* 연결 상태 */}
         <div style={{
           display: 'flex',
