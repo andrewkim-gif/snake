@@ -19,6 +19,7 @@ import type { GameData, UiState } from '@/hooks/useSocket';
 import type { AgentNetworkData, OrbNetworkData } from '@agent-survivor/shared';
 import { ARENA_CONFIG } from '@agent-survivor/shared';
 import { populateAppearanceCache, clearAppearanceCache } from '@/lib/3d/appearance-cache';
+import { getTerrainBonusDescription } from '@/lib/3d/terrain-textures';
 
 // 3D 컴포넌트
 import { Scene } from '@/components/3d/Scene';
@@ -87,6 +88,20 @@ export function GameCanvas3D({
   const stateMachineRef = useRef<AnimationStateMachine | null>(null);
   const agentIndexMapRef = useRef<Map<string, number>>(new Map());
   const [menuOpen, setMenuOpen] = useState(false);
+  const [terrainToast, setTerrainToast] = useState<string | null>(null);
+
+  // ─── 테마 결정 (uiState.terrainTheme → 폴백 "forest") ───
+  const terrainTheme = uiState.terrainTheme || 'forest';
+
+  // ─── 전투 보너스 토스트 (입장 시 3초 표시) ───
+  useEffect(() => {
+    const desc = getTerrainBonusDescription(terrainTheme);
+    if (desc) {
+      setTerrainToast(desc);
+      const timer = setTimeout(() => setTerrainToast(null), 4000);
+      return () => clearTimeout(timer);
+    }
+  }, [terrainTheme]);
 
   // 경과 시간 업데이트 + 오브 데이터 동기화 + appearance 캐시 (rAF 기반)
   useEffect(() => {
@@ -337,8 +352,8 @@ export function GameCanvas3D({
           dataRef={dataRef}
         />
 
-        {/* 3. Scene — 라이팅 + Fog + 분위기 변화 */}
-        <Scene timeRemaining={uiState.timeRemaining} />
+        {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별) */}
+        <Scene timeRemaining={uiState.timeRemaining} theme={terrainTheme} />
 
         {/* 4. SkyBox — 하늘 돔 + 구름 */}
         <SkyBox />
@@ -359,11 +374,11 @@ export function GameCanvas3D({
           agentIndexMapRef={agentIndexMapRef}
         />
 
-        {/* 6. ZoneTerrain — 3개 동심원 존 바닥 (Edge/Mid/Core) */}
-        <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} />
+        {/* 6. ZoneTerrain — 3개 동심원 존 바닥 (테마별) */}
+        <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
 
-        {/* 7. TerrainDeco — 환경 데코레이션 (나무/횃불/용암 등) */}
-        <TerrainDeco arenaRadius={ARENA_CONFIG.radius} />
+        {/* 7. TerrainDeco — 환경 데코레이션 (테마별) */}
+        <TerrainDeco arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
 
         {/* 8. ArenaBoundary — 수축 경계벽 */}
         <ArenaBoundary currentRadius={currentRadius} targetRadius={targetRadius} />
@@ -385,6 +400,9 @@ export function GameCanvas3D({
       </Canvas>
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
+
+      {/* 전투 보너스 토스트 (입장 시 4초) */}
+      {terrainToast && <TerrainBonusToast text={terrainToast} />}
 
       <ShrinkWarning
         shrinkData={uiState.arenaShrink}
@@ -489,6 +507,41 @@ function BuildTypeIndicator({ buildType }: { buildType: string }) {
       letterSpacing: '0.06em',
     }}>
       {info.label}
+    </div>
+  );
+}
+
+function TerrainBonusToast({ text }: { text: string }) {
+  return (
+    <div style={{
+      position: 'absolute',
+      top: '60px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 25,
+      fontFamily: '"Black Ops One", "Patrick Hand", "Inter", sans-serif',
+      fontSize: '0.85rem',
+      fontWeight: 700,
+      color: '#E8E0D4',
+      backgroundColor: 'rgba(17, 17, 17, 0.85)',
+      padding: '8px 20px',
+      borderRadius: '4px',
+      border: '1.5px solid #CC9933',
+      letterSpacing: '0.04em',
+      textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+      animation: 'terrainToastFade 4s ease-out forwards',
+      pointerEvents: 'none',
+    }}>
+      <span style={{ color: '#CC9933', marginRight: 8 }}>TERRAIN</span>
+      {text}
+      <style>{`
+        @keyframes terrainToastFade {
+          0% { opacity: 0; transform: translateX(-50%) translateY(-8px); }
+          10% { opacity: 1; transform: translateX(-50%) translateY(0); }
+          75% { opacity: 1; }
+          100% { opacity: 0; }
+        }
+      `}</style>
     </div>
   );
 }

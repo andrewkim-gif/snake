@@ -52,7 +52,8 @@ func ApplyInput(a *domain.Agent, angle float64, boost bool) {
 }
 
 // UpdateAgent advances the agent state by one tick.
-func UpdateAgent(a *domain.Agent, currentTick uint64) {
+// terrainMods applies terrain-specific multipliers (pass DefaultTerrainModifiers() for no effect).
+func UpdateAgent(a *domain.Agent, currentTick uint64, terrainMods ...TerrainModifiers) {
 	if !a.Alive {
 		return
 	}
@@ -72,16 +73,21 @@ func UpdateAgent(a *domain.Agent, currentTick uint64) {
 		}
 	}
 
-	// 3. Calculate effective speed (base + Speed Tome bonus)
+	// 3. Calculate effective speed (base + Speed Tome bonus + terrain modifier)
 	speedMult := 1.0 + float64(a.Build.Tomes[domain.TomeSpeed])*getTomeEffect(domain.TomeSpeed)
+	// Apply terrain speed modifier
+	terrainSpeedMult := 1.0
+	if len(terrainMods) > 0 {
+		terrainSpeedMult = terrainMods[0].SpeedMult
+	}
 	var movePerTick float64
 	if a.Boosting {
-		movePerTick = BoostSpeedPerTick
+		movePerTick = BoostSpeedPerTick * terrainSpeedMult
 	} else {
-		movePerTick = BaseSpeedPerTick * speedMult
-		// Cap at max speed
-		if movePerTick > MaxSpeedPerTick {
-			movePerTick = MaxSpeedPerTick
+		movePerTick = BaseSpeedPerTick * speedMult * terrainSpeedMult
+		// Cap at max speed (pre-terrain)
+		if movePerTick > MaxSpeedPerTick*terrainSpeedMult {
+			movePerTick = MaxSpeedPerTick * terrainSpeedMult
 		}
 	}
 

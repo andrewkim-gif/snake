@@ -6,7 +6,9 @@ type ArenaShrink struct {
 	currentRadius float64
 	minRadius     float64
 	startDelayTicks uint64 // ticks before shrink begins
-	shrinkRate    float64  // px per tick
+	shrinkRate    float64  // px per tick (effective = base * shrinkRateMult)
+	baseShrinkRate float64 // base px per tick before terrain modifier
+	shrinkRateMult float64 // terrain modifier (default 1.0)
 	elapsedTicks  uint64
 	shrinking     bool
 
@@ -24,12 +26,21 @@ func NewArenaShrink() *ArenaShrink {
 		minRadius:          ArenaMinRadius,
 		startDelayTicks:    uint64(ShrinkStartDelaySec * TickRate),
 		shrinkRate:         ShrinkRatePerTick,
+		baseShrinkRate:     ShrinkRatePerTick,
+		shrinkRateMult:     1.0,
 		elapsedTicks:       0,
 		shrinking:          false,
 		warningTicksBefore: uint64(ShrinkWarningSecondsBefore * TickRate),
 		lastWarningTick:    0,
 		warningSent:        false,
 	}
+}
+
+// SetShrinkRateMult applies a terrain modifier to the shrink rate.
+// mult > 1.0 = faster shrink (e.g. island: 1.5), mult < 1.0 = slower.
+func (as *ArenaShrink) SetShrinkRateMult(mult float64) {
+	as.shrinkRateMult = mult
+	as.shrinkRate = as.baseShrinkRate * mult
 }
 
 // Update advances the shrink timer by one tick and returns the current radius.
@@ -95,12 +106,14 @@ func (as *ArenaShrink) GetShrinkRate() float64 {
 }
 
 // Reset resets the shrink system to initial state.
+// Terrain modifier (shrinkRateMult) is preserved across resets.
 func (as *ArenaShrink) Reset() {
 	as.currentRadius = as.initialRadius
 	as.elapsedTicks = 0
 	as.shrinking = false
 	as.warningSent = false
 	as.lastWarningTick = 0
+	as.shrinkRate = as.baseShrinkRate * as.shrinkRateMult
 }
 
 // GetRadiusAtTick calculates what the arena radius would be at a given tick.

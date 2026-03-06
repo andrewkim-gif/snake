@@ -48,6 +48,9 @@ type Arena struct {
 	running      bool
 	eventBuffer  []ArenaEvent
 	EventHandler func(events []ArenaEvent) // called at end of each tick with buffered events
+
+	// Terrain modifiers (Phase 2: terrain bonus engine)
+	terrainMods TerrainModifiers
 }
 
 // NewArena creates a new Arena with all subsystems initialized.
@@ -65,6 +68,7 @@ func NewArena() *Arena {
 		tick:            0,
 		running:         false,
 		eventBuffer:     make([]ArenaEvent, 0, 64),
+		terrainMods:     DefaultTerrainModifiers(),
 	}
 }
 
@@ -112,12 +116,12 @@ func (a *Arena) processTick() {
 
 	// 1. Apply inputs (already applied via HandleInput)
 
-	// 2. Move agents
+	// 2. Move agents (with terrain speed modifier)
 	for _, agent := range a.agents {
 		if !agent.Alive {
 			continue
 		}
-		UpdateAgent(agent, a.tick)
+		UpdateAgent(agent, a.tick, a.terrainMods)
 		// Update spatial hash with new position
 		a.spatialHash.Update(agent.ID, agent.Position.X, agent.Position.Y)
 	}
@@ -642,6 +646,28 @@ func (a *Arena) Reset() {
 
 	// Spawn initial orbs
 	a.orbManager.SpawnNaturalOrbs(a.tick)
+}
+
+// SetTerrainModifiers sets the terrain modifiers for this arena and propagates
+// to all subsystems (collision, shrink, orbs).
+func (a *Arena) SetTerrainModifiers(mods TerrainModifiers) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.terrainMods = mods
+
+	// Propagate to collision system (DPS, damage receive, ranged damage multipliers)
+	a.collisionSystem.SetTerrainModifiers(mods)
+
+	// Apply shrink rate modifier
+	a.arenaShrink.SetShrinkRateMult(mods.ShrinkMult)
+
+	// Apply orb density modifier
+	a.orbManager.SetOrbTargetMult(mods.OrbMult)
+}
+
+// GetTerrainMods returns the current terrain modifiers (for use in agent/collision helpers).
+func (a *Arena) GetTerrainMods() TerrainModifiers {
+	return a.terrainMods
 }
 
 // IsRunning returns whether the game loop is active.

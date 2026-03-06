@@ -10,18 +10,26 @@ import (
 
 // OrbManager handles orb spawning, collection, and lifecycle.
 type OrbManager struct {
-	orbs        map[string]*domain.Orb
-	nextOrbID   int
-	arenaRadius float64 // current arena radius for spawning
+	orbs           map[string]*domain.Orb
+	nextOrbID      int
+	arenaRadius    float64 // current arena radius for spawning
+	orbTargetMult  float64 // terrain modifier for orb density (default 1.0)
 }
 
 // NewOrbManager creates a new OrbManager.
 func NewOrbManager(arenaRadius float64) *OrbManager {
 	return &OrbManager{
-		orbs:        make(map[string]*domain.Orb),
-		nextOrbID:   1,
-		arenaRadius: arenaRadius,
+		orbs:          make(map[string]*domain.Orb),
+		nextOrbID:     1,
+		arenaRadius:   arenaRadius,
+		orbTargetMult: 1.0,
 	}
+}
+
+// SetOrbTargetMult applies a terrain modifier to the orb spawn target count.
+// mult < 1.0 = fewer orbs (e.g. arctic: 0.7), mult > 1.0 = more orbs.
+func (om *OrbManager) SetOrbTargetMult(mult float64) {
+	om.orbTargetMult = mult
 }
 
 // SetArenaRadius updates the radius used for spawning.
@@ -36,9 +44,10 @@ func (om *OrbManager) generateID() string {
 	return id
 }
 
-// SpawnNaturalOrbs adds natural orbs to maintain the target count.
+// SpawnNaturalOrbs adds natural orbs to maintain the target count (adjusted by terrain modifier).
 func (om *OrbManager) SpawnNaturalOrbs(currentTick uint64) {
-	deficit := NaturalOrbTargetCount - om.CountNatural()
+	target := int(float64(NaturalOrbTargetCount) * om.orbTargetMult)
+	deficit := target - om.CountNatural()
 	if deficit <= 0 {
 		return
 	}

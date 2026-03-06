@@ -16,14 +16,21 @@ type CollisionEvent struct {
 
 // CollisionSystem detects and resolves agent-agent and agent-boundary collisions.
 type CollisionSystem struct {
-	spatialHash *SpatialHash
+	spatialHash  *SpatialHash
+	terrainMods  TerrainModifiers
 }
 
 // NewCollisionSystem creates a new collision system.
 func NewCollisionSystem(sh *SpatialHash) *CollisionSystem {
 	return &CollisionSystem{
 		spatialHash: sh,
+		terrainMods: DefaultTerrainModifiers(),
 	}
+}
+
+// SetTerrainModifiers updates the terrain modifiers for this collision system.
+func (cs *CollisionSystem) SetTerrainModifiers(mods TerrainModifiers) {
+	cs.terrainMods = mods
 }
 
 // ProcessBoundaryCollisions checks all agents against the arena boundary
@@ -118,11 +125,11 @@ func (cs *CollisionSystem) ProcessAuraCombat(
 				continue
 			}
 
-			// Mutual DPS exchange
+			// Mutual DPS exchange (terrain modifiers: DPSMult on offense, DamageReceiveMult on defense)
 			// Agent damages other
 			if !IsInGracePeriod(other, currentTick) {
-				agentDPS := GetEffectiveAuraDPS(agent)
-				TakeDamage(other, agentDPS, agent.ID, currentTick)
+				agentDPS := GetEffectiveAuraDPS(agent) * cs.terrainMods.DPSMult
+				TakeDamage(other, agentDPS*cs.terrainMods.DamageReceiveMult, agent.ID, currentTick)
 
 				if !other.Alive || other.Mass <= 0 {
 					if other.Mass <= 0 && other.Alive {
@@ -142,8 +149,8 @@ func (cs *CollisionSystem) ProcessAuraCombat(
 
 			// Other damages agent
 			if !IsInGracePeriod(agent, currentTick) {
-				otherDPS := GetEffectiveAuraDPS(other)
-				TakeDamage(agent, otherDPS, other.ID, currentTick)
+				otherDPS := GetEffectiveAuraDPS(other) * cs.terrainMods.DPSMult
+				TakeDamage(agent, otherDPS*cs.terrainMods.DamageReceiveMult, other.ID, currentTick)
 
 				if !agent.Alive || agent.Mass <= 0 {
 					if agent.Mass <= 0 && agent.Alive {
@@ -205,8 +212,8 @@ func (cs *CollisionSystem) ProcessDashCollisions(
 				continue
 			}
 
-			// Apply burst damage: DashDamageRatio of target's mass
-			burstDmg := GetEffectiveDashDamage(attacker, target.Mass)
+			// Apply burst damage: DashDamageRatio of target's mass (terrain: RangedDamageMult)
+			burstDmg := GetEffectiveDashDamage(attacker, target.Mass) * cs.terrainMods.RangedDamageMult
 			TakeDamage(target, burstDmg, attacker.ID, currentTick)
 
 			if !target.Alive || target.Mass <= 0 {

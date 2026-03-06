@@ -81,6 +81,9 @@ type Room struct {
 	// Analyst Agent (S58) - generates post-round analysis
 	analystAgent *AnalystAgent
 
+	// Terrain modifiers (Phase 2: terrain bonus engine)
+	terrainMods TerrainModifiers
+
 	// Event callback (set by main.go)
 	OnEvents RoomEventCallback
 
@@ -104,6 +107,7 @@ func NewRoom(id, name string, cfg RoomConfig) *Room {
 		recentWinners: make([]domain.WinnerInfo, 0, 5),
 		coachAgent:    NewCoachAgent(),
 		analystAgent:  NewAnalystAgent(),
+		terrainMods:   GetTerrainModifiers(cfg.TerrainTheme),
 	}
 }
 
@@ -298,6 +302,9 @@ func (r *Room) transitionTo(newState domain.RoomState) {
 func (r *Room) startRound() {
 	r.round++
 	r.arena.Reset()
+
+	// Apply terrain modifiers to arena
+	r.arena.SetTerrainModifiers(r.terrainMods)
 
 	// Setup arena event handler to forward events
 	r.arena.EventHandler = r.handleArenaEvents
@@ -738,6 +745,11 @@ func (r *Room) GetInfo() domain.RoomInfo {
 		TimeRemaining: timeRemaining,
 		Round:         r.round,
 	}
+}
+
+// GetTerrainMods returns the room's terrain modifiers.
+func (r *Room) GetTerrainMods() TerrainModifiers {
+	return r.terrainMods
 }
 
 // GetArena returns the room's arena instance (for agent API access).
