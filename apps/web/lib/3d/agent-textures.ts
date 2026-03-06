@@ -102,28 +102,23 @@ function getSkinData(skinId: number) {
   };
 }
 
-// ─── Head 텍스처 생성 (16x16) ───
+// ─── Head 텍스처 생성 (면별 6개) ───
 
-export function generateHeadTexture(skinId: number): THREE.CanvasTexture {
+/** FRONT (+X face): 얼굴 (눈/코/입) */
+export function generateHeadFrontTexture(skinId: number): THREE.CanvasTexture {
   const [canvas, ctx] = createCanvas();
   const s = getSkinData(skinId);
 
-  // 머리 전체 피부톤 베이스
   fillRect(ctx, 0, 0, 16, 16, SKIN_TONE);
-
-  // 머리카락 (상단 4행) — primary 색상
+  // 머리카락 (상단 4행)
   fillRect(ctx, 0, 0, 16, 4, s.primary);
-  // 양옆 머리카락
   fillRect(ctx, 0, 4, 2, 4, s.darkPrimary);
   fillRect(ctx, 14, 4, 2, 4, s.darkPrimary);
 
-  // 눈 (row 5-7)
   drawEyes(ctx, s.eyeStyle);
-
   // 코
   px(ctx, 7, 9, darkenHex(SKIN_TONE, 0.1));
   px(ctx, 8, 9, darkenHex(SKIN_TONE, 0.1));
-
   // 입
   px(ctx, 6, 11, s.darkPrimary);
   px(ctx, 7, 11, s.darkPrimary);
@@ -131,6 +126,71 @@ export function generateHeadTexture(skinId: number): THREE.CanvasTexture {
   px(ctx, 9, 11, s.darkPrimary);
 
   return toCanvasTexture(canvas);
+}
+
+/** BACK (-X face): 뒷머리 (머리카락만) */
+export function generateHeadBackTexture(skinId: number): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  const s = getSkinData(skinId);
+
+  fillRect(ctx, 0, 0, 16, 16, s.primary);
+  // 아래쪽에 목/피부톤
+  fillRect(ctx, 2, 12, 12, 4, SKIN_TONE);
+  // 외곽 어두운 톤
+  for (let y = 0; y < 16; y++) {
+    px(ctx, 0, y, s.darkPrimary);
+    px(ctx, 15, y, s.darkPrimary);
+  }
+
+  return toCanvasTexture(canvas);
+}
+
+/** SIDE (±Z faces): 옆머리 (귀 주변) */
+export function generateHeadSideTexture(skinId: number): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  const s = getSkinData(skinId);
+
+  fillRect(ctx, 0, 0, 16, 16, SKIN_TONE);
+  // 머리카락 상단 + 옆면
+  fillRect(ctx, 0, 0, 16, 5, s.primary);
+  fillRect(ctx, 0, 5, 3, 3, s.darkPrimary);
+  fillRect(ctx, 13, 5, 3, 3, s.darkPrimary);
+  // 귀
+  px(ctx, 7, 7, darkenHex(SKIN_TONE, 0.08));
+  px(ctx, 8, 7, darkenHex(SKIN_TONE, 0.08));
+  px(ctx, 7, 8, darkenHex(SKIN_TONE, 0.12));
+  px(ctx, 8, 8, darkenHex(SKIN_TONE, 0.12));
+
+  return toCanvasTexture(canvas);
+}
+
+/** TOP (+Y face): 정수리 (머리카락) */
+export function generateHeadTopTexture(skinId: number): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  const s = getSkinData(skinId);
+
+  fillRect(ctx, 0, 0, 16, 16, s.primary);
+  // 가르마 라인
+  fillRect(ctx, 7, 0, 2, 16, s.darkPrimary);
+  // 외곽 살짝 밝게
+  for (let x = 1; x < 15; x++) {
+    px(ctx, x, 1, s.lightPrimary);
+    px(ctx, x, 14, s.lightPrimary);
+  }
+
+  return toCanvasTexture(canvas);
+}
+
+/** BOTTOM (-Y face): 턱/목 */
+function generateHeadBottomTexture(skinId: number): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  fillRect(ctx, 0, 0, 16, 16, darkenHex(SKIN_TONE, 0.1));
+  return toCanvasTexture(canvas);
+}
+
+/** 후방 호환: 기존 코드가 사용하던 head 텍스처 (front face 사용) */
+export function generateHeadTexture(skinId: number): THREE.CanvasTexture {
+  return generateHeadFrontTexture(skinId);
 }
 
 function drawEyes(ctx: CanvasRenderingContext2D, eyeStyle: string): void {
@@ -321,7 +381,7 @@ export function getAgentTextures(skinId: number): AgentTextures {
   if (cached) return cached;
 
   const textures: AgentTextures = {
-    head: generateHeadTexture(skinId),
+    head: generateHeadFrontTexture(skinId),
     body: generateBodyTexture(skinId),
     arm: generateArmTexture(skinId),
     leg: generateLegTexture(skinId),
@@ -329,6 +389,51 @@ export function getAgentTextures(skinId: number): AgentTextures {
 
   textureCache.set(key, textures);
   return textures;
+}
+
+// ─── Head 면별 Material 캐시 ───
+
+const headMaterialCache = new Map<number, THREE.MeshLambertMaterial[]>();
+
+/**
+ * Head용 6-material 배열 생성 (BoxGeometry face order)
+ * [0]+X=front(얼굴), [1]-X=back, [2]+Y=top, [3]-Y=bottom, [4]+Z=left, [5]-Z=right
+ * → 캐릭터 forward = +X (headingToRotY convention)
+ */
+export function getHeadMaterials(skinId: number): THREE.MeshLambertMaterial[] {
+  const cached = headMaterialCache.get(skinId);
+  if (cached) return cached;
+
+  const frontTex = generateHeadFrontTexture(skinId);
+  const backTex = generateHeadBackTexture(skinId);
+  const topTex = generateHeadTopTexture(skinId);
+  const bottomTex = generateHeadBottomTexture(skinId);
+  const sideTex = generateHeadSideTexture(skinId);
+
+  const mats = [
+    new THREE.MeshLambertMaterial({ map: frontTex }),   // +X front (face)
+    new THREE.MeshLambertMaterial({ map: backTex }),    // -X back
+    new THREE.MeshLambertMaterial({ map: topTex }),     // +Y top
+    new THREE.MeshLambertMaterial({ map: bottomTex }),  // -Y bottom
+    new THREE.MeshLambertMaterial({ map: sideTex }),    // +Z left side
+    new THREE.MeshLambertMaterial({ map: sideTex }),    // -Z right side
+  ];
+
+  headMaterialCache.set(skinId, mats);
+  return mats;
+}
+
+/**
+ * Head material 캐시 해제
+ */
+export function disposeMaterialCache(): void {
+  headMaterialCache.forEach((mats) => {
+    mats.forEach(m => {
+      if (m.map) m.map.dispose();
+      m.dispose();
+    });
+  });
+  headMaterialCache.clear();
 }
 
 /**

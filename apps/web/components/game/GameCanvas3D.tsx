@@ -46,6 +46,7 @@ import { ShrinkWarning } from './ShrinkWarning';
 import { SynergyPopup } from './SynergyPopup';
 import { CoachBubble } from './CoachBubble';
 import { AnalystPanel } from './AnalystPanel';
+import { GameMinimap } from './GameMinimap';
 
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
@@ -371,6 +372,11 @@ export function GameCanvas3D({
 
       <BuildHUD build={null} />
 
+      {/* 빌드 타입 인디케이터 */}
+      {myAgent?.bt && myAgent.bt !== 'balanced' && (
+        <BuildTypeIndicator buildType={myAgent.bt} />
+      )}
+
       {myAgent && (
         <XPBar
           level={myAgent.lv ?? 1}
@@ -404,6 +410,13 @@ export function GameCanvas3D({
         />
       )}
 
+      {/* ─── 미니맵 (우하단) ─── */}
+      <GameMinimap
+        dataRef={dataRef}
+        arenaRadius={ARENA_CONFIG.radius}
+        shrinkData={uiState.arenaShrink}
+      />
+
       {menuOpen && (
         <PauseMenu onResume={() => setMenuOpen(false)} onExit={handleExitToLobby} />
       )}
@@ -424,6 +437,29 @@ function WaitingBanner({ text }: { text: string }) {
       border: '1.5px solid #A89888', letterSpacing: '0.03em',
     }}>
       {text}
+    </div>
+  );
+}
+
+const BUILD_TYPE_COLORS: Record<string, { bg: string; text: string; label: string }> = {
+  berserker: { bg: 'rgba(255,60,60,0.2)', text: '#FF5555', label: 'BERSERKER' },
+  tank:      { bg: 'rgba(80,80,255,0.2)', text: '#5588FF', label: 'TANK' },
+  speedster: { bg: 'rgba(80,255,255,0.2)', text: '#55FFFF', label: 'SPEEDSTER' },
+  farmer:    { bg: 'rgba(80,255,80,0.2)', text: '#55FF55', label: 'FARMER' },
+};
+
+function BuildTypeIndicator({ buildType }: { buildType: string }) {
+  const info = BUILD_TYPE_COLORS[buildType];
+  if (!info) return null;
+  return (
+    <div style={{
+      position: 'absolute', bottom: '40px', left: '12px', zIndex: 15, pointerEvents: 'none',
+      fontFamily: '"Press Start 2P", monospace', fontSize: '0.3rem',
+      color: info.text, backgroundColor: info.bg,
+      border: `1px solid ${info.text}40`, padding: '3px 8px',
+      letterSpacing: '0.06em',
+    }}>
+      {info.label}
     </div>
   );
 }

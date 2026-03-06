@@ -14,7 +14,7 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { getAgentTextures, disposeTextureCache } from '@/lib/3d/agent-textures';
+import { getAgentTextures, getHeadMaterials, disposeTextureCache, disposeMaterialCache } from '@/lib/3d/agent-textures';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
 import type { AgentNetworkData } from '@agent-survivor/shared';
 
@@ -23,14 +23,18 @@ import type { AgentNetworkData } from '@agent-survivor/shared';
 const MAX_AGENTS = 60;
 const PI2 = Math.PI * 2;
 
-/** MC 캐릭터 파트 정의 (6파트) */
+/**
+ * MC 캐릭터 파트 정의 (6파트)
+ * 전체 높이 32 units: Legs(0~12) + Body(12~24) + Head(24~32)
+ * Arms/Legs는 geometry.translate()로 피벗을 상단에 배치 (어깨/엉덩이 회전)
+ */
 const PARTS = {
-  head: { size: [8, 8, 8] as const, offset: [0, 24, 0] as const },
-  body: { size: [8, 12, 4] as const, offset: [0, 14, 0] as const },
-  armL: { size: [4, 12, 4] as const, offset: [-6, 14, 0] as const },
-  armR: { size: [4, 12, 4] as const, offset: [6, 14, 0] as const },
-  legL: { size: [4, 12, 4] as const, offset: [-2, 2, 0] as const },
-  legR: { size: [4, 12, 4] as const, offset: [2, 2, 0] as const },
+  head: { size: [8, 8, 8] as const, offset: [0, 28, 0] as const },
+  body: { size: [8, 12, 4] as const, offset: [0, 18, 0] as const },
+  armL: { size: [4, 12, 4] as const, offset: [-6, 24, 0] as const },  // shoulder pivot
+  armR: { size: [4, 12, 4] as const, offset: [6, 24, 0] as const },   // shoulder pivot
+  legL: { size: [4, 12, 4] as const, offset: [-2, 12, 0] as const },  // hip pivot
+  legR: { size: [4, 12, 4] as const, offset: [2, 12, 0] as const },   // hip pivot
 } as const;
 
 // ─── 재사용 임시 객체 (GC 방지) ───
@@ -158,7 +162,8 @@ function setPartMatrix(
 
 /** skinId → 파트별 MeshLambertMaterial 캐시 */
 interface PartMaterials {
-  head: THREE.MeshLambertMaterial;
+  /** 6-material array for head faces: [+X front, -X back, +Y top, -Y bottom, +Z left, -Z right] */
+  headMats: THREE.MeshLambertMaterial[];
   body: THREE.MeshLambertMaterial;
   arm: THREE.MeshLambertMaterial;
   leg: THREE.MeshLambertMaterial;
@@ -172,7 +177,7 @@ function getPartMaterials(skinId: number): PartMaterials {
 
   const textures = getAgentTextures(skinId);
   const mats: PartMaterials = {
-    head: new THREE.MeshLambertMaterial({ map: textures.head }),
+    headMats: getHeadMaterials(skinId),
     body: new THREE.MeshLambertMaterial({ map: textures.body }),
     arm: new THREE.MeshLambertMaterial({ map: textures.arm }),
     leg: new THREE.MeshLambertMaterial({ map: textures.leg }),
@@ -194,36 +199,45 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
   const legRRef = useRef<THREE.InstancedMesh>(null!);
 
   // ─── 파트별 Geometry (useMemo — 한 번만 생성) ───
-  const geometries = useMemo(() => ({
-    head: new THREE.BoxGeometry(...PARTS.head.size),
-    body: new THREE.BoxGeometry(...PARTS.body.size),
-    armL: new THREE.BoxGeometry(...PARTS.armL.size),
-    armR: new THREE.BoxGeometry(...PARTS.armR.size),
-    legL: new THREE.BoxGeometry(...PARTS.legL.size),
-    legR: new THREE.BoxGeometry(...PARTS.legR.size),
-  }), []);
+  // Arms/Legs: geometry.translate()로 피벗을 상단(어깨/엉덩이)에 배치
+  // → rotation 적용 시 어깨/엉덩이에서 자연스럽게 스윙
+  const geometries = useMemo(() => {
+    const armLGeo = new THREE.BoxGeometry(...PARTS.armL.size);
+    armLGeo.translate(0, -PARTS.armL.size[1] / 2, 0); // 피벗 → 어깨
+    const armRGeo = new THREE.BoxGeometry(...PARTS.armR.size);
+    armRGeo.translate(0, -PARTS.armR.size[1] / 2, 0);
+    const legLGeo = new THREE.BoxGeometry(...PARTS.legL.size);
+    legLGeo.translate(0, -PARTS.legL.size[1] / 2, 0); // 피벗 → 엉덩이
+    const legRGeo = new THREE.BoxGeometry(...PARTS.legR.size);
+    legRGeo.translate(0, -PARTS.legR.size[1] / 2, 0);
 
-  // ─── 기본 material (첫 렌더링용, 실제 텍스처는 skinId별로 변경) ───
-  // InstancedMesh는 단일 material만 지원하므로 기본 스킨(skinId=0)으로 초기화
-  // 스킨별 차이는 텍스처 교체로 처리 (다수의 스킨은 가장 많은 스킨의 material 사용)
-  const defaultMaterials = useMemo(() => {
-    const mats = getPartMaterials(0);
-    return mats;
+    return {
+      head: new THREE.BoxGeometry(...PARTS.head.size),
+      body: new THREE.BoxGeometry(...PARTS.body.size),
+      armL: armLGeo,
+      armR: armRGeo,
+      legL: legLGeo,
+      legR: legRGeo,
+    };
   }, []);
+
+  // ─── 기본 material (첫 렌더링용) ───
+  // Head: 6-material array (face on +X front only)
+  // Body/Arm/Leg: single material (dominant skin 교체)
+  const defaultMaterials = useMemo(() => getPartMaterials(0), []);
 
   // ─── 클린업 ───
   useEffect(() => {
     return () => {
-      // Geometry dispose
       Object.values(geometries).forEach(g => g.dispose());
-      // Material dispose
       materialCache.forEach(mats => {
-        mats.head.dispose();
+        mats.headMats.forEach(m => m.dispose());
         mats.body.dispose();
         mats.arm.dispose();
         mats.leg.dispose();
       });
       materialCache.clear();
+      disposeMaterialCache();
       disposeTextureCache();
       motionCache.clear();
     };
@@ -263,7 +277,7 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       });
 
       const mats = getPartMaterials(dominantSkin);
-      headMesh.material = mats.head;
+      headMesh.material = mats.headMats; // 6-material array (face on front only)
       bodyMesh.material = mats.body;
       armLMesh.material = mats.arm;
       armRMesh.material = mats.arm; // 양팔 동일
@@ -352,9 +366,10 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
   return (
     <group>
       {/* 파트별 InstancedMesh — 6 draw calls */}
+      {/* Head: 6-material array → face only on front (+X) */}
       <instancedMesh
         ref={headRef}
-        args={[geometries.head, defaultMaterials.head, MAX_AGENTS]}
+        args={[geometries.head, defaultMaterials.headMats, MAX_AGENTS]}
         frustumCulled={false}
       />
       <instancedMesh
