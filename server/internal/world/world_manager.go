@@ -880,14 +880,15 @@ func (wm *WorldManager) redisSyncLoop(ctx context.Context) {
 	}
 }
 
-// syncAllToRedis saves all country states to Redis.
+// syncAllToRedis saves all country states to Redis using pipelined writes.
+// S39 Optimization: replaces 195 individual SET commands with a single pipeline (~1 RTT).
 func (wm *WorldManager) syncAllToRedis() {
 	if wm.redis == nil {
 		return
 	}
 
 	wm.mu.RLock()
-	states := make(map[string]*CountryState, len(wm.countries))
+	states := make(map[string]interface{}, len(wm.countries))
 	for k, v := range wm.countries {
 		states[k] = v
 	}
@@ -896,11 +897,10 @@ func (wm *WorldManager) syncAllToRedis() {
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
 	defer cancel()
 
-	for iso, state := range states {
-		key := cache.CountryStateKey(iso)
-		if err := wm.redis.Set(ctx, key, state, 30*time.Second); err != nil {
-			slog.Warn("redis sync failed", "country", iso, "error", err)
-		}
+	// S39: Use pipeline for batch writes (195 SETs in 1 RTT instead of 195 RTTs)
+	pipeline := cache.NewPipelineWriter(wm.redis)
+	if err := pipeline.BatchSetCountryStates(ctx, states, 30*time.Second); err != nil {
+		slog.Warn("redis pipeline sync failed", "error", err)
 	}
 
 	// Also store a world summary
@@ -914,6 +914,7 @@ func (wm *WorldManager) syncAllToRedis() {
 }
 
 // restoreFromRedis restores country state from Redis on startup.
+// S39 Optimization: uses pipeline BatchGet for 195 keys in 1 RTT.
 func (wm *WorldManager) restoreFromRedis(ctx context.Context) {
 	if wm.redis == nil || !wm.config.RedisSyncEnabled {
 		return
@@ -925,12 +926,29 @@ func (wm *WorldManager) restoreFromRedis(ctx context.Context) {
 	restoreCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
+	// S39: Batch-read all country keys in a single pipeline
+	keys := make([]string, 0, len(wm.countries))
+	for iso := range wm.countries {
+		keys = append(keys, cache.CountryStateKey(iso))
+	}
+
+	pipeline := cache.NewPipelineWriter(wm.redis)
+	results, err := pipeline.BatchGet(restoreCtx, keys)
+	if err != nil {
+		slog.Warn("redis pipeline restore failed", "error", err)
+		return
+	}
+
 	restored := 0
 	for iso := range wm.countries {
 		key := cache.CountryStateKey(iso)
+		data, ok := results[key]
+		if !ok {
+			continue
+		}
 		var cached CountryState
-		if err := wm.redis.Get(restoreCtx, key, &cached); err != nil {
-			continue // Not cached or expired
+		if err := json.Unmarshal(data, &cached); err != nil {
+			continue
 		}
 		// Only restore persistent fields (sovereignty, GDP)
 		state := wm.countries[iso]

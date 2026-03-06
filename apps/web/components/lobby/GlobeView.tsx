@@ -2,7 +2,7 @@
 
 /**
  * GlobeView — three-globe 3D 지구본
- * 프리미엄 다크: 딥 네이비 바다 + 인디고 대기 글로우 + 자동 회전 없음
+ * 실사 렌더링: NASA Blue Marble 바다 텍스처 + 얇은 대기 림 + 자동 회전 없음
  */
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
@@ -65,7 +65,7 @@ function GlobeObject({
       if (cancelled) return;
 
       const globe = new ThreeGlobeClass!()
-        .globeImageUrl('')
+        .globeImageUrl('//unpkg.com/three-globe/example/img/earth-blue-marble.jpg')
         .showGlobe(true)
         .showAtmosphere(false)
         .polygonsData(geoData.features.filter((f) => f.geometry.type !== 'Point'))
@@ -85,12 +85,13 @@ function GlobeObject({
           return 0.006;
         });
 
-      // Globe material: 딥 네이비 바다
+      // Globe material: 실사 바다 — 텍스처 색감 보존 + 수면 반사
       const globeMat = globe.globeMaterial() as THREE.MeshPhongMaterial;
-      globeMat.color = new THREE.Color('#0A1628');
-      globeMat.emissive = new THREE.Color('#0F1D35');
-      globeMat.emissiveIntensity = 0.3;
-      globeMat.shininess = 60;
+      globeMat.color = new THREE.Color('#bbccdd');
+      globeMat.emissive = new THREE.Color('#0a1520');
+      globeMat.emissiveIntensity = 0.12;
+      globeMat.shininess = 90;
+      globeMat.specular = new THREE.Color('#446688');
 
       if (groupRef.current) {
         if (globeRef.current) {
@@ -183,9 +184,9 @@ function GlobeObject({
   );
 }
 
-// 대기 글로우 이펙트 (프리미엄 다크 — 인디고 글로우)
+// 대기 글로우 이펙트 (실사 — 얇은 BackSide 대기 림)
 function AtmosphereGlow() {
-  const atmosphereMaterial = useMemo(() => {
+  const material = useMemo(() => {
     return new THREE.ShaderMaterial({
       vertexShader: `
         varying vec3 vNormal;
@@ -197,36 +198,12 @@ function AtmosphereGlow() {
       fragmentShader: `
         varying vec3 vNormal;
         void main() {
-          float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
-          float glow = pow(fresnel, 3.0) * 0.6;
-          gl_FragColor = vec4(0.39, 0.4, 0.95, glow);
+          float intensity = pow(0.65 - dot(vNormal, vec3(0.0, 0.0, 1.0)), 2.0);
+          vec3 color = vec3(0.35, 0.65, 1.0);
+          gl_FragColor = vec4(color, 1.0) * intensity * 0.35;
         }
       `,
-      side: THREE.FrontSide,
-      blending: THREE.AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-    });
-  }, []);
-
-  const rimMaterial = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      vertexShader: `
-        varying vec3 vNormal;
-        void main() {
-          vNormal = normalize(normalMatrix * normal);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vNormal;
-        void main() {
-          float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
-          float rim = pow(fresnel, 4.0) * 0.5;
-          gl_FragColor = vec4(0.35, 0.36, 0.9, rim);
-        }
-      `,
-      side: THREE.FrontSide,
+      side: THREE.BackSide,
       blending: THREE.AdditiveBlending,
       transparent: true,
       depthWrite: false,
@@ -234,21 +211,16 @@ function AtmosphereGlow() {
   }, []);
 
   return (
-    <>
-      <mesh material={atmosphereMaterial}>
-        <sphereGeometry args={[112, 64, 64]} />
-      </mesh>
-      <mesh material={rimMaterial}>
-        <sphereGeometry args={[103, 48, 48]} />
-      </mesh>
-    </>
+    <mesh material={material}>
+      <sphereGeometry args={[104, 64, 64]} />
+    </mesh>
   );
 }
 
-// 줌 레벨에 따라 회전 속도 동적 조절 — cubic curve로 확대 시 훨씬 느리게
+// 줌 레벨에 따라 회전 속도 동적 조절
 const MIN_DIST = 150;
 const MAX_DIST = 500;
-const MIN_ROTATE_SPEED = 0.008;
+const MIN_ROTATE_SPEED = 0.03;
 const MAX_ROTATE_SPEED = 0.5;
 
 function AdaptiveControls() {
@@ -259,9 +231,8 @@ function AdaptiveControls() {
     if (!controlsRef.current) return;
     const dist = camera.position.length();
     const t = Math.max(0, Math.min(1, (dist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
-    // cubic curve: 확대 시 회전 속도가 급격히 줄어듦
     (controlsRef.current as unknown as { rotateSpeed: number }).rotateSpeed =
-      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t * t * t;
+      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t * t;
   });
 
   return (

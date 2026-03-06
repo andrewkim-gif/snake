@@ -13,6 +13,7 @@ import (
 	"github.com/andrewkim-gif/snake/server/internal/api"
 	"github.com/andrewkim-gif/snake/server/internal/auth"
 	"github.com/andrewkim-gif/snake/server/internal/game"
+	"github.com/andrewkim-gif/snake/server/internal/security"
 	"github.com/andrewkim-gif/snake/server/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -33,13 +34,13 @@ type healthResponse struct {
 }
 
 // upgrader configures the WebSocket upgrade from HTTP.
+// S42 FIX: CheckOrigin is set per-request using security.ValidateWebSocketOrigin().
+// The default is used as a fallback and gets replaced in newRouter().
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
 	CheckOrigin: func(r *http.Request) bool {
-		// In production, validate origin against CORS config.
-		// For now, allow all origins.
-		return true
+		return true // Overridden by newRouter() via security.ValidateWebSocketOrigin
 	},
 }
 
@@ -71,10 +72,19 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 	}
 	r := chi.NewRouter()
 
+	// S42: Set WebSocket origin validation using CORS config
+	upgrader.CheckOrigin = security.ValidateWebSocketOrigin(cfg.CORSOrigins)
+
 	// -- Middleware --
 	r.Use(middleware.RequestID)
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
+
+	// S42: Request body size limit (1MB) — prevents DoS via oversized payloads
+	r.Use(security.MaxBodyMiddleware)
+
+	// S42: Security headers (CSP, X-Frame-Options, etc.)
+	r.Use(security.CSPHeaders)
 
 	// Structured request logging (skip /ws to avoid noise)
 	r.Use(func(next http.Handler) http.Handler {
