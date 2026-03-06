@@ -2,8 +2,8 @@
 
 /**
  * SkyDome — 로비용 하늘 돔 + 블록 구름
- * 돔: SphereGeometry 반구, 하늘색 MeshBasicMaterial
- * 구름: 10개 BoxGeometry InstancedMesh, 느린 드리프트
+ * 돔: SphereGeometry 반구, 하늘색 MeshBasicMaterial (radius=100)
+ * 구름: 12개 BoxGeometry InstancedMesh, 느린 드리프트 (radius=45)
  * useFrame priority=0 (auto-render 유지 필수)
  */
 
@@ -11,10 +11,10 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
-const CLOUD_COUNT = 10;
-const CLOUD_RADIUS = 25;
-const CLOUD_HEIGHT = 18;
-const DRIFT_SPEED = 0.015;
+const CLOUD_COUNT = 12;
+const CLOUD_RADIUS = 45;
+const CLOUD_HEIGHT = 25;
+const DRIFT_SPEED = 0.012;
 
 interface CloudData {
   angle: number;
@@ -31,11 +31,11 @@ function generateCloudData(): CloudData[] {
     const seed = i * 137.5;
     clouds.push({
       angle: (i / CLOUD_COUNT) * Math.PI * 2 + Math.sin(seed) * 0.3,
-      radius: CLOUD_RADIUS + Math.sin(seed * 2.1) * 8,
-      height: CLOUD_HEIGHT + Math.sin(seed * 3.7) * 3,
-      scaleX: 3 + Math.abs(Math.sin(seed * 1.3)) * 5,
-      scaleY: 0.8 + Math.abs(Math.sin(seed * 2.7)) * 0.6,
-      scaleZ: 2 + Math.abs(Math.sin(seed * 4.1)) * 3,
+      radius: CLOUD_RADIUS + Math.sin(seed * 2.1) * 10,
+      height: CLOUD_HEIGHT + Math.sin(seed * 3.7) * 4,
+      scaleX: 4 + Math.abs(Math.sin(seed * 1.3)) * 6,
+      scaleY: 1.0 + Math.abs(Math.sin(seed * 2.7)) * 0.8,
+      scaleZ: 3 + Math.abs(Math.sin(seed * 4.1)) * 4,
     });
   }
   return clouds;
@@ -73,9 +73,9 @@ export function SkyDome() {
 
   return (
     <>
-      {/* 하늘 돔 — 반구 */}
+      {/* 하늘 돔 — 반구 (radius=100) */}
       <mesh>
-        <sphereGeometry args={[60, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <sphereGeometry args={[100, 20, 14, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshBasicMaterial color="#87CEEB" side={THREE.BackSide} depthWrite={false} />
       </mesh>
 

@@ -6,6 +6,7 @@
  * 위치 lerp 15%/frame, 줌 lerp 8%/frame (dt-independent)
  * camera.lookAt(targetX, 0, targetZ) — 자연스러운 추적
  *
+ * ★ playerId는 dataRef에서 매 프레임 읽음 (props로 전달 시 stale 문제)
  * CRITICAL: useFrame priority 0 (기본값) 사용!
  * priority != 0 설정 시 R3F auto-render가 꺼지므로 절대 금지.
  */
@@ -13,15 +14,16 @@
 import { useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import type { AgentNetworkData } from '@snake-arena/shared';
+import type { GameData } from '@/hooks/useSocket';
 
 interface PlayCameraProps {
   /** 보간된 Agent 배열 ref */
   agentsRef: React.MutableRefObject<AgentNetworkData[]>;
-  /** 현재 플레이어 ID */
-  playerId: string | null;
+  /** 서버 데이터 ref — playerId를 매 프레임 읽기 위함 */
+  dataRef: React.MutableRefObject<GameData>;
 }
 
-export function PlayCamera({ agentsRef, playerId }: PlayCameraProps) {
+export function PlayCamera({ agentsRef, dataRef }: PlayCameraProps) {
   const { camera } = useThree();
   const zoomRef = useRef(1.0);
   const camPosRef = useRef({ x: 0, y: 300, z: 180 });
@@ -29,11 +31,26 @@ export function PlayCamera({ agentsRef, playerId }: PlayCameraProps) {
 
   // priority 0 (기본값) — auto-render 유지!
   useFrame((_, delta) => {
-    if (!playerId) return;
+    // ★ 매 프레임 ref에서 읽어 항상 최신 playerId 사용
+    const playerId = dataRef.current.playerId;
+
+    if (!playerId) {
+      // playerId 아직 미할당 — 아레나 중앙 상공 기본 뷰
+      camera.position.set(0, 500, 400);
+      camera.lookAt(0, 0, 0);
+      return;
+    }
 
     const agents = agentsRef.current;
     const myAgent = agents.find(a => a.i === playerId);
-    if (!myAgent) return;
+    if (!myAgent) {
+      // playerId 있지만 agent 데이터 아직 없음 — 기본 위치 유지
+      if (!initializedRef.current) {
+        camera.position.set(0, 500, 400);
+        camera.lookAt(0, 0, 0);
+      }
+      return;
+    }
 
     // ─── 동적 줌 계산 (mass 기반) ───
     const mass = myAgent.m;

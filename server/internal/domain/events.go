@@ -14,28 +14,30 @@ type JoinedEvent struct {
 }
 
 // StateAgent is the per-tick serialized agent data sent to clients.
+// JSON tags MUST match AgentNetworkData in shared/types/events.ts
 type StateAgent struct {
-	ID          string   `json:"id"`
+	ID          string   `json:"i"`
 	X           float64  `json:"x"`
 	Y           float64  `json:"y"`
 	Heading     float64  `json:"h"`
 	Mass        float64  `json:"m"`
 	Boosting    bool     `json:"b,omitempty"`
 	Alive       bool     `json:"a"`
-	Level       int      `json:"l"`
+	Level       int      `json:"lv"`
 	Name        string   `json:"n"`
-	SkinID      int      `json:"sk"`
+	SkinID      int      `json:"k"`
 	IsBot       bool     `json:"bot,omitempty"`
 	KillStreak  int      `json:"ks,omitempty"`
 	HitboxRadius float64 `json:"hr"`
 }
 
 // StateOrb is the per-tick serialized orb data sent to clients.
+// JSON tags MUST match OrbNetworkData in shared/types/events.ts
 type StateOrb struct {
-	ID    string  `json:"id"`
 	X     float64 `json:"x"`
 	Y     float64 `json:"y"`
 	Value float64 `json:"v"`
+	Color int     `json:"c"`
 	Type  OrbType `json:"t"`
 }
 

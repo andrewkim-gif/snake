@@ -242,7 +242,7 @@ export function GameCanvas3D({
       <Canvas
         dpr={[1, 1]}
         gl={{ antialias: true }}
-        camera={{ fov: 50, near: 1, far: 1500 }}
+        camera={{ fov: 50, near: 1, far: 5000, position: [0, 500, 400] }}
         style={{ display: 'block', width: '100%', height: '100%' }}
       >
         {/* 실행 순서: JSX 마운트 순서 = useFrame 실행 순서 (priority 0) */}
@@ -258,7 +258,7 @@ export function GameCanvas3D({
         {/* 2. PlayCamera — 보간된 Agent 위치 추적 */}
         <PlayCamera
           agentsRef={agentsRef}
-          playerId={dataRef.current.playerId}
+          dataRef={dataRef}
         />
 
         {/* 3. Scene — 라이팅 + Fog + 분위기 변화 */}

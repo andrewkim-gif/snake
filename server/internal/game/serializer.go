@@ -149,13 +149,20 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 	return sa
 }
 
+// orbTypeColor maps OrbType to client color index (0-7).
+var orbTypeColor = map[domain.OrbType]int{
+	domain.OrbTypeNatural: 0, // green
+	domain.OrbTypeDeath:   2, // red
+}
+
 // serializeOrb converts a domain.Orb to a compact StateOrb.
 func serializeOrb(o *domain.Orb) domain.StateOrb {
+	c := orbTypeColor[o.Type] // 0 if unknown
 	return domain.StateOrb{
-		ID:    o.ID,
 		X:     math.Round(o.Position.X*10) / 10,
 		Y:     math.Round(o.Position.Y*10) / 10,
 		Value: math.Round(o.Value*10) / 10,
+		Color: c,
 		Type:  o.Type,
 	}
 }

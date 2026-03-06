@@ -12,8 +12,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
 const CLOUD_COUNT = 15;
-const CLOUD_RADIUS = 600; // 구름 배치 반경
-const CLOUD_HEIGHT = 250; // 구름 높이
+const CLOUD_RADIUS = 1500; // 구름 배치 반경
+const CLOUD_HEIGHT = 400; // 구름 높이
 const DRIFT_SPEED = 0.003; // 초당 라디안 (느린 회전)
 
 // 구름 초기 배치 데이터 (결정적)
@@ -76,7 +76,7 @@ export function SkyBox() {
     <>
       {/* 하늘 돔 — 반구 */}
       <mesh>
-        <sphereGeometry args={[1400, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
+        <sphereGeometry args={[4500, 16, 12, 0, Math.PI * 2, 0, Math.PI / 2]} />
         <meshBasicMaterial
           color="#87CEEB"
           side={THREE.BackSide}

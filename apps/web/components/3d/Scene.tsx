@@ -59,7 +59,7 @@ export function Scene({ timeRemaining }: SceneProps) {
 
   // Fog 설정 — scene.fog 직접 할당 (JSX로 불가)
   useEffect(() => {
-    const fog = new THREE.Fog('#87CEEB', 400, 1200);
+    const fog = new THREE.Fog('#87CEEB', 600, 2500);
     scene.fog = fog;
     scene.background = new THREE.Color('#87CEEB');
     fogRef.current = fog;
@@ -78,7 +78,7 @@ export function Scene({ timeRemaining }: SceneProps) {
 
     if (timeRemaining === undefined || timeRemaining >= 300) {
       fog.color.set('#87CEEB');
-      fog.near = 400;
+      fog.near = 600;
       if (scene.background instanceof THREE.Color) {
         scene.background.set('#87CEEB');
       }
@@ -90,7 +90,7 @@ export function Scene({ timeRemaining }: SceneProps) {
 
     const color = getAtmosphereColor(t);
     fog.color.copy(color);
-    fog.near = 400 - t * 150;
+    fog.near = 600 - t * 250;
 
     if (scene.background instanceof THREE.Color) {
       scene.background.copy(color);
