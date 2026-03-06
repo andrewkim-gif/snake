@@ -146,9 +146,14 @@ func (r *Room) tick() {
 // --- State tick handlers ---
 
 func (r *Room) tickWaiting() {
-	// Transition to countdown when enough human players join
+	// Transition when enough human players join
 	if len(r.players) >= r.Config.MinPlayersToStart {
-		r.transitionTo(domain.RoomStateCountdown)
+		if r.Config.CountdownSec <= 0 {
+			// Skip countdown, start immediately
+			r.startRound()
+		} else {
+			r.transitionTo(domain.RoomStateCountdown)
+		}
 	}
 }
 

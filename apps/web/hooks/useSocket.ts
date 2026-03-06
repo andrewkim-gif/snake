@@ -17,7 +17,7 @@ import type {
   AgentNetworkData,
 } from '@snake-arena/shared';
 
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8080';
+const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
 
 // Coach message from server (Phase 5)
 export interface CoachMessageData {

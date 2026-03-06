@@ -203,7 +203,7 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 		var roomID string
 		var err error
 
-		if payload.RoomID == "" {
+		if payload.RoomID == "" || payload.RoomID == "quick" {
 			// Quick join
 			roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID)
 		} else {

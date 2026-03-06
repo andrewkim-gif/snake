@@ -29,7 +29,7 @@ import type { BuildData } from './BuildHUD';
 import { XPBar } from './XPBar';
 import { ShrinkWarning } from './ShrinkWarning';
 import { SynergyPopup } from './SynergyPopup';
-import { CoachOverlay } from './CoachOverlay';
+import { CoachBubble } from './CoachBubble';
 import { AnalystPanel } from './AnalystPanel';
 
 import { ARENA_CONFIG } from '@snake-arena/shared';
@@ -219,7 +219,7 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
 
       {/* Round/game overlays */}
       {showTimer && <RoundTimerHUD timeRemaining={uiState.timeRemaining} />}
-      {showCountdown && <CountdownOverlay initialCount={uiState.countdown!} />}
+      {/* Countdown removed — game starts immediately */}
       {showRoundResult && (
         <RoundResultOverlay
           roundEnd={uiState.roundEnd!}
@@ -232,7 +232,7 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
       {showDeath && !showLevelUp && <DeathOverlay deathInfo={uiState.deathInfo!} onRespawn={handleRespawn} />}
 
       {/* Phase 5: Coach Overlay */}
-      <CoachOverlay message={uiState.coachMessage ?? null} />
+      <CoachBubble messages={uiState.coachMessage ? [{ ...uiState.coachMessage, icon: uiState.coachMessage.type }] : []} />
 
       {/* v10 LevelUp Overlay (highest priority gameplay overlay) */}
       {showLevelUp && chooseUpgrade && (

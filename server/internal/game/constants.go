@@ -211,7 +211,7 @@ func DefaultRoomConfig() RoomConfig {
 		MaxHumansPerRoom:  85,
 		MaxBotsPerRoom:    15,
 		RoundDurationSec:  300, // 5 minutes
-		CountdownSec:      10,
+		CountdownSec:      0,
 		EndingSec:         5,
 		CooldownSec:       15,
 		MinPlayersToStart: 1,

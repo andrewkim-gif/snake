@@ -1,0 +1,8 @@
+{
+  "name": "agent-survivor",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
+}

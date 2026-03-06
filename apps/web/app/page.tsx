@@ -17,7 +17,7 @@ import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { useSocket } from '@/hooks/useSocket';
 import { MC, pixelFont, bodyFont } from '@/lib/minecraft-ui';
 
-// PLACEHOLDER:IMPORTS_GAME
+import { GameCanvas } from '@/components/game/GameCanvas';
 
 /* ── 메인 홈 컴포넌트 ── */
 export default function Home() {
@@ -95,25 +95,18 @@ export default function Home() {
   }
 
   if (mode === 'playing') {
-    // Phase 3 MVP: 2D Canvas 게임 (향후 GameCanvas3D로 교체 가능)
     return (
-      <div style={{ width: '100vw', height: '100vh', position: 'relative', overflow: 'hidden' }}>
-        <div style={{
-          position: 'absolute', top: '8px', left: '8px', zIndex: 20,
-        }}>
-          <McButton variant="red" onClick={handleExit} style={{ fontSize: '0.3rem', padding: '4px 12px' }}>
-            EXIT
-          </McButton>
-        </div>
-        <div style={{
-          width: '100%', height: '100%', display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          backgroundColor: '#87CEEB', fontFamily: pixelFont,
-          fontSize: '0.5rem', color: '#FFF',
-        }}>
-          Game Active — {uiState.roomState ?? 'connecting'}
-        </div>
-      </div>
+      <GameCanvas
+        dataRef={dataRef}
+        uiState={uiState}
+        sendInput={sendInput}
+        respawn={respawn}
+        playerName={playerName}
+        skinId={skinId}
+        onExit={handleExit}
+        chooseUpgrade={chooseUpgrade}
+        dismissSynergyPopup={dismissSynergyPopup}
+      />
     );
   }
 
@@ -197,7 +190,7 @@ export default function Home() {
 
             <McInput
               value={playerName}
-              onChange={setPlayerName}
+              onChange={(e) => setPlayerName(e.target.value)}
               placeholder="Enter agent name..."
               style={{ marginBottom: '0.6rem' }}
             />
