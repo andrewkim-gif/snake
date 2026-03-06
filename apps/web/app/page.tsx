@@ -8,6 +8,8 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import type { CubelingAppearance } from '@agent-survivor/shared';
+import { createDefaultAppearance } from '@agent-survivor/shared';
 import { LobbyHeader } from '@/components/lobby/LobbyHeader';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
@@ -31,6 +33,7 @@ export default function Home() {
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing'>('lobby');
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
+  const [appearance, setAppearance] = useState<CubelingAppearance>(createDefaultAppearance);
   const [fadeOut, setFadeOut] = useState(false);
   const [setupOpen, setSetupOpen] = useState(true);
   const [newsExpanded, setNewsExpanded] = useState(false);
@@ -220,8 +223,13 @@ export default function Home() {
               style={{ marginBottom: '12px' }}
             />
 
-            {/* 캐릭터 선택 */}
-            <CharacterCreator skinId={skinId} onSelect={setSkinId} />
+            {/* 캐릭터 에디터 (Phase 7) */}
+            <CharacterCreator
+              skinId={skinId}
+              onSelect={setSkinId}
+              appearance={appearance}
+              onAppearanceChange={setAppearance}
+            />
 
             {/* 안내 문구 */}
             <div style={{
