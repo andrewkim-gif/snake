@@ -1,1 +1,14 @@
-{"pipeline":"da:work","execution_mode":"roadmap","pipeline_mode":"turbo","plan_file":"docs/designs/v12-gameplay-polish-plan.md","roadmap_file":"docs/designs/v12-gameplay-roadmap.md","ref_docs":["docs/designs/v11-world-war-plan.md"],"project_type":"GAME","current_stage":3,"current_phase":5,"current_step":"S22","total_phases":6,"total_steps":25,"phases":[{"name":"Phase 0: 즉시 게임 시작","status":"done"},{"name":"Phase 1: 캐릭터 얼굴+프리셋","status":"done"},{"name":"Phase 2: 6종 테마맵+전투보너스","status":"done"},{"name":"Phase 3: 스킬 이펙트","status":"done"},{"name":"Phase 4: 배틀결과+점령UI","status":"done"},{"name":"Phase 5: HUD 폴리시","status":"pending"}],"iterations":{"arch":0,"dev":0,"e2e":0},"last_skill":"turbo_phase5_start","last_update":"2026-03-07T13:00:00Z"}
+{
+  "pipeline": "da:work",
+  "execution_mode": "plan",
+  "pipeline_mode": "turbo",
+  "plan_file": "docs/designs/v13-navigation-integration-plan.md",
+  "project_type": "GAME",
+  "current_stage": 3,
+  "current_phase": 2,
+  "total_phases": 7,
+  "phases_status": ["done","done","pending","pending","pending","pending","pending"],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
+  "last_skill": "turbo_phase1_done",
+  "last_update": "2026-03-07T00:03:00Z"
+}
