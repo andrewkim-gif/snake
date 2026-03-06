@@ -1,60 +1,60 @@
 /**
- * Modern Light UI — 밝고 클린한 디자인 시스템
- * 라이트 톤 + 블루 액센트 + 모던 가독성 (Inter 폰트)
+ * Premium Dark UI — 세련된 다크 디자인 시스템
+ * 딥 다크 + 인디고 액센트 + 글래스모피즘 (Inter 폰트)
  */
 
-/** 라이트 컬러 팔레트 */
+/** 프리미엄 다크 팔레트 */
 export const SK = {
-  // 배경 — 밝은 톤
-  bg: '#F8FAFC',
-  bgWarm: '#F1F5F9',
-  cardBg: '#FFFFFF',
-  cardBgHover: '#F8FAFC',
-  overlay: 'rgba(0, 0, 0, 0.4)',
+  // 배경 — 딥 다크
+  bg: '#09090B',
+  bgWarm: '#0C0D12',
+  cardBg: '#141418',
+  cardBgHover: '#1C1C22',
+  overlay: 'rgba(0, 0, 0, 0.7)',
 
-  // 텍스트 — 다크 on 라이트
-  textPrimary: '#0F172A',
-  textSecondary: '#64748B',
-  textMuted: '#94A3B8',
+  // 텍스트 — 소프트 화이트 on 다크
+  textPrimary: '#ECECEF',
+  textSecondary: '#8B8D98',
+  textMuted: '#55565E',
   textWhite: '#FFFFFF',
 
-  // 액센트
-  orange: '#D97706',
-  orangeLight: '#F59E0B',
-  orangeDark: '#B45309',
-  green: '#16A34A',
-  greenLight: '#22C55E',
-  greenDark: '#15803D',
-  red: '#DC2626',
-  redLight: '#EF4444',
-  redDark: '#B91C1C',
-  gold: '#D97706',
-  blue: '#3B82F6',
+  // 액센트 — 정제된 색감
+  orange: '#F59E0B',
+  orangeLight: '#FBBF24',
+  orangeDark: '#D97706',
+  green: '#10B981',
+  greenLight: '#34D399',
+  greenDark: '#059669',
+  red: '#EF4444',
+  redLight: '#F87171',
+  redDark: '#DC2626',
+  gold: '#F59E0B',
+  blue: '#6366F1',
 
-  // 보더
-  border: 'rgba(0, 0, 0, 0.08)',
-  borderDark: 'rgba(0, 0, 0, 0.04)',
-  borderFocus: 'rgba(59, 130, 246, 0.5)',
-  shadow: 'rgba(0, 0, 0, 0.04)',
-  shadowMd: 'rgba(0, 0, 0, 0.06)',
-  shadowLg: 'rgba(0, 0, 0, 0.1)',
+  // 보더 — 화이트 기반 극저 불투명도
+  border: 'rgba(255, 255, 255, 0.06)',
+  borderDark: 'rgba(255, 255, 255, 0.03)',
+  borderFocus: 'rgba(99, 102, 241, 0.5)',
+  shadow: 'rgba(0, 0, 0, 0.3)',
+  shadowMd: 'rgba(0, 0, 0, 0.4)',
+  shadowLg: 'rgba(0, 0, 0, 0.5)',
 
   // 상태
-  statusOnline: '#22C55E',
+  statusOnline: '#10B981',
   statusOffline: '#EF4444',
-  statusWaiting: '#94A3B8',
-  statusLive: '#22C55E',
-  statusStarting: '#D97706',
-  statusEnding: '#DC2626',
+  statusWaiting: '#55565E',
+  statusLive: '#10B981',
+  statusStarting: '#F59E0B',
+  statusEnding: '#EF4444',
 
   // 3D 씬 / 글로브
-  skyBg: '#E8F4FD',
-  ocean: '#93B5CF',
-  land: '#E2E8F0',
+  skyBg: '#07080C',
+  ocean: '#0A1628',
+  land: '#1C1C22',
 
-  // 글래스모피즘 프리셋
-  glassBg: 'rgba(255, 255, 255, 0.85)',
-  glassBorder: 'rgba(0, 0, 0, 0.06)',
+  // 글래스모피즘 프리셋 — 다크 글래스
+  glassBg: 'rgba(14, 14, 18, 0.80)',
+  glassBorder: 'rgba(255, 255, 255, 0.06)',
 } as const;
 
 /** 폰트 사이즈 스케일 */
@@ -68,7 +68,7 @@ export const SKFont = {
   button: '16px',
 } as const;
 
-/** 타이틀 폰트 — Inter Heavy (Black Ops One 교체) */
+/** 타이틀 폰트 — Inter Heavy */
 export const headingFont = '"Inter", -apple-system, BlinkMacSystemFont, sans-serif';
 
 /** UI 폰트 — Inter */
@@ -88,12 +88,12 @@ export const radius = {
   pill: '9999px',
 } as const;
 
-/** 박스 섀도 */
+/** 박스 섀도 — 다크 테마 */
 export function sketchShadow(level: 'sm' | 'md' | 'lg' = 'md') {
   const shadows = {
-    sm: '0 1px 2px rgba(0, 0, 0, 0.05)',
-    md: '0 1px 3px rgba(0, 0, 0, 0.06), 0 1px 2px rgba(0, 0, 0, 0.04)',
-    lg: '0 4px 6px rgba(0, 0, 0, 0.06), 0 2px 4px rgba(0, 0, 0, 0.04)',
+    sm: '0 1px 2px rgba(0, 0, 0, 0.4)',
+    md: '0 2px 8px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.04)',
+    lg: '0 8px 24px rgba(0, 0, 0, 0.5), 0 0 1px rgba(255, 255, 255, 0.04)',
   };
   return shadows[level];
 }
@@ -110,9 +110,9 @@ export function tacticalBg() {
 
 /** 상태별 색상 */
 export const statusColors = {
-  waiting: { text: 'STANDBY', color: '#94A3B8', bg: 'rgba(148, 163, 184, 0.1)' },
-  countdown: { text: 'DEPLOY', color: '#D97706', bg: 'rgba(217, 119, 6, 0.1)' },
-  playing: { text: 'ACTIVE', color: '#16A34A', bg: 'rgba(22, 163, 74, 0.1)' },
-  ending: { text: 'ENDING', color: '#DC2626', bg: 'rgba(220, 38, 38, 0.1)' },
-  cooldown: { text: 'RESET', color: '#64748B', bg: 'rgba(100, 116, 139, 0.1)' },
+  waiting: { text: 'STANDBY', color: '#55565E', bg: 'rgba(85, 86, 94, 0.15)' },
+  countdown: { text: 'DEPLOY', color: '#F59E0B', bg: 'rgba(245, 158, 11, 0.12)' },
+  playing: { text: 'ACTIVE', color: '#10B981', bg: 'rgba(16, 185, 129, 0.12)' },
+  ending: { text: 'ENDING', color: '#EF4444', bg: 'rgba(239, 68, 68, 0.12)' },
+  cooldown: { text: 'RESET', color: '#8B8D98', bg: 'rgba(139, 141, 152, 0.1)' },
 } as const;

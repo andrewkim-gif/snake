@@ -43,7 +43,7 @@ function ResourceBar({ label, icon, value, color }: {
       <div style={{
         flex: 1,
         height: '8px',
-        background: 'rgba(0,0,0,0.04)',
+        background: 'rgba(255,255,255,0.04)',
         borderRadius: '2px',
         overflow: 'hidden',
       }}>
@@ -153,7 +153,7 @@ export function CountryPanel({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.2)',
+          background: 'rgba(0, 0, 0, 0.5)',
           zIndex: 100,
           opacity: visible ? 1 : 0,
           transition: 'opacity 200ms ease',

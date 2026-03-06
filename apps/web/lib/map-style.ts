@@ -44,7 +44,7 @@ export const continentColors: Record<string, string> = {
 // 다크 맵 스타일 (MapLibre GL 용)
 export const darkMapStyle: maplibregl.StyleSpecification = {
   version: 8 as const,
-  name: 'AI World War Light',
+  name: 'AI World War Dark',
   sources: {
     countries: {
       type: 'geojson',
@@ -57,7 +57,7 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
       id: 'background',
       type: 'background',
       paint: {
-        'background-color': '#E8F4FD',
+        'background-color': '#0A0B10',
       },
     },
     // 국가 fill
@@ -76,9 +76,9 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
       type: 'line',
       source: 'countries',
       paint: {
-        'line-color': '#B0C4D8',
+        'line-color': 'rgba(255, 255, 255, 0.12)',
         'line-width': 1,
-        'line-opacity': 0.8,
+        'line-opacity': 0.6,
       },
     },
     // 호버 하이라이트

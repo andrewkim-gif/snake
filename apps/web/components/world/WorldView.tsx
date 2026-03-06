@@ -65,7 +65,7 @@ export function WorldView({
       position: 'relative',
       width: '100%',
       height: '100%',
-      background: '#F8FAFC',
+      background: '#09090B',
       overflow: 'hidden',
       ...style,
     }}>
@@ -102,7 +102,7 @@ export function WorldView({
         justifyContent: 'center',
         gap: '16px',
         zIndex: 50,
-        background: 'linear-gradient(to top, rgba(248,250,252,0.8) 0%, transparent 100%)',
+        background: 'linear-gradient(to top, rgba(9,9,11,0.8) 0%, transparent 100%)',
         pointerEvents: 'none',
       }}>
         {[
@@ -125,7 +125,7 @@ export function WorldView({
               height: '8px',
               borderRadius: '2px',
               backgroundColor: color,
-              border: '1px solid rgba(0,0,0,0.06)',
+              border: '1px solid rgba(255,255,255,0.08)',
             }} />
             <span style={{
               fontFamily: bodyFont,

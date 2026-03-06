@@ -2,7 +2,7 @@
 
 /**
  * GlobeView — three-globe 3D 지구본
- * 라이트 테마: 밝은 바다 + 밝은 대기 + 자동 회전 없음
+ * 프리미엄 다크: 딥 네이비 바다 + 인디고 대기 글로우 + 자동 회전 없음
  */
 
 import { useEffect, useRef, useState, useMemo, useCallback } from 'react';
@@ -76,8 +76,8 @@ function GlobeObject({
           if (state?.sovereignFaction) return sovereigntyColors.neutral;
           return sovereigntyColors.unclaimed;
         })
-        .polygonSideColor(() => 'rgba(180, 200, 220, 0.4)')
-        .polygonStrokeColor(() => '#B0C4D8')
+        .polygonSideColor(() => 'rgba(99, 102, 241, 0.12)')
+        .polygonStrokeColor(() => 'rgba(255, 255, 255, 0.12)')
         .polygonAltitude((feat: object) => {
           const f = feat as { properties: Record<string, unknown> };
           const iso3 = getCountryISO(f.properties);
@@ -85,12 +85,12 @@ function GlobeObject({
           return 0.006;
         });
 
-      // Globe material: 밝은 라이트 블루 바다
+      // Globe material: 딥 네이비 바다
       const globeMat = globe.globeMaterial() as THREE.MeshPhongMaterial;
-      globeMat.color = new THREE.Color('#93B5CF');
-      globeMat.emissive = new THREE.Color('#7BA3BF');
-      globeMat.emissiveIntensity = 0.15;
-      globeMat.shininess = 40;
+      globeMat.color = new THREE.Color('#0A1628');
+      globeMat.emissive = new THREE.Color('#0F1D35');
+      globeMat.emissiveIntensity = 0.3;
+      globeMat.shininess = 60;
 
       if (groupRef.current) {
         if (globeRef.current) {
@@ -183,7 +183,7 @@ function GlobeObject({
   );
 }
 
-// 대기 글로우 이펙트 (라이트 테마용 — 서브틀 워밍)
+// 대기 글로우 이펙트 (프리미엄 다크 — 인디고 글로우)
 function AtmosphereGlow() {
   const atmosphereMaterial = useMemo(() => {
     return new THREE.ShaderMaterial({
@@ -198,8 +198,8 @@ function AtmosphereGlow() {
         varying vec3 vNormal;
         void main() {
           float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
-          float glow = pow(fresnel, 3.0) * 0.4;
-          gl_FragColor = vec4(0.55, 0.75, 0.95, glow);
+          float glow = pow(fresnel, 3.0) * 0.6;
+          gl_FragColor = vec4(0.39, 0.4, 0.95, glow);
         }
       `,
       side: THREE.FrontSide,
@@ -222,8 +222,8 @@ function AtmosphereGlow() {
         varying vec3 vNormal;
         void main() {
           float fresnel = 1.0 - dot(vNormal, vec3(0.0, 0.0, 1.0));
-          float rim = pow(fresnel, 4.0) * 0.3;
-          gl_FragColor = vec4(0.6, 0.8, 1.0, rim);
+          float rim = pow(fresnel, 4.0) * 0.5;
+          gl_FragColor = vec4(0.35, 0.36, 0.9, rim);
         }
       `,
       side: THREE.FrontSide,
@@ -245,10 +245,10 @@ function AtmosphereGlow() {
   );
 }
 
-// 줌 레벨에 따라 회전 속도 동적 조절
+// 줌 레벨에 따라 회전 속도 동적 조절 — cubic curve로 확대 시 훨씬 느리게
 const MIN_DIST = 150;
 const MAX_DIST = 500;
-const MIN_ROTATE_SPEED = 0.03;
+const MIN_ROTATE_SPEED = 0.008;
 const MAX_ROTATE_SPEED = 0.5;
 
 function AdaptiveControls() {
@@ -259,8 +259,9 @@ function AdaptiveControls() {
     if (!controlsRef.current) return;
     const dist = camera.position.length();
     const t = Math.max(0, Math.min(1, (dist - MIN_DIST) / (MAX_DIST - MIN_DIST)));
+    // cubic curve: 확대 시 회전 속도가 급격히 줄어듦
     (controlsRef.current as unknown as { rotateSpeed: number }).rotateSpeed =
-      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t * t;
+      MIN_ROTATE_SPEED + (MAX_ROTATE_SPEED - MIN_ROTATE_SPEED) * t * t * t;
   });
 
   return (
@@ -284,7 +285,7 @@ export function GlobeView({
   style,
 }: GlobeViewProps) {
   return (
-    <div style={{ width: '100%', height: '100%', background: '#E8F4FD', ...style }}>
+    <div style={{ width: '100%', height: '100%', background: '#07080C', ...style }}>
       <Canvas
         camera={{
           position: [0, 0, 300],
@@ -298,9 +299,9 @@ export function GlobeView({
           powerPreference: 'high-performance',
         }}
       >
-        <ambientLight intensity={1.0} />
-        <directionalLight position={[100, 100, 100]} intensity={0.8} />
-        <directionalLight position={[-100, -50, -100]} intensity={0.4} color="#B0C4DE" />
+        <ambientLight intensity={0.3} />
+        <directionalLight position={[100, 100, 100]} intensity={0.7} />
+        <directionalLight position={[-100, -50, -100]} intensity={0.2} color="#6366F1" />
 
         <GlobeObject
           countryStates={countryStates}

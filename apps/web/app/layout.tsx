@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#F8FAFC',
+  themeColor: '#09090B',
 };
 
 export default function RootLayout({
@@ -44,8 +44,8 @@ export default function RootLayout({
         style={{
           margin: 0,
           padding: 0,
-          backgroundColor: '#F8FAFC',
-          color: '#0F172A',
+          backgroundColor: '#09090B',
+          color: '#ECECEF',
           fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale' as never,

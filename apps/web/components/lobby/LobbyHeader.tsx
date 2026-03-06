@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * LobbyHeader — 모던 라이트 헤더 바
- * 글래스모피즘 화이트 + 로고 + 상태 + 뷰 토글
+ * LobbyHeader — 프리미엄 다크 헤더 바
+ * 다크 글래스모피즘 + 로고 + 상태 + 뷰 토글
  */
 
 import { useState } from 'react';
@@ -30,7 +30,7 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
       alignItems: 'center',
       justifyContent: 'space-between',
       padding: '0 20px',
-      background: 'linear-gradient(to bottom, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0.6) 80%, transparent 100%)',
+      background: 'linear-gradient(to bottom, rgba(9,9,11,0.92) 0%, rgba(9,9,11,0.6) 80%, transparent 100%)',
       backdropFilter: 'blur(12px)',
       WebkitBackdropFilter: 'blur(12px)',
       borderBottom: `1px solid ${SK.borderDark}`,
@@ -54,7 +54,7 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             style={{
               height: '36px',
               width: 'auto',
-              filter: 'drop-shadow(0 1px 2px rgba(0,0,0,0.1))',
+              filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.5))',
             }}
           />
         ) : (
@@ -104,8 +104,8 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             borderRadius: '50%',
             backgroundColor: connected ? SK.statusOnline : SK.statusOffline,
             boxShadow: connected
-              ? `0 0 6px ${SK.green}60`
-              : `0 0 6px ${SK.red}60`,
+              ? `0 0 8px ${SK.green}80`
+              : `0 0 8px ${SK.red}60`,
           }} />
           <span style={{
             fontFamily: bodyFont,
@@ -130,21 +130,21 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             letterSpacing: '2px',
             textTransform: 'uppercase',
             padding: '6px 14px',
-            border: `1px solid rgba(0, 0, 0, 0.1)`,
+            border: `1px solid rgba(255, 255, 255, 0.08)`,
             borderRadius: '6px',
-            backgroundColor: 'rgba(255, 255, 255, 0.7)',
+            backgroundColor: 'rgba(255, 255, 255, 0.04)',
             cursor: 'pointer',
             transition: 'all 150ms ease',
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.2)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.15)';
             e.currentTarget.style.color = SK.textPrimary;
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.9)';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.08)';
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.borderColor = 'rgba(0, 0, 0, 0.1)';
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
             e.currentTarget.style.color = SK.textSecondary;
-            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.7)';
+            e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
           }}
         >
           {viewMode === 'globe' ? '2D MAP' : '3D GLOBE'}

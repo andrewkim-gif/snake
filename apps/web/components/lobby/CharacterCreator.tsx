@@ -294,8 +294,8 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
       <div style={{
         padding: '6px 8px',
         borderRadius: '8px',
-        backgroundColor: '#F8FAFC',
-        border: '1px solid rgba(0, 0, 0, 0.06)',
+        backgroundColor: SK.bgWarm,
+        border: `1px solid ${SK.border}`,
         maxHeight: '200px',
         overflowY: 'auto',
       }}>
@@ -373,8 +373,8 @@ function AgentPreview3D({ appearance, skinId }: { appearance: CubelingAppearance
       width: '90px',
       height: '90px',
       borderRadius: '8px',
-      border: '1px solid rgba(0, 0, 0, 0.08)',
-      backgroundColor: '#F1F5F9',
+      border: `1px solid ${SK.border}`,
+      backgroundColor: SK.bgWarm,
       overflow: 'hidden',
       flexShrink: 0,
     }}>
@@ -413,7 +413,7 @@ function ColorCircle({ color, selected, onClick }: {
       style={{
         ...colorCircleBase,
         backgroundColor: color,
-        border: selected ? selectedBorder : '2px solid rgba(0,0,0,0.08)',
+        border: selected ? selectedBorder : `2px solid ${SK.border}`,
         boxShadow: selected ? selectedShadow : 'none',
         transform: selected ? 'scale(1.15)' : 'scale(1)',
       }}

@@ -177,7 +177,7 @@ export default function Home() {
             border: `1px solid ${SK.glassBorder}`,
             borderRadius: '6px',
             padding: '14px',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.08)',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
           }}>
             {/* 헤더 */}
             <div style={{

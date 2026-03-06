@@ -30,7 +30,7 @@ export function PixelLogo() {
           style={{
             maxWidth: 'min(500px, 90vw)',
             height: 'auto',
-            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.12))',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.5))',
           }}
         />
         <div style={{

@@ -45,13 +45,13 @@ export function WelcomeTutorial() {
   return (
     <div style={{
       position: 'fixed', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: 'rgba(0, 0, 0, 0.3)', zIndex: 100,
+      backgroundColor: 'rgba(0, 0, 0, 0.6)', zIndex: 100,
     }}>
       <div style={{
         backgroundColor: SK.cardBg,
         borderRadius: handDrawnRadius(4),
         border: sketchBorder(),
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.12)',
+        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
         padding: '28px',
         maxWidth: '420px', width: '90%', textAlign: 'center',
       }}>
