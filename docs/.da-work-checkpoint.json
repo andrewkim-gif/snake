@@ -1,1 +1,16 @@
-{"pipeline":"da:work","execution_mode":"roadmap","pipeline_mode":"turbo","plan_file":"docs/designs/v10-survival-roguelike-plan.md","roadmap_file":"docs/designs/v10-development-roadmap.md","project_type":"GAME","current_stage":3,"current_phase":4,"total_phases":4,"gap_phases":["Gap-1: DONE","Gap-2: DONE","Gap-3: DONE","Gap-4: Final Polish"],"iterations":{"arch":0,"dev":0,"e2e":0},"last_skill":"gap3_done","last_update":"2026-03-06T15:30:00Z"}
+{
+  "pipeline": "da:work",
+  "execution_mode": "roadmap",
+  "pipeline_mode": "turbo",
+  "plan_file": "docs/designs/v11-world-war-plan.md",
+  "roadmap_file": "docs/designs/v11-world-war-roadmap.md",
+  "ref_docs": ["docs/designs/v11-verification-report.md","docs/designs/v11-system-architecture.md"],
+  "project_type": "GAME",
+  "current_stage": 3,
+  "current_phase": 0,
+  "current_step": "S01",
+  "total_phases": 11,
+  "total_steps": 53,
+  "last_skill": "turbo_system_done",
+  "last_update": "2026-03-06T01:00:00Z"
+}
