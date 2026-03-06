@@ -7,11 +7,14 @@
  * 콘텐츠: max-width 1200px, 중앙 정렬
  */
 
-import { SK, bodyFont } from '@/lib/sketch-ui';
+import { SK, bodyFont, sketchShadow } from '@/lib/sketch-ui';
 import { TopNavBar } from '@/components/navigation/TopNavBar';
 import { BottomTabBar } from '@/components/navigation/BottomTabBar';
+import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
+import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
 import Image from 'next/image';
-import { useState } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
+import type { WalletState, TokenBalance } from '@/lib/crossx-config';
 
 export default function HubLayout({
   children,
@@ -19,6 +22,33 @@ export default function HubLayout({
   children: React.ReactNode;
 }) {
   const [imgError, setImgError] = useState(false);
+  const [wallet, setWallet] = useState<WalletState | null>(null);
+  const [showBalances, setShowBalances] = useState(false);
+  const [mockBalances] = useState<TokenBalance[]>([]);
+  const dropdownRef = useRef<HTMLDivElement>(null);
+
+  // Wallet connect/disconnect handlers
+  const handleWalletConnect = useCallback((w: WalletState) => {
+    setWallet(w);
+  }, []);
+
+  const handleWalletDisconnect = useCallback(() => {
+    setWallet(null);
+    setShowBalances(false);
+  }, []);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    function handleClickOutside(event: MouseEvent) {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target as Node)) {
+        setShowBalances(false);
+      }
+    }
+    if (showBalances) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [showBalances]);
 
   return (
     <div
@@ -119,37 +149,110 @@ export default function HubLayout({
         {/* 중앙: 네비게이션 (데스크탑) */}
         <TopNavBar />
 
-        {/* 우측: Wallet 자리 + placeholder */}
+        {/* 우측: Wallet Connect + Balance Dropdown */}
         <div
+          ref={dropdownRef}
           style={{
-            display: 'flex',
+            position: 'relative',
+            display: 'none',
             alignItems: 'center',
             gap: '16px',
           }}
+          className="wallet-section"
         >
-          {/* Wallet Connect 버튼 자리 (Phase 3에서 구현) */}
+          <style>{`
+            @media (min-width: 768px) {
+              .wallet-section { display: flex !important; }
+            }
+          `}</style>
+
+          {/* Wallet Connect Button */}
           <div
-            style={{
-              fontFamily: bodyFont,
-              fontWeight: 600,
-              fontSize: '10px',
-              color: SK.textMuted,
-              letterSpacing: '1px',
-              textTransform: 'uppercase',
-              padding: '6px 12px',
-              border: `1px solid ${SK.border}`,
-              borderRadius: '6px',
-              display: 'none',
-            }}
-            className="wallet-placeholder"
+            onClick={wallet ? () => setShowBalances(!showBalances) : undefined}
+            style={{ cursor: wallet ? 'pointer' : undefined }}
           >
-            <style>{`
-              @media (min-width: 768px) {
-                .wallet-placeholder { display: block !important; }
-              }
-            `}</style>
-            CONNECT
+            <WalletConnectButton
+              onConnect={handleWalletConnect}
+              onDisconnect={handleWalletDisconnect}
+            />
           </div>
+
+          {/* Token Balance Dropdown */}
+          {showBalances && wallet && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                right: 0,
+                marginTop: '8px',
+                width: '360px',
+                maxHeight: '480px',
+                background: SK.cardBg,
+                border: `1px solid ${SK.border}`,
+                borderRadius: '12px',
+                boxShadow: sketchShadow('lg'),
+                overflow: 'hidden',
+                zIndex: 100,
+                animation: 'walletDropdownIn 150ms ease-out',
+              }}
+            >
+              <style>{`
+                @keyframes walletDropdownIn {
+                  from {
+                    opacity: 0;
+                    transform: translateY(-8px);
+                  }
+                  to {
+                    opacity: 1;
+                    transform: translateY(0);
+                  }
+                }
+              `}</style>
+
+              {/* Dropdown header */}
+              <div
+                style={{
+                  padding: '12px 16px',
+                  borderBottom: `1px solid ${SK.borderDark}`,
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: bodyFont,
+                    fontSize: '13px',
+                    fontWeight: 700,
+                    color: SK.textPrimary,
+                    letterSpacing: '1px',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  TOKEN HOLDINGS
+                </span>
+                <span
+                  style={{
+                    fontFamily: bodyFont,
+                    fontSize: '11px',
+                    color: SK.green,
+                  }}
+                >
+                  {wallet.address.slice(0, 6)}...{wallet.address.slice(-4)}
+                </span>
+              </div>
+
+              {/* Token list */}
+              <TokenBalanceList
+                balances={mockBalances}
+                onTokenSelect={(iso3) => {
+                  setShowBalances(false);
+                  // Navigate to economy/tokens with country filter
+                  window.location.href = `/economy/tokens?country=${iso3}`;
+                }}
+              />
+            </div>
+          )}
         </div>
       </header>
 
