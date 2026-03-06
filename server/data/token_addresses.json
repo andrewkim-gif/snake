@@ -5,7 +5,7 @@
   "defenseOracleAddress": "",
   "governanceModuleAddress": "",
   "awwTokenAddress": "",
-  "totalCountries": 171,
+  "totalCountries": 195,
   "tokens": {
     "USA": {
       "name": "United States Token",
@@ -1540,6 +1540,222 @@
     "GUF": {
       "name": "French Guiana Token",
       "symbol": "GUF",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "CPV": {
+      "name": "Cape Verde Token",
+      "symbol": "CPV",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "COM": {
+      "name": "Comoros Token",
+      "symbol": "COM",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MUS": {
+      "name": "Mauritius Token",
+      "symbol": "MUS",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SYC": {
+      "name": "Seychelles Token",
+      "symbol": "SYC",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "STP": {
+      "name": "Sao Tome and Principe Token",
+      "symbol": "STP",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "WSM": {
+      "name": "Samoa Token",
+      "symbol": "WSM",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "TON": {
+      "name": "Tonga Token",
+      "symbol": "TON",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "VUT": {
+      "name": "Vanuatu Token",
+      "symbol": "VUT",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SLB": {
+      "name": "Solomon Islands Token",
+      "symbol": "SLB",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KIR": {
+      "name": "Kiribati Token",
+      "symbol": "KIR",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "MHL": {
+      "name": "Marshall Islands Token",
+      "symbol": "MHL",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "PLW": {
+      "name": "Palau Token",
+      "symbol": "PLW",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "FSM": {
+      "name": "Micronesia Token",
+      "symbol": "FSM",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "NRU": {
+      "name": "Nauru Token",
+      "symbol": "NRU",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "ATG": {
+      "name": "Antigua and Barbuda Token",
+      "symbol": "ATG",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "BRB": {
+      "name": "Barbados Token",
+      "symbol": "BRB",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "DMA": {
+      "name": "Dominica Token",
+      "symbol": "DMA",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "GRD": {
+      "name": "Grenada Token",
+      "symbol": "GRD",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "KNA": {
+      "name": "Saint Kitts and Nevis Token",
+      "symbol": "KNA",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LCA": {
+      "name": "Saint Lucia Token",
+      "symbol": "LCA",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "VCT": {
+      "name": "Saint Vincent Token",
+      "symbol": "VCT",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "AND": {
+      "name": "Andorra Token",
+      "symbol": "AND",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "LIE": {
+      "name": "Liechtenstein Token",
+      "symbol": "LIE",
+      "tier": "D",
+      "tierIndex": 4,
+      "initialSupply": "5000000",
+      "contractAddress": "",
+      "treasuryAddress": ""
+    },
+    "SMR": {
+      "name": "San Marino Token",
+      "symbol": "SMR",
       "tier": "D",
       "tierIndex": 4,
       "initialSupply": "5000000",
