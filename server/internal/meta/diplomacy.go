@@ -1,10 +1,16 @@
 package meta
 
 import (
+	"encoding/json"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"sync"
 	"time"
+
+	"github.com/andrewkim-gif/snake/server/internal/auth"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
 )
 
 // DiplomacyType defines the types of diplomatic relations.
@@ -324,4 +330,512 @@ func (de *DiplomacyEngine) relationKey(a, b string) string {
 		return a + ":" + b
 	}
 	return b + ":" + a
+}
+
+// --- Extended Diplomacy: Treaty Effects ---
+
+// TributeTerms defines the tribute payment terms.
+type TributeTerms struct {
+	GoldPerTick      int64 `json:"gold_per_tick"`
+	OilPerTick       int64 `json:"oil_per_tick"`
+	MineralsPerTick  int64 `json:"minerals_per_tick"`
+	PayerFaction     string `json:"payer_faction"`
+	ReceiverFaction  string `json:"receiver_faction"`
+}
+
+// TradeAgreementTerms defines trade agreement details.
+type TradeAgreementTerms struct {
+	FeeReduction float64 `json:"fee_reduction"` // 0.5 = 50% reduction
+}
+
+// ReputationPenalty is the prestige penalty for breaking treaties.
+const ReputationPenalty = 50
+
+// BreakTreatyWithReputation breaks a treaty and applies reputation penalty to the breaker's faction.
+func (de *DiplomacyEngine) BreakTreatyWithReputation(treatyID, brokenByFaction string, factionManager *FactionManager) error {
+	de.mu.Lock()
+
+	treaty, ok := de.treaties[treatyID]
+	if !ok {
+		de.mu.Unlock()
+		return fmt.Errorf("treaty %s not found", treatyID)
+	}
+	if treaty.Status != StatusActive {
+		de.mu.Unlock()
+		return fmt.Errorf("treaty %s is not active", treatyID)
+	}
+
+	treaty.Status = StatusBroken
+	treaty.BrokenAt = time.Now()
+	treaty.BrokenBy = brokenByFaction
+
+	// Remove from relations index
+	key := de.relationKey(treaty.FactionA, treaty.FactionB)
+	activeIDs := de.relations[key]
+	for i, id := range activeIDs {
+		if id == treatyID {
+			de.relations[key] = append(activeIDs[:i], activeIDs[i+1:]...)
+			break
+		}
+	}
+
+	de.mu.Unlock()
+
+	// Apply reputation penalty
+	if factionManager != nil {
+		factionManager.mu.Lock()
+		if f, ok := factionManager.factions[brokenByFaction]; ok {
+			f.Prestige -= ReputationPenalty
+			if f.Prestige < 0 {
+				f.Prestige = 0
+			}
+		}
+		factionManager.mu.Unlock()
+	}
+
+	slog.Info("treaty broken with reputation penalty",
+		"id", treatyID,
+		"by", brokenByFaction,
+		"penalty", ReputationPenalty,
+	)
+	return nil
+}
+
+// HasNonAggressionPact checks if two factions have an active non-aggression pact.
+func (de *DiplomacyEngine) HasNonAggressionPact(factionA, factionB string) bool {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	key := de.relationKey(factionA, factionB)
+	for _, tid := range de.relations[key] {
+		if t, ok := de.treaties[tid]; ok {
+			if t.Status == StatusActive && t.Type == DiplomacyNonAggression {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// HasTradeAgreement checks if two factions have an active trade agreement.
+func (de *DiplomacyEngine) HasTradeAgreement(factionA, factionB string) bool {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	key := de.relationKey(factionA, factionB)
+	for _, tid := range de.relations[key] {
+		if t, ok := de.treaties[tid]; ok {
+			if t.Status == StatusActive && t.Type == DiplomacyTradeAgreement {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// GetTradeFeeReduction returns the trade fee reduction for two factions.
+// Returns 0.5 (50%) if they have a trade agreement, 0 otherwise.
+func (de *DiplomacyEngine) GetTradeFeeReduction(factionA, factionB string) float64 {
+	if de.HasTradeAgreement(factionA, factionB) {
+		return 0.5
+	}
+	return 0.0
+}
+
+// HasSanction checks if factionA has imposed sanctions on factionB.
+func (de *DiplomacyEngine) HasSanction(sanctioner, sanctioned string) bool {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	for _, treaty := range de.treaties {
+		if treaty.Status != StatusActive || treaty.Type != DiplomacySanction {
+			continue
+		}
+		if treaty.FactionA == sanctioner && treaty.FactionB == sanctioned {
+			return true
+		}
+	}
+	return false
+}
+
+// IsTradeBlocked returns true if trade between two factions is blocked by sanctions.
+func (de *DiplomacyEngine) IsTradeBlocked(factionA, factionB string) bool {
+	return de.HasSanction(factionA, factionB) || de.HasSanction(factionB, factionA)
+}
+
+// GetTributeObligations returns all active tribute treaties where the given faction is paying.
+func (de *DiplomacyEngine) GetTributeObligations(payerFactionID string) []*Treaty {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	var result []*Treaty
+	for _, treaty := range de.treaties {
+		if treaty.Status != StatusActive || treaty.Type != DiplomacyTribute {
+			continue
+		}
+		// The proposer (FactionA) in a tribute treaty is the one who demands tribute
+		// so FactionB is the payer
+		if treaty.FactionB == payerFactionID {
+			result = append(result, treaty)
+		}
+	}
+	return result
+}
+
+// GetPendingProposals returns all pending proposals for a faction.
+func (de *DiplomacyEngine) GetPendingProposals(factionID string) []*Treaty {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	var result []*Treaty
+	for _, treaty := range de.treaties {
+		if treaty.Status != StatusProposed {
+			continue
+		}
+		// Receiver (FactionB) sees pending proposals
+		if treaty.FactionB == factionID {
+			result = append(result, treaty)
+		}
+	}
+	return result
+}
+
+// GetTreaty returns a treaty by ID.
+func (de *DiplomacyEngine) GetTreaty(id string) *Treaty {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+	return de.treaties[id]
+}
+
+// RejectTreaty rejects a proposed treaty.
+func (de *DiplomacyEngine) RejectTreaty(treatyID, rejectedByFaction string) error {
+	de.mu.Lock()
+	defer de.mu.Unlock()
+
+	treaty, ok := de.treaties[treatyID]
+	if !ok {
+		return fmt.Errorf("treaty %s not found", treatyID)
+	}
+	if treaty.Status != StatusProposed {
+		return fmt.Errorf("treaty %s is not in proposed state", treatyID)
+	}
+	if treaty.FactionB != rejectedByFaction {
+		return fmt.Errorf("only the receiving faction can reject a proposal")
+	}
+
+	// Just delete the proposal
+	delete(de.treaties, treatyID)
+
+	slog.Info("treaty proposal rejected", "id", treatyID, "by", rejectedByFaction)
+	return nil
+}
+
+// ProcessTributeTick is called during economy ticks to transfer tribute resources.
+// Returns a list of (payerFactionID, receiverFactionID, ResourceBundle) transfers.
+func (de *DiplomacyEngine) ProcessTributeTick() []TributeTransfer {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	var transfers []TributeTransfer
+	for _, treaty := range de.treaties {
+		if treaty.Status != StatusActive || treaty.Type != DiplomacyTribute {
+			continue
+		}
+
+		// Parse tribute terms from treaty.Terms
+		termsData, _ := json.Marshal(treaty.Terms)
+		var terms TributeTerms
+		if err := json.Unmarshal(termsData, &terms); err != nil {
+			continue
+		}
+
+		if terms.GoldPerTick > 0 || terms.OilPerTick > 0 || terms.MineralsPerTick > 0 {
+			transfers = append(transfers, TributeTransfer{
+				PayerFaction:    treaty.FactionB,
+				ReceiverFaction: treaty.FactionA,
+				Resources: ResourceBundle{
+					Gold:     terms.GoldPerTick,
+					Oil:      terms.OilPerTick,
+					Minerals: terms.MineralsPerTick,
+				},
+			})
+		}
+	}
+	return transfers
+}
+
+// TributeTransfer represents a tribute payment in a single tick.
+type TributeTransfer struct {
+	PayerFaction    string         `json:"payer_faction"`
+	ReceiverFaction string         `json:"receiver_faction"`
+	Resources       ResourceBundle `json:"resources"`
+}
+
+// GetAllActiveWars returns all active or preparing wars.
+func (de *DiplomacyEngine) GetAllActiveWars() []*War {
+	de.mu.RLock()
+	defer de.mu.RUnlock()
+
+	var result []*War
+	for _, war := range de.wars {
+		if war.Status == "active" || war.Status == "preparing" {
+			result = append(result, war)
+		}
+	}
+	return result
+}
+
+// --- HTTP API ---
+
+// DiplomacyRoutes returns a chi.Router with diplomacy HTTP endpoints.
+// Requires a FactionManager reference for permission and reputation checks.
+func (de *DiplomacyEngine) DiplomacyRoutes(fm *FactionManager) chi.Router {
+	r := chi.NewRouter()
+	r.Use(auth.JWTAuth)
+
+	r.Post("/propose", de.handlePropose(fm))
+	r.Post("/accept", de.handleAccept(fm))
+	r.Post("/reject", de.handleReject(fm))
+	r.Post("/break", de.handleBreak(fm))
+	r.Get("/treaties/{factionID}", de.handleGetTreaties)
+	r.Get("/pending/{factionID}", de.handleGetPending)
+
+	return r
+}
+
+// ProposeRequest is the HTTP request body for proposing a treaty.
+type ProposeRequest struct {
+	Type     DiplomacyType          `json:"type"`
+	TargetID string                 `json:"target_faction_id"`
+	Terms    map[string]interface{} `json:"terms,omitempty"`
+}
+
+func (de *DiplomacyEngine) handlePropose(fm *FactionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := auth.GetUserID(r.Context())
+		if userID == "" {
+			writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+			return
+		}
+
+		factionID := fm.GetUserFaction(userID)
+		if factionID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "you must be in a faction"})
+			return
+		}
+
+		// Need Council+ to propose treaties
+		if !fm.HasPermission(factionID, userID, RoleCouncil) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "requires Council+ permission"})
+			return
+		}
+
+		var req ProposeRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		if req.TargetID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "target_faction_id required"})
+			return
+		}
+
+		// Validate target faction exists
+		if fm.GetFaction(req.TargetID) == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "target faction not found"})
+			return
+		}
+
+		// For sanctions — one-sided, no acceptance needed
+		if req.Type == DiplomacySanction {
+			id := uuid.New().String()
+			treaty, err := de.ProposeTreaty(id, req.Type, factionID, req.TargetID, userID)
+			if err != nil {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+				return
+			}
+			// Auto-activate sanctions
+			if err := de.AcceptTreaty(id); err != nil {
+				writeJSON(w, http.StatusInternalServerError, map[string]string{"error": err.Error()})
+				return
+			}
+			writeJSON(w, http.StatusCreated, map[string]interface{}{
+				"treaty": treaty,
+				"status": "active",
+			})
+			return
+		}
+
+		id := uuid.New().String()
+		treaty, err := de.ProposeTreaty(id, req.Type, factionID, req.TargetID, userID)
+		if err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+
+		// Set terms if provided
+		if len(req.Terms) > 0 {
+			de.mu.Lock()
+			treaty.Terms = req.Terms
+			de.mu.Unlock()
+		}
+
+		writeJSON(w, http.StatusCreated, map[string]interface{}{
+			"treaty": treaty,
+			"status": "proposed",
+		})
+	}
+}
+
+// AcceptRequest is the HTTP request body for accepting a treaty.
+type AcceptRequest struct {
+	TreatyID string `json:"treaty_id"`
+}
+
+func (de *DiplomacyEngine) handleAccept(fm *FactionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := auth.GetUserID(r.Context())
+		factionID := fm.GetUserFaction(userID)
+		if factionID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "you must be in a faction"})
+			return
+		}
+
+		if !fm.HasPermission(factionID, userID, RoleCouncil) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "requires Council+ permission"})
+			return
+		}
+
+		var req AcceptRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		treaty := de.GetTreaty(req.TreatyID)
+		if treaty == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "treaty not found"})
+			return
+		}
+
+		// Must be the receiving faction
+		if treaty.FactionB != factionID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "only the receiving faction can accept"})
+			return
+		}
+
+		if err := de.AcceptTreaty(req.TreatyID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status": "accepted",
+			"treaty": de.GetTreaty(req.TreatyID),
+		})
+	}
+}
+
+// RejectRequest is the HTTP request body for rejecting a treaty.
+type RejectRequest struct {
+	TreatyID string `json:"treaty_id"`
+}
+
+func (de *DiplomacyEngine) handleReject(fm *FactionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := auth.GetUserID(r.Context())
+		factionID := fm.GetUserFaction(userID)
+		if factionID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "you must be in a faction"})
+			return
+		}
+
+		var req RejectRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		if err := de.RejectTreaty(req.TreatyID, factionID); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]string{"status": "rejected"})
+	}
+}
+
+// BreakRequest is the HTTP request body for breaking a treaty.
+type BreakRequest struct {
+	TreatyID string `json:"treaty_id"`
+}
+
+func (de *DiplomacyEngine) handleBreak(fm *FactionManager) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		userID := auth.GetUserID(r.Context())
+		factionID := fm.GetUserFaction(userID)
+		if factionID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "you must be in a faction"})
+			return
+		}
+
+		if !fm.HasPermission(factionID, userID, RoleCouncil) {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "requires Council+ permission"})
+			return
+		}
+
+		var req BreakRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid request body"})
+			return
+		}
+
+		// Verify this faction is part of the treaty
+		treaty := de.GetTreaty(req.TreatyID)
+		if treaty == nil {
+			writeJSON(w, http.StatusNotFound, map[string]string{"error": "treaty not found"})
+			return
+		}
+		if treaty.FactionA != factionID && treaty.FactionB != factionID {
+			writeJSON(w, http.StatusForbidden, map[string]string{"error": "your faction is not part of this treaty"})
+			return
+		}
+
+		if err := de.BreakTreatyWithReputation(req.TreatyID, factionID, fm); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
+			return
+		}
+
+		writeJSON(w, http.StatusOK, map[string]interface{}{
+			"status":           "broken",
+			"reputation_penalty": ReputationPenalty,
+		})
+	}
+}
+
+// handleGetTreaties — GET /api/diplomacy/treaties/{factionID}
+func (de *DiplomacyEngine) handleGetTreaties(w http.ResponseWriter, r *http.Request) {
+	factionID := chi.URLParam(r, "factionID")
+	treaties := de.GetActiveTreaties(factionID)
+	if treaties == nil {
+		treaties = []*Treaty{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"treaties": treaties,
+		"count":    len(treaties),
+	})
+}
+
+// handleGetPending — GET /api/diplomacy/pending/{factionID}
+func (de *DiplomacyEngine) handleGetPending(w http.ResponseWriter, r *http.Request) {
+	factionID := chi.URLParam(r, "factionID")
+	pending := de.GetPendingProposals(factionID)
+	if pending == nil {
+		pending = []*Treaty{}
+	}
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"proposals": pending,
+		"count":     len(pending),
+	})
 }
