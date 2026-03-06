@@ -25,6 +25,10 @@ import { SkyBox } from '@/components/3d/SkyBox';
 import { PlayCamera } from '@/components/3d/PlayCamera';
 import { GameLoop } from '@/components/3d/GameLoop';
 import { AgentInstances } from '@/components/3d/AgentInstances';
+import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
+import { TerrainDeco } from '@/components/3d/TerrainDeco';
+import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
+import { MapStructures } from '@/components/3d/MapStructures';
 
 // 기존 HUD 오버레이 (Canvas 밖 HTML)
 import { DeathOverlay } from './DeathOverlay';
@@ -212,6 +216,7 @@ export function GameCanvas3D({
     ? Math.sqrt(myAgent.x * myAgent.x + myAgent.y * myAgent.y)
     : 0;
   const currentRadius = uiState.arenaShrink?.currentRadius ?? ARENA_CONFIG.radius;
+  const targetRadius = uiState.arenaShrink?.minRadius;
 
   // ─── 오버레이 표시 조건 (기존 GameCanvas.tsx와 동일) ───
   const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
@@ -249,8 +254,8 @@ export function GameCanvas3D({
           playerId={dataRef.current.playerId}
         />
 
-        {/* 3. Scene — 라이팅 + Fog */}
-        <Scene />
+        {/* 3. Scene — 라이팅 + Fog + 분위기 변화 */}
+        <Scene timeRemaining={uiState.timeRemaining} />
 
         {/* 4. SkyBox — 하늘 돔 + 구름 */}
         <SkyBox />
@@ -258,12 +263,17 @@ export function GameCanvas3D({
         {/* 5. AgentInstances — MC 복셀 캐릭터 InstancedMesh 렌더링 */}
         <AgentInstances agentsRef={agentsRef} elapsedRef={elapsedRef} />
 
-        {/* 향후 Phase에서 추가:
-          <ZoneTerrain />
-          <OrbInstances />
-          <ArenaBoundary />
-          <EffectsLayer />
-        */}
+        {/* 6. ZoneTerrain — 3개 동심원 존 바닥 (Edge/Mid/Core) */}
+        <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} />
+
+        {/* 7. TerrainDeco — 환경 데코레이션 (나무/횃불/용암 등) */}
+        <TerrainDeco arenaRadius={ARENA_CONFIG.radius} />
+
+        {/* 8. ArenaBoundary — 수축 경계벽 */}
+        <ArenaBoundary currentRadius={currentRadius} targetRadius={targetRadius} />
+
+        {/* 9. MapStructures — 맵 구조물 (Shrine/Spring/Altar) */}
+        <MapStructures arenaRadius={ARENA_CONFIG.radius} />
       </Canvas>
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
