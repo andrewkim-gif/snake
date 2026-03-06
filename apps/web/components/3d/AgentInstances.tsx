@@ -3,21 +3,21 @@
 /**
  * AgentInstances — 큐블링(Cubeling) 캐릭터 InstancedMesh 일괄 렌더링
  *
- * Phase 4A 변경사항: AnimationStateMachine 통합
- * - computePartRotations() → AnimationStateMachine.getTransforms()
- * - 파트별 multi-axis rotation + positional offset + scale 지원
+ * Phase 4A: AnimationStateMachine 통합
  * - IDLE: 호흡, 좌우 둘러보기, 무게중심 이동, 팔 흔들림
  * - WALK: 교차 스윙, Y 바운스(cos 곡선), Z 힙스웨이
  * - BOOST: 전방 기울임, 팔 잠금, 2배속 다리, body 찌그러짐
- * - 상태 전환: smoothstep 블렌딩 (0.1~0.2초)
+ *
+ * Phase 4B: 전투/이벤트 애니메이션 통합
+ * - ATTACK: 팔R 휘두르기, body 트위스트
+ * - HIT: 넉백 + 찌그러짐 + 흰색 플래시 (setColorAt)
+ * - DEATH: 720° 스핀 + 포물선 + 축소 소멸
+ * - SPAWN: 스케일 바운스 + 아래서 솟아오름
+ * - LEVELUP: 점프 + 만세 포즈
+ * - VICTORY: 제자리 춤 루프
+ * - COLLECT: 짧은 팔 뻗기
  *
  * Phase 2 유지: Color-Tint 머티리얼 시스템
- * - body: 패턴별 4 InstancedMesh 그룹핑
- * - arm/leg: 단일 IM + setColorAt
- * - head: HeadGroupManager 담당
- *
- * 총 IM: body 4 + armL 1 + armR 1 + legL 1 + legR 1 = 8 draw calls
- * (head는 HeadGroupManager가 담당)
  *
  * CRITICAL: useFrame priority 0 — auto-render 유지!
  */
@@ -50,6 +50,7 @@ const _qAgent = new THREE.Quaternion();
 const _qPart = new THREE.Quaternion();
 const _qCombined = new THREE.Quaternion();
 const _color = new THREE.Color();
+const _whiteColor = new THREE.Color(0xffffff);
 
 // ─── 속도 추정용 이전 위치 캐시 ───
 
@@ -305,6 +306,9 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       // ─── 애니메이션 변환 가져오기 ───
       const anim = sm.getTransforms(smIdx, motion.velocity, boosting);
 
+      // ─── HIT 플래시: 흰색으로 일시 오버라이드 ───
+      const isFlashing = sm.getHitFlashRemaining(smIdx) > 0;
+
       // ─── Body: 패턴별 IM에 할당 ───
       const patternGroup = appearance.pattern < BODY_PATTERN_COUNT ? appearance.pattern : 0;
       const bodyMesh = bodyMeshes[patternGroup];
@@ -316,39 +320,45 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
           anim.body.posX, anim.body.posY, anim.body.posZ,
           anim.body.scaleX, anim.body.scaleY);
 
-        // body 색상 = topColor
-        const topColorHex = VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length];
-        _color.set(topColorHex);
-        bodyMesh.setColorAt(bodyIdx, _color);
+        // body 색상 = topColor (HIT 플래시 시 흰색)
+        if (isFlashing) {
+          bodyMesh.setColorAt(bodyIdx, _whiteColor);
+        } else {
+          const topColorHex = VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length];
+          _color.set(topColorHex);
+          bodyMesh.setColorAt(bodyIdx, _color);
+        }
 
         bodyIndices[patternGroup] = bodyIdx + 1;
       }
+
+      // ─── 팔/다리 색상 결정 (HIT 플래시 대응) ───
+      const topColorHex = VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length];
+      const bottomColorHex = VIVID_PALETTE[appearance.bottomColor % VIVID_PALETTE.length];
 
       // ─── ArmL ───
       setPartMatrix(armLMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armL.offset[0], P.armL.offset[1], P.armL.offset[2],
         anim.armL.rotX, 0, anim.armL.rotZ);
-      _color.set(VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length]);
-      armLMesh.setColorAt(limbIdx, _color);
+      armLMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(topColorHex));
 
       // ─── ArmR ───
       setPartMatrix(armRMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armR.offset[0], P.armR.offset[1], P.armR.offset[2],
         anim.armR.rotX, 0, anim.armR.rotZ);
-      armRMesh.setColorAt(limbIdx, _color);
+      armRMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(topColorHex));
 
       // ─── LegL ───
       setPartMatrix(legLMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.legL.offset[0], P.legL.offset[1], P.legL.offset[2],
         anim.legL.rotX);
-      _color.set(VIVID_PALETTE[appearance.bottomColor % VIVID_PALETTE.length]);
-      legLMesh.setColorAt(limbIdx, _color);
+      legLMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(bottomColorHex));
 
       // ─── LegR ───
       setPartMatrix(legRMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.legR.offset[0], P.legR.offset[1], P.legR.offset[2],
         anim.legR.rotX);
-      legRMesh.setColorAt(limbIdx, _color);
+      legRMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(bottomColorHex));
 
       limbIdx++;
     }

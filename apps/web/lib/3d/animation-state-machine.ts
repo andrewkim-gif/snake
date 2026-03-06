@@ -7,7 +7,7 @@
  * 출력: 파트별 회전(rad), 오프셋(unit), 스케일 — Matrix4 변환은 AgentInstances.tsx에서 수행
  *
  * Phase 4A: IDLE, WALK, BOOST 3상태 + 블렌딩 전환
- * (ATTACK, HIT, DEATH, SPAWN, LEVELUP, VICTORY, COLLECT는 Phase 4B에서 추가)
+ * Phase 4B: ATTACK, HIT, DEATH, SPAWN, LEVELUP, VICTORY, COLLECT 7상태 추가
  */
 
 import { AnimState } from '@agent-survivor/shared';
@@ -19,6 +19,23 @@ const PI2 = Math.PI * 2;
 
 /** 속도 임계값: 이 이하이면 IDLE */
 const WALK_THRESHOLD = 5;
+
+// ─── 원샷/루프/영구 상태 duration 상수 ───
+
+/** ATTACK 원샷 duration (초) */
+const ATTACK_DURATION = 0.4;
+/** HIT 원샷 duration (초) */
+const HIT_DURATION = 0.3;
+/** DEATH 영구 애니메이션 duration (초) — 완료 후 scale=0 유지 */
+const DEATH_DURATION = 2.0;
+/** SPAWN 원샷 duration (초) */
+const SPAWN_DURATION = 0.4;
+/** LEVELUP 원샷 duration (초) */
+const LEVELUP_DURATION = 0.8;
+/** COLLECT 원샷 duration (초) */
+const COLLECT_DURATION = 0.25;
+/** VICTORY 루프 주기 (초) */
+const VICTORY_LOOP_PERIOD = 1.0;
 
 // ─── 파트별 변환 출력 인터페이스 ───
 
@@ -94,8 +111,39 @@ const TRANSITION_DURATIONS: TransitionConfig[] = [
   { from: -1, to: AnimState.HIT, blendDuration: 0, priority: 8 },
   // ANY → DEATH: 즉시
   { from: -1, to: AnimState.DEATH, blendDuration: 0, priority: 10 },
+  // ANY → SPAWN: 즉시
+  { from: -1, to: AnimState.SPAWN, blendDuration: 0, priority: 9 },
   // SPAWN → IDLE: 느린 전환
   { from: AnimState.SPAWN, to: AnimState.IDLE, blendDuration: 0.2, priority: 0 },
+
+  // ATTACK → 이전 상태: 빠른 복귀
+  { from: AnimState.ATTACK, to: AnimState.IDLE, blendDuration: 0.1, priority: 0 },
+  { from: AnimState.ATTACK, to: AnimState.WALK, blendDuration: 0.1, priority: 1 },
+  { from: AnimState.ATTACK, to: AnimState.BOOST, blendDuration: 0.08, priority: 2 },
+
+  // HIT → 이전 상태: 빠른 복귀
+  { from: AnimState.HIT, to: AnimState.IDLE, blendDuration: 0.1, priority: 0 },
+  { from: AnimState.HIT, to: AnimState.WALK, blendDuration: 0.1, priority: 1 },
+
+  // LEVELUP → IDLE: 부드러운 복귀
+  { from: AnimState.LEVELUP, to: AnimState.IDLE, blendDuration: 0.15, priority: 0 },
+  { from: AnimState.LEVELUP, to: AnimState.WALK, blendDuration: 0.12, priority: 1 },
+
+  // COLLECT → 이전 상태: 즉시 복귀
+  { from: AnimState.COLLECT, to: AnimState.IDLE, blendDuration: 0.05, priority: 0 },
+  { from: AnimState.COLLECT, to: AnimState.WALK, blendDuration: 0.05, priority: 1 },
+
+  // VICTORY → IDLE: 명시적 종료
+  { from: AnimState.VICTORY, to: AnimState.IDLE, blendDuration: 0.2, priority: 0 },
+
+  // ANY → ATTACK: 빠른 진입
+  { from: -1, to: AnimState.ATTACK, blendDuration: 0.05, priority: 5 },
+  // ANY → COLLECT: 즉시
+  { from: -1, to: AnimState.COLLECT, blendDuration: 0, priority: 3 },
+  // ANY → LEVELUP: 빠른 진입
+  { from: -1, to: AnimState.LEVELUP, blendDuration: 0.05, priority: 4 },
+  // ANY → VICTORY: 부드러운 진입
+  { from: -1, to: AnimState.VICTORY, blendDuration: 0.15, priority: 4 },
 ];
 
 /** 특정 전환의 블렌드 시간 조회 */
@@ -110,6 +158,27 @@ function getBlendDuration(from: AnimState, to: AnimState): number {
   }
   // 기본 블렌드
   return 0.15;
+}
+
+// ─── 이징 함수 ───
+
+/** easeOutBack: 오버슈트 후 복귀 (공격 휘두르기 등) */
+function easeOutBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+
+/** easeOutExpo: 빠른 시작 후 점차 감속 (사망 스핀) */
+function easeOutExpo(t: number): number {
+  return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+}
+
+/** easeInBack: 당겼다 발사 (사망 축소) */
+function easeInBack(t: number): number {
+  const c1 = 1.70158;
+  const c3 = c1 + 1;
+  return c3 * t * t * t - c1 * t * t;
 }
 
 // ─── 바운스 물리 (큐블링 핵심 개성) ───
@@ -141,8 +210,6 @@ export function computeBounce(
   const boostMul = boosting ? 1.5 : 1.0;
 
   // cos 기반 smooth 바운스 (발 딛을 때마다 올라감)
-  // cos(0)=1 → 시작점이 높음, cos(π)=-1 → 낮은 점
-  // (1 - cos) / 2 → 0~1 범위, 바닥에서 시작해서 올라감
   const amplitude = 1.2 * boostMul;
   const bounceY = (1 - Math.cos(elapsed * walkFreq * PI2)) * 0.5 * amplitude;
 
@@ -161,7 +228,7 @@ export function computeBounce(
 /**
  * IDLE 상태 파트 변환 계산
  * - 호흡: body scaleY 미세 변화 (0.98~1.02, sin wave 2초 주기)
- * - 좌우 둘러보기: head Y축 회전 (±0.2rad, 4~6초 랜덤→4초 고정 주기, lerp 전환)
+ * - 좌우 둘러보기: head Y축 회전 (±0.2rad, 4초 주기)
  * - 무게중심 이동: body 미세 X 오프셋 (±0.3, 8초 주기)
  * - 팔 자연스러운 흔들림: ±0.08rad, body와 역위상
  * - 다리: 거의 정지 (±0.02rad 미세 흔들림)
@@ -179,7 +246,6 @@ function computeIdle(elapsed: number, out: PartTransforms): void {
   out.head.posY = breathPhase * 0.4;
 
   // 좌우 둘러보기: 4초 주기, ±0.2rad (~11°)
-  // sin 커브의 부드러운 왕복을 위해 더 느린 주파수 사용
   const lookPhase = Math.sin(elapsed * 0.25 * PI2); // 4초 주기
   out.head.rotY = lookPhase * 0.2;
 
@@ -273,6 +339,259 @@ function computeBoost(
   out.head.posY = bounce.bounceY;
 }
 
+// ─── Phase 4B: 전투/이벤트 애니메이션 ───
+
+/**
+ * ATTACK 상태 파트 변환 계산 (원샷 0.4초)
+ * - 팔R 휘두르기: rotX -2.0→0 rad (easeOutBack)
+ * - body 미세 회전: rotY 0→0.2→0 (타겟 방향 트위스트)
+ * - head: 약간 앞으로 기울임 (-0.1rad)
+ */
+function computeAttack(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / ATTACK_DURATION);
+
+  // 팔R 휘두르기: -2.0 → 0 (easeOutBack으로 오버슈트)
+  const armSwing = easeOutBack(t);
+  out.armR.rotX = -2.0 * (1 - armSwing);
+
+  // body rotY: 0→0.2→0 (삼각 펄스 — 전반부 올라가고 후반부 내려옴)
+  const bodyTwist = t < 0.5 ? t * 2 : (1 - t) * 2;
+  out.body.rotY = bodyTwist * 0.2;
+
+  // head: 전방 기울임 (공격 집중)
+  out.head.rotX = -0.1 * (1 - t); // 점차 복원
+
+  // body 약간 앞으로 숙이기
+  out.body.rotX = -0.05 * (1 - t);
+}
+
+/**
+ * HIT 상태 파트 변환 계산 (원샷 0.3초)
+ * - 넉백: body rotX 0.3rad (뒤로 젖힘)
+ * - 찌그러짐: body scaleX 1.3, scaleY 0.7 → 복원 (squash & stretch)
+ * - 고주파 진동: posX += sin(elapsed * 40) * 2 (0.3초간)
+ */
+function computeHit(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / HIT_DURATION);
+
+  // 넉백: 뒤로 젖힘 → 복원 (빠르게 시작, 느리게 복귀)
+  const knockbackT = 1 - t;
+  out.body.rotX = 0.3 * knockbackT * knockbackT; // 제곱 감쇠
+
+  // 찌그러짐 (squash & stretch): 시작 시 최대, 스프링 바운스로 복원
+  const squashDecay = Math.exp(-t * 8); // 지수 감쇠
+  out.body.scaleX = 1.0 + 0.3 * squashDecay;
+  out.body.scaleY = 1.0 - 0.3 * squashDecay;
+
+  // head도 따라서 찌그러짐
+  out.head.scaleX = 1.0 + 0.15 * squashDecay;
+  out.head.scaleY = 1.0 - 0.15 * squashDecay;
+
+  // 고주파 진동 (흔들림): sin(elapsed * 40) * 2, 시간에 따라 감쇠
+  const shake = Math.sin(elapsed * 40) * 2 * (1 - t);
+  out.body.posX = shake;
+  out.head.posX = shake * 0.7; // head는 덜 흔들림
+
+  // head 뒤로 젖힘
+  out.head.rotX = 0.15 * knockbackT;
+
+  // 팔 벌어짐 (피격 충격)
+  out.armL.rotX = -0.5 * knockbackT;
+  out.armR.rotX = -0.5 * knockbackT;
+}
+
+/**
+ * DEATH 상태 파트 변환 계산 (영구 2.0초, "코미컬 퐁" 사망)
+ * - 720° 스핀: body rotY 0→4π (easeOutExpo)
+ * - Y축 포물선: posY 0→30→-50
+ * - 전체 축소: scaleX/Y 1→0 (easeInBack)
+ * - head: 별도 더 빠르게 회전 (rotY 6π)
+ * - 팔/다리: 벌어짐 (rotX ±1.5rad)
+ * - 2초 후 완전 소멸 (scaleX/Y = 0)
+ */
+function computeDeath(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / DEATH_DURATION);
+
+  // 720° 스핀 (body): easeOutExpo로 처음 빠르고 끝에 느려짐
+  const spinProgress = easeOutExpo(t);
+  out.body.rotY = spinProgress * 4 * PI; // 0 → 4π (720°)
+
+  // Y축 포물선: 시작→최고점(30)→하강(-50)
+  // 포물선 공식: y = -a(t-h)^2 + k, 최고점 t=0.3에서 y=30
+  const peakT = 0.3;
+  const peakY = 30;
+  const fallEnd = -50;
+  let posY: number;
+  if (t < peakT) {
+    // 상승 구간: 0→30 (sin 곡선으로 부드럽게)
+    posY = peakY * Math.sin((t / peakT) * PI * 0.5);
+  } else {
+    // 하강 구간: 30→-50 (가속 낙하)
+    const fallT = (t - peakT) / (1 - peakT);
+    posY = peakY + (fallEnd - peakY) * fallT * fallT;
+  }
+  out.body.posY = posY;
+  out.head.posY = posY;
+
+  // 전체 축소: easeInBack (당겼다 줄어듦)
+  const shrink = 1 - easeInBack(t);
+  const scaleVal = Math.max(0, shrink);
+  out.body.scaleX = scaleVal;
+  out.body.scaleY = scaleVal;
+  out.head.scaleX = scaleVal;
+  out.head.scaleY = scaleVal;
+
+  // head: 더 빠른 회전 (6π = 1080°)
+  out.head.rotY = spinProgress * 6 * PI;
+
+  // 팔/다리 벌어짐: 점차 최대로
+  const limbSpread = Math.min(t * 3, 1); // 0.33초 안에 최대
+  out.armL.rotX = -1.5 * limbSpread;
+  out.armR.rotX = -1.5 * limbSpread;
+  out.armL.rotZ = -0.5 * limbSpread; // 옆으로도 벌어짐
+  out.armR.rotZ = 0.5 * limbSpread;
+  out.legL.rotX = -1.5 * limbSpread;
+  out.legR.rotX = 1.5 * limbSpread;
+}
+
+/**
+ * SPAWN 상태 파트 변환 계산 (원샷 0.4초)
+ * - 스케일 바운스: 0→1.3→0.9→1.0 (3단계 bounce)
+ * - posY: -20→0 (아래서 솟아오름)
+ * - 팔: 양쪽 벌어짐 rotX ±1.0 → 0 (만세 포즈에서 복원)
+ */
+function computeSpawn(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / SPAWN_DURATION);
+
+  // 3단계 스케일 바운스: 0→1.3→0.9→1.0
+  let scale: number;
+  if (t < 0.4) {
+    // Phase 1: 0→1.3 (빠른 확대)
+    const p = t / 0.4;
+    scale = 1.3 * p * p * (3 - 2 * p); // smoothstep
+  } else if (t < 0.7) {
+    // Phase 2: 1.3→0.9 (살짝 줄어듦)
+    const p = (t - 0.4) / 0.3;
+    scale = 1.3 + (0.9 - 1.3) * p;
+  } else {
+    // Phase 3: 0.9→1.0 (안착)
+    const p = (t - 0.7) / 0.3;
+    scale = 0.9 + (1.0 - 0.9) * p;
+  }
+  out.body.scaleX = scale;
+  out.body.scaleY = scale;
+  out.head.scaleX = scale;
+  out.head.scaleY = scale;
+
+  // posY: -20→0 (아래서 솟아오름, easeOut)
+  const riseT = 1 - (1 - t) * (1 - t); // easeOutQuad
+  out.body.posY = -20 * (1 - riseT);
+  out.head.posY = -20 * (1 - riseT);
+
+  // 팔: 만세(벌어짐) → 복원
+  const armDecay = 1 - t;
+  out.armL.rotX = -1.0 * armDecay;
+  out.armR.rotX = -1.0 * armDecay;
+  out.armL.rotZ = -0.3 * armDecay; // 옆으로도 벌어짐
+  out.armR.rotZ = 0.3 * armDecay;
+}
+
+/**
+ * LEVELUP 상태 파트 변환 계산 (원샷 0.8초)
+ * - 점프: posY 0→15→0 (cos 곡선)
+ * - 만세 포즈: armL rotX -2.5, armR rotX -2.5 (양팔 위로)
+ * - body scaleY: 1.0→1.1→1.0 (기쁨 표현)
+ * - head: rotX -0.2 (위를 바라봄)
+ */
+function computeLevelup(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / LEVELUP_DURATION);
+
+  // 점프: cos 곡선 (0→15→0)
+  // sin(t * π) = 0→1→0 곡선
+  const jumpHeight = 15;
+  out.body.posY = jumpHeight * Math.sin(t * PI);
+  out.head.posY = jumpHeight * Math.sin(t * PI);
+
+  // 만세 포즈: 빠르게 올리고 천천히 복원
+  const armRaise = t < 0.3
+    ? t / 0.3 // 빠르게 올림 (0.3초)
+    : 1 - (t - 0.3) / 0.7; // 천천히 복원 (0.5초)
+  const armTarget = -2.5; // 양팔 위로
+  out.armL.rotX = armTarget * Math.max(0, armRaise);
+  out.armR.rotX = armTarget * Math.max(0, armRaise);
+  // 팔 옆으로 벌림 (만세)
+  out.armL.rotZ = -0.4 * Math.max(0, armRaise);
+  out.armR.rotZ = 0.4 * Math.max(0, armRaise);
+
+  // body scaleY: 기쁨으로 살짝 커짐
+  const joyScale = Math.sin(t * PI); // 0→1→0
+  out.body.scaleY = 1.0 + 0.1 * joyScale;
+  out.body.scaleX = 1.0 - 0.03 * joyScale; // 약간 좁아짐 (stretch)
+
+  // head: 위를 바라봄
+  out.head.rotX = -0.2 * joyScale;
+
+  // 다리: 공중에서 살짝 오므림
+  const legTuck = Math.sin(t * PI) * 0.3;
+  out.legL.rotX = legTuck;
+  out.legR.rotX = -legTuck;
+}
+
+/**
+ * VICTORY 상태 파트 변환 계산 (루프 1.0초 주기)
+ * - 제자리 춤: body rotY ±0.3rad (왕복)
+ * - 팔: 교대 만세 (armL과 armR 번갈아 올라감)
+ * - 다리: 작은 스텝 (rotX ±0.2)
+ * - head: body 반대 방향 rotY (유연함)
+ */
+function computeVictory(elapsed: number, out: PartTransforms): void {
+  // 루프: elapsed modulo period
+  const phase = (elapsed % VICTORY_LOOP_PERIOD) / VICTORY_LOOP_PERIOD;
+  const sinPhase = Math.sin(phase * PI2);
+  const cosPhase = Math.cos(phase * PI2);
+
+  // body: 좌우 춤 (rotY 왕복)
+  out.body.rotY = sinPhase * 0.3;
+
+  // head: body 반대 방향 (유연함)
+  out.head.rotY = -sinPhase * 0.2;
+
+  // 팔: 교대 만세 (하나 올라가면 하나 내려감)
+  // armL: sin 위상, armR: cos 위상 (90° 차이 = 교대)
+  out.armL.rotX = -1.5 - sinPhase * 1.0; // -2.5 ~ -0.5 (올라감~내려감)
+  out.armR.rotX = -1.5 - cosPhase * 1.0;
+
+  // 다리: 작은 스텝 (walk보다 느리고 작은 진폭)
+  out.legL.rotX = sinPhase * 0.2;
+  out.legR.rotX = -sinPhase * 0.2;
+
+  // body: 미세 바운스 (춤 느낌)
+  out.body.posY = Math.abs(sinPhase) * 2; // 0~2 범위 바운스
+  out.head.posY = Math.abs(sinPhase) * 2;
+
+  // body scaleY: 리듬감 있는 미세 변화
+  out.body.scaleY = 1.0 + Math.abs(sinPhase) * 0.05;
+}
+
+/**
+ * COLLECT 상태 파트 변환 계산 (원샷 0.25초)
+ * - 짧은 팔 뻗기: armR rotX -1.5 → 0
+ * - body 미세 기울임: rotX -0.1 (앞으로 살짝)
+ */
+function computeCollect(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / COLLECT_DURATION);
+
+  // 팔R: 앞으로 뻗었다 복원 (빠른 easeOut)
+  const reach = 1 - t * t; // 빠르게 감소
+  out.armR.rotX = -1.5 * reach;
+
+  // body: 앞으로 미세 기울임 (수집하려 숙이는 느낌)
+  out.body.rotX = -0.1 * reach;
+
+  // head: 아래를 봄 (수집 대상 주시)
+  out.head.rotX = 0.1 * reach;
+}
+
 // ─── 에이전트별 애니메이션 상태 ───
 
 interface AgentAnimState {
@@ -280,6 +599,8 @@ interface AgentAnimState {
   current: AnimState;
   /** 이전 상태 (블렌딩용) */
   previous: AnimState;
+  /** 원샷 복귀용: 원샷 애니메이션 직전의 이동 상태 */
+  returnState: AnimState;
   /** 현재 상태 경과 시간 (초) */
   elapsed: number;
   /** 블렌드 팩터: 0=previous, 1=current */
@@ -292,6 +613,8 @@ interface AgentAnimState {
   active: boolean;
   /** IDLE 시드 (에이전트별 위상 오프셋으로 동시 동작 방지) */
   idleSeed: number;
+  /** HIT 플래시 타이머 (AgentInstances.tsx에서 참조) */
+  hitFlashRemaining: number;
 }
 
 // ─── AnimInput: 외부에서 전달하는 에이전트 상태 ───
@@ -299,12 +622,41 @@ interface AgentAnimState {
 export interface AnimInput {
   velocity: number;
   boosting: boolean;
-  // Phase 4B에서 추가될 필드:
-  // alive: boolean;
-  // wasHit: boolean;
-  // wasLevelUp: boolean;
-  // wasKill: boolean;
-  // wasCollect: boolean;
+  /** false면 DEATH 트리거 (Phase 4B) */
+  alive?: boolean;
+  /** true면 HIT 트리거 (1프레임 이벤트) */
+  wasHit?: boolean;
+  /** true면 LEVELUP 트리거 (1프레임 이벤트) */
+  wasLevelUp?: boolean;
+  /** true면 ATTACK 트리거 (1프레임 이벤트) */
+  wasAttack?: boolean;
+  /** true면 COLLECT 트리거 (1프레임 이벤트) */
+  wasCollect?: boolean;
+  /** true면 VICTORY 루프 시작 */
+  isVictory?: boolean;
+  /** true면 SPAWN 트리거 (첫 등장) */
+  wasSpawn?: boolean;
+}
+
+// ─── 원샷 상태인지 판단 ───
+
+/** 원샷 상태의 duration 조회 (루프/영구 상태는 -1) */
+function getOneShotDuration(state: AnimState): number {
+  switch (state) {
+    case AnimState.ATTACK: return ATTACK_DURATION;
+    case AnimState.HIT: return HIT_DURATION;
+    case AnimState.SPAWN: return SPAWN_DURATION;
+    case AnimState.LEVELUP: return LEVELUP_DURATION;
+    case AnimState.COLLECT: return COLLECT_DURATION;
+    // DEATH는 영구 (자동 복귀 없음)
+    // VICTORY는 루프 (명시적 종료)
+    default: return -1;
+  }
+}
+
+/** 이동 상태인지 (IDLE/WALK/BOOST) */
+function isLocomotionState(state: AnimState): boolean {
+  return state === AnimState.IDLE || state === AnimState.WALK || state === AnimState.BOOST;
 }
 
 // ─── lerp 유틸 ───
@@ -347,6 +699,7 @@ export class AnimationStateMachine {
       this.states.push({
         current: AnimState.IDLE,
         previous: AnimState.IDLE,
+        returnState: AnimState.IDLE,
         elapsed: 0,
         blendFactor: 1, // 완전히 현재 상태
         blendDuration: 0,
@@ -354,6 +707,7 @@ export class AnimationStateMachine {
         active: false,
         // 에이전트별 위상 오프셋: IDLE 애니메이션이 동시에 움직이지 않도록
         idleSeed: Math.random() * 10,
+        hitFlashRemaining: 0,
       });
     }
 
@@ -384,6 +738,14 @@ export class AnimationStateMachine {
     // (단, 블렌드가 완료된 상태면 자유롭게 전환 가능)
     if (state.blendFactor < 1 && newPriority < currentPriority) return;
 
+    // DEATH 상태에서는 다른 상태로 전환 불가 (deactivate만 가능)
+    if (state.current === AnimState.DEATH && newState !== AnimState.SPAWN) return;
+
+    // 원샷/루프 상태 진입 시 returnState 기록 (이동 상태만)
+    if (isLocomotionState(state.current)) {
+      state.returnState = state.current;
+    }
+
     // 전환 시작
     state.previous = state.current;
     state.current = newState;
@@ -391,21 +753,62 @@ export class AnimationStateMachine {
     state.transitionElapsed = 0;
     state.blendFactor = state.blendDuration > 0 ? 0 : 1;
     state.elapsed = 0; // 새 상태에서 경과 시간 리셋
+
+    // HIT 시 플래시 타이머 설정
+    if (newState === AnimState.HIT) {
+      state.hitFlashRemaining = 0.08; // 80ms 흰색 플래시
+    }
   }
 
   /**
    * 외부 입력 기반 자동 상태 전환 + 시간 업데이트
-   * 매 프레임 호출: velocity/boosting으로 IDLE/WALK/BOOST 판단
+   * 매 프레임 호출: velocity/boosting + Phase 4B 이벤트 플래그 처리
    */
   updateAgent(agentIndex: number, input: AnimInput, dt: number): void {
     if (agentIndex < 0 || agentIndex >= this.maxAgents) return;
     const state = this.states[agentIndex];
     if (!state.active) return;
 
-    // ─── 자동 상태 전환 결정 ───
+    // ─── Phase 4B: 이벤트 기반 상태 전환 (우선순위 높은 순서) ───
+
+    // DEATH: 최우선 (alive === false)
+    if (input.alive === false && state.current !== AnimState.DEATH) {
+      this.requestTransition(agentIndex, AnimState.DEATH);
+    }
+
+    // SPAWN: 등장 시
+    if (input.wasSpawn) {
+      this.requestTransition(agentIndex, AnimState.SPAWN);
+    }
+
+    // HIT: 피격 시
+    if (input.wasHit && state.current !== AnimState.DEATH) {
+      this.requestTransition(agentIndex, AnimState.HIT);
+    }
+
+    // ATTACK: 전투 시
+    if (input.wasAttack && state.current !== AnimState.DEATH && state.current !== AnimState.HIT) {
+      this.requestTransition(agentIndex, AnimState.ATTACK);
+    }
+
+    // LEVELUP: 레벨업 시
+    if (input.wasLevelUp && state.current !== AnimState.DEATH) {
+      this.requestTransition(agentIndex, AnimState.LEVELUP);
+    }
+
+    // COLLECT: 수집 시
+    if (input.wasCollect && state.current !== AnimState.DEATH && state.current !== AnimState.HIT) {
+      this.requestTransition(agentIndex, AnimState.COLLECT);
+    }
+
+    // VICTORY: 승리 루프
+    if (input.isVictory && state.current !== AnimState.DEATH && state.current !== AnimState.VICTORY) {
+      this.requestTransition(agentIndex, AnimState.VICTORY);
+    }
+
+    // ─── 자동 상태 전환 결정 (이동 상태) ───
     const { velocity, boosting } = input;
 
-    // Phase 4A: IDLE / WALK / BOOST 3상태만
     let targetState: AnimState;
     if (boosting) {
       targetState = AnimState.BOOST;
@@ -415,15 +818,25 @@ export class AnimationStateMachine {
       targetState = AnimState.IDLE;
     }
 
-    // 현재 상태가 Phase 4B 전용 상태(ATTACK, HIT 등)이면 자동 전환 안함
-    // (해당 상태들은 자체 duration이 끝나면 자동 복귀)
+    // 현재 상태가 이동 상태(IDLE/WALK/BOOST)일 때만 자동 전환
     const currentPriority = STATE_PRIORITY[state.current] ?? 0;
     if (currentPriority <= (STATE_PRIORITY[AnimState.BOOST] ?? 2)) {
       this.requestTransition(agentIndex, targetState);
     }
 
+    // ─── returnState 업데이트 (원샷 복귀 대상 추적) ───
+    // 원샷 상태 중에도 velocity/boosting이 변할 수 있으므로 returnState 갱신
+    if (!isLocomotionState(state.current) && state.current !== AnimState.DEATH) {
+      state.returnState = targetState;
+    }
+
     // ─── 시간 업데이트 ───
     state.elapsed += dt;
+
+    // HIT 플래시 타이머 감소
+    if (state.hitFlashRemaining > 0) {
+      state.hitFlashRemaining = Math.max(0, state.hitFlashRemaining - dt);
+    }
 
     // 블렌드 진행
     if (state.blendFactor < 1) {
@@ -431,6 +844,13 @@ export class AnimationStateMachine {
       state.blendFactor = state.blendDuration > 0
         ? clamp01(state.transitionElapsed / state.blendDuration)
         : 1;
+    }
+
+    // ─── 원샷 애니메이션 자동 복귀 ───
+    const oneShotDuration = getOneShotDuration(state.current);
+    if (oneShotDuration > 0 && state.elapsed >= oneShotDuration) {
+      // 원샷 완료: returnState로 복귀
+      this.requestTransition(agentIndex, state.returnState);
     }
   }
 
@@ -446,11 +866,21 @@ export class AnimationStateMachine {
 
       state.elapsed += dt;
 
+      if (state.hitFlashRemaining > 0) {
+        state.hitFlashRemaining = Math.max(0, state.hitFlashRemaining - dt);
+      }
+
       if (state.blendFactor < 1) {
         state.transitionElapsed += dt;
         state.blendFactor = state.blendDuration > 0
           ? clamp01(state.transitionElapsed / state.blendDuration)
           : 1;
+      }
+
+      // 원샷 자동 복귀
+      const oneShotDuration = getOneShotDuration(state.current);
+      if (oneShotDuration > 0 && state.elapsed >= oneShotDuration) {
+        this.requestTransition(i, state.returnState);
       }
     }
   }
@@ -532,6 +962,16 @@ export class AnimationStateMachine {
     };
   }
 
+  /**
+   * HIT 플래시 상태 조회 (AgentInstances.tsx에서 사용)
+   * @returns 잔여 플래시 시간 (0이면 플래시 없음)
+   */
+  getHitFlashRemaining(agentIndex: number): number {
+    const s = this.states[agentIndex];
+    if (!s || !s.active) return 0;
+    return s.hitFlashRemaining;
+  }
+
   /** 에이전트 활성화 (join) */
   activate(agentIndex: number): void {
     if (agentIndex < 0 || agentIndex >= this.maxAgents) return;
@@ -539,16 +979,23 @@ export class AnimationStateMachine {
     state.active = true;
     state.current = AnimState.IDLE;
     state.previous = AnimState.IDLE;
+    state.returnState = AnimState.IDLE;
     state.elapsed = 0;
     state.blendFactor = 1;
     state.transitionElapsed = 0;
+    state.hitFlashRemaining = 0;
     // idleSeed는 유지 (재접속 시 다른 위상)
   }
 
-  /** 에이전트 비활성화 (leave) */
+  /** 에이전트 비활성화 (leave) — DEATH 포함 모든 상태 리셋 */
   deactivate(agentIndex: number): void {
     if (agentIndex < 0 || agentIndex >= this.maxAgents) return;
-    this.states[agentIndex].active = false;
+    const state = this.states[agentIndex];
+    state.active = false;
+    state.current = AnimState.IDLE;
+    state.previous = AnimState.IDLE;
+    state.returnState = AnimState.IDLE;
+    state.hitFlashRemaining = 0;
   }
 
   /** 에이전트 활성 여부 */
@@ -605,15 +1052,32 @@ export class AnimationStateMachine {
         break;
       }
 
-      // Phase 4B에서 구현할 상태들 — 현재는 IDLE 폴백
       case AnimState.ATTACK:
+        computeAttack(elapsed, out);
+        break;
+
       case AnimState.HIT:
+        computeHit(elapsed, out);
+        break;
+
       case AnimState.DEATH:
+        computeDeath(elapsed, out);
+        break;
+
       case AnimState.SPAWN:
+        computeSpawn(elapsed, out);
+        break;
+
       case AnimState.LEVELUP:
+        computeLevelup(elapsed, out);
+        break;
+
       case AnimState.VICTORY:
+        computeVictory(elapsed, out);
+        break;
+
       case AnimState.COLLECT:
-        computeIdle(elapsed, out);
+        computeCollect(elapsed, out);
         break;
 
       default:
