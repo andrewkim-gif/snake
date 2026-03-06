@@ -45,19 +45,19 @@ const MOBS_DATA: { type: 'pig' | 'sheep' | 'chicken'; pos: [number, number, numb
   { type: 'chicken', pos: [-6, 0, -8], rot: -0.8, ph: 5.7 },
 ];
 
-/** 안개 + 배경색 (안개가 가장자리를 완전히 가림) */
+/** 안개 + 배경색 (어두운 야전 톤) */
 function SceneSetup() {
   const { scene } = useThree();
   useEffect(() => {
-    scene.fog = new THREE.Fog('#87CEEB', 20, 55);
-    scene.background = new THREE.Color('#87CEEB');
+    scene.fog = new THREE.Fog('#0A1520', 15, 45);
+    scene.background = new THREE.Color('#0A1520');
     return () => { scene.fog = null; scene.background = null; };
   }, [scene]);
 
   return (
     <>
-      <ambientLight intensity={0.6} />
-      <directionalLight position={[12, 18, 10]} intensity={0.8} castShadow={false} />
+      <ambientLight intensity={0.35} />
+      <directionalLight position={[12, 18, 10]} intensity={0.5} color="#C0D0E0" castShadow={false} />
     </>
   );
 }

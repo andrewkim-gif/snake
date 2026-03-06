@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Agent Survivor — Main Page
- * v10: 3D 로비 + MC 레트로 UI + 게임 모드 전환
+ * AI World War — Main Page
+ * 작전 지도 / 워룸 컨셉: 다크 + 손그림 아웃라인 + 군사 톤
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -16,7 +16,7 @@ import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { PixelLogo } from '@/components/lobby/PixelLogo';
 import { useSocket } from '@/hooks/useSocket';
-import { MC, MCFont, pixelFont } from '@/lib/minecraft-ui';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 
 const LobbyScene3D = dynamic(
   () => import('@/components/3d/LobbyScene3D').then(m => ({ default: m.LobbyScene3D })),
@@ -90,11 +90,11 @@ export default function Home() {
       <div style={{
         width: '100vw', height: '100vh', display: 'flex',
         alignItems: 'center', justifyContent: 'center',
-        backgroundColor: '#87CEEB', fontFamily: pixelFont,
-        fontSize: '16px', color: '#FFF',
-        textShadow: '2px 2px 0 rgba(0,0,0,0.3)',
+        backgroundColor: SK.bg, fontFamily: headingFont,
+        fontSize: '24px', color: SK.textPrimary,
+        letterSpacing: '3px',
       }}>
-        Loading arena...
+        DEPLOYING...
       </div>
     );
   }
@@ -127,6 +127,18 @@ export default function Home() {
       <WelcomeTutorial />
       <LobbyScene3D />
 
+      {/* 다크 오버레이 (3D 씬 위에 비네팅 효과) */}
+      <div style={{
+        position: 'absolute', inset: 0, zIndex: 5,
+        background: `radial-gradient(
+          ellipse at center,
+          rgba(17, 17, 17, 0.6) 0%,
+          rgba(17, 17, 17, 0.85) 60%,
+          rgba(17, 17, 17, 0.95) 100%
+        )`,
+        pointerEvents: 'none',
+      }} />
+
       {/* UI 오버레이 */}
       <div style={{
         position: 'relative', zIndex: 10,
@@ -143,40 +155,43 @@ export default function Home() {
 
         {/* 연결 상태 */}
         <div style={{
-          display: 'flex', alignItems: 'center', gap: '6px',
+          display: 'flex', alignItems: 'center', gap: '8px',
         }}>
           <div style={{
-            width: '8px', height: '8px',
-            backgroundColor: uiState.connected ? MC.textGreen : MC.textRed,
+            width: '6px', height: '6px',
+            borderRadius: '50%',
+            backgroundColor: uiState.connected ? SK.statusOnline : SK.statusOffline,
             boxShadow: uiState.connected
-              ? '0 0 8px rgba(85,255,85,0.6)'
-              : '0 0 8px rgba(255,85,85,0.6)',
+              ? `0 0 6px ${SK.green}80`
+              : `0 0 6px ${SK.red}80`,
           }} />
           <span style={{
-            fontFamily: pixelFont,
-            fontSize: MCFont.sm,
-            color: uiState.connected ? MC.textGreen : MC.textRed,
-            textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
+            fontFamily: bodyFont,
+            fontWeight: 600,
+            fontSize: SKFont.xs,
+            color: uiState.connected ? SK.green : SK.red,
+            letterSpacing: '1px',
+            textTransform: 'uppercase',
           }}>
-            {uiState.connected ? 'ONLINE' : 'CONNECTING...'}
+            {uiState.connected ? 'Online' : 'Connecting...'}
           </span>
         </div>
 
         {/* 메인 패널: 2열 레이아웃 */}
         <div style={{
           display: 'flex',
-          gap: '16px',
+          gap: '14px',
           maxWidth: '860px',
           width: '100%',
           flexWrap: 'wrap',
           justifyContent: 'center',
         }}>
           {/* 좌: 플레이어 설정 + 참가 */}
-          <McPanel style={{ flex: '1 1 340px', maxWidth: '420px', padding: '16px' }}>
+          <McPanel style={{ flex: '1 1 340px', maxWidth: '420px', padding: '18px' }}>
             <div style={{
-              fontFamily: pixelFont, fontSize: MCFont.h2, color: MC.textGold,
-              marginBottom: '12px', letterSpacing: '1px',
-              textShadow: '1px 1px 0 #553300',
+              fontFamily: headingFont, fontSize: SKFont.h2,
+              color: SK.textPrimary, marginBottom: '12px',
+              letterSpacing: '2px',
             }}>
               AGENT SETUP
             </div>
@@ -184,7 +199,7 @@ export default function Home() {
             <McInput
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter agent name..."
+              placeholder="Enter callsign..."
               style={{ marginBottom: '14px' }}
             />
 
@@ -195,9 +210,9 @@ export default function Home() {
                 variant="green"
                 onClick={handleQuickJoin}
                 disabled={!uiState.connected}
-                style={{ width: '100%', padding: '12px 0', fontSize: MCFont.h2 }}
+                style={{ width: '100%', padding: '12px 0', fontSize: SKFont.h3 }}
               >
-                ⚔ QUICK JOIN ⚔
+                QUICK DEPLOY
               </McButton>
             </div>
           </McPanel>
@@ -207,32 +222,33 @@ export default function Home() {
             flex: '1 1 340px', maxWidth: '420px',
             display: 'flex', flexDirection: 'column', gap: '12px',
           }}>
-            <McPanel style={{ padding: '14px' }}>
+            <McPanel style={{ padding: '16px' }}>
               <div style={{
-                fontFamily: pixelFont, fontSize: MCFont.h2, color: MC.textGold,
-                marginBottom: '10px', letterSpacing: '1px',
-                textShadow: '1px 1px 0 #553300',
+                fontFamily: headingFont, fontSize: SKFont.h2,
+                color: SK.textPrimary, marginBottom: '10px',
+                letterSpacing: '2px',
               }}>
-                GAME ROOMS
+                WAR ZONES
               </div>
               <RoomList rooms={uiState.rooms} onJoin={handleJoinRoom} />
             </McPanel>
 
-            <McPanel style={{ padding: '14px' }}>
+            <McPanel style={{ padding: '16px' }}>
               <RecentWinnersPanel winners={uiState.recentWinners} />
             </McPanel>
           </div>
         </div>
 
-        {/* 하단 버전 배지 */}
+        {/* 하단 버전 */}
         <div style={{
-          fontFamily: pixelFont,
-          fontSize: MCFont.xs,
-          color: 'rgba(255,255,255,0.25)',
-          textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
-          letterSpacing: '1px',
+          fontFamily: bodyFont,
+          fontWeight: 500,
+          fontSize: SKFont.xs,
+          color: SK.textMuted,
+          letterSpacing: '2px',
+          textTransform: 'uppercase',
         }}>
-          v10.0 ALPHA
+          v10.0 alpha
         </div>
       </div>
     </div>

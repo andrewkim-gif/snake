@@ -1,13 +1,12 @@
 'use client';
 
 /**
- * McButton — MC 스타일 3D 엠보스 버튼
- * 석재(default) / 초록(green) / 빨강(red) 3변형
- * 3px 엠보스 보더 + Hover 밝아짐 + Pressed 반전
+ * McButton — 전술 액센트 버튼
+ * 좌측 컬러 스트라이프 + 다크 배경 + 호버 하이라이트
  */
 
 import { useState, type CSSProperties, type ReactNode, type ButtonHTMLAttributes } from 'react';
-import { MC, MCFont, pixelFont } from '@/lib/minecraft-ui';
+import { SK, SKFont, bodyFont, handDrawnRadius } from '@/lib/sketch-ui';
 
 interface McButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'green' | 'red';
@@ -16,9 +15,27 @@ interface McButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const V = {
-  default: { bg: MC.btnDefault, hover: '#9A9A9A', light: MC.btnDefaultLight, dark: MC.btnDefaultDark },
-  green: { bg: MC.btnGreen, hover: '#67AE55', light: MC.btnGreenLight, dark: MC.btnGreenDark },
-  red: { bg: MC.btnRed, hover: '#D76B6B', light: MC.btnRedLight, dark: MC.btnRedDark },
+  default: {
+    border: 'rgba(232, 224, 212, 0.2)',
+    accent: 'rgba(232, 224, 212, 0.5)',
+    hoverBg: 'rgba(232, 224, 212, 0.08)',
+    pressBg: 'rgba(232, 224, 212, 0.12)',
+    text: SK.textPrimary,
+  },
+  green: {
+    border: 'rgba(74, 158, 74, 0.35)',
+    accent: SK.green,
+    hoverBg: 'rgba(74, 158, 74, 0.12)',
+    pressBg: 'rgba(74, 158, 74, 0.18)',
+    text: SK.green,
+  },
+  red: {
+    border: 'rgba(204, 51, 51, 0.35)',
+    accent: SK.red,
+    hoverBg: 'rgba(204, 51, 51, 0.12)',
+    pressBg: 'rgba(204, 51, 51, 0.18)',
+    text: SK.red,
+  },
 };
 
 export function McButton({ variant = 'default', children, style, disabled, ...rest }: McButtonProps) {
@@ -27,28 +44,30 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
 
   const c = V[variant];
   const isActive = !disabled;
-  const bg = pressed && isActive ? c.dark : hovered && isActive ? c.hover : c.bg;
-  const shadow = pressed && isActive
-    ? `inset 3px 3px 0 ${c.dark}, inset -3px -3px 0 ${c.light}`
-    : `inset 3px 3px 0 ${c.light}, inset -3px -3px 0 ${c.dark}`;
 
   return (
     <button
       disabled={disabled}
       style={{
-        backgroundColor: bg,
-        boxShadow: disabled ? 'none' : shadow,
-        border: 'none',
-        color: disabled ? MC.textGray : MC.textPrimary,
-        fontFamily: pixelFont,
-        fontSize: MCFont.button,
+        backgroundColor: pressed && isActive
+          ? c.pressBg
+          : hovered && isActive
+            ? c.hoverBg
+            : 'rgba(26, 26, 26, 0.6)',
+        border: `1px solid ${disabled ? SK.textMuted + '40' : c.border}`,
+        borderLeft: `3px solid ${disabled ? SK.textMuted + '40' : c.accent}`,
+        borderRadius: handDrawnRadius(2),
+        color: disabled ? SK.textMuted : c.text,
+        fontFamily: bodyFont,
+        fontWeight: 700,
+        fontSize: SKFont.button,
         padding: '10px 24px',
         minHeight: '44px',
         cursor: disabled ? 'default' : 'pointer',
+        letterSpacing: '2px',
         textTransform: 'uppercase',
-        letterSpacing: '1px',
-        opacity: disabled ? 0.5 : 1,
-        textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
+        opacity: disabled ? 0.4 : 1,
+        transition: 'all 150ms ease',
         ...style,
       }}
       onMouseEnter={() => setHovered(true)}

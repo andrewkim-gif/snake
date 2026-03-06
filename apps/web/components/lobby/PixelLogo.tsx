@@ -1,14 +1,54 @@
 'use client';
 
 /**
- * PixelLogo — Agent Survivor 로고 (AI 생성 픽셀아트 이미지)
- * gemini-3.1-flash-image-preview로 생성 + sharp 배경 제거
+ * PixelLogo — AI World War 로고
+ * Gemini 생성 스케치 로고 유지 + 작전 지도 스타일 폴백
  */
 
+import { useState } from 'react';
 import Image from 'next/image';
-import { pixelFont, MCFont } from '@/lib/minecraft-ui';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 
 export function PixelLogo() {
+  const [imgError, setImgError] = useState(false);
+
+  if (!imgError) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        userSelect: 'none',
+      }}>
+        <Image
+          src="/images/logo-ww.png"
+          alt="AI World War"
+          width={500}
+          height={280}
+          priority
+          onError={() => setImgError(true)}
+          style={{
+            maxWidth: 'min(500px, 90vw)',
+            height: 'auto',
+            filter: 'drop-shadow(0 2px 16px rgba(0,0,0,0.5))',
+          }}
+        />
+        <div style={{
+          fontFamily: bodyFont,
+          fontWeight: 600,
+          fontSize: SKFont.xs,
+          color: SK.textMuted,
+          letterSpacing: '4px',
+          marginTop: '6px',
+          textTransform: 'uppercase',
+        }}>
+          Survival Roguelike
+        </div>
+      </div>
+    );
+  }
+
+  // CSS 폴백 로고 (작전 지도 마커 스타일)
   return (
     <div style={{
       display: 'flex',
@@ -16,31 +56,34 @@ export function PixelLogo() {
       alignItems: 'center',
       userSelect: 'none',
     }}>
-      {/* 로고 이미지 */}
-      <Image
-        src="/images/logo.png"
-        alt="Agent Survivor"
-        width={400}
-        height={153}
-        priority
-        style={{
-          imageRendering: 'pixelated',
-          filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.5))',
-          maxWidth: 'min(400px, 85vw)',
-          height: 'auto',
-        }}
-      />
-
-      {/* 서브타이틀 */}
       <div style={{
-        fontFamily: pixelFont,
-        fontSize: MCFont.sm,
-        color: 'rgba(255,255,255,0.45)',
-        letterSpacing: '3px',
-        marginTop: '8px',
-        textShadow: '1px 1px 0 rgba(0,0,0,0.8)',
+        fontFamily: headingFont,
+        fontSize: 'clamp(24px, 5vw, 36px)',
+        color: SK.gold,
+        lineHeight: 1,
+        letterSpacing: '6px',
       }}>
-        SURVIVAL ROGUELIKE
+        AI
+      </div>
+      <div style={{
+        fontFamily: headingFont,
+        fontSize: 'clamp(40px, 10vw, 64px)',
+        color: SK.textPrimary,
+        lineHeight: 1,
+        marginTop: '2px',
+      }}>
+        WORLD WAR
+      </div>
+      <div style={{
+        fontFamily: bodyFont,
+        fontWeight: 600,
+        fontSize: SKFont.xs,
+        color: SK.textMuted,
+        letterSpacing: '4px',
+        marginTop: '8px',
+        textTransform: 'uppercase',
+      }}>
+        Survival Roguelike
       </div>
     </div>
   );

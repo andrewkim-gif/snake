@@ -1,21 +1,22 @@
 'use client';
 
 /**
- * RecentWinnersPanel — MC 스타일 최근 우승자 리스트
- * 랭크 번호 + 이름 + 점수 + 시간
+ * RecentWinnersPanel — 작전 지도 스타일 최근 챔피언
+ * 군사 랭크 + 어두운 행 + 손그림 보더
  */
 
 import type { RecentWinner } from '@agent-survivor/shared';
-import { MC, MCFont, mcBorder, pixelFont, bodyFont } from '@/lib/minecraft-ui';
+import { SK, SKFont, headingFont, bodyFont, handDrawnRadius } from '@/lib/sketch-ui';
 
 function timeAgo(timestamp: number): string {
   const diff = Math.floor((Date.now() - timestamp) / 1000);
-  if (diff < 60) return `${diff}s ago`;
+  if (diff < 60) return `${diff}s`;
   const m = Math.floor(diff / 60);
-  return `${m}m ago`;
+  return `${m}m`;
 }
 
-const RANK_COLORS = ['#FFD700', '#C0C0C0', '#CD7F32', MC.textSecondary, MC.textGray];
+const RANK_LABELS = ['1ST', '2ND', '3RD', '4TH', '5TH'];
+const RANK_COLORS = [SK.gold, '#A8A8A8', '#8B6B3D', SK.textSecondary, SK.textMuted];
 
 interface RecentWinnersPanelProps {
   winners: RecentWinner[];
@@ -27,36 +28,34 @@ export function RecentWinnersPanel({ winners }: RecentWinnersPanelProps) {
   return (
     <div style={{ width: '100%' }}>
       <div style={{
-        fontFamily: pixelFont, fontSize: MCFont.h2,
-        color: MC.textGold, marginBottom: '10px',
-        letterSpacing: '1px',
-        textShadow: '1px 1px 0 #553300',
+        fontFamily: headingFont, fontSize: SKFont.h2,
+        color: SK.gold, marginBottom: '10px',
+        letterSpacing: '2px',
       }}>
-        RECENT CHAMPIONS
+        KILL LEADERS
       </div>
       <div style={{
-        display: 'flex', flexDirection: 'column', gap: '4px',
-        maxHeight: '140px', overflowY: 'auto',
+        display: 'flex', flexDirection: 'column', gap: '3px',
+        maxHeight: '150px', overflowY: 'auto',
       }}>
         {winners.slice(0, 5).map((w, i) => (
           <div key={`${w.roomId ?? i}-${w.timestamp ?? 0}`} style={{
-            display: 'flex', alignItems: 'center', gap: '8px',
+            display: 'flex', alignItems: 'center', gap: '10px',
             padding: '6px 10px',
-            backgroundColor: 'rgba(0,0,0,0.4)',
-            boxShadow: mcBorder('#484848', '#1A1A1A', 1),
+            borderBottom: `1px solid ${SK.borderDark}`,
           }}>
             {/* 순위 */}
             <span style={{
-              fontFamily: pixelFont, fontSize: MCFont.body,
-              color: RANK_COLORS[i] || MC.textGray, minWidth: '28px',
+              fontFamily: headingFont, fontSize: '13px',
+              color: RANK_COLORS[i] || SK.textMuted, minWidth: '32px',
             }}>
-              #{i + 1}
+              {RANK_LABELS[i]}
             </span>
 
             {/* 이름 */}
             <span style={{
-              fontFamily: bodyFont, fontSize: '14px',
-              color: MC.textPrimary, fontWeight: 600,
+              fontFamily: bodyFont, fontSize: SKFont.body, fontWeight: 600,
+              color: SK.textPrimary,
               overflow: 'hidden', textOverflow: 'ellipsis',
               whiteSpace: 'nowrap', flex: 1,
             }}>
@@ -65,17 +64,18 @@ export function RecentWinnersPanel({ winners }: RecentWinnersPanelProps) {
 
             {/* 점수 */}
             <span style={{
-              fontFamily: pixelFont, fontSize: MCFont.body, color: MC.textGold,
+              fontFamily: headingFont, fontSize: '15px',
+              color: SK.gold,
             }}>
               {w.score}
             </span>
 
-            {/* 시간 + 룸 */}
+            {/* 시간 */}
             <span style={{
-              fontFamily: bodyFont, fontSize: '12px', color: MC.textGray,
-              whiteSpace: 'nowrap',
+              fontFamily: bodyFont, fontSize: SKFont.xs, fontWeight: 500,
+              color: SK.textMuted, whiteSpace: 'nowrap',
             }}>
-              {(w.roomId ?? '').replace('room-', 'R')} · {timeAgo(w.timestamp ?? Date.now())}
+              {timeAgo(w.timestamp ?? Date.now())}
             </span>
           </div>
         ))}

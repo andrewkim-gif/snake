@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * McInput — MC 스타일 다크 입력 필드
- * 3px 솔리드 보더 + 포커스 시 밝은 보더
+ * McInput — 작전 지도 스타일 입력 필드
+ * 다크 배경 + 손그림 아웃라인 보더 + 포커스 앰버 글로우
  */
 
 import { useState, type InputHTMLAttributes } from 'react';
-import { MC, bodyFont } from '@/lib/minecraft-ui';
+import { SK, SKFont, bodyFont, handDrawnRadius } from '@/lib/sketch-ui';
 
 interface McInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -16,17 +16,23 @@ export function McInput({ style, ...rest }: McInputProps) {
   return (
     <input
       style={{
-        backgroundColor: MC.inputBg,
-        border: `3px solid ${focused ? MC.inputFocusBorder : MC.inputBorder}`,
-        color: MC.textPrimary,
+        backgroundColor: SK.bg,
+        border: `1.5px solid ${focused ? SK.borderFocus : SK.border}`,
+        borderRadius: handDrawnRadius(2),
+        color: SK.textPrimary,
         fontFamily: bodyFont,
-        fontSize: '16px', // iOS 줌 방지: 16px 이상
+        fontWeight: 500,
+        fontSize: '16px',
         padding: '10px 14px',
         minHeight: '44px',
         outline: 'none',
         width: '100%',
         boxSizing: 'border-box',
         textAlign: 'center',
+        transition: 'all 150ms ease',
+        boxShadow: focused
+          ? `0 0 0 2px ${SK.gold}20`
+          : 'none',
         ...style,
       }}
       onFocus={(e) => { setFocused(true); rest.onFocus?.(e); }}

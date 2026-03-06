@@ -1,21 +1,13 @@
 'use client';
 
 /**
- * RoomList — MC 서버 리스트 스타일
- * 엠보스 보더 + 상태 브래킷 [LIVE] + 플레이어 수
+ * RoomList — 작전 지도 스타일 룸 리스트
+ * 다크 행 + 군사 상태 뱃지 + 손그림 보더
  */
 
 import { useState } from 'react';
 import type { RoomInfo, RoomStatus } from '@agent-survivor/shared';
-import { MC, MCFont, mcBorder, pixelFont } from '@/lib/minecraft-ui';
-
-const STATUS_CONFIG: Record<RoomStatus, { text: string; color: string }> = {
-  waiting: { text: 'WAITING', color: MC.textGray },
-  countdown: { text: 'STARTING', color: MC.textYellow },
-  playing: { text: 'LIVE', color: MC.textGreen },
-  ending: { text: 'ENDING', color: MC.textRed },
-  cooldown: { text: 'NEXT', color: MC.textSecondary },
-};
+import { SK, SKFont, bodyFont, headingFont, handDrawnRadius, statusColors } from '@/lib/sketch-ui';
 
 function formatTime(seconds: number): string {
   const m = Math.floor(seconds / 60);
@@ -40,7 +32,7 @@ export function RoomList({ rooms, onJoin }: RoomListProps) {
 
 function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJoin: (id: string) => void }) {
   const [hovered, setHovered] = useState(false);
-  const status = STATUS_CONFIG[room.state];
+  const status = statusColors[room.state as keyof typeof statusColors] || statusColors.waiting;
   const joinable = ['waiting', 'countdown', 'playing'].includes(room.state) && room.playerCount < room.maxPlayers;
 
   return (
@@ -52,36 +44,44 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
         alignItems: 'center',
         gap: '10px',
         padding: '8px 12px',
-        backgroundColor: hovered && joinable ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.5)',
-        boxShadow: mcBorder('#484848', '#1A1A1A', 1),
-        border: 'none',
+        backgroundColor: hovered && joinable ? 'rgba(232, 224, 212, 0.05)' : 'transparent',
+        borderRadius: handDrawnRadius(2),
+        border: `1px solid ${hovered && joinable ? SK.border : 'rgba(232, 224, 212, 0.08)'}`,
         cursor: joinable ? 'pointer' : 'default',
-        opacity: joinable ? 1 : 0.4,
+        opacity: joinable ? 1 : 0.35,
         width: '100%',
         textAlign: 'left',
+        transition: 'all 150ms ease',
       }}
       onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
       {/* Arena 이름 */}
       <span style={{
-        fontFamily: pixelFont, fontSize: MCFont.body,
-        color: MC.textSecondary, minWidth: '85px',
+        fontFamily: headingFont, fontSize: '16px',
+        color: SK.textPrimary, minWidth: '95px',
       }}>
-        Arena {index + 1}
+        ZONE {index + 1}
       </span>
 
-      {/* 상태 [LIVE] */}
+      {/* 상태 뱃지 */}
       <span style={{
-        fontFamily: pixelFont, fontSize: MCFont.sm, color: status.color,
+        fontFamily: bodyFont, fontSize: SKFont.xs, fontWeight: 700,
+        color: status.color,
+        backgroundColor: status.bg,
+        padding: '2px 8px',
+        borderRadius: handDrawnRadius(2),
+        border: `1px solid ${status.color}30`,
+        textTransform: 'uppercase',
+        letterSpacing: '1px',
       }}>
-        [{status.text}]
+        {status.text}
       </span>
 
       {/* 플레이어 수 */}
       <span style={{
-        fontFamily: pixelFont, fontSize: MCFont.sm,
-        color: MC.textSecondary, marginLeft: 'auto',
+        fontFamily: bodyFont, fontSize: SKFont.sm, fontWeight: 600,
+        color: SK.textSecondary, marginLeft: 'auto',
       }}>
         {room.playerCount}/{room.maxPlayers}
       </span>
@@ -89,8 +89,9 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
       {/* 시간 */}
       {room.state !== 'waiting' && (
         <span style={{
-          fontFamily: pixelFont, fontSize: MCFont.xs,
-          color: MC.textGray, minWidth: '44px', textAlign: 'right',
+          fontFamily: bodyFont, fontSize: SKFont.xs, fontWeight: 500,
+          color: SK.textMuted, minWidth: '40px', textAlign: 'right',
+          fontVariantNumeric: 'tabular-nums',
         }}>
           {formatTime(room.timeRemaining)}
         </span>
@@ -99,8 +100,8 @@ function RoomCard({ room, index, onJoin }: { room: RoomInfo; index: number; onJo
       {/* 우승자 */}
       {room.winner && (room.state === 'ending' || room.state === 'cooldown') && (
         <span style={{
-          fontFamily: pixelFont, fontSize: MCFont.xs,
-          color: MC.textGold, maxWidth: '70px',
+          fontFamily: headingFont, fontSize: '13px',
+          color: SK.gold, maxWidth: '80px',
           overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
         }}>
           {room.winner.name}

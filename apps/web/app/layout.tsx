@@ -1,13 +1,13 @@
 import type { Metadata, Viewport } from 'next';
 
 export const metadata: Metadata = {
-  title: 'Agent Survivor - Multiplayer Survival Roguelike',
-  description: 'Minecraft style multiplayer auto-battler survival roguelike game with AI agents. Build, survive, and dominate the arena!',
-  applicationName: 'Agent Survivor',
+  title: 'AI World War - Multiplayer Survival Roguelike',
+  description: 'Multiplayer auto-battler survival roguelike with AI agents. Build, survive, and dominate the arena!',
+  applicationName: 'AI World War',
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Agent Survivor',
+    title: 'AI World War',
   },
   formatDetection: {
     telephone: false,
@@ -19,7 +19,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: '#87CEEB',
+  themeColor: '#111111',
 };
 
 export default function RootLayout({
@@ -31,7 +31,7 @@ export default function RootLayout({
     <html lang="ko" suppressHydrationWarning>
       <head>
         <link
-          href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700;800;900&family=Patrick+Hand&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Black+Ops+One&family=Inter:wght@400;500;600;700;800;900&family=Press+Start+2P&family=Rajdhani:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
@@ -40,12 +40,12 @@ export default function RootLayout({
         style={{
           margin: 0,
           padding: 0,
-          backgroundColor: '#87CEEB',
-          color: '#FFFFFF',
-          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+          backgroundColor: '#111111',
+          color: '#E8E0D4',
+          fontFamily: '"Rajdhani", -apple-system, BlinkMacSystemFont, sans-serif',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale' as never,
-          overscrollBehavior: 'none', // 모바일: 풀-투-리프레시 방지
+          overscrollBehavior: 'none',
         }}
       >
         {children}
