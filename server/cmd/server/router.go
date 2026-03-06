@@ -13,7 +13,10 @@ import (
 	"github.com/andrewkim-gif/snake/server/internal/api"
 	"github.com/andrewkim-gif/snake/server/internal/auth"
 	"github.com/andrewkim-gif/snake/server/internal/game"
+	"github.com/andrewkim-gif/snake/server/internal/meta"
+	"github.com/andrewkim-gif/snake/server/internal/observability"
 	"github.com/andrewkim-gif/snake/server/internal/security"
+	"github.com/andrewkim-gif/snake/server/internal/world"
 	"github.com/andrewkim-gif/snake/server/internal/ws"
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -26,16 +29,17 @@ var startTime = time.Now()
 
 // healthResponse is the JSON structure returned by GET /health.
 type healthResponse struct {
-	Status     string `json:"status"`
-	Rooms      int    `json:"rooms"`
-	Players    int    `json:"players"`
-	Uptime     string `json:"uptime"`
-	Goroutines int    `json:"goroutines"`
+	Status       string `json:"status"`
+	Version      string `json:"version"`
+	Rooms        int    `json:"rooms"`
+	Players      int    `json:"players"`
+	Countries    int    `json:"countries"`
+	MetaModules  int    `json:"meta_modules"`
+	Uptime       string `json:"uptime"`
+	Goroutines   int    `json:"goroutines"`
 }
 
 // upgrader configures the WebSocket upgrade from HTTP.
-// S42 FIX: CheckOrigin is set per-request using security.ValidateWebSocketOrigin().
-// The default is used as a fallback and gets replaced in newRouter().
 var upgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -44,9 +48,9 @@ var upgrader = websocket.Upgrader{
 	},
 }
 
-// newRouter creates the chi HTTP router with middleware and routes.
-// RouterDeps holds optional dependencies for the HTTP router.
+// RouterDeps holds all dependencies for the HTTP router.
 type RouterDeps struct {
+	// v10 dependencies
 	TrainingStore     *game.TrainingStore
 	MemoryStore       *game.MemoryStore
 	ProgressionStore  *game.ProgressionStore
@@ -54,22 +58,46 @@ type RouterDeps struct {
 	GlobalLeaderboard *game.GlobalLeaderboard
 	AgentRouter       *api.AgentRouter
 	AgentStreamHub    *ws.AgentStreamHub
+
+	// v11 world modules
+	WorldManager      *world.WorldManager
+	DeploymentManager *world.DeploymentManager
+	SiegeManager      *world.SiegeManager
+	ContinentalEngine *world.ContinentalBonusEngine
+
+	// v11 meta modules
+	FactionManager    *meta.FactionManager
+	EconomyEngine     *meta.EconomyEngine
+	TradeEngine       *meta.TradeEngine
+	GDPEngine         *meta.GDPEngine
+	PolicyEngine      *meta.PolicyEngine
+	DiplomacyEngine   *meta.DiplomacyEngine
+	WarManager        *meta.WarManager
+	SeasonEngine      *meta.SeasonEngine
+	SeasonResetEngine *meta.SeasonResetEngine
+	HallOfFameEngine  *meta.HallOfFameEngine
+	AchievementEngine *meta.AchievementEngine
+	TechTreeManager   *meta.TechTreeManager
+	IntelSystem       *meta.IntelSystem
+	EventEngine       *meta.EventEngine
+	UNCouncil         *meta.UNCouncil
+	MercenaryMarket   *meta.MercenaryMarket
+	NewsManager       *meta.NewsManager
+	AgentManager      *meta.AgentManager
+
+	// Observability
+	Metrics *observability.Metrics
 }
 
 func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager, deps ...*RouterDeps) http.Handler {
-	// Optional dependencies
-	var ts *game.TrainingStore
-	var ms *game.MemoryStore
-	var ps *game.ProgressionStore
-	var qs *game.QuestStore
-	var glb *game.GlobalLeaderboard
+	// Unpack dependencies
+	var d *RouterDeps
 	if len(deps) > 0 && deps[0] != nil {
-		ts = deps[0].TrainingStore
-		ms = deps[0].MemoryStore
-		ps = deps[0].ProgressionStore
-		qs = deps[0].QuestStore
-		glb = deps[0].GlobalLeaderboard
+		d = deps[0]
+	} else {
+		d = &RouterDeps{}
 	}
+
 	r := chi.NewRouter()
 
 	// S42: Set WebSocket origin validation using CORS config
@@ -80,16 +108,16 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 	r.Use(middleware.RealIP)
 	r.Use(middleware.Recoverer)
 
-	// S42: Request body size limit (1MB) — prevents DoS via oversized payloads
+	// S42: Request body size limit (1MB)
 	r.Use(security.MaxBodyMiddleware)
 
 	// S42: Security headers (CSP, X-Frame-Options, etc.)
 	r.Use(security.CSPHeaders)
 
-	// Structured request logging (skip /ws to avoid noise)
+	// Structured request logging (skip /ws and /metrics to avoid noise)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if r.URL.Path == "/ws" {
+			if r.URL.Path == "/ws" || r.URL.Path == "/metrics" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -110,22 +138,25 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   cfg.CORSOrigins,
 		AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token", "X-API-Key"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
-	// -- Routes --
-
-	// Health check
+	// ==============================================================
+	// Health check (enhanced for v11)
+	// ==============================================================
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
 		resp := healthResponse{
-			Status:     "ok",
-			Rooms:      rm.RoomCount(),
-			Players:    hub.ClientCount(),
-			Uptime:     time.Since(startTime).Truncate(time.Second).String(),
-			Goroutines: runtime.NumGoroutine(),
+			Status:      "ok",
+			Version:     "11.0.0",
+			Rooms:       rm.RoomCount(),
+			Players:     hub.ClientCount(),
+			Countries:   world.CountryCount(),
+			MetaModules: 16,
+			Uptime:      time.Since(startTime).Truncate(time.Second).String(),
+			Goroutines:  runtime.NumGoroutine(),
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -134,7 +165,16 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		}
 	})
 
-	// Rooms list (REST endpoint for initial lobby load)
+	// ==============================================================
+	// Prometheus Metrics endpoint (S44)
+	// ==============================================================
+	if d.Metrics != nil {
+		r.Get("/metrics", d.Metrics.Handler())
+	}
+
+	// ==============================================================
+	// v10 Rooms API (backward compatible)
+	// ==============================================================
 	r.Get("/rooms", func(w http.ResponseWriter, r *http.Request) {
 		rooms := rm.GetRoomList()
 		w.Header().Set("Content-Type", "application/json")
@@ -144,7 +184,9 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		}
 	})
 
+	// ==============================================================
 	// WebSocket upgrade endpoint
+	// ==============================================================
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
@@ -154,131 +196,111 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 
 		clientID := uuid.New().String()
 		client := ws.NewClient(clientID, hub, conn, router.HandleMessage, func(c *ws.Client) {
-			// On disconnect: clean up room membership
 			rm.LeaveRoom(c.ID)
 			slog.Info("client disconnected", "clientId", c.ID)
 		})
 
-		// Register to lobby (no room yet)
 		hub.RegisterLobby(client)
 
-		// Start read/write pumps
 		go client.WritePump()
 		go client.ReadPump()
 
 		slog.Info("new ws connection", "clientId", clientID, "remoteAddr", r.RemoteAddr)
 	})
 
-	// --- Agent Training API (S49) ---
+	// ==============================================================
+	// v10 Agent Training API
+	// ==============================================================
 	r.Route("/api/agent/{agentId}", func(r chi.Router) {
-		// PUT /api/agent/:id/training — Set training profile
 		r.Put("/training", func(w http.ResponseWriter, r *http.Request) {
-			if ts == nil {
+			if d.TrainingStore == nil {
 				http.Error(w, `{"error":"training not initialized"}`, http.StatusServiceUnavailable)
 				return
 			}
-
 			agentID := chi.URLParam(r, "agentId")
 			if agentID == "" {
 				http.Error(w, `{"error":"missing agentId"}`, http.StatusBadRequest)
 				return
 			}
-
 			var req game.SetTrainingRequest
 			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 				http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 				return
 			}
-
 			if err := req.Validate(); err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
-
-			// Get existing or create new
-			existing, _ := ts.GetProfile(agentID)
+			existing, _ := d.TrainingStore.GetProfile(agentID)
 			profile := req.ApplyToProfile(agentID, existing)
-
-			if err := ts.SetProfile(agentID, profile); err != nil {
+			if err := d.TrainingStore.SetProfile(agentID, profile); err != nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
 				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
 				return
 			}
-
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(profile)
 		})
 
-		// GET /api/agent/:id/training — Get training profile
 		r.Get("/training", func(w http.ResponseWriter, r *http.Request) {
-			if ts == nil {
+			if d.TrainingStore == nil {
 				http.Error(w, `{"error":"training not initialized"}`, http.StatusServiceUnavailable)
 				return
 			}
-
 			agentID := chi.URLParam(r, "agentId")
-			profile, ok := ts.GetProfile(agentID)
+			profile, ok := d.TrainingStore.GetProfile(agentID)
 			if !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusNotFound)
 				json.NewEncoder(w).Encode(map[string]string{"error": "profile not found"})
 				return
 			}
-
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(profile)
 		})
 
-		// PUT /api/agent/:id/build-path — Register custom build path (S48)
 		r.Put("/build-path", func(w http.ResponseWriter, r *http.Request) {
 			agentID := chi.URLParam(r, "agentId")
 			if agentID == "" {
 				http.Error(w, `{"error":"missing agentId"}`, http.StatusBadRequest)
 				return
 			}
-
 			var bp game.BuildPath
 			if err := json.NewDecoder(r.Body).Decode(&bp); err != nil {
 				http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
 				return
 			}
-
 			bp.ID = "custom_" + agentID
-			// Store as training profile build path
-			if ts != nil {
-				existing, _ := ts.GetProfile(agentID)
+			if d.TrainingStore != nil {
+				existing, _ := d.TrainingStore.GetProfile(agentID)
 				if existing == nil {
 					existing = &game.TrainingProfile{AgentID: agentID}
 				}
 				existing.BuildProfile.PrimaryPath = bp.ID
-				ts.SetProfile(agentID, existing)
+				d.TrainingStore.SetProfile(agentID, existing)
 			}
-
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 			json.NewEncoder(w).Encode(bp)
 		})
 
-		// GET /api/agent/:id/memory — Get agent learning data (S50)
 		r.Get("/memory", func(w http.ResponseWriter, r *http.Request) {
-			if ms == nil {
+			if d.MemoryStore == nil {
 				http.Error(w, `{"error":"memory not initialized"}`, http.StatusServiceUnavailable)
 				return
 			}
-
 			agentID := chi.URLParam(r, "agentId")
-			mem, ok := ms.GetMemory(agentID)
+			mem, ok := d.MemoryStore.GetMemory(agentID)
 			if !ok {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusNotFound)
 				json.NewEncoder(w).Encode(map[string]string{"error": "memory not found"})
 				return
 			}
-
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(mem)
 		})
@@ -294,7 +316,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		json.NewEncoder(w).Encode(paths)
 	})
 
-	// --- Personality Presets API (public, read-only) ---
+	// --- Personality Presets API ---
 	r.Get("/api/personalities", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(game.PersonalityPresets)
@@ -302,14 +324,13 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 
 	// --- Player Progression API (S53) ---
 	r.Route("/api/player/{playerId}", func(r chi.Router) {
-		// GET /api/player/:id/progression — Get RP + unlock state
 		r.Get("/progression", func(w http.ResponseWriter, r *http.Request) {
-			if ps == nil {
+			if d.ProgressionStore == nil {
 				http.Error(w, `{"error":"progression not initialized"}`, http.StatusServiceUnavailable)
 				return
 			}
 			playerID := chi.URLParam(r, "playerId")
-			resp := ps.BuildProgressionResponse(playerID)
+			resp := d.ProgressionStore.BuildProgressionResponse(playerID)
 			if resp == nil {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusNotFound)
@@ -320,14 +341,13 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 			json.NewEncoder(w).Encode(resp)
 		})
 
-		// GET /api/player/:id/quests — Get quest state (S54)
 		r.Get("/quests", func(w http.ResponseWriter, r *http.Request) {
-			if qs == nil {
+			if d.QuestStore == nil {
 				http.Error(w, `{"error":"quests not initialized"}`, http.StatusServiceUnavailable)
 				return
 			}
 			playerID := chi.URLParam(r, "playerId")
-			resp := qs.GetPlayerQuestsResponse(playerID)
+			resp := d.QuestStore.GetPlayerQuestsResponse(playerID)
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(resp)
 		})
@@ -335,7 +355,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 
 	// --- Global Leaderboard API (S55) ---
 	r.Get("/api/leaderboard", func(w http.ResponseWriter, r *http.Request) {
-		if glb == nil {
+		if d.GlobalLeaderboard == nil {
 			http.Error(w, `{"error":"leaderboard not initialized"}`, http.StatusServiceUnavailable)
 			return
 		}
@@ -343,21 +363,16 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		if lbType == "" {
 			lbType = "agent"
 		}
-		resp := glb.GetLeaderboard(lbType)
+		resp := d.GlobalLeaderboard.GetLeaderboard(lbType)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(resp)
 	})
 
-	// --- Agent REST API (S24, Phase 5) ---
-	// DualAuth accepts JWT or API Key authentication for agent endpoints
-	var agentRouter *api.AgentRouter
-	if len(deps) > 0 && deps[0] != nil {
-		agentRouter = deps[0].AgentRouter
-	}
-	if agentRouter != nil {
+	// ==============================================================
+	// Agent REST API (S24, Phase 5) — DualAuth (JWT or API Key)
+	// ==============================================================
+	if d.AgentRouter != nil {
 		apiKeyValidator := func(_ context.Context, keyHash string) (string, error) {
-			// Simple validator: check keyHash is not empty
-			// In production, this validates against DB
 			if keyHash == "" {
 				return "", fmt.Errorf("empty key hash")
 			}
@@ -365,18 +380,115 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		}
 		r.Route("/api/agents", func(r chi.Router) {
 			r.Use(auth.DualAuth(apiKeyValidator))
-			r.Mount("/", agentRouter.Routes())
+			r.Mount("/", d.AgentRouter.Routes())
 		})
 	}
 
-	// --- Agent WebSocket Live Stream (S25, Phase 5) ---
-	var agentStreamHub *ws.AgentStreamHub
-	if len(deps) > 0 && deps[0] != nil {
-		agentStreamHub = deps[0].AgentStreamHub
+	// ==============================================================
+	// Agent WebSocket Live Stream (S25, Phase 5)
+	// ==============================================================
+	if d.AgentStreamHub != nil {
+		r.Get("/ws/agents/live", d.AgentStreamHub.HandleAgentStream)
 	}
-	if agentStreamHub != nil {
-		r.Get("/ws/agents/live", agentStreamHub.HandleAgentStream)
-	}
+
+	// ==============================================================
+	// v11 Meta API Routes (Phase 3-8)
+	// ==============================================================
+	r.Route("/api/v11", func(r chi.Router) {
+		// --- Factions (S16) ---
+		if d.FactionManager != nil {
+			r.Mount("/factions", d.FactionManager.FactionRoutes())
+		}
+
+		// --- Diplomacy (S17) ---
+		if d.DiplomacyEngine != nil && d.FactionManager != nil {
+			r.Mount("/diplomacy", d.DiplomacyEngine.DiplomacyRoutes(d.FactionManager))
+		}
+
+		// --- War (S18) ---
+		if d.WarManager != nil {
+			r.Mount("/war", d.WarManager.WarRoutes())
+		}
+
+		// --- Economy: Trade (S22) ---
+		if d.TradeEngine != nil && d.FactionManager != nil {
+			r.Mount("/trade", d.TradeEngine.TradeRoutes(d.FactionManager))
+		}
+
+		// --- Economy: Policy (S21) ---
+		if d.PolicyEngine != nil {
+			r.Mount("/policy", d.PolicyEngine.PolicyRoutes())
+		}
+
+		// --- Economy: GDP (S23) ---
+		if d.GDPEngine != nil {
+			r.Mount("/gdp", d.GDPEngine.GDPRoutes())
+		}
+
+		// --- Season (S29) ---
+		if d.SeasonEngine != nil {
+			r.Mount("/season", d.SeasonEngine.SeasonRoutes())
+		}
+
+		// --- Season Reset / Archives (S30) ---
+		if d.SeasonResetEngine != nil {
+			r.Mount("/season-archive", d.SeasonResetEngine.SeasonResetRoutes())
+		}
+
+		// --- Hall of Fame (S31) ---
+		if d.HallOfFameEngine != nil {
+			r.Mount("/hall-of-fame", d.HallOfFameEngine.HallOfFameRoutes())
+		}
+
+		// --- Achievements (S32) ---
+		if d.AchievementEngine != nil {
+			r.Mount("/achievements", d.AchievementEngine.AchievementRoutes())
+		}
+
+		// --- Tech Tree (S33) ---
+		if d.TechTreeManager != nil && d.FactionManager != nil {
+			r.Mount("/tech-tree", d.TechTreeManager.TechTreeRoutes(d.FactionManager))
+		}
+
+		// --- Intel (S34) ---
+		if d.IntelSystem != nil && d.FactionManager != nil {
+			r.Mount("/intel", d.IntelSystem.IntelRoutes(d.FactionManager))
+		}
+
+		// --- Events (S35) ---
+		if d.EventEngine != nil {
+			r.Mount("/events", d.EventEngine.EventRoutes())
+		}
+
+		// --- UN Council (S36) ---
+		if d.UNCouncil != nil && d.FactionManager != nil {
+			r.Mount("/council", d.UNCouncil.CouncilRoutes(d.FactionManager))
+		}
+
+		// --- Mercenary Market (S37) ---
+		if d.MercenaryMarket != nil && d.FactionManager != nil {
+			r.Mount("/mercenary", d.MercenaryMarket.MercenaryRoutes(d.FactionManager))
+		}
+
+		// --- World Info (country list, status) ---
+		r.Get("/countries", func(w http.ResponseWriter, r *http.Request) {
+			countries := world.AllCountries
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"count":     len(countries),
+				"countries": countries,
+			})
+		})
+
+		// --- World Status (live country state from WorldManager) ---
+		if d.WorldManager != nil {
+			r.Get("/world/status", func(w http.ResponseWriter, r *http.Request) {
+				status := d.WorldManager.GetAllCountries()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(status)
+			})
+		}
+	})
 
 	return r
 }
