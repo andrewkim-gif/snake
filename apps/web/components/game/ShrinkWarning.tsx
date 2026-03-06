@@ -29,10 +29,16 @@ interface ShrinkWarningProps {
 export function ShrinkWarning({ shrinkData, playerDistance, currentRadius }: ShrinkWarningProps) {
   const [pulse, setPulse] = useState(0);
 
+  // 펄스 애니메이션 (~15fps로 제한하여 불필요한 re-render 감소)
   useEffect(() => {
     let raf: number;
-    const animate = () => {
-      setPulse(performance.now() * 0.003);
+    let lastFrame = 0;
+    const FRAME_INTERVAL = 66; // ~15fps
+    const animate = (now: number) => {
+      if (now - lastFrame >= FRAME_INTERVAL) {
+        setPulse(now * 0.003);
+        lastFrame = now;
+      }
       raf = requestAnimationFrame(animate);
     };
     raf = requestAnimationFrame(animate);

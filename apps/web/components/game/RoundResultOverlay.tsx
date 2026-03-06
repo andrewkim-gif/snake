@@ -45,7 +45,8 @@ export function RoundResultOverlay({ roundEnd, deathInfo, buildSummary, analysis
       position: 'absolute', inset: 0,
       display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
       backgroundColor: 'rgba(0, 0, 0, 0.8)', zIndex: 40, fontFamily: bodyFont,
-      gap: '0.6rem', overflowY: 'auto', padding: '1rem',
+      gap: '0.6rem', overflowY: 'auto', padding: 'clamp(0.5rem, 2vw, 1rem)',
+      WebkitOverflowScrolling: 'touch' as never,
     }}>
       <h2 style={{
         fontFamily: pixelFont, fontSize: '1rem', color: MC.textGold, margin: 0,

@@ -134,7 +134,9 @@ export default function Home() {
         display: 'flex', flexDirection: 'column',
         alignItems: 'center', justifyContent: 'center',
         gap: '14px',
-        padding: '20px',
+        padding: 'clamp(10px, 3vw, 20px)',
+        overflowY: 'auto',
+        WebkitOverflowScrolling: 'touch' as never,
       }}>
         {/* 로고 */}
         <PixelLogo />

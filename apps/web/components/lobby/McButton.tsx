@@ -43,6 +43,7 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
         fontFamily: pixelFont,
         fontSize: MCFont.button,
         padding: '10px 24px',
+        minHeight: '44px',
         cursor: disabled ? 'default' : 'pointer',
         textTransform: 'uppercase',
         letterSpacing: '1px',
@@ -54,6 +55,8 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
       onMouseLeave={() => { setHovered(false); setPressed(false); }}
       onMouseDown={() => setPressed(true)}
       onMouseUp={() => setPressed(false)}
+      onTouchStart={() => { setHovered(true); setPressed(true); }}
+      onTouchEnd={() => { setHovered(false); setPressed(false); }}
       {...rest}
     >
       {children}

@@ -20,8 +20,9 @@ export function McInput({ style, ...rest }: McInputProps) {
         border: `3px solid ${focused ? MC.inputFocusBorder : MC.inputBorder}`,
         color: MC.textPrimary,
         fontFamily: bodyFont,
-        fontSize: '15px',
+        fontSize: '16px', // iOS 줌 방지: 16px 이상
         padding: '10px 14px',
+        minHeight: '44px',
         outline: 'none',
         width: '100%',
         boxSizing: 'border-box',

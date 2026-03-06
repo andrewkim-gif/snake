@@ -96,7 +96,7 @@ export function GameCanvas3D({
     return () => cancelAnimationFrame(raf);
   }, [dataRef]);
 
-  // ─── 입력 처리 (마우스 + 키보드) ───
+  // ─── 입력 처리 (마우스 + 키보드 + 터치) ───
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
@@ -127,6 +127,54 @@ export function GameCanvas3D({
       boostRef.current = false;
       inputSeqRef.current++;
       sendInput(angleRef.current, false, inputSeqRef.current);
+    };
+
+    // ─── 터치 이벤트 (모바일) ───
+    let lastTapTime = 0;
+
+    const handleTouchAngle = (touch: Touch) => {
+      if (menuOpen) return;
+      const rect = container.getBoundingClientRect();
+      const cx = rect.width / 2;
+      const cy = rect.height / 2;
+      const dx = touch.clientX - rect.left - cx;
+      const dy = touch.clientY - rect.top - cy;
+      let angle = Math.atan2(dy, dx);
+      if (angle < 0) angle += Math.PI * 2;
+      angleRef.current = angle;
+      inputSeqRef.current++;
+      sendInput(angle, boostRef.current, inputSeqRef.current);
+    };
+
+    const handleTouchStart = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 0) return;
+      const touch = e.touches[0];
+      handleTouchAngle(touch);
+
+      // 더블탭 → 부스트 토글
+      const now = Date.now();
+      if (now - lastTapTime < 300) {
+        boostRef.current = !boostRef.current;
+        inputSeqRef.current++;
+        sendInput(angleRef.current, boostRef.current, inputSeqRef.current);
+      }
+      lastTapTime = now;
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      e.preventDefault();
+      if (e.touches.length === 0) return;
+      handleTouchAngle(e.touches[0]);
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      // 모든 터치가 끝나면 부스트 해제
+      if (e.touches.length === 0 && boostRef.current) {
+        boostRef.current = false;
+        inputSeqRef.current++;
+        sendInput(angleRef.current, false, inputSeqRef.current);
+      }
     };
 
     // 키보드 방향/부스트
@@ -190,6 +238,9 @@ export function GameCanvas3D({
     container.addEventListener('mousemove', handleMouseMove);
     container.addEventListener('mousedown', handleMouseDown);
     container.addEventListener('mouseup', handleMouseUp);
+    container.addEventListener('touchstart', handleTouchStart, { passive: false });
+    container.addEventListener('touchmove', handleTouchMove, { passive: false });
+    container.addEventListener('touchend', handleTouchEnd);
     window.addEventListener('keydown', handleKeyDown);
     window.addEventListener('keyup', handleKeyUp);
 
@@ -197,6 +248,9 @@ export function GameCanvas3D({
       container.removeEventListener('mousemove', handleMouseMove);
       container.removeEventListener('mousedown', handleMouseDown);
       container.removeEventListener('mouseup', handleMouseUp);
+      container.removeEventListener('touchstart', handleTouchStart);
+      container.removeEventListener('touchmove', handleTouchMove);
+      container.removeEventListener('touchend', handleTouchEnd);
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
@@ -237,12 +291,16 @@ export function GameCanvas3D({
   return (
     <div
       ref={containerRef}
-      style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}
+      style={{
+        position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden',
+        touchAction: 'none', // 모바일: 브라우저 스크롤/줌 방지
+        WebkitUserSelect: 'none', userSelect: 'none', // 터치 시 텍스트 선택 방지
+      }}
     >
       {/* ─── R3F Canvas ─── */}
       <Canvas
-        dpr={[1, 1]}
-        gl={{ antialias: true }}
+        dpr={[1, 1.5]}
+        gl={{ antialias: true, powerPreference: 'high-performance' }}
         camera={{ fov: 50, near: 1, far: 5000, position: [0, 500, 400] }}
         style={{ display: 'block', width: '100%', height: '100%' }}
       >
@@ -399,14 +457,14 @@ function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => v
           ESC to resume
         </p>
         <button onClick={onResume} style={{
-          width: 200, padding: '12px 0', fontSize: 17, fontWeight: 700,
+          width: 200, padding: '12px 0', minHeight: 48, fontSize: 17, fontWeight: 700,
           backgroundColor: '#D4914A', color: '#F5F0E8', border: '2px solid #3A3028',
           borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
           RESUME
         </button>
         <button onClick={onExit} style={{
-          width: 200, padding: '12px 0', fontSize: 17, fontWeight: 700,
+          width: 200, padding: '12px 0', minHeight: 48, fontSize: 17, fontWeight: 700,
           backgroundColor: 'transparent', color: '#C75B5B', border: '1.5px solid #C75B5B',
           borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>

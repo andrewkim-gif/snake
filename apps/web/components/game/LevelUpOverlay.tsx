@@ -91,7 +91,8 @@ export function LevelUpOverlay({ levelUp, onChoose }: LevelUpOverlayProps) {
       </div>
 
       <div style={{
-        display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center', maxWidth: '700px',
+        display: 'flex', gap: '0.8rem', flexWrap: 'wrap', justifyContent: 'center',
+        maxWidth: '700px', padding: '0 0.5rem',
       }}>
         {choices.map((choice, idx) => (
           <UpgradeCard
@@ -146,9 +147,12 @@ function UpgradeCard({
       onClick={onClick}
       onMouseEnter={onHover}
       onMouseLeave={onLeave}
+      onTouchStart={onHover}
+      onTouchEnd={onLeave}
       style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.5rem',
-        width: '180px', padding: '1rem 0.8rem',
+        width: '180px', minWidth: '140px', flex: '1 1 140px', maxWidth: '200px',
+        padding: '1rem 0.8rem', minHeight: '48px',
         backgroundColor: hovered ? 'rgba(255,255,255,0.12)' : MC.panelBg,
         boxShadow: mcPanelShadow(),
         border: hovered ? `2px solid ${accentColor}` : `2px solid ${MC.panelBorderDark}`,

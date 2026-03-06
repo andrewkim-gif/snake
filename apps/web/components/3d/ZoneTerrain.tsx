@@ -13,12 +13,13 @@
  * position-y 오프셋으로 z-fighting 방지
  */
 
-import { useMemo } from 'react';
+import { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import {
   createGrassTexture,
   createStoneTexture,
   createNetherrackTexture,
+  disposeZoneTextures,
 } from '@/lib/3d/zone-textures';
 
 interface ZoneTerrainProps {
@@ -30,12 +31,19 @@ export function ZoneTerrain({ arenaRadius }: ZoneTerrainProps) {
   const centerRadius = arenaRadius * 0.40;
   const midRadius = arenaRadius * 0.70;
 
-  // 텍스처 캐시 — 한 번만 생성
+  // 텍스처 캐시 -- 한 번만 생성
   const textures = useMemo(() => ({
     grass: createGrassTexture(),
     stone: createStoneTexture(),
     netherrack: createNetherrackTexture(),
   }), []);
+
+  // 텍스처 클린업 (언마운트 시)
+  useEffect(() => {
+    return () => {
+      disposeZoneTextures();
+    };
+  }, []);
 
   return (
     <group>
