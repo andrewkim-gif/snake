@@ -1269,5 +1269,102 @@ export function generateBackItemTexture(backGeometryType: string): THREE.CanvasT
   return toCanvasTexture(canvas);
 }
 
+// ─── Phase 6: 눈 깜빡임 & 표정 텍스처 ───
+
+/**
+ * 닫힌 눈 텍스처 생성 (깜빡임용)
+ * 16x16 투명 캔버스에 양쪽 눈 위치에 가로 일자 라인만 그림
+ * 눈 위치: 왼쪽 (4,6), 오른쪽 (9,6) — 눈 영역 하단 1px 라인
+ */
+export function generateClosedEyeTexture(): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  ctx.clearRect(0, 0, TEX_SIZE, TEX_SIZE);
+
+  // 닫힌 눈: 각 눈 3px 가로 라인 (y=6, 눈 하단)
+  // 왼쪽 눈
+  px(ctx, 4, 6, '#3A3028');
+  px(ctx, 5, 6, '#3A3028');
+  px(ctx, 6, 6, '#3A3028');
+  // 오른쪽 눈
+  px(ctx, 9, 6, '#3A3028');
+  px(ctx, 10, 6, '#3A3028');
+  px(ctx, 11, 6, '#3A3028');
+
+  return toCanvasTexture(canvas);
+}
+
+/**
+ * 표정별 눈 오버라이드 텍스처 생성
+ *
+ * AnimState에 따라 다른 눈 텍스처를 반환:
+ *  - 'hit':     찡그린 눈 (수평 일자 + 약간 비스듬)
+ *  - 'death':   X눈 (대각선 교차)
+ *  - 'levelup': 별눈 (Star 스타일 — 골드)
+ *  - 'victory': 하트눈 (Heart 스타일 — 빨강) 또는 눈웃음
+ *  - 'boost':   좁힌 눈 (Cool 스타일 — 바이저 느낌)
+ *
+ * @param expression - 표정 키
+ * @returns 16x16 CanvasTexture (눈만 그려진 상태, 나머지 투명)
+ */
+export function generateExpressionEyeTexture(
+  expression: 'hit' | 'death' | 'levelup' | 'victory' | 'boost',
+): THREE.CanvasTexture {
+  const [canvas, ctx] = createCanvas();
+  ctx.clearRect(0, 0, TEX_SIZE, TEX_SIZE);
+
+  // 양쪽 눈에 동일 패턴 적용 (왼쪽 기준점 4,5 / 오른쪽 기준점 9,5)
+  const drawBothEyes = (pattern: [number, number, string][]) => {
+    for (const [dx, dy, color] of pattern) {
+      px(ctx, 4 + dx, 5 + dy, color);
+      px(ctx, 9 + dx, 5 + dy, color);
+    }
+  };
+
+  switch (expression) {
+    case 'hit':
+      // 찡그린 눈: 가운데 꽉 쥔 | | 형태 (세로 2px)
+      drawBothEyes([
+        [0, 0, '#3A3028'], [2, 0, '#3A3028'],
+        [1, 0, '#3A3028'], [1, 1, '#3A3028'],
+      ]);
+      break;
+
+    case 'death':
+      // X눈: 대각선 교차
+      drawBothEyes([
+        [0, 0, '#3A3028'], [2, 0, '#3A3028'],
+        [1, 1, '#3A3028'],
+        [0, 1, '#3A3028'], [2, 1, '#3A3028'],
+      ]);
+      break;
+
+    case 'levelup':
+      // 별눈: 골드 색상으로 별 모양
+      drawBothEyes([
+        [0, 0, '#FFD700'], [1, 0, '#FFD700'], [2, 0, '#FFD700'],
+        [0, 1, '#FFD700'], [1, 1, '#FFD700'], [2, 1, '#FFD700'],
+      ]);
+      break;
+
+    case 'victory':
+      // 눈웃음: 반원형 ( ^  ^ )
+      drawBothEyes([
+        [0, 0, '#3A3028'], [2, 0, '#3A3028'],
+        [0, 1, '#3A3028'], [1, 1, '#3A3028'], [2, 1, '#3A3028'],
+      ]);
+      break;
+
+    case 'boost':
+      // 좁힌 눈: 가로 바이저 (Cool 스타일)
+      drawBothEyes([
+        [0, 0, '#222222'], [1, 0, '#222222'], [2, 0, '#222222'],
+        [0, 1, '#222222'], [1, 1, '#222222'], [2, 1, '#222222'],
+      ]);
+      break;
+  }
+
+  return toCanvasTexture(canvas);
+}
+
 /** 글로벌 싱글턴 캐시 매니저 */
 export const textureCacheManager = new TextureCacheManager(60);

@@ -31,6 +31,7 @@ import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import { resolveAppearance } from '@/lib/3d/skin-migration';
 import { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { HeadGroupManager } from './HeadGroupManager';
+import { EyeInstances } from './EyeInstances';
 import { VIVID_PALETTE } from '@agent-survivor/shared';
 import type { AgentNetworkData, CubelingAppearance } from '@agent-survivor/shared';
 
@@ -442,6 +443,13 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
         agentsRef={agentsRef}
         elapsedRef={elapsedRef}
         resolveAppearanceFn={getCachedAppearance}
+        stateMachineRef={stateMachineRef}
+        agentIndexMapRef={agentIndexMapRef}
+      />
+
+      {/* Eyes: EyeInstances (눈 깜빡임 & 표정 오버레이 — Phase 6) */}
+      <EyeInstances
+        agentsRef={agentsRef}
         stateMachineRef={stateMachineRef}
         agentIndexMapRef={agentIndexMapRef}
       />
