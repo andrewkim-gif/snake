@@ -107,19 +107,21 @@ export function HeadGroupManager({
     faceGroups.forEach(g => { g.count = 0; });
 
     // Phase 2: 에이전트별 faceKey 수집 및 그룹 할당
-    // faceKey → 에이전트 인덱스 목록
+    // headGroupKey → 에이전트 인덱스 목록
+    // Phase 3: hairStyle 포함한 확장 키 (눈+입+헤어스타일 조합별 IM 그룹핑)
     const faceKeyAgents = new Map<string, Array<{ agent: AgentNetworkData; appearance: CubelingAppearance }>>();
 
     let agentCount = 0;
     for (const agent of agents) {
       if (agentCount >= MAX_AGENTS) break;
       const appearance = resolveAppearanceFn(agent.k);
-      const faceKey: FaceKey = `${appearance.eyeStyle}-${appearance.mouthStyle}`;
+      // Phase 3: faceKey에 hairStyle 포함 (같은 얼굴+헤어만 같은 IM 공유)
+      const headGroupKey = `${appearance.eyeStyle}-${appearance.mouthStyle}-h${appearance.hairStyle}`;
 
-      let list = faceKeyAgents.get(faceKey);
+      let list = faceKeyAgents.get(headGroupKey);
       if (!list) {
         list = [];
-        faceKeyAgents.set(faceKey, list);
+        faceKeyAgents.set(headGroupKey, list);
       }
       list.push({ agent, appearance });
       agentCount++;
@@ -129,14 +131,17 @@ export function HeadGroupManager({
     for (const [faceKey, agentList] of faceKeyAgents) {
       let group = faceGroups.get(faceKey);
 
-      // 새 얼굴 조합 → IM 동적 생성
+      // 새 얼굴+헤어 조합 → IM 동적 생성
       if (!group) {
         const firstAppearance = agentList[0].appearance;
+        // Phase 3: faceKey는 캐시 내부에서 확장키 사용, hairStyle 전달
+        const baseFaceKey: FaceKey = `${firstAppearance.eyeStyle}-${firstAppearance.mouthStyle}`;
         const materials = textureCacheManager.getFaceMaterials(
-          faceKey as FaceKey,
+          baseFaceKey,
           firstAppearance.eyeStyle,
           firstAppearance.mouthStyle,
           firstAppearance.marking,
+          firstAppearance.hairStyle,
         );
         const mesh = new THREE.InstancedMesh(headGeo, materials, MAX_AGENTS);
         mesh.frustumCulled = false;
