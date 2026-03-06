@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next';
+import { SocketProvider } from '@/providers/SocketProvider';
 
 export const metadata: Metadata = {
   title: 'AI World War - Multiplayer Survival Roguelike',
@@ -41,6 +42,7 @@ export default function RootLayout({
         />
       </head>
       <body
+        suppressHydrationWarning
         style={{
           margin: 0,
           padding: 0,
@@ -52,7 +54,9 @@ export default function RootLayout({
           overscrollBehavior: 'none',
         }}
       >
-        {children}
+        <SocketProvider>
+          {children}
+        </SocketProvider>
       </body>
     </html>
   );

@@ -15,7 +15,8 @@ import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { NewsFeed } from '@/components/lobby/NewsFeed';
-import { useSocket } from '@/hooks/useSocket';
+import { useSocketContext } from '@/providers/SocketProvider';
+import type { GameMode } from '@/providers/SocketProvider';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
 const WorldView = dynamic(
@@ -38,10 +39,17 @@ export default function Home() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [newsExpanded, setNewsExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
+
+  // v13: 전역 SocketContext에서 소켓 데이터 + 액션 가져오기
   const {
     dataRef, uiState, joinRoom, leaveRoom, sendInput,
-    respawn, chooseUpgrade, dismissSynergyPopup,
-  } = useSocket();
+    respawn, chooseUpgrade, dismissSynergyPopup, setGameMode,
+  } = useSocketContext();
+
+  // v13: 로컬 mode ↔ 전역 gameMode 동기화
+  useEffect(() => {
+    setGameMode(mode as GameMode);
+  }, [mode, setGameMode]);
 
   // localStorage 복원
   useEffect(() => {
