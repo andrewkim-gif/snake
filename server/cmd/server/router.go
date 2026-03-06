@@ -40,7 +40,20 @@ var upgrader = websocket.Upgrader{
 }
 
 // newRouter creates the chi HTTP router with middleware and routes.
-func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager) http.Handler {
+// RouterDeps holds optional dependencies for the HTTP router.
+type RouterDeps struct {
+	TrainingStore *game.TrainingStore
+	MemoryStore   *game.MemoryStore
+}
+
+func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game.RoomManager, deps ...*RouterDeps) http.Handler {
+	// Optional dependencies
+	var ts *game.TrainingStore
+	var ms *game.MemoryStore
+	if len(deps) > 0 && deps[0] != nil {
+		ts = deps[0].TrainingStore
+		ms = deps[0].MemoryStore
+	}
 	r := chi.NewRouter()
 
 	// -- Middleware --
@@ -129,6 +142,137 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, rm *game
 		go client.ReadPump()
 
 		slog.Info("new ws connection", "clientId", clientID, "remoteAddr", r.RemoteAddr)
+	})
+
+	// --- Agent Training API (S49) ---
+	r.Route("/api/agent/{agentId}", func(r chi.Router) {
+		// PUT /api/agent/:id/training — Set training profile
+		r.Put("/training", func(w http.ResponseWriter, r *http.Request) {
+			if ts == nil {
+				http.Error(w, `{"error":"training not initialized"}`, http.StatusServiceUnavailable)
+				return
+			}
+
+			agentID := chi.URLParam(r, "agentId")
+			if agentID == "" {
+				http.Error(w, `{"error":"missing agentId"}`, http.StatusBadRequest)
+				return
+			}
+
+			var req game.SetTrainingRequest
+			if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+				http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+				return
+			}
+
+			if err := req.Validate(); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusBadRequest)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+
+			// Get existing or create new
+			existing, _ := ts.GetProfile(agentID)
+			profile := req.ApplyToProfile(agentID, existing)
+
+			if err := ts.SetProfile(agentID, profile); err != nil {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(map[string]string{"error": err.Error()})
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(profile)
+		})
+
+		// GET /api/agent/:id/training — Get training profile
+		r.Get("/training", func(w http.ResponseWriter, r *http.Request) {
+			if ts == nil {
+				http.Error(w, `{"error":"training not initialized"}`, http.StatusServiceUnavailable)
+				return
+			}
+
+			agentID := chi.URLParam(r, "agentId")
+			profile, ok := ts.GetProfile(agentID)
+			if !ok {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "profile not found"})
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(profile)
+		})
+
+		// PUT /api/agent/:id/build-path — Register custom build path (S48)
+		r.Put("/build-path", func(w http.ResponseWriter, r *http.Request) {
+			agentID := chi.URLParam(r, "agentId")
+			if agentID == "" {
+				http.Error(w, `{"error":"missing agentId"}`, http.StatusBadRequest)
+				return
+			}
+
+			var bp game.BuildPath
+			if err := json.NewDecoder(r.Body).Decode(&bp); err != nil {
+				http.Error(w, `{"error":"invalid JSON"}`, http.StatusBadRequest)
+				return
+			}
+
+			bp.ID = "custom_" + agentID
+			// Store as training profile build path
+			if ts != nil {
+				existing, _ := ts.GetProfile(agentID)
+				if existing == nil {
+					existing = &game.TrainingProfile{AgentID: agentID}
+				}
+				existing.BuildProfile.PrimaryPath = bp.ID
+				ts.SetProfile(agentID, existing)
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+			json.NewEncoder(w).Encode(bp)
+		})
+
+		// GET /api/agent/:id/memory — Get agent learning data (S50)
+		r.Get("/memory", func(w http.ResponseWriter, r *http.Request) {
+			if ms == nil {
+				http.Error(w, `{"error":"memory not initialized"}`, http.StatusServiceUnavailable)
+				return
+			}
+
+			agentID := chi.URLParam(r, "agentId")
+			mem, ok := ms.GetMemory(agentID)
+			if !ok {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(http.StatusNotFound)
+				json.NewEncoder(w).Encode(map[string]string{"error": "memory not found"})
+				return
+			}
+
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(mem)
+		})
+	})
+
+	// --- Build Paths API (public, read-only) ---
+	r.Get("/api/build-paths", func(w http.ResponseWriter, r *http.Request) {
+		paths := make(map[string]*game.BuildPath)
+		for _, id := range game.AllBuildPathIDs() {
+			paths[id] = game.GetBuildPath(id)
+		}
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(paths)
+	})
+
+	// --- Personality Presets API (public, read-only) ---
+	r.Get("/api/personalities", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		json.NewEncoder(w).Encode(game.PersonalityPresets)
 	})
 
 	return r

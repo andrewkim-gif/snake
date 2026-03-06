@@ -49,12 +49,22 @@ func main() {
 	// Wire RoomManager events → Hub messaging (bridge game→ws without circular import)
 	roomManager.OnEvents = createRoomEventHandler(hub)
 
+	// Create agent command router (S47)
+	agentCmdRouter := game.NewAgentCommandRouter()
+
+	// Create training store (S49) + memory store (S50) — persists to data/ directory
+	trainingStore := game.NewTrainingStore("data")
+	memoryStore := game.NewMemoryStore("data")
+
 	// Create event router with handlers
 	eventRouter := ws.NewEventRouter()
-	registerEventHandlers(eventRouter, hub, roomManager)
+	registerEventHandlers(eventRouter, hub, roomManager, agentCmdRouter)
 
 	// Build HTTP router
-	router := newRouter(cfg, hub, eventRouter, roomManager)
+	router := newRouter(cfg, hub, eventRouter, roomManager, &RouterDeps{
+		TrainingStore: trainingStore,
+		MemoryStore:   memoryStore,
+	})
 
 	// HTTP server
 	httpServer := &http.Server{
@@ -150,7 +160,7 @@ func main() {
 }
 
 // registerEventHandlers sets up all client→server event handlers.
-func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomManager) {
+func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomManager, agentCmdRouter *game.AgentCommandRouter) {
 	// Ping/Pong
 	router.On(ws.EventPing, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.PingPayload
@@ -269,6 +279,156 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 
 		rm.RouteChooseUpgrade(client.ID, choiceIndex)
 	})
+
+	// --- Agent-specific event handlers (S46) ---
+
+	// Agent Authentication
+	router.On(ws.EventAgentAuth, func(client *ws.Client, data json.RawMessage) {
+		var payload ws.AgentAuthPayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			slog.Warn("invalid agent_auth payload", "clientId", client.ID, "error", err)
+			return
+		}
+
+		// API key validation (simple for now; production would use hashed keys + DB)
+		if payload.APIKey == "" || payload.AgentID == "" {
+			frame, _ := ws.EncodeFrame(ws.EventAgentAuthResult, domain.AgentAuthResult{
+				Success: false,
+				Error:   "missing api_key or agent_id",
+			})
+			client.Send(frame)
+			return
+		}
+
+		// Mark client as authenticated agent
+		client.IsAgent = true
+		client.AgentID = payload.AgentID
+		client.AgentAPIKey = payload.APIKey
+
+		slog.Info("agent authenticated",
+			"clientId", client.ID,
+			"agentId", payload.AgentID,
+		)
+
+		frame, _ := ws.EncodeFrame(ws.EventAgentAuthResult, domain.AgentAuthResult{
+			Success: true,
+			AgentID: payload.AgentID,
+		})
+		client.Send(frame)
+	})
+
+	// Agent Choose Upgrade (with reasoning)
+	router.On(ws.EventAgentChooseUpgrade, func(client *ws.Client, data json.RawMessage) {
+		if !client.IsAgent {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "not_agent",
+				Message: "agent_choose_upgrade requires agent authentication",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		var payload ws.AgentChooseUpgradePayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+
+		if payload.Reasoning != "" {
+			slog.Info("agent upgrade choice",
+				"agentId", client.AgentID,
+				"choiceIndex", payload.ChoiceIndex,
+				"reasoning", payload.Reasoning,
+			)
+		}
+
+		rm.RouteChooseUpgrade(client.ID, payload.ChoiceIndex)
+	})
+
+	// Agent Commander Mode Command (S47)
+	router.On(ws.EventAgentCommand, func(client *ws.Client, data json.RawMessage) {
+		if !client.IsAgent {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "not_agent",
+				Message: "agent_command requires agent authentication",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		var payload ws.AgentCommandPayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+
+		// Get agent's room and arena
+		roomID := rm.GetPlayerRoom(client.ID)
+		if roomID == "" {
+			return
+		}
+		room := rm.GetRoom(roomID)
+		if room == nil {
+			return
+		}
+
+		agent, ok := room.GetArena().GetAgent(client.ID)
+		if !ok || !agent.Alive {
+			return
+		}
+
+		if err := agentCmdRouter.ExecuteCommand(client.ID, agent, room.GetArena(), payload.Cmd, payload.Data); err != nil {
+			slog.Warn("agent command failed",
+				"agentId", client.AgentID,
+				"cmd", payload.Cmd,
+				"error", err,
+			)
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "command_failed",
+				Message: err.Error(),
+			})
+			client.Send(errFrame)
+		}
+	})
+
+	// Agent Observe Game (S52) — request/response pattern
+	router.On(ws.EventAgentObserveReq, func(client *ws.Client, data json.RawMessage) {
+		if !client.IsAgent {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "not_agent",
+				Message: "observe_game requires agent authentication",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		// Get agent's room and arena
+		roomID := rm.GetPlayerRoom(client.ID)
+		if roomID == "" {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "not_in_room",
+				Message: "observe_game: not in a room",
+			})
+			client.Send(errFrame)
+			return
+		}
+		room := rm.GetRoom(roomID)
+		if room == nil {
+			return
+		}
+
+		agent, ok := room.GetArena().GetAgent(client.ID)
+		if !ok {
+			return
+		}
+
+		// Build and send the observation response
+		observation := game.BuildObserveGameResponse(agent, room.GetArena())
+		if observation != nil {
+			frame, err := ws.EncodeFrame(ws.EventAgentObserveGame, observation)
+			if err == nil {
+				client.Send(frame)
+			}
+		}
+	})
 }
 
 // createRoomEventHandler creates the callback that bridges Room events to Hub messaging.
@@ -285,6 +445,8 @@ func createRoomEventHandler(hub *ws.Hub) game.RoomEventCallback {
 				wsEvent = ws.EventLevelUp
 			case game.RoomEvtSynergy:
 				wsEvent = ws.EventSynergyActivated
+			case game.RoomEvtAgentLevelUp:
+				wsEvent = ws.EventAgentLevelUp
 			case game.RoomEvtShrinkWarn:
 				wsEvent = ws.EventArenaShrink
 			case game.RoomEvtRoundStart:

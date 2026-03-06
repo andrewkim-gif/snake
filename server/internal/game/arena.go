@@ -14,10 +14,11 @@ import (
 type ArenaEventType string
 
 const (
-	EventDeath    ArenaEventType = "death"
-	EventKill     ArenaEventType = "kill"
-	EventLevelUp  ArenaEventType = "level_up"
-	EventSynergy  ArenaEventType = "synergy"
+	EventDeath         ArenaEventType = "death"
+	EventKill          ArenaEventType = "kill"
+	EventLevelUp       ArenaEventType = "level_up"
+	EventAgentLevelUp  ArenaEventType = "agent_level_up"
+	EventSynergy       ArenaEventType = "synergy"
 	EventShrinkWarn    ArenaEventType = "shrink_warn"
 	EventMapObjectUse  ArenaEventType = "map_object_use"
 )
@@ -239,6 +240,7 @@ func (a *Arena) handleLevelUp(agent *domain.Agent) {
 	agent.PendingChoices = choices
 	agent.UpgradeDeadline = a.tick + UpgradeTimeoutTicks
 
+	// Standard level_up event for human players
 	a.eventBuffer = append(a.eventBuffer, ArenaEvent{
 		Type:      EventLevelUp,
 		AgentID:   agent.ID,
@@ -250,6 +252,107 @@ func (a *Arena) handleLevelUp(agent *domain.Agent) {
 			CurrentBuild: agent.Build,
 		},
 	})
+
+	// Enriched agent_level_up event for AI agents (S46)
+	if agent.IsAgent {
+		a.eventBuffer = append(a.eventBuffer, ArenaEvent{
+			Type:      EventAgentLevelUp,
+			AgentID:   agent.ID,
+			AgentName: agent.Name,
+			Data:      a.buildAgentLevelUpEvent(agent, choices),
+		})
+	}
+}
+
+// buildAgentLevelUpEvent creates an enriched level_up event for AI agents.
+func (a *Arena) buildAgentLevelUpEvent(agent *domain.Agent, choices []domain.UpgradeChoice) domain.AgentLevelUpEvent {
+	// Compute nearby synergies (synergies that are 1 upgrade away)
+	nearbySynergies := computeNearbySynergies(agent)
+
+	// Compute nearby threats
+	nearbyThreats := 0
+	threatRadius := AuraRadius * 4.0
+	for _, other := range a.agents {
+		if other.ID == agent.ID || !other.Alive {
+			continue
+		}
+		dist := DistanceSq(agent.Position, other.Position)
+		if dist < threatRadius*threatRadius {
+			nearbyThreats++
+		}
+	}
+
+	// Compute rank
+	rank := a.leaderboard.GetAgentRankInFinal(a.agents, agent.ID)
+
+	// Compute time remaining (approximate from tick)
+	roundDuration := uint64(DefaultRoomConfig().RoundDurationSec * TickRate)
+	timeRemainingSec := 0
+	if roundDuration > a.tick {
+		timeRemainingSec = int((roundDuration - a.tick) / uint64(TickRate))
+	}
+
+	return domain.AgentLevelUpEvent{
+		Level:   agent.Level,
+		Choices: choices,
+		CurrentBuild: domain.AgentBuildInfo{
+			Tomes:           agent.Build.Tomes,
+			Abilities:       agent.Build.AbilitySlots,
+			ActiveSynergies: agent.ActiveSynergies,
+			NearbySynergies: nearbySynergies,
+		},
+		GameContext: domain.AgentGameContext{
+			TimeRemaining: timeRemainingSec,
+			MyRank:        rank,
+			MyMass:        agent.Mass,
+			NearbyThreats: nearbyThreats,
+			ArenaRadius:   a.arenaShrink.GetCurrentRadius(),
+		},
+		Deadline: 5000, // 5 seconds in milliseconds
+	}
+}
+
+// computeNearbySynergies returns synergy IDs that are 1 upgrade away from completion.
+func computeNearbySynergies(agent *domain.Agent) []string {
+	var nearby []string
+	for _, synergy := range domain.AllSynergies {
+		// Skip already active
+		alreadyActive := false
+		for _, active := range agent.ActiveSynergies {
+			if active == synergy.ID {
+				alreadyActive = true
+				break
+			}
+		}
+		if alreadyActive {
+			continue
+		}
+
+		// Count remaining requirements
+		remaining := 0
+		for tome, required := range synergy.TomeReqs {
+			if agent.Build.Tomes[tome] < required {
+				remaining += required - agent.Build.Tomes[tome]
+			}
+		}
+		for ability, requiredLevel := range synergy.AbilityReqs {
+			found := false
+			for _, slot := range agent.Build.AbilitySlots {
+				if slot.Type == ability && slot.Level >= requiredLevel {
+					found = true
+					break
+				}
+			}
+			if !found {
+				remaining++
+			}
+		}
+
+		if remaining == 1 {
+			nearby = append(nearby, synergy.ID)
+		}
+	}
+	return nearby
 }
 
 // processUpgradeTimeouts auto-selects for agents who didn't choose in time.

@@ -14,6 +14,12 @@ const (
 	EventRespawn        = "respawn"
 	EventPing           = "ping"
 	EventChooseUpgrade  = "choose_upgrade"
+
+	// Agent-specific events (client → server)
+	EventAgentAuth          = "agent_auth"
+	EventAgentCommand       = "agent_command"
+	EventAgentChooseUpgrade = "agent_choose_upgrade"
+	EventAgentObserveReq    = "observe_game" // agent requests game observation
 )
 
 // --- Event names (server → client) ---
@@ -32,6 +38,12 @@ const (
 	EventSynergyActivated = "synergy_activated"
 	EventArenaShrink      = "arena_shrink"
 	EventError            = "error"
+
+	// Agent-specific events (server → client)
+	EventAgentAuthResult    = "agent_auth_result"
+	EventAgentLevelUp       = "agent_level_up"
+	EventAgentObserveGame   = "agent_observe_game"
+	EventTrainingUpdate     = "training_update"
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -138,6 +150,24 @@ type PingPayload struct {
 // ChooseUpgradePayload is sent by the client to select a level-up upgrade.
 type ChooseUpgradePayload struct {
 	ChoiceID string `json:"choiceId"`
+}
+
+// AgentAuthPayload is sent by an agent to authenticate via API key.
+type AgentAuthPayload struct {
+	APIKey  string `json:"apiKey"`
+	AgentID string `json:"agentId"`
+}
+
+// AgentChooseUpgradePayload is sent by an agent to select a level-up upgrade.
+type AgentChooseUpgradePayload struct {
+	ChoiceIndex int    `json:"choiceIndex"` // 0, 1, or 2
+	Reasoning   string `json:"reasoning,omitempty"`
+}
+
+// AgentCommandPayload is sent by an agent to issue a commander mode command.
+type AgentCommandPayload struct {
+	Cmd  string          `json:"cmd"`
+	Data json.RawMessage `json:"data,omitempty"`
 }
 
 // --- Server → Client payload types ---

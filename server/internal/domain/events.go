@@ -89,6 +89,121 @@ type LevelUpEvent struct {
 	CurrentBuild PlayerBuild     `json:"currentBuild"`
 }
 
+// AgentLevelUpEvent is the enriched level_up event sent to AI agents.
+// Includes game context for strategic decision-making.
+type AgentLevelUpEvent struct {
+	Level        int               `json:"level"`
+	Choices      []UpgradeChoice   `json:"choices"`
+	CurrentBuild AgentBuildInfo    `json:"currentBuild"`
+	GameContext  AgentGameContext  `json:"gameContext"`
+	Deadline     int               `json:"deadline"` // milliseconds until auto-select (5000ms)
+}
+
+// AgentBuildInfo is the detailed build state sent to agents.
+type AgentBuildInfo struct {
+	Tomes           map[TomeType]int `json:"tomes"`
+	Abilities       []AbilitySlot    `json:"abilities"`
+	ActiveSynergies []string         `json:"activeSynergies"`
+	NearbySynergies []string         `json:"nearbySynergies"` // synergies 1 upgrade away
+}
+
+// AgentGameContext provides game state for agent decision-making.
+type AgentGameContext struct {
+	TimeRemaining int     `json:"timeRemaining"` // seconds
+	MyRank        int     `json:"myRank"`
+	MyMass        float64 `json:"myMass"`
+	NearbyThreats int     `json:"nearbyThreats"` // count of nearby enemies
+	ArenaRadius   float64 `json:"arenaRadius"`
+}
+
+// AgentAuthResult is sent to an agent after authentication attempt.
+type AgentAuthResult struct {
+	Success bool   `json:"success"`
+	AgentID string `json:"agentId,omitempty"`
+	Error   string `json:"error,omitempty"`
+}
+
+// --- observe_game response types (S52) ---
+
+// ObserveGameResponse is the full game observation sent to AI agents.
+// Maintains v9 backward compatibility while adding v10 fields.
+type ObserveGameResponse struct {
+	// --- v9 compatible fields ---
+	ID       string  `json:"id"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+	Heading  float64 `json:"heading"`
+	Speed    float64 `json:"speed"`
+	Mass     float64 `json:"mass"`
+	Alive    bool    `json:"alive"`
+	Score    int     `json:"score"`
+	Kills    int     `json:"kills"`
+	Boosting bool    `json:"boosting"`
+
+	// Nearby agents (v9 compat: id, x, y, mass, heading)
+	NearbyAgents []ObserveNearbyAgent `json:"nearbyAgents"`
+
+	// Nearby orbs (v9 compat)
+	NearbyOrbs []ObserveNearbyOrb `json:"nearbyOrbs"`
+
+	// --- v10 extended fields ---
+	Level          int                   `json:"level"`
+	XP             int                   `json:"xp"`
+	XPToNext       int                   `json:"xpToNext"`
+	Build          ObserveBuildInfo      `json:"build"`
+	ArenaRadius    float64               `json:"arenaRadius"`
+	Zone           string                `json:"zone"` // "center", "mid", "edge", "danger"
+	NearbyThreats  []ObserveNearbyThreat `json:"nearbyThreats"`
+	NearbyMapObjs  []ObserveNearbyMapObj `json:"nearbyMapObjects"`
+	TimeRemaining  int                   `json:"timeRemaining"` // seconds
+	MyRank         int                   `json:"myRank"`
+	AliveCount     int                   `json:"aliveCount"`
+	Tick           uint64                `json:"tick"`
+}
+
+// ObserveNearbyAgent is a nearby agent in the observe_game response (v9 compat).
+type ObserveNearbyAgent struct {
+	ID       string  `json:"id"`
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+	Mass     float64 `json:"mass"`
+	Heading  float64 `json:"heading"`
+	Boosting bool    `json:"boosting,omitempty"`
+	Name     string  `json:"name"`
+	Level    int     `json:"level"`
+}
+
+// ObserveNearbyOrb is a nearby orb in the observe_game response (v9 compat).
+type ObserveNearbyOrb struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Value float64 `json:"value"`
+	Type  OrbType `json:"type"`
+}
+
+// ObserveBuildInfo is the build state in the observe_game response (v10).
+type ObserveBuildInfo struct {
+	Tomes           map[TomeType]int `json:"tomes"`
+	Abilities       []AbilitySlot    `json:"abilities"`
+	ActiveSynergies []string         `json:"activeSynergies"`
+}
+
+// ObserveNearbyThreat is a nearby enemy with build classification (v10).
+type ObserveNearbyThreat struct {
+	ID        string  `json:"id"`
+	Mass      float64 `json:"mass"`
+	Distance  float64 `json:"distance"`
+	BuildType string  `json:"buildType"` // "berserker", "tank", "speedster", "farmer", "balanced"
+}
+
+// ObserveNearbyMapObj is a nearby map object in the observe_game response (v10).
+type ObserveNearbyMapObj struct {
+	Type     string  `json:"type"` // "shrine", "spring", "altar", "gate"
+	X        float64 `json:"x"`
+	Y        float64 `json:"y"`
+	Distance float64 `json:"distance"`
+}
+
 // SynergyActivatedEvent is sent when a synergy is triggered.
 type SynergyActivatedEvent struct {
 	SynergyID   string `json:"synergyId"`

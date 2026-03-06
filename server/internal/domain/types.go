@@ -457,6 +457,8 @@ type Agent struct {
 	UpgradeDeadline uint64       `json:"upgradeDeadline"`
 	GracePeriodEnd  uint64       `json:"gracePeriodEnd"`
 	IsBot           bool         `json:"isBot"`
+	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent
+	AgentID         string       `json:"agentId,omitempty"` // agent identifier
 }
 
 // UpgradeChoice represents a single upgrade option presented at level-up.

@@ -14,17 +14,18 @@ import (
 type RoomEventType string
 
 const (
-	RoomEvtDeath        RoomEventType = "death"
-	RoomEvtKill         RoomEventType = "kill"
-	RoomEvtLevelUp      RoomEventType = "level_up"
-	RoomEvtSynergy      RoomEventType = "synergy"
-	RoomEvtShrinkWarn   RoomEventType = "shrink_warn"
-	RoomEvtRoundStart   RoomEventType = "round_start"
-	RoomEvtRoundEnd     RoomEventType = "round_end"
-	RoomEvtRoundReset   RoomEventType = "round_reset"
-	RoomEvtState        RoomEventType = "state"
-	RoomEvtMinimap      RoomEventType = "minimap"
-	RoomEvtArenaShrink  RoomEventType = "arena_shrink"
+	RoomEvtDeath         RoomEventType = "death"
+	RoomEvtKill          RoomEventType = "kill"
+	RoomEvtLevelUp       RoomEventType = "level_up"
+	RoomEvtAgentLevelUp  RoomEventType = "agent_level_up"
+	RoomEvtSynergy       RoomEventType = "synergy"
+	RoomEvtShrinkWarn    RoomEventType = "shrink_warn"
+	RoomEvtRoundStart    RoomEventType = "round_start"
+	RoomEvtRoundEnd      RoomEventType = "round_end"
+	RoomEvtRoundReset    RoomEventType = "round_reset"
+	RoomEvtState         RoomEventType = "state"
+	RoomEvtMinimap       RoomEventType = "minimap"
+	RoomEvtArenaShrink   RoomEventType = "arena_shrink"
 )
 
 // RoomEvent is a lifecycle event emitted by a Room.
@@ -504,6 +505,14 @@ func (r *Room) handleArenaEvents(arenaEvents []ArenaEvent) {
 				Data:     ae.Data,
 			})
 
+		case EventAgentLevelUp:
+			roomEvents = append(roomEvents, RoomEvent{
+				RoomID:   r.ID,
+				Type:     RoomEvtAgentLevelUp,
+				TargetID: ae.AgentID,
+				Data:     ae.Data,
+			})
+
 		case EventShrinkWarn:
 			roomEvents = append(roomEvents, RoomEvent{
 				RoomID: r.ID,
@@ -593,6 +602,11 @@ func (r *Room) GetInfo() domain.RoomInfo {
 		TimeRemaining: timeRemaining,
 		Round:         r.round,
 	}
+}
+
+// GetArena returns the room's arena instance (for agent API access).
+func (r *Room) GetArena() *Arena {
+	return r.arena
 }
 
 // GetState returns the current room state.
