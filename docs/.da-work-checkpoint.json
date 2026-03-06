@@ -5,7 +5,7 @@
   "roadmap_file": "docs/designs/v10-development-roadmap.md",
   "ref_docs": ["docs/designs/v10-go-server-plan.md", "docs/designs/v10-3d-graphics-plan.md", "docs/designs/v10-ui-ux-plan.md"],
   "project_type": "GAME",
-  "current_stage": 1,
+  "current_stage": 2,
   "current_phase": 0,
   "current_step": null,
   "total_phases": 7,
@@ -20,6 +20,6 @@
     {"name": "Phase 5 — Meta + Coach/Analyst + Polish", "steps": "S53-S59", "design_needed": false, "status": "pending"}
   ],
   "iterations": {"arch": 0, "dev": 0, "e2e": 0},
-  "last_skill": "da:git_start",
-  "last_update": "2026-03-06T11:30:00Z"
+  "last_skill": "da:verify_running",
+  "last_update": "2026-03-06T14:00:00Z"
 }
