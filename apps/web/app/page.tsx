@@ -9,7 +9,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
 import type { CubelingAppearance } from '@agent-survivor/shared';
-import { createDefaultAppearance } from '@agent-survivor/shared';
+import { createDefaultAppearance, packAppearance } from '@agent-survivor/shared';
 import { LobbyHeader } from '@/components/lobby/LobbyHeader';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
@@ -66,24 +66,26 @@ export default function Home() {
   // 국가 아레나 진입
   const handleEnterArena = useCallback((iso3: string) => {
     const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
+    const packedAp = packAppearance(appearance).toString();
     setFadeOut(true);
     setTimeout(() => {
-      joinRoom(iso3, name, skinId);
+      joinRoom(iso3, name, skinId, packedAp);
       setMode('transitioning');
       setFadeOut(false);
     }, 300);
-  }, [joinRoom, playerName, skinId]);
+  }, [joinRoom, playerName, skinId, appearance]);
 
   // 관전
   const handleSpectate = useCallback((iso3: string) => {
     const name = playerName || `Spectator${Math.floor(Math.random() * 999)}`;
+    const packedAp = packAppearance(appearance).toString();
     setFadeOut(true);
     setTimeout(() => {
-      joinRoom(iso3, name, skinId);
+      joinRoom(iso3, name, skinId, packedAp);
       setMode('transitioning');
       setFadeOut(false);
     }, 300);
-  }, [joinRoom, playerName, skinId]);
+  }, [joinRoom, playerName, skinId, appearance]);
 
   // 퇴장
   const handleExit = useCallback(() => {
@@ -91,15 +93,24 @@ export default function Home() {
     setMode('lobby');
   }, [leaveRoom]);
 
-  // 전환 타이머
+  // 전환: joined 이벤트 수신 시 playing으로 전환, 8초 타임아웃 시 lobby 복귀
   useEffect(() => {
     if (mode !== 'transitioning') return;
+    // 서버에서 joined 수신 → currentRoomId 설정됨 → playing
+    if (uiState.currentRoomId) {
+      setMode('playing');
+      return;
+    }
+    // 타임아웃: 서버 응답 없으면 lobby 복귀
     let cancelled = false;
     const timer = setTimeout(() => {
-      if (!cancelled) setMode('playing');
-    }, 200);
+      if (!cancelled) {
+        setMode('lobby');
+        setFadeOut(false);
+      }
+    }, 8000);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [mode]);
+  }, [mode, uiState.currentRoomId]);
 
   // --- 전환 화면 ---
   if (mode === 'transitioning') {

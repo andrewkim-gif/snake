@@ -499,9 +499,17 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, rm *game.RoomMan
 		var err error
 
 		if payload.RoomID == "" || payload.RoomID == "quick" {
-			roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID)
+			roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID, payload.Appearance)
 		} else {
-			roomID, err = rm.JoinRoom(client.ID, payload.RoomID, payload.Name, payload.SkinID)
+			roomID, err = rm.JoinRoom(client.ID, payload.RoomID, payload.Name, payload.SkinID, payload.Appearance)
+			if err != nil {
+				// Room not found (e.g. ISO3 country code) → fallback to QuickJoin
+				slog.Info("room not found, falling back to QuickJoin",
+					"requestedRoom", payload.RoomID,
+					"clientId", client.ID,
+				)
+				roomID, err = rm.QuickJoin(client.ID, payload.Name, payload.SkinID, payload.Appearance)
+			}
 		}
 
 		if err != nil {
