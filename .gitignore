@@ -9,6 +9,7 @@ out/
 
 # Go
 server/agent-survivor
+server/bin/
 *.exe
 
 # Environment

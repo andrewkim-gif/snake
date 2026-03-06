@@ -1,0 +1,30 @@
+# Test files
+*_test.go
+**/*_test.go
+testdata/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Documentation
+*.md
+docs/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Binaries (built during docker build)
+bin/
+agent-survivor
+
+# Misc
+.env
+.env.*
