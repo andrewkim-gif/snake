@@ -2,14 +2,17 @@
 
 /**
  * AgentInstances — 큐블링(Cubeling) 캐릭터 InstancedMesh 일괄 렌더링
- * 6개 파트(head, body, armL, armR, legL, legR)별 InstancedMesh
- * 총 6 draw calls로 최대 60 Agent 렌더링
  *
- * Phase 1 변경사항:
- * - 32u MC 프로포션 → 24u 큐블링 프로포션 (cubeling-proportions.ts 사용)
- * - head [8,8,8] → [10,10,8], body [8,12,4] → [8,7,5], arm/leg [4,12,4] → [4,7,4]
- * - 오프셋 전체 변경 (큐블링 비율)
- * - 기존 idle/walk/boost 애니메이션 로직 유지
+ * Phase 2 변경사항: Color-Tint 머티리얼 시스템
+ * - dominant skin 방식 → 인스턴스별 setColorAt() 고유 색상
+ * - body: 패턴별 4 InstancedMesh 그룹핑 (solid/striped/dotted/gradient)
+ * - arm/leg: 단일 IM + setColorAt (패턴 표현 불필요)
+ * - head: HeadGroupManager로 분리 (얼굴 조합별 동적 IM)
+ * - material.color = white(0xFFFFFF) → setColorAt이 100% 색상 결정
+ * - skin-migration.ts의 resolveAppearance()로 기존 skinId 지원 유지
+ *
+ * 총 IM: body 4 + armL 1 + armR 1 + legL 1 + legR 1 = 8 draw calls
+ * (head는 HeadGroupManager가 담당)
  *
  * CRITICAL: useFrame priority 0 — auto-render 유지!
  */
@@ -17,15 +20,21 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { getAgentTextures, getHeadMaterials, disposeTextureCache, disposeMaterialCache } from '@/lib/3d/agent-textures';
+import { textureCacheManager } from '@/lib/3d/cubeling-textures';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
 import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
-import type { AgentNetworkData } from '@agent-survivor/shared';
+import { resolveAppearance } from '@/lib/3d/skin-migration';
+import { HeadGroupManager } from './HeadGroupManager';
+import { VIVID_PALETTE } from '@agent-survivor/shared';
+import type { AgentNetworkData, CubelingAppearance } from '@agent-survivor/shared';
 
 // ─── Constants ───
 
 const MAX_AGENTS = 60;
 const PI2 = Math.PI * 2;
+
+/** body 패턴 그룹 수 (solid, striped, dotted, gradient) — 첫 4종만 body IM 분리 */
+const BODY_PATTERN_COUNT = 4;
 
 // ─── 재사용 임시 객체 (GC 방지) ───
 
@@ -35,6 +44,7 @@ const _euler = new THREE.Euler();
 const _qAgent = new THREE.Quaternion();
 const _qPart = new THREE.Quaternion();
 const _qCombined = new THREE.Quaternion();
+const _color = new THREE.Color();
 
 // ─── 속도 추정용 이전 위치 캐시 ───
 
@@ -42,13 +52,24 @@ interface AgentMotionState {
   prevX: number;
   prevY: number;
   velocity: number;
-  // 사망 시 timestamp (death 애니메이션용)
   deathTime: number;
-  // 마지막으로 살아있었는지
   wasAlive: boolean;
 }
 
 const motionCache = new Map<string, AgentMotionState>();
+
+// ─── appearance 캐시 (skinId → CubelingAppearance) ───
+
+const appearanceCache = new Map<number, CubelingAppearance>();
+
+/** skinId → CubelingAppearance 해석 (캐시 포함) */
+function getCachedAppearance(skinId: number): CubelingAppearance {
+  let cached = appearanceCache.get(skinId);
+  if (cached) return cached;
+  cached = resolveAppearance(skinId);
+  appearanceCache.set(skinId, cached);
+  return cached;
+}
 
 // ─── Props ───
 
@@ -63,7 +84,7 @@ interface AgentInstancesProps {
 
 /**
  * Agent의 속도 기반 애니메이션 상태에서 팔/다리 rotation 계산
- * Phase 1: 기존 로직 유지 (큐블링 프로포션에서는 시각적으로 더 귀여운 바운스)
+ * Phase 2: 기존 로직 유지 (큐블링 프로포션에서 시각적으로 더 귀여운 바운스)
  */
 function computePartRotations(
   velocity: number,
@@ -72,7 +93,7 @@ function computePartRotations(
 ): { armLX: number; armRX: number; legLX: number; legRX: number } {
   // idle: 미세 흔들림 (±3°, 0.8Hz)
   if (velocity < 5 && !boosting) {
-    const idleSwing = Math.sin(elapsed * 0.8 * PI2) * 0.05; // ~3° radians
+    const idleSwing = Math.sin(elapsed * 0.8 * PI2) * 0.05;
     return {
       armLX: idleSwing,
       armRX: -idleSwing,
@@ -81,15 +102,14 @@ function computePartRotations(
     };
   }
 
-  // 큐블링은 짧은 팔/다리 → 스윙 진폭 조금 더 크게 (0.52→0.44 rad ≈ 25°)
-  const walkFreq = Math.min(velocity / 80, 3.5); // 조금 더 빠른 걸음
-  const walkAmp = 0.44; // ~25° radians (큐블링 짧은 다리에 맞춤)
+  // 큐블링 짧은 팔/다리 → 스윙 진폭 0.44 rad ≈ 25°
+  const walkFreq = Math.min(velocity / 80, 3.5);
+  const walkAmp = 0.44;
 
   if (boosting) {
-    // boost: 팔 뒤로 고정(-60°) + 다리 빠른 스윙(2x freq, 1.3배 진폭)
     const legSwing = Math.sin(elapsed * walkFreq * 2 * PI2) * walkAmp * 1.3;
     return {
-      armLX: -1.05, // -60° 고정 (큐블링 대시 포즈)
+      armLX: -1.05,
       armRX: -1.05,
       legLX: legSwing,
       legRX: -legSwing,
@@ -108,9 +128,6 @@ function computePartRotations(
 
 /**
  * 파트별 월드 위치 + 회전을 Object3D에 설정하고 matrix 업데이트
- * T = agentWorldPos + partOffset(rotated by heading)
- * R = heading × partAnimation
- * S = agentScale
  */
 function setPartMatrix(
   mesh: THREE.InstancedMesh,
@@ -124,90 +141,54 @@ function setPartMatrix(
   offsetZ: number,
   partRotX: number,
 ): void {
-  // Agent heading quaternion (Y축 회전)
   _qAgent.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, headingRotY);
-
-  // 파트 오프셋을 heading으로 회전
   _pos.set(offsetX * scale, offsetY * scale, offsetZ * scale);
   _pos.applyQuaternion(_qAgent);
-
-  // 최종 위치 = Agent 월드 위치 + 회전된 파트 오프셋
-  _obj.position.set(
-    agentWorldX + _pos.x,
-    _pos.y,
-    agentWorldZ + _pos.z,
-  );
-
-  // 회전: heading(Y) + 파트 애니메이션(X)
+  _obj.position.set(agentWorldX + _pos.x, _pos.y, agentWorldZ + _pos.z);
   _qPart.setFromEuler(_euler.set(partRotX, 0, 0));
   _qCombined.copy(_qAgent).multiply(_qPart);
   _obj.quaternion.copy(_qCombined);
-
-  // 스케일
   _obj.scale.setScalar(scale);
-
   _obj.updateMatrix();
   mesh.setMatrixAt(idx, _obj.matrix);
 }
 
-// ─── 텍스처 Material 캐시 ───
-
-/** skinId → 파트별 MeshLambertMaterial 캐시 */
-interface PartMaterials {
-  /** 6-material array for head faces: [+X front, -X back, +Y top, -Y bottom, +Z left, -Z right] */
-  headMats: THREE.MeshLambertMaterial[];
-  body: THREE.MeshLambertMaterial;
-  arm: THREE.MeshLambertMaterial;
-  leg: THREE.MeshLambertMaterial;
-}
-
-const materialCache = new Map<number, PartMaterials>();
-
-function getPartMaterials(skinId: number): PartMaterials {
-  const cached = materialCache.get(skinId);
-  if (cached) return cached;
-
-  const textures = getAgentTextures(skinId);
-  const mats: PartMaterials = {
-    headMats: getHeadMaterials(skinId),
-    body: new THREE.MeshLambertMaterial({ map: textures.body }),
-    arm: new THREE.MeshLambertMaterial({ map: textures.arm }),
-    leg: new THREE.MeshLambertMaterial({ map: textures.leg }),
-  };
-
-  materialCache.set(skinId, mats);
-  return mats;
+/**
+ * 비활성 인스턴스를 scale 0으로 숨김
+ */
+function hideInstance(mesh: THREE.InstancedMesh, idx: number): void {
+  _obj.position.set(0, -9999, 0);
+  _obj.scale.setScalar(0);
+  _obj.updateMatrix();
+  mesh.setMatrixAt(idx, _obj.matrix);
 }
 
 // ─── Component ───
 
 export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
-  // ─── Refs for 6 InstancedMesh ───
-  const headRef = useRef<THREE.InstancedMesh>(null!);
-  const bodyRef = useRef<THREE.InstancedMesh>(null!);
+  // ─── Body 패턴별 IM refs (4 IM) ───
+  const bodyRefs = useRef<(THREE.InstancedMesh | null)[]>([null, null, null, null]);
+
+  // ─── Arm/Leg 단일 IM refs ───
   const armLRef = useRef<THREE.InstancedMesh>(null!);
   const armRRef = useRef<THREE.InstancedMesh>(null!);
   const legLRef = useRef<THREE.InstancedMesh>(null!);
   const legRRef = useRef<THREE.InstancedMesh>(null!);
 
-  // ─── 파트별 Geometry (useMemo — 한 번만 생성) ───
-  // 큐블링 24u 프로포션 사용
-  // Arms/Legs: geometry.translate()로 피벗을 상단(어깨/엉덩이)에 배치
-  // → rotation 적용 시 어깨/엉덩이에서 자연스럽게 스윙
+  // ─── Geometry (한 번만 생성) ───
   const geometries = useMemo(() => {
     const P = CUBELING_PARTS;
 
     const armLGeo = new THREE.BoxGeometry(...P.armL.size);
-    armLGeo.translate(0, -P.armL.size[1] / 2, 0); // 피벗 → 어깨
+    armLGeo.translate(0, -P.armL.size[1] / 2, 0);
     const armRGeo = new THREE.BoxGeometry(...P.armR.size);
     armRGeo.translate(0, -P.armR.size[1] / 2, 0);
     const legLGeo = new THREE.BoxGeometry(...P.legL.size);
-    legLGeo.translate(0, -P.legL.size[1] / 2, 0); // 피벗 → 엉덩이
+    legLGeo.translate(0, -P.legL.size[1] / 2, 0);
     const legRGeo = new THREE.BoxGeometry(...P.legR.size);
     legRGeo.translate(0, -P.legR.size[1] / 2, 0);
 
     return {
-      head: new THREE.BoxGeometry(...P.head.size),
       body: new THREE.BoxGeometry(...P.body.size),
       armL: armLGeo,
       armR: armRGeo,
@@ -216,72 +197,70 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
     };
   }, []);
 
-  // ─── 기본 material (첫 렌더링용) ───
-  // Head: 6-material array (face on +X front only)
-  // Body/Arm/Leg: single material (dominant skin 교체)
-  const defaultMaterials = useMemo(() => getPartMaterials(0), []);
+  // ─── 패턴별 Body Material (흰색 base — setColorAt으로 틴팅) ───
+  const bodyMaterials = useMemo(() => {
+    const mats: THREE.MeshLambertMaterial[] = [];
+    for (let p = 0; p < BODY_PATTERN_COUNT; p++) {
+      const tex = textureCacheManager.getBodyTexture(p);
+      mats.push(new THREE.MeshLambertMaterial({
+        map: tex,
+        color: 0xffffff, // 곱연산 중립 → setColorAt이 100% 색상 결정
+      }));
+    }
+    return mats;
+  }, []);
+
+  // ─── Arm/Leg Material (흰색 base) ───
+  const limbMaterials = useMemo(() => {
+    const armTex = textureCacheManager.getArmTexture(0);
+    const legTex = textureCacheManager.getLegTexture(0);
+    return {
+      arm: new THREE.MeshLambertMaterial({ map: armTex, color: 0xffffff }),
+      leg: new THREE.MeshLambertMaterial({ map: legTex, color: 0xffffff }),
+    };
+  }, []);
 
   // ─── 클린업 ───
   useEffect(() => {
     return () => {
       Object.values(geometries).forEach(g => g.dispose());
-      materialCache.forEach(mats => {
-        mats.headMats.forEach(m => m.dispose());
-        mats.body.dispose();
-        mats.arm.dispose();
-        mats.leg.dispose();
-      });
-      materialCache.clear();
-      disposeMaterialCache();
-      disposeTextureCache();
+      bodyMaterials.forEach(m => m.dispose());
+      limbMaterials.arm.dispose();
+      limbMaterials.leg.dispose();
       motionCache.clear();
+      appearanceCache.clear();
     };
-  }, [geometries]);
+  }, [geometries, bodyMaterials, limbMaterials]);
 
-  // ─── useFrame: 매 프레임 모든 Agent의 6파트 matrix 업데이트 ───
-  // priority 0 (기본값) — GameLoop 이후 마운트 순서로 실행
+  // ─── useFrame: 매 프레임 body/arm/leg matrix + color 업데이트 ───
   useFrame((_, delta) => {
     const agents = agentsRef.current;
     const elapsed = elapsedRef.current;
 
-    const headMesh = headRef.current;
-    const bodyMesh = bodyRef.current;
     const armLMesh = armLRef.current;
     const armRMesh = armRRef.current;
     const legLMesh = legLRef.current;
     const legRMesh = legRRef.current;
 
-    if (!headMesh || !bodyMesh || !armLMesh || !armRMesh || !legLMesh || !legRMesh) return;
+    if (!armLMesh || !armRMesh || !legLMesh || !legRMesh) return;
 
-    // 가장 많은 Agent가 사용하는 skinId를 찾아 각 mesh의 material 교체
-    // ★ Phase 2에서 setColorAt 기반으로 전환 예정
-    if (agents.length > 0) {
-      const skinCounts = new Map<number, number>();
-      for (const a of agents) {
-        skinCounts.set(a.k, (skinCounts.get(a.k) ?? 0) + 1);
-      }
-      let dominantSkin = 0;
-      let maxCount = 0;
-      skinCounts.forEach((count, skinId) => {
-        if (count > maxCount) { maxCount = count; dominantSkin = skinId; }
-      });
-
-      const mats = getPartMaterials(dominantSkin);
-      headMesh.material = mats.headMats; // 6-material array
-      bodyMesh.material = mats.body;
-      armLMesh.material = mats.arm;
-      armRMesh.material = mats.arm; // 양팔 동일
-      legLMesh.material = mats.leg;
-      legRMesh.material = mats.leg; // 양다리 동일
-    }
+    // Body 패턴별 IM 참조 + 패턴별 에이전트 인덱스 추적
+    const bodyMeshes: (THREE.InstancedMesh | null)[] = bodyRefs.current;
+    const bodyIndices: number[] = new Array(BODY_PATTERN_COUNT).fill(0); // 패턴별 현재 인덱스
 
     const P = CUBELING_PARTS;
-    let idx = 0;
+    let limbIdx = 0;
+
+    // ─── 색상 업데이트가 필요한지 추적 ───
+    let anyColorUpdated = false;
 
     for (const agent of agents) {
-      if (idx >= MAX_AGENTS) break;
+      if (limbIdx >= MAX_AGENTS) break;
 
       const { x, y, h, m, b: boosting, k: skinId, i: id } = agent;
+
+      // ─── appearance 해석 ───
+      const appearance = getCachedAppearance(skinId);
 
       // ─── 속도 추정 ───
       let motion = motionCache.get(id);
@@ -289,8 +268,6 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
         motion = { prevX: x, prevY: y, velocity: 0, deathTime: 0, wasAlive: true };
         motionCache.set(id, motion);
       }
-
-      // 속도 계산 (이전 프레임 위치 차이)
       const dx = x - motion.prevX;
       const dy = y - motion.prevY;
       const dist = Math.sqrt(dx * dx + dy * dy);
@@ -299,7 +276,7 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       motion.prevX = x;
       motion.prevY = y;
 
-      // ─── 월드 좌표 변환 ───
+      // ─── 월드 좌표 + 스케일 ───
       const [worldX, , worldZ] = toWorld(x, y, 0);
       const rotY = headingToRotY(h);
       const scale = getAgentScale(m);
@@ -307,84 +284,122 @@ export function AgentInstances({ agentsRef, elapsedRef }: AgentInstancesProps) {
       // ─── 애니메이션 ───
       const anim = computePartRotations(motion.velocity, boosting, elapsed);
 
-      // ─── 6파트 Matrix 설정 (큐블링 24u 오프셋) ───
+      // ─── Body: 패턴별 IM에 할당 ───
+      // 패턴 0~3만 분리, 4~7은 solid(0)에 할당
+      const patternGroup = appearance.pattern < BODY_PATTERN_COUNT ? appearance.pattern : 0;
+      const bodyMesh = bodyMeshes[patternGroup];
+      if (bodyMesh) {
+        const bodyIdx = bodyIndices[patternGroup];
+        setPartMatrix(bodyMesh, bodyIdx, worldX, worldZ, rotY, scale,
+          P.body.offset[0], P.body.offset[1], P.body.offset[2], 0);
 
-      // Head (애니메이션 없음 — rotX = 0)
-      setPartMatrix(headMesh, idx, worldX, worldZ, rotY, scale,
-        P.head.offset[0], P.head.offset[1], P.head.offset[2], 0);
+        // body 색상 = topColor
+        const topColorHex = VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length];
+        _color.set(topColorHex);
+        bodyMesh.setColorAt(bodyIdx, _color);
 
-      // Body (애니메이션 없음 — rotX = 0)
-      setPartMatrix(bodyMesh, idx, worldX, worldZ, rotY, scale,
-        P.body.offset[0], P.body.offset[1], P.body.offset[2], 0);
+        bodyIndices[patternGroup] = bodyIdx + 1;
+        anyColorUpdated = true;
+      }
 
-      // ArmL
-      setPartMatrix(armLMesh, idx, worldX, worldZ, rotY, scale,
+      // ─── ArmL ───
+      setPartMatrix(armLMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armL.offset[0], P.armL.offset[1], P.armL.offset[2], anim.armLX);
+      // arm 색상 = topColor (소매)
+      _color.set(VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length]);
+      armLMesh.setColorAt(limbIdx, _color);
 
-      // ArmR
-      setPartMatrix(armRMesh, idx, worldX, worldZ, rotY, scale,
+      // ─── ArmR ───
+      setPartMatrix(armRMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armR.offset[0], P.armR.offset[1], P.armR.offset[2], anim.armRX);
+      armRMesh.setColorAt(limbIdx, _color);
 
-      // LegL
-      setPartMatrix(legLMesh, idx, worldX, worldZ, rotY, scale,
+      // ─── LegL ───
+      setPartMatrix(legLMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.legL.offset[0], P.legL.offset[1], P.legL.offset[2], anim.legLX);
+      // leg 색상 = bottomColor
+      _color.set(VIVID_PALETTE[appearance.bottomColor % VIVID_PALETTE.length]);
+      legLMesh.setColorAt(limbIdx, _color);
 
-      // LegR
-      setPartMatrix(legRMesh, idx, worldX, worldZ, rotY, scale,
+      // ─── LegR ───
+      setPartMatrix(legRMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.legR.offset[0], P.legR.offset[1], P.legR.offset[2], anim.legRX);
+      legRMesh.setColorAt(limbIdx, _color);
 
-      idx++;
+      limbIdx++;
     }
 
-    // ─── Instance count + needsUpdate ───
-    headMesh.count = idx;
-    bodyMesh.count = idx;
-    armLMesh.count = idx;
-    armRMesh.count = idx;
-    legLMesh.count = idx;
-    legRMesh.count = idx;
+    // ─── Body 패턴별 IM count + needsUpdate ───
+    for (let p = 0; p < BODY_PATTERN_COUNT; p++) {
+      const mesh = bodyMeshes[p];
+      if (mesh) {
+        mesh.count = bodyIndices[p];
+        mesh.instanceMatrix.needsUpdate = true;
+        if (mesh.instanceColor) {
+          mesh.instanceColor.needsUpdate = true;
+        }
+      }
+    }
 
-    headMesh.instanceMatrix.needsUpdate = true;
-    bodyMesh.instanceMatrix.needsUpdate = true;
+    // ─── Arm/Leg count + needsUpdate ───
+    armLMesh.count = limbIdx;
+    armRMesh.count = limbIdx;
+    legLMesh.count = limbIdx;
+    legRMesh.count = limbIdx;
+
     armLMesh.instanceMatrix.needsUpdate = true;
     armRMesh.instanceMatrix.needsUpdate = true;
     legLMesh.instanceMatrix.needsUpdate = true;
     legRMesh.instanceMatrix.needsUpdate = true;
+
+    if (armLMesh.instanceColor) armLMesh.instanceColor.needsUpdate = true;
+    if (armRMesh.instanceColor) armRMesh.instanceColor.needsUpdate = true;
+    if (legLMesh.instanceColor) legLMesh.instanceColor.needsUpdate = true;
+    if (legRMesh.instanceColor) legRMesh.instanceColor.needsUpdate = true;
   });
 
   return (
     <group>
-      {/* 파트별 InstancedMesh — 6 draw calls */}
-      {/* Head: 6-material array → face only on front (+X) */}
-      <instancedMesh
-        ref={headRef}
-        args={[geometries.head, defaultMaterials.headMats, MAX_AGENTS]}
-        frustumCulled={false}
-      />
-      <instancedMesh
-        ref={bodyRef}
-        args={[geometries.body, defaultMaterials.body, MAX_AGENTS]}
-        frustumCulled={false}
-      />
+      {/* Body: 패턴별 4 InstancedMesh */}
+      {bodyMaterials.map((mat, patternIdx) => (
+        <instancedMesh
+          key={`body-pattern-${patternIdx}`}
+          ref={(el: THREE.InstancedMesh | null) => { bodyRefs.current[patternIdx] = el; }}
+          args={[geometries.body, mat, MAX_AGENTS]}
+          frustumCulled={false}
+        />
+      ))}
+
+      {/* ArmL: 단일 IM + setColorAt */}
       <instancedMesh
         ref={armLRef}
-        args={[geometries.armL, defaultMaterials.arm, MAX_AGENTS]}
+        args={[geometries.armL, limbMaterials.arm, MAX_AGENTS]}
         frustumCulled={false}
       />
+      {/* ArmR */}
       <instancedMesh
         ref={armRRef}
-        args={[geometries.armR, defaultMaterials.arm, MAX_AGENTS]}
+        args={[geometries.armR, limbMaterials.arm, MAX_AGENTS]}
         frustumCulled={false}
       />
+      {/* LegL */}
       <instancedMesh
         ref={legLRef}
-        args={[geometries.legL, defaultMaterials.leg, MAX_AGENTS]}
+        args={[geometries.legL, limbMaterials.leg, MAX_AGENTS]}
         frustumCulled={false}
       />
+      {/* LegR */}
       <instancedMesh
         ref={legRRef}
-        args={[geometries.legR, defaultMaterials.leg, MAX_AGENTS]}
+        args={[geometries.legR, limbMaterials.leg, MAX_AGENTS]}
         frustumCulled={false}
+      />
+
+      {/* Head: HeadGroupManager (얼굴 조합별 동적 IM) */}
+      <HeadGroupManager
+        agentsRef={agentsRef}
+        elapsedRef={elapsedRef}
+        resolveAppearanceFn={getCachedAppearance}
       />
     </group>
   );

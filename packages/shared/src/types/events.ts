@@ -39,6 +39,8 @@ export interface JoinRoomPayload {
   roomId: string; // 'quick' for auto-match
   name: string;
   skinId?: number;
+  /** v10 Phase 2: CubelingAppearance packed as bigint string (optional, 하위 호환) */
+  appearance?: string;
 }
 
 export interface InputPayload {
@@ -196,13 +198,14 @@ export interface AgentNetworkData {
   m: number;              // mass
   b: boolean;             // boosting
   a: boolean;             // alive
-  k: number;              // skin id
+  k: number;              // skin id (legacy) / appearance hash
   lv: number;             // level
   bot?: boolean;          // is bot agent
   ks?: number;            // kill streak
   hr: number;             // hitbox radius
   e?: number[];           // activeEffects (legacy 2D renderer compat)
   bt?: string;            // v10: dominant build type (berserker/tank/speedster/farmer/balanced)
+  ap?: string;            // v10 Phase 2: appearance packed bigint as string (첫 state에만 포함)
 }
 
 // ─── v10 Upgrade Events ───
