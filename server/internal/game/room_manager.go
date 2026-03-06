@@ -140,14 +140,13 @@ func (rm *RoomManager) QuickJoin(clientID, name string, skinID int) (string, err
 
 // JoinRoom assigns a client to a specific room.
 func (rm *RoomManager) JoinRoom(clientID, roomID, name string, skinID int) (string, error) {
-	rm.mu.Lock()
-	defer rm.mu.Unlock()
-
-	// Quick join if roomID is empty
+	// Quick join if roomID is empty (separate lock path to avoid double-unlock)
 	if roomID == "" {
-		rm.mu.Unlock()
 		return rm.QuickJoin(clientID, name, skinID)
 	}
+
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
 
 	// Leave current room if any
 	if currentRoom, ok := rm.playerRoom[clientID]; ok {

@@ -87,10 +87,20 @@ type Client struct {
 	// onDisconnect is called when the client disconnects.
 	onDisconnect func(client *Client)
 
+	// sendOnce ensures the send channel is closed exactly once.
+	sendOnce sync.Once
+
 	// Agent-specific fields (S46)
 	IsAgent      bool   // true if this client is an authenticated AI agent
 	AgentID      string // agent identifier (e.g., "my-claude-agent-01")
 	AgentAPIKey  string // API key for verification (stored hashed in production)
+}
+
+// CloseSend safely closes the send channel exactly once (prevents double-close panic).
+func (c *Client) CloseSend() {
+	c.sendOnce.Do(func() {
+		close(c.send)
+	})
 }
 
 // NewClient creates a new Client with the given WebSocket connection.
@@ -148,7 +158,14 @@ func (c *Client) ReadPump() {
 		}
 
 		if c.onMessage != nil {
-			c.onMessage(c, message)
+			func() {
+				defer func() {
+					if r := recover(); r != nil {
+						slog.Error("message handler panic", "clientId", c.ID, "error", r)
+					}
+				}()
+				c.onMessage(c, message)
+			}()
 		}
 	}
 }

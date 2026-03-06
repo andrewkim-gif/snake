@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"log/slog"
 	"math"
 	"math/rand"
 	"sync"
@@ -86,9 +87,19 @@ func (a *Arena) Run(ctx context.Context) {
 			a.mu.Unlock()
 			return
 		case <-ticker.C:
-			a.processTick()
+			a.safeProcessTick()
 		}
 	}
+}
+
+// safeProcessTick wraps processTick with panic recovery to prevent goroutine death.
+func (a *Arena) safeProcessTick() {
+	defer func() {
+		if r := recover(); r != nil {
+			slog.Error("arena processTick panic recovered", "error", r, "tick", a.tick)
+		}
+	}()
+	a.processTick()
 }
 
 // processTick executes one game tick with the correct ordering.
@@ -220,11 +231,18 @@ func (a *Arena) processTick() {
 		a.leaderboard.Update(a.agents)
 	}
 
-	// 10. Flush event buffer
+	// 10. Flush event buffer (with panic protection)
 	if a.EventHandler != nil && len(a.eventBuffer) > 0 {
 		events := make([]ArenaEvent, len(a.eventBuffer))
 		copy(events, a.eventBuffer)
-		a.EventHandler(events)
+		func() {
+			defer func() {
+				if r := recover(); r != nil {
+					slog.Error("arena event handler panic", "error", r, "eventCount", len(events))
+				}
+			}()
+			a.EventHandler(events)
+		}()
 	}
 }
 
@@ -469,11 +487,15 @@ func (a *Arena) GetAgent(agentID string) (*domain.Agent, bool) {
 	return agent, ok
 }
 
-// GetAgents returns a snapshot of all agents.
+// GetAgents returns a snapshot copy of all agents (safe for concurrent iteration).
 func (a *Arena) GetAgents() map[string]*domain.Agent {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
-	return a.agents
+	snapshot := make(map[string]*domain.Agent, len(a.agents))
+	for k, v := range a.agents {
+		snapshot[k] = v
+	}
+	return snapshot
 }
 
 // GetTick returns the current tick count.
@@ -488,6 +510,44 @@ func (a *Arena) GetCurrentRadius() float64 {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.arenaShrink.GetCurrentRadius()
+}
+
+// BroadcastSnapshot holds a thread-safe copy of all state needed for broadcasting.
+type BroadcastSnapshot struct {
+	Agents      map[string]*domain.Agent
+	Orbs        map[string]*domain.Orb
+	Leaderboard []domain.LeaderboardEntry
+	Tick        uint64
+	Radius      float64
+}
+
+// GetBroadcastSnapshot atomically captures all state needed for broadcasting
+// under a single read lock (prevents concurrent map access crashes).
+func (a *Arena) GetBroadcastSnapshot() BroadcastSnapshot {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+
+	agentsCopy := make(map[string]*domain.Agent, len(a.agents))
+	for k, v := range a.agents {
+		agentsCopy[k] = v
+	}
+
+	orbsCopy := make(map[string]*domain.Orb, len(a.orbManager.orbs))
+	for k, v := range a.orbManager.orbs {
+		orbsCopy[k] = v
+	}
+
+	lbEntries := a.leaderboard.entries
+	lbCopy := make([]domain.LeaderboardEntry, len(lbEntries))
+	copy(lbCopy, lbEntries)
+
+	return BroadcastSnapshot{
+		Agents:      agentsCopy,
+		Orbs:        orbsCopy,
+		Leaderboard: lbCopy,
+		Tick:        a.tick,
+		Radius:      a.arenaShrink.GetCurrentRadius(),
+	}
 }
 
 // GetOrbManager returns the orb manager (for serialization).

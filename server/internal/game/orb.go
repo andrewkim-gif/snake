@@ -133,9 +133,13 @@ func (om *OrbManager) RemoveExpired(currentTick uint64) {
 	}
 }
 
-// GetOrbs returns all current orbs (for serialization).
+// GetOrbs returns a snapshot copy of all current orbs (safe for concurrent iteration).
 func (om *OrbManager) GetOrbs() map[string]*domain.Orb {
-	return om.orbs
+	snapshot := make(map[string]*domain.Orb, len(om.orbs))
+	for k, v := range om.orbs {
+		snapshot[k] = v
+	}
+	return snapshot
 }
 
 // GetOrbSlice returns all orbs as a slice.

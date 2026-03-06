@@ -93,9 +93,9 @@ func (h *Hub) Run() {
 			h.handleUnicast(msg)
 
 		case <-h.done:
-			// Close all client connections
+			// Close all client connections (safe: CloseSend prevents double-close)
 			for _, client := range h.allClients {
-				close(client.send)
+				client.CloseSend()
 			}
 			return
 		}
@@ -222,8 +222,8 @@ func (h *Hub) handleUnregister(client *Client) {
 	// Remove from all rooms
 	h.removeFromAllRooms(client)
 
-	// Close the send channel
-	close(client.send)
+	// Close the send channel (safe: CloseSend prevents double-close)
+	client.CloseSend()
 
 	slog.Info("client unregistered", "clientId", client.ID)
 }

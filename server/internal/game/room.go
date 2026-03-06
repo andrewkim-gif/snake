@@ -119,9 +119,19 @@ func (r *Room) Run(ctx context.Context) {
 			slog.Info("room stopped", "roomId", r.ID)
 			return
 		case <-ticker.C:
-			r.tick()
+			r.safeTick()
 		}
 	}
+}
+
+// safeTick wraps tick with panic recovery to prevent goroutine death.
+func (r *Room) safeTick() {
+	defer func() {
+		if rec := recover(); rec != nil {
+			slog.Error("room tick panic recovered", "roomId", r.ID, "error", rec)
+		}
+	}()
+	r.tick()
 }
 
 // tick processes one room tick (state machine + broadcasting).
@@ -225,8 +235,7 @@ func (r *Room) tickEnding() {
 func (r *Room) tickCooldown() {
 	r.stateTicksLeft--
 	if r.stateTicksLeft <= 0 {
-		// Stop arena, reset for next round
-		r.stopArena()
+		// Arena already stopped in endRound(); just reset for next round
 		r.transitionTo(domain.RoomStateWaiting)
 
 		r.emitEvents([]RoomEvent{{
@@ -304,7 +313,10 @@ func (r *Room) startRound() {
 }
 
 func (r *Room) endRound() {
-	// Generate final leaderboard
+	// Stop arena FIRST to prevent concurrent map access during final state reads
+	r.stopArena()
+
+	// Generate final leaderboard (safe: arena goroutine is stopped)
 	agents := r.arena.GetAgents()
 	lb := r.arena.GetLeaderboard()
 	finalRanking := lb.GetFinalRanking(agents)
@@ -590,17 +602,16 @@ func (r *Room) handleArenaEvents(arenaEvents []ArenaEvent) {
 // --- Broadcasting helpers ---
 
 func (r *Room) broadcastState(tick uint64) {
-	agents := r.arena.GetAgents()
-	orbs := r.arena.GetOrbManager().GetOrbs()
-	leaderboard := r.arena.GetLeaderboard().GetTop()
+	// Atomically snapshot all arena state under a single lock
+	snap := r.arena.GetBroadcastSnapshot()
 
 	// For each human player, send viewport-culled state
 	for pid := range r.players {
-		viewer, ok := agents[pid]
+		viewer, ok := snap.Agents[pid]
 		if !ok || !viewer.Alive {
 			continue
 		}
-		stateUpdate := r.serializer.SerializeState(viewer, agents, orbs, leaderboard, tick)
+		stateUpdate := r.serializer.SerializeState(viewer, snap.Agents, snap.Orbs, snap.Leaderboard, tick)
 		r.emitEvents([]RoomEvent{{
 			RoomID:   r.ID,
 			Type:     RoomEvtState,
@@ -611,11 +622,10 @@ func (r *Room) broadcastState(tick uint64) {
 }
 
 func (r *Room) broadcastMinimap() {
-	agents := r.arena.GetAgents()
-	boundary := r.arena.GetCurrentRadius()
+	snap := r.arena.GetBroadcastSnapshot()
 
 	for pid := range r.players {
-		minimap := r.serializer.SerializeMinimap(agents, pid, boundary)
+		minimap := r.serializer.SerializeMinimap(snap.Agents, pid, snap.Radius)
 		r.emitEvents([]RoomEvent{{
 			RoomID:   r.ID,
 			Type:     RoomEvtMinimap,
@@ -639,9 +649,9 @@ func (r *Room) broadcastCoachAdvice(tick uint64) {
 	if r.coachAgent == nil {
 		return
 	}
-	agents := r.arena.GetAgents()
+	snap := r.arena.GetBroadcastSnapshot()
 	for pid := range r.players {
-		agent, ok := agents[pid]
+		agent, ok := snap.Agents[pid]
 		if !ok || !agent.Alive {
 			continue
 		}

@@ -1,14 +1,20 @@
 #!/bin/bash
 # ============================================================
 # game.sh — Agent Survivor Server Management Script
+# Runs Go server (port 9000) + Next.js client (port 9001)
 # ============================================================
 
 set -e
 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$PROJECT_ROOT/server"
+WEB_DIR="$PROJECT_ROOT/apps/web"
 BIN_DIR="$SERVER_DIR/bin"
-PID_FILE="$SERVER_DIR/.server.pid"
+GO_PID_FILE="$SERVER_DIR/.server.pid"
+WEB_PID_FILE="$PROJECT_ROOT/.web.pid"
+
+GO_PORT=9000
+WEB_PORT=9001
 
 # Colors for output
 RED='\033[0;31m'
@@ -28,7 +34,7 @@ ensure_bin_dir() {
 
 # Build the Go server binary
 build_server() {
-    echo -e "${YELLOW}Building server...${NC}"
+    echo -e "${YELLOW}Building Go server...${NC}"
     cd "$SERVER_DIR"
     ensure_bin_dir
     go build -o "$BIN_DIR/server" ./cmd/server
@@ -53,48 +59,89 @@ build_loadtest() {
     echo -e "${GREEN}Loadtest binary built: $BIN_DIR/loadtest${NC}"
 }
 
-# Start the server in the foreground
+# Start the Go server in the foreground
 start_server() {
     build_server
-    echo -e "${GREEN}Starting server...${NC}"
+    echo -e "${GREEN}Starting Go server on port $GO_PORT...${NC}"
     cd "$SERVER_DIR"
-    exec "$BIN_DIR/server"
+    PORT=$GO_PORT exec "$BIN_DIR/server"
 }
 
-# Start the server in the background
+# Start the Go server in the background
 start_server_bg() {
     build_server
-    echo -e "${GREEN}Starting server in background...${NC}"
+    echo -e "${GREEN}Starting Go server on port $GO_PORT (background)...${NC}"
     cd "$SERVER_DIR"
-    "$BIN_DIR/server" &
-    echo $! > "$PID_FILE"
-    echo -e "${GREEN}Server started (PID: $(cat "$PID_FILE"))${NC}"
+    PORT=$GO_PORT "$BIN_DIR/server" &
+    echo $! > "$GO_PID_FILE"
+    echo -e "${GREEN}Go server started (PID: $(cat "$GO_PID_FILE"), port: $GO_PORT)${NC}"
 }
 
-# Stop the background server
+# Start the Next.js dev server in the background
+start_web_bg() {
+    echo -e "${GREEN}Starting Next.js dev server on port $WEB_PORT (background)...${NC}"
+    cd "$WEB_DIR"
+    NEXT_PUBLIC_SERVER_URL="http://localhost:$GO_PORT" npx next dev -p $WEB_PORT &
+    echo $! > "$WEB_PID_FILE"
+    echo -e "${GREEN}Next.js dev server started (PID: $(cat "$WEB_PID_FILE"), port: $WEB_PORT)${NC}"
+}
+
+# Stop the Go server
 stop_server() {
-    if [ -f "$PID_FILE" ]; then
-        PID=$(cat "$PID_FILE")
+    if [ -f "$GO_PID_FILE" ]; then
+        PID=$(cat "$GO_PID_FILE")
         if kill -0 "$PID" 2>/dev/null; then
-            echo -e "${YELLOW}Stopping server (PID: $PID)...${NC}"
+            echo -e "${YELLOW}Stopping Go server (PID: $PID)...${NC}"
             kill "$PID"
-            rm -f "$PID_FILE"
-            echo -e "${GREEN}Server stopped.${NC}"
+            rm -f "$GO_PID_FILE"
+            echo -e "${GREEN}Go server stopped.${NC}"
         else
-            echo -e "${YELLOW}Server process not running (stale PID file).${NC}"
-            rm -f "$PID_FILE"
+            echo -e "${YELLOW}Go server process not running (stale PID file).${NC}"
+            rm -f "$GO_PID_FILE"
         fi
     else
-        # Try to find and kill any running server process
         PIDS=$(pgrep -f "$BIN_DIR/server" 2>/dev/null || true)
         if [ -n "$PIDS" ]; then
-            echo -e "${YELLOW}Stopping server processes: $PIDS${NC}"
+            echo -e "${YELLOW}Stopping Go server processes: $PIDS${NC}"
             echo "$PIDS" | xargs kill 2>/dev/null || true
-            echo -e "${GREEN}Server stopped.${NC}"
+            echo -e "${GREEN}Go server stopped.${NC}"
         else
-            echo -e "${YELLOW}No server process found.${NC}"
+            echo -e "${YELLOW}No Go server process found.${NC}"
         fi
     fi
+}
+
+# Stop the Next.js dev server
+stop_web() {
+    if [ -f "$WEB_PID_FILE" ]; then
+        PID=$(cat "$WEB_PID_FILE")
+        if kill -0 "$PID" 2>/dev/null; then
+            echo -e "${YELLOW}Stopping Next.js dev server (PID: $PID)...${NC}"
+            kill "$PID"
+            # Also kill child processes (next dev spawns children)
+            pkill -P "$PID" 2>/dev/null || true
+            rm -f "$WEB_PID_FILE"
+            echo -e "${GREEN}Next.js dev server stopped.${NC}"
+        else
+            echo -e "${YELLOW}Next.js dev server not running (stale PID file).${NC}"
+            rm -f "$WEB_PID_FILE"
+        fi
+    else
+        PIDS=$(pgrep -f "next dev.*$WEB_PORT" 2>/dev/null || true)
+        if [ -n "$PIDS" ]; then
+            echo -e "${YELLOW}Stopping Next.js processes: $PIDS${NC}"
+            echo "$PIDS" | xargs kill 2>/dev/null || true
+            echo -e "${GREEN}Next.js dev server stopped.${NC}"
+        else
+            echo -e "${YELLOW}No Next.js dev server process found.${NC}"
+        fi
+    fi
+}
+
+# Stop all services
+stop_all() {
+    stop_server
+    stop_web
 }
 
 # Run balance simulation
@@ -119,32 +166,39 @@ print_help() {
     echo "Usage: ./game.sh <command> [options]"
     echo ""
     echo "Commands:"
-    echo -e "  ${GREEN}dev${NC}         Build and start server in background, then wait"
-    echo -e "  ${GREEN}server${NC}      Build and start server in foreground"
+    echo -e "  ${GREEN}dev${NC}         Start Go server (port $GO_PORT) + Next.js (port $WEB_PORT)"
+    echo -e "  ${GREEN}server${NC}      Start Go server only in foreground (port $GO_PORT)"
     echo -e "  ${GREEN}build${NC}       Build all Go binaries (server, balance, loadtest)"
     echo -e "  ${GREEN}balance${NC}     Run balance simulation (pass -rounds=N -bots=N)"
     echo -e "  ${GREEN}loadtest${NC}    Run load test (pass -clients=N -duration=N -url=...)"
-    echo -e "  ${GREEN}stop${NC}        Stop the running server process"
+    echo -e "  ${GREEN}stop${NC}        Stop all running processes"
     echo -e "  ${GREEN}help${NC}        Show this help message"
     echo ""
     echo "Examples:"
-    echo "  ./game.sh dev                          # Start dev server"
+    echo "  ./game.sh dev                          # Start both servers"
     echo "  ./game.sh balance -rounds=20 -bots=50  # Run 20 rounds with 50 bots"
     echo "  ./game.sh loadtest -clients=200         # Load test with 200 clients"
-    echo "  ./game.sh stop                          # Stop running server"
+    echo "  ./game.sh stop                          # Stop all processes"
 }
 
 # Main command dispatch
-case "${1:-help}" in
+case "${1:-dev}" in
     dev)
         print_header
+        # Stop any existing processes first
+        stop_all 2>/dev/null || true
+        echo ""
         start_server_bg
+        start_web_bg
         echo ""
-        echo -e "${CYAN}Server running. Press Ctrl+C to stop.${NC}"
+        echo -e "${CYAN}Go server:  http://localhost:$GO_PORT${NC}"
+        echo -e "${CYAN}Game client: http://localhost:$WEB_PORT${NC}"
+        echo -e "${CYAN}Press Ctrl+C to stop all.${NC}"
         echo ""
-        # Wait and forward interrupt to stop
-        trap 'stop_server; exit 0' INT TERM
-        wait $(cat "$PID_FILE") 2>/dev/null || true
+        # Wait and forward interrupt to stop all
+        trap 'echo ""; stop_all; exit 0' INT TERM
+        # Wait for either process to exit
+        wait $(cat "$GO_PID_FILE") $(cat "$WEB_PID_FILE") 2>/dev/null || true
         ;;
     server)
         print_header
@@ -170,7 +224,7 @@ case "${1:-help}" in
         ;;
     stop)
         print_header
-        stop_server
+        stop_all
         ;;
     help|--help|-h)
         print_help
