@@ -17,9 +17,9 @@ import { PersonalitySelector } from '@/components/lobby/PersonalitySelector';
 import { useSocket } from '@/hooks/useSocket';
 import { MC, pixelFont, bodyFont } from '@/lib/minecraft-ui';
 
-// GameCanvas uses 2D Canvas — SSR 불가 -> dynamic import (ssr: false)
-const GameCanvas = dynamic(
-  () => import('@/components/game/GameCanvas').then(m => ({ default: m.GameCanvas })),
+// GameCanvas3D uses R3F — SSR 불가 -> dynamic import (ssr: false)
+const GameCanvas3D = dynamic(
+  () => import('@/components/game/GameCanvas3D'),
   {
     ssr: false,
     loading: () => (
@@ -29,7 +29,7 @@ const GameCanvas = dynamic(
         backgroundColor: '#87CEEB', fontFamily: pixelFont,
         fontSize: '0.6rem', color: '#FFF',
       }}>
-        Loading game...
+        Loading 3D...
       </div>
     ),
   },
@@ -97,7 +97,7 @@ export default function Home() {
 
   if (mode === 'playing') {
     return (
-      <GameCanvas
+      <GameCanvas3D
         dataRef={dataRef}
         uiState={uiState}
         sendInput={sendInput}

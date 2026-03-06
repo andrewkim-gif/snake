@@ -9,7 +9,7 @@ import type {
   LevelUpPayload, ArenaShrinkPayload, SynergyActivatedPayload,
 } from '@snake-arena/shared';
 
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:9001';
+const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:3001';
 
 // Coach message from server
 export interface CoachMessageData {
