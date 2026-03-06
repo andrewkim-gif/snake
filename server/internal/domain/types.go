@@ -457,6 +457,12 @@ type Agent struct {
 	PendingChoices  []UpgradeChoice  `json:"pendingChoices,omitempty"`
 	UpgradeDeadline uint64       `json:"upgradeDeadline"`
 	GracePeriodEnd  uint64       `json:"gracePeriodEnd"`
+	// v12: Active ability tracking (for visual effects on clients)
+	ActiveAbility      AbilityType `json:"activeAbility,omitempty"`
+	ActiveAbilityTicks int         `json:"activeAbilityTicks,omitempty"` // remaining display ticks
+	AbilityTargetX     float64     `json:"abilityTargetX,omitempty"`
+	AbilityTargetY     float64     `json:"abilityTargetY,omitempty"`
+	AbilityLevel       int         `json:"abilityLevel,omitempty"`
 	IsBot           bool         `json:"isBot"`
 	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent
 	AgentID         string       `json:"agentId,omitempty"` // agent identifier

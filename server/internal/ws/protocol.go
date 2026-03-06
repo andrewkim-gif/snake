@@ -50,6 +50,9 @@ const (
 	// Coach/Analyst events (server → client) (S57, S58)
 	EventCoachMessage       = "coach_message"
 	EventRoundAnalysis      = "round_analysis"
+
+	// v12: ability effect events (server → client)
+	EventAbilityTriggered   = "ability_triggered"
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}

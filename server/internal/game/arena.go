@@ -20,8 +20,9 @@ const (
 	EventLevelUp       ArenaEventType = "level_up"
 	EventAgentLevelUp  ArenaEventType = "agent_level_up"
 	EventSynergy       ArenaEventType = "synergy"
-	EventShrinkWarn    ArenaEventType = "shrink_warn"
-	EventMapObjectUse  ArenaEventType = "map_object_use"
+	EventShrinkWarn       ArenaEventType = "shrink_warn"
+	EventMapObjectUse     ArenaEventType = "map_object_use"
+	EventAbilityTriggered ArenaEventType = "ability_triggered"
 )
 
 // ArenaEvent is a game event generated during a tick.
@@ -212,6 +213,10 @@ func (a *Arena) processTick() {
 			a.handleLevelUp(agent)
 		}
 	}
+
+	// 5c. Process ability auto-triggers
+	abilityEvents := ProcessAbilities(a.agents, a.spatialHash, a.tick)
+	a.eventBuffer = append(a.eventBuffer, abilityEvents...)
 
 	// 6. Check level-ups for agents that may have gained XP from kills
 	for _, agent := range a.agents {

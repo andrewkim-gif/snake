@@ -28,7 +28,8 @@ const (
 	RoomEvtArenaShrink   RoomEventType = "arena_shrink"
 	RoomEvtCoachMessage   RoomEventType = "coach_message"
 	RoomEvtRoundAnalysis  RoomEventType = "round_analysis"
-	RoomEvtBattleComplete RoomEventType = "battle_complete" // v11: cooldown ended
+	RoomEvtBattleComplete    RoomEventType = "battle_complete"    // v11: cooldown ended
+	RoomEvtAbilityTriggered  RoomEventType = "ability_triggered"  // v12: ability visual effect
 )
 
 // RoomEvent is a lifecycle event emitted by a Room.
@@ -639,6 +640,14 @@ func (r *Room) handleArenaEvents(arenaEvents []ArenaEvent) {
 			roomEvents = append(roomEvents, RoomEvent{
 				RoomID: r.ID,
 				Type:   RoomEvtShrinkWarn,
+				Data:   ae.Data,
+			})
+
+		case EventAbilityTriggered:
+			// v12: broadcast ability triggered to all clients in room (for visual effects)
+			roomEvents = append(roomEvents, RoomEvent{
+				RoomID: r.ID,
+				Type:   RoomEvtAbilityTriggered,
 				Data:   ae.Data,
 			})
 		}

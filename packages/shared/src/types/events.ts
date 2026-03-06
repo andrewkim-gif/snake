@@ -239,6 +239,10 @@ export interface AgentNetworkData {
   e?: number[];           // activeEffects (legacy 2D renderer compat)
   bt?: string;            // v10: dominant build type (berserker/tank/speedster/farmer/balanced)
   ap?: string;            // v10 Phase 2: appearance packed bigint as string (매 state에 항상 포함)
+  ab?: string;            // v12: active ability type (empty = none)
+  tx?: number;            // v12: ability target X coordinate
+  ty?: number;            // v12: ability target Y coordinate
+  abl?: number;           // v12: ability level (1-4)
 }
 
 // ─── v10 Upgrade Events ───
@@ -350,6 +354,15 @@ export interface ObserveGamePayload {
   agentId: string;
 }
 
+/** v12: 서버→클라: 어빌리티 발동 알림 */
+export interface AbilityTriggeredPayload {
+  agentId: string;
+  abilityType: string;  // 'venom_aura' | 'shield_burst' | 'lightning_strike' | 'speed_dash' | 'mass_drain' | 'gravity_well'
+  targetX: number;
+  targetY: number;
+  level: number;        // 1-4
+}
+
 /** 서버→클라: 시너지 발동 알림 */
 export interface SynergyActivatedPayload {
   synergyId: string;
@@ -406,4 +419,6 @@ export interface ServerToClientEvents {
   quest_update: (data: QuestUpdatePayload) => void;
   // v11: Battle complete — cooldown ended
   battle_complete: (data: BattleCompletePayload) => void;
+  // v12: Ability triggered visual effect
+  ability_triggered: (data: AbilityTriggeredPayload) => void;
 }

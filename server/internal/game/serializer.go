@@ -155,6 +155,13 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 	if a.Appearance != "" {
 		sa.Appearance = a.Appearance
 	}
+	// v12: active ability for visual effects
+	if a.ActiveAbility != "" && a.ActiveAbilityTicks > 0 {
+		sa.ActiveAbility = string(a.ActiveAbility)
+		sa.AbilityTargetX = math.Round(a.AbilityTargetX*10) / 10
+		sa.AbilityTargetY = math.Round(a.AbilityTargetY*10) / 10
+		sa.AbilityLevel = a.AbilityLevel
+	}
 	return sa
 }
 

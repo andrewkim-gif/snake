@@ -763,6 +763,8 @@ func createWorldEventHandler(hub *ws.Hub) world.WorldEventCallback {
 					wsEvent = ws.EventRoundAnalysis
 				case game.RoomEvtBattleComplete:
 					wsEvent = ws.EventBattleComplete
+				case game.RoomEvtAbilityTriggered:
+					wsEvent = ws.EventAbilityTriggered
 				default:
 					continue
 				}

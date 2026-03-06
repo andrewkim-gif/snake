@@ -32,6 +32,10 @@ type StateAgent struct {
 	HitboxRadius float64 `json:"hr"`
 	BuildType   string   `json:"bt,omitempty"` // v10: dominant build type (berserker/tank/speedster/farmer/balanced)
 	Appearance  string   `json:"ap,omitempty"` // v10 Phase 2: packed BigInt string (매 state에 항상 포함)
+	ActiveAbility string `json:"ab,omitempty"` // v12: currently active ability type (empty = none)
+	AbilityTargetX float64 `json:"tx,omitempty"` // v12: ability target X coordinate
+	AbilityTargetY float64 `json:"ty,omitempty"` // v12: ability target Y coordinate
+	AbilityLevel   int     `json:"abl,omitempty"` // v12: ability level (1-4)
 }
 
 // StateOrb is the per-tick serialized orb data sent to clients.
@@ -286,6 +290,15 @@ type RoomsUpdateEvent struct {
 }
 
 // --- Map object events ---
+
+// AbilityTriggeredEvent is sent when an ability activates on an agent.
+type AbilityTriggeredEvent struct {
+	AgentID     string      `json:"agentId"`
+	AbilityType AbilityType `json:"abilityType"`
+	TargetX     float64     `json:"targetX"`
+	TargetY     float64     `json:"targetY"`
+	Level       int         `json:"level"`
+}
 
 // MapObjectEvent notifies clients about map object state changes.
 type MapObjectEvent struct {
