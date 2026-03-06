@@ -2,11 +2,13 @@
 
 /**
  * Agent Survivor — Main Page
- * v10: 로비(Agent Survivor 리브랜딩) + 게임 모드 전환
+ * v10: 3D 로비 + 글래스모피즘 UI + 게임 모드 전환
+ * LobbyScene3D 동적 임포트 (SSR 불가)
  * useSocket을 page.tsx에서 lift하여 lobby/playing 모드에 props 전달
  */
 
 import { useState, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import { RoomList } from '@/components/lobby/RoomList';
 import { RecentWinnersPanel } from '@/components/lobby/RecentWinnersPanel';
 import { McPanel } from '@/components/lobby/McPanel';
@@ -15,9 +17,14 @@ import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { useSocket } from '@/hooks/useSocket';
-import { MC, pixelFont, bodyFont } from '@/lib/minecraft-ui';
-
+import { MC, MCModern, pixelFont } from '@/lib/minecraft-ui';
 import { GameCanvas } from '@/components/game/GameCanvas';
+
+// Three.js SSR 불가 → 동적 임포트
+const LobbyScene3D = dynamic(
+  () => import('@/components/3d/LobbyScene3D').then(m => ({ default: m.LobbyScene3D })),
+  { ssr: false },
+);
 
 /* ── 메인 홈 컴포넌트 ── */
 export default function Home() {
@@ -71,7 +78,7 @@ export default function Home() {
     setMode('lobby');
   }, [leaveRoom]);
 
-  // Lobby -> Game 전환 시 WebGL context 충돌 방지
+  // Lobby → Game 전환 시 WebGL context 충돌 방지 (200ms 딜레이)
   useEffect(() => {
     if (mode !== 'transitioning') return;
     let cancelled = false;
@@ -116,19 +123,14 @@ export default function Home() {
       width: '100vw',
       height: '100vh',
       overflow: 'hidden',
-      backgroundColor: MC.skyBg,
       position: 'relative',
       opacity: fadeOut ? 0 : 1,
       transition: 'opacity 300ms ease',
     }}>
       <WelcomeTutorial />
 
-      {/* 3D 배경 영역 (Phase 1: 단색 배경) */}
-      <div style={{
-        position: 'absolute', inset: 0,
-        background: 'linear-gradient(180deg, #87CEEB 0%, #4A90B8 50%, #2A5A3A 100%)',
-        zIndex: 0,
-      }} />
+      {/* 3D 배경 씬 */}
+      <LobbyScene3D />
 
       {/* UI 오버레이 */}
       <div style={{
@@ -144,7 +146,7 @@ export default function Home() {
           fontFamily: pixelFont,
           fontSize: '1.2rem',
           color: MC.textGold,
-          textShadow: '3px 3px 0 #553300, -1px -1px 0 #000',
+          textShadow: '3px 3px 0 #553300, -1px -1px 0 #000, 0 0 20px rgba(255,170,0,0.3)',
           letterSpacing: '0.1em',
           textTransform: 'uppercase',
           marginBottom: '0.3rem',
@@ -154,9 +156,10 @@ export default function Home() {
         <div style={{
           fontFamily: pixelFont,
           fontSize: '0.3rem',
-          color: MC.textSecondary,
+          color: 'rgba(255,255,255,0.7)',
           letterSpacing: '0.08em',
           marginBottom: '0.5rem',
+          textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
         }}>
           Survival Roguelike Auto-Battler
         </div>
@@ -166,6 +169,9 @@ export default function Home() {
           fontFamily: pixelFont,
           fontSize: '0.25rem',
           color: uiState.connected ? MC.textGreen : MC.textRed,
+          textShadow: uiState.connected
+            ? '0 0 8px rgba(85,255,85,0.4)'
+            : '0 0 8px rgba(255,85,85,0.4)',
         }}>
           {uiState.connected ? 'CONNECTED' : 'CONNECTING...'}
         </div>
@@ -225,12 +231,6 @@ export default function Home() {
             </McPanel>
 
             <McPanel style={{ padding: '0.8rem' }}>
-              <div style={{
-                fontFamily: pixelFont, fontSize: '0.3rem', color: MC.textSecondary,
-                marginBottom: '0.3rem', letterSpacing: '0.06em',
-              }}>
-                RECENT CHAMPIONS
-              </div>
               <RecentWinnersPanel winners={uiState.recentWinners} />
             </McPanel>
           </div>

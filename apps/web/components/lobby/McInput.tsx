@@ -1,16 +1,19 @@
 'use client';
 
-import type { InputHTMLAttributes } from 'react';
-import { MC, bodyFont } from '@/lib/minecraft-ui';
+import { useState, type InputHTMLAttributes } from 'react';
+import { MC, MCModern, bodyFont } from '@/lib/minecraft-ui';
 
 interface McInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
 export function McInput({ style, ...rest }: McInputProps) {
+  const [focused, setFocused] = useState(false);
+
   return (
     <input
       style={{
-        backgroundColor: MC.inputBg,
-        border: `2px solid ${MC.inputBorder}`,
+        backgroundColor: 'rgba(0, 0, 0, 0.5)',
+        border: `1.5px solid ${focused ? MC.btnGreen : 'rgba(255,255,255,0.1)'}`,
+        borderRadius: MCModern.radiusSm,
         color: MC.textPrimary,
         fontFamily: bodyFont,
         fontSize: '0.95rem',
@@ -19,13 +22,17 @@ export function McInput({ style, ...rest }: McInputProps) {
         width: '100%',
         boxSizing: 'border-box',
         textAlign: 'center',
+        transition: MCModern.transitionFast,
+        boxShadow: focused ? MCModern.glowGreen : 'none',
         ...style,
       }}
       onFocus={(e) => {
-        e.currentTarget.style.borderColor = MC.inputFocusBorder;
+        setFocused(true);
+        rest.onFocus?.(e);
       }}
       onBlur={(e) => {
-        e.currentTarget.style.borderColor = MC.inputBorder;
+        setFocused(false);
+        rest.onBlur?.(e);
       }}
       {...rest}
     />

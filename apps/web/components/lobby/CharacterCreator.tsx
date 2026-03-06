@@ -2,15 +2,16 @@
 
 /**
  * CharacterCreator — 에이전트 캐릭터 커스터마이저
- * 좌: 대형 2D 캔버스 프리뷰 / 우: 스킨 그리드 선택
- * McPanel 스타일 + 탭 UI: [체형] [색상] [얼굴] [장비]
- * Phase 1: 기본 스킨 그리드 + 프리뷰
+ * 좌: 미니 R3F Canvas 3D 캐릭터 프리뷰 / 우: 스킨 그리드 선택
+ * Phase 2: 2D canvas → 3D R3F 프리뷰
  */
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, Suspense } from 'react';
+import { Canvas, useFrame, useThree } from '@react-three/fiber';
+import * as THREE from 'three';
 import { DEFAULT_SKINS } from '@snake-arena/shared';
-import { MC, pixelFont } from '@/lib/minecraft-ui';
-import { getAgentSprite } from '@/lib/sprites';
+import { MC, MCModern, pixelFont } from '@/lib/minecraft-ui';
+import { VoxelCharacter } from '@/components/3d/VoxelCharacter';
 
 const SKINS_PER_PAGE = 8;
 
@@ -29,8 +30,8 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
       alignItems: 'flex-start',
       width: '100%',
     }}>
-      {/* 좌: Agent 2D 캔버스 프리뷰 */}
-      <AgentPreview skinId={skinId} />
+      {/* 좌: 3D 캐릭터 프리뷰 */}
+      <AgentPreview3D skinId={skinId} />
 
       {/* 우: 탭 + 스킨 그리드 */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
@@ -44,9 +45,11 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
               backgroundColor: activeTab === tab ? 'rgba(255,170,0,0.2)' : 'rgba(255,255,255,0.05)',
               color: activeTab === tab ? MC.textGold : MC.textGray,
               border: activeTab === tab ? `1px solid ${MC.textGold}40` : `1px solid transparent`,
+              borderRadius: MCModern.radiusSm,
               cursor: 'pointer',
               textTransform: 'uppercase',
               letterSpacing: '0.06em',
+              transition: MCModern.transitionFast,
             }}>
               {tab === 'skin' ? 'SKIN' : tab === 'color' ? 'COLOR' : tab === 'face' ? 'FACE' : 'EQUIP'}
             </button>
@@ -57,10 +60,8 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
         {activeTab === 'skin' && (
           <>
             <div style={{
-              fontFamily: pixelFont,
-              fontSize: '0.3rem',
-              color: MC.textSecondary,
-              letterSpacing: '0.06em',
+              fontFamily: pixelFont, fontSize: '0.3rem',
+              color: MC.textSecondary, letterSpacing: '0.06em',
             }}>
               SELECT SKIN
             </div>
@@ -69,11 +70,8 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
         )}
         {activeTab !== 'skin' && (
           <div style={{
-            fontFamily: pixelFont,
-            fontSize: '0.25rem',
-            color: MC.textGray,
-            padding: '1rem 0',
-            textAlign: 'center',
+            fontFamily: pixelFont, fontSize: '0.25rem',
+            color: MC.textGray, padding: '1rem 0', textAlign: 'center',
           }}>
             COMING SOON
           </div>
@@ -83,50 +81,53 @@ export function CharacterCreator({ skinId, onSelect }: CharacterCreatorProps) {
   );
 }
 
-/* ── Agent 프리뷰 (2D Canvas) ── */
-function AgentPreview({ skinId }: { skinId: number }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+/* ── 3D Agent 프리뷰 (미니 R3F Canvas) ── */
+function PreviewCamera() {
+  const { camera } = useThree();
 
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+  useFrame((state) => {
+    const t = state.clock.elapsedTime * 0.5;
+    const radius = 3.5;
+    camera.position.set(
+      Math.cos(t) * radius,
+      2.2,
+      Math.sin(t) * radius,
+    );
+    camera.lookAt(0, 1.0, 0);
+  });
 
-    ctx.imageSmoothingEnabled = false;
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
+  return null;
+}
 
-    const skin = DEFAULT_SKINS[skinId % DEFAULT_SKINS.length];
-    if (!skin) return;
-
-    const sprite = getAgentSprite(skinId, skin);
-    const size = 80;
-    const x = (canvas.width - size) / 2;
-    const y = (canvas.height - size) / 2;
-    ctx.drawImage(sprite, x, y, size, size);
-
-    ctx.font = 'bold 10px "Press Start 2P", monospace';
-    ctx.textAlign = 'center';
-    ctx.fillStyle = MC.textGold;
-    ctx.fillText(`#${skinId + 1}`, canvas.width / 2, canvas.height - 8);
-  }, [skinId]);
-
+function AgentPreview3D({ skinId }: { skinId: number }) {
   return (
-    <canvas
-      ref={canvasRef}
-      width={120}
-      height={120}
-      style={{
-        width: '120px',
-        height: '120px',
-        imageRendering: 'pixelated',
-        border: `2px solid ${MC.panelBorderDark}`,
-        backgroundColor: 'rgba(0,0,0,0.3)',
-        flexShrink: 0,
-      }}
-    />
+    <div style={{
+      width: '120px',
+      height: '120px',
+      borderRadius: MCModern.radiusSm,
+      border: `1px solid ${MCModern.glassBorder}`,
+      backgroundColor: 'rgba(0,0,0,0.3)',
+      overflow: 'hidden',
+      flexShrink: 0,
+    }}>
+      <Canvas
+        dpr={[1, 1.5]}
+        gl={{ antialias: true, alpha: true }}
+        style={{ width: '100%', height: '100%' }}
+      >
+        <ambientLight intensity={0.6} />
+        <directionalLight position={[3, 5, 3]} intensity={0.7} />
+        <PreviewCamera />
+        <Suspense fallback={null}>
+          <VoxelCharacter
+            skinId={skinId}
+            position={[0, 0, 0]}
+            rotation={0}
+            phaseOffset={0}
+          />
+        </Suspense>
+      </Canvas>
+    </div>
   );
 }
 
@@ -170,13 +171,14 @@ function SkinThumbnail({ skinId, selected, onClick }: {
       aria-label={`Skin ${skinId + 1}`}
       style={{
         width: 28, height: 28, padding: 0,
-        border: selected ? `2px solid ${MC.textGold}` : `1px solid ${MC.panelBorderLight}`,
+        border: selected ? `2px solid ${MC.textGold}` : `1px solid rgba(255,255,255,0.1)`,
+        borderRadius: '4px',
         backgroundColor: 'transparent',
         cursor: 'pointer',
         imageRendering: 'pixelated',
-        position: 'relative',
         opacity: selected ? 1 : 0.7,
-        transition: 'opacity 80ms',
+        transition: MCModern.transitionFast,
+        transform: selected ? 'scale(1.1)' : 'scale(1)',
       }}
     >
       <canvas
@@ -227,6 +229,7 @@ function SkinGrid({ skinId, onSelect }: { skinId: number; onSelect: (id: number)
           {Array.from({ length: totalPages }, (_, i) => (
             <div key={i} style={{
               width: currentPage === i ? 10 : 4, height: 3,
+              borderRadius: '2px',
               backgroundColor: currentPage === i ? MC.textGold : MC.textGray,
               transition: 'all 150ms ease',
             }} />

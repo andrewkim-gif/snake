@@ -1,7 +1,7 @@
 'use client';
 
 import type { CSSProperties, ReactNode } from 'react';
-import { MC, mcPanelShadow } from '@/lib/minecraft-ui';
+import { MCModern } from '@/lib/minecraft-ui';
 
 interface McPanelProps {
   children: ReactNode;
@@ -14,10 +14,13 @@ export function McPanel({ children, style, className }: McPanelProps) {
     <div
       className={className}
       style={{
-        backgroundColor: MC.panelBg,
-        boxShadow: mcPanelShadow(),
-        border: `2px solid ${MC.panelBorderDark}`,
+        backgroundColor: MCModern.glassBg,
+        backdropFilter: `blur(${MCModern.glassBlur})`,
+        WebkitBackdropFilter: `blur(${MCModern.glassBlur})`,
+        border: `1px solid ${MCModern.glassBorder}`,
+        borderRadius: MCModern.radius,
         padding: '1rem',
+        transition: MCModern.transition,
         ...style,
       }}
     >

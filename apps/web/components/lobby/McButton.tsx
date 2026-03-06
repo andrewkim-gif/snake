@@ -1,7 +1,7 @@
 'use client';
 
-import type { CSSProperties, ReactNode, ButtonHTMLAttributes } from 'react';
-import { MC, mcButtonShadow, pixelFont } from '@/lib/minecraft-ui';
+import { useState, type CSSProperties, type ReactNode, type ButtonHTMLAttributes } from 'react';
+import { MC, MCModern, pixelFont } from '@/lib/minecraft-ui';
 
 interface McButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'default' | 'green' | 'red';
@@ -15,16 +15,28 @@ const BG_COLORS = {
   red: MC.btnRed,
 };
 
+const GLOW_MAP = {
+  default: 'none',
+  green: MCModern.glowGreen,
+  red: MCModern.glowRed,
+};
+
 export function McButton({ variant = 'default', children, style, disabled, ...rest }: McButtonProps) {
+  const [hovered, setHovered] = useState(false);
+  const [pressed, setPressed] = useState(false);
+
   const bg = BG_COLORS[variant];
+  const glow = GLOW_MAP[variant];
+
+  const scale = pressed && !disabled ? 0.97 : hovered && !disabled ? 1.02 : 1;
 
   return (
     <button
       disabled={disabled}
       style={{
         backgroundColor: bg,
-        boxShadow: mcButtonShadow(variant),
         border: 'none',
+        borderRadius: MCModern.radiusSm,
         color: disabled ? MC.textGray : MC.textPrimary,
         fontFamily: pixelFont,
         fontSize: '0.65rem',
@@ -33,15 +45,16 @@ export function McButton({ variant = 'default', children, style, disabled, ...re
         textTransform: 'uppercase',
         letterSpacing: '0.05em',
         opacity: disabled ? 0.5 : 1,
-        transition: 'filter 80ms',
+        transition: MCModern.transitionFast,
         textShadow: '1px 1px 0 rgba(0,0,0,0.4)',
+        transform: `scale(${scale})`,
+        boxShadow: hovered && !disabled ? glow : 'none',
         ...style,
       }}
-      onMouseDown={(e) => {
-        if (!disabled) (e.currentTarget.style.filter = 'brightness(0.85)');
-      }}
-      onMouseUp={(e) => { e.currentTarget.style.filter = ''; }}
-      onMouseLeave={(e) => { e.currentTarget.style.filter = ''; }}
+      onMouseEnter={() => setHovered(true)}
+      onMouseLeave={() => { setHovered(false); setPressed(false); }}
+      onMouseDown={() => setPressed(true)}
+      onMouseUp={() => setPressed(false)}
       {...rest}
     >
       {children}

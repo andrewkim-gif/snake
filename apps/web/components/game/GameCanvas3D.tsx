@@ -16,7 +16,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type { GameData, UiState } from '@/hooks/useSocket';
-import type { AgentNetworkData } from '@snake-arena/shared';
+import type { AgentNetworkData, OrbNetworkData } from '@snake-arena/shared';
 import { ARENA_CONFIG } from '@snake-arena/shared';
 
 // 3D 컴포넌트
@@ -29,6 +29,10 @@ import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
 import { TerrainDeco } from '@/components/3d/TerrainDeco';
 import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
 import { MapStructures } from '@/components/3d/MapStructures';
+import { OrbInstances } from '@/components/3d/OrbInstances';
+import { MCParticles } from '@/components/3d/MCParticles';
+import type { MCParticlesHandle } from '@/components/3d/MCParticles';
+import { AuraRings } from '@/components/3d/AuraRings';
 
 // 기존 HUD 오버레이 (Canvas 밖 HTML)
 import { DeathOverlay } from './DeathOverlay';
@@ -68,6 +72,8 @@ export function GameCanvas3D({
 }: GameCanvas3DProps) {
   // ─── Refs ───
   const agentsRef = useRef<AgentNetworkData[]>([]);
+  const orbsRef = useRef<OrbNetworkData[]>([]);
+  const particlesRef = useRef<MCParticlesHandle>(null!);
   const angleRef = useRef(0);
   const boostRef = useRef(false);
   const inputSeqRef = useRef(0);
@@ -75,18 +81,20 @@ export function GameCanvas3D({
   const elapsedRef = useRef(0);
   const [menuOpen, setMenuOpen] = useState(false);
 
-  // 경과 시간 업데이트 (rAF 기반)
+  // 경과 시간 업데이트 + 오브 데이터 동기화 (rAF 기반)
   useEffect(() => {
     let raf = 0;
     let lastTime = performance.now();
     const tick = (now: number) => {
       elapsedRef.current += (now - lastTime) / 1000;
       lastTime = now;
+      // 오브 데이터를 서버 state에서 동기화
+      orbsRef.current = dataRef.current.latestState?.o ?? [];
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, []);
+  }, [dataRef]);
 
   // ─── 입력 처리 (마우스 + 키보드) ───
   useEffect(() => {
@@ -274,6 +282,15 @@ export function GameCanvas3D({
 
         {/* 9. MapStructures — 맵 구조물 (Shrine/Spring/Altar) */}
         <MapStructures arenaRadius={ARENA_CONFIG.radius} />
+
+        {/* 10. OrbInstances — 오브 복셀 큐브 InstancedMesh */}
+        <OrbInstances orbsRef={orbsRef} />
+
+        {/* 11. MCParticles — MC 스타일 파티클 엔진 */}
+        <MCParticles ref={particlesRef} />
+
+        {/* 12. AuraRings — Agent 전투 오라 시각화 */}
+        <AuraRings agentsRef={agentsRef} />
       </Canvas>
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}

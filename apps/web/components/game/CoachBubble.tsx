@@ -10,7 +10,7 @@ import { useEffect, useState, useCallback } from "react";
 // ============================================================
 
 export interface CoachMessage {
-  type: "warning" | "tip" | "strategy" | "opportunity";
+  type: "warning" | "tip" | "strategy" | "opportunity" | "efficiency";
   message: string;
   icon: string;
 }

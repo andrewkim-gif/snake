@@ -25,13 +25,9 @@ export interface CoachMessageData {
   message: string;
 }
 
-// Round analysis from server (Phase 5)
-export interface RoundAnalysisData {
-  buildEfficiency: number;
-  combatScore: number;
-  positioningScore: number;
-  suggestions: string[];
-}
+// Round analysis — AnalystPanel의 타입 재사용
+export type { RoundAnalysisData } from '@/components/game/AnalystPanel';
+import type { RoundAnalysisData } from '@/components/game/AnalystPanel';
 
 export interface GameData {
   connected: boolean;
