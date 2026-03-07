@@ -534,3 +534,293 @@ export const ENEMY_COLORS: Record<AREnemyType, string> = {
   spider: '#795548',
   creeper: '#76FF03',
 };
+
+// ============================================================
+// Phase 6: Token Economy Types
+// ============================================================
+
+export type ARTokenType = 'aww' | 'country';
+
+export interface ARRewardEntry {
+  tokenType: ARTokenType;
+  amount: number;
+  source: string;
+  countryCode: string;
+}
+
+export interface ARBattleRewards {
+  playerId: string;
+  entries: ARRewardEntry[];
+  totalAww: number;
+  totalCountry: number;
+  profileXp: number;
+  questProgress?: ARQuestDelta[];
+}
+
+export interface ARQuestDelta {
+  questId: string;
+  delta: number;
+  complete: boolean;
+}
+
+// ============================================================
+// Phase 6: Quest Types
+// ============================================================
+
+export type ARQuestPeriod = 'daily' | 'weekly' | 'season';
+
+export type ARQuestCategory =
+  | 'kill'
+  | 'survive'
+  | 'build'
+  | 'pvp'
+  | 'sovereignty'
+  | 'explore'
+  | 'challenge';
+
+export interface ARQuest {
+  id: string;
+  templateId: string;
+  name: string;
+  desc: string;
+  category: ARQuestCategory;
+  period: ARQuestPeriod;
+  target: number;
+  progress: number;
+  completed: boolean;
+  rewardType: string;
+  rewardAmount: number;
+  expiresAt: string;
+}
+
+// ============================================================
+// Phase 6: Season Pass Types
+// ============================================================
+
+export type ARSeasonEra = 'discovery' | 'expansion' | 'empires' | 'reckoning';
+
+export interface ARSeasonPass {
+  playerId: string;
+  seasonId: string;
+  level: number;
+  xp: number;
+  xpToNext: number;
+  isPremium: boolean;
+  claimedFree: number[];
+  claimedPremium: number[];
+}
+
+export interface ARSeasonReward {
+  level: number;
+  track: 'free' | 'premium';
+  rewardType: string;
+  amount?: number;
+  itemId?: string;
+  description: string;
+}
+
+// ============================================================
+// Phase 6: Profile Types
+// ============================================================
+
+export interface ARPlayerProfile {
+  playerId: string;
+  username: string;
+  profileLevel: number;
+  profileXp: number;
+  profileXpMax: number;
+  stats: ARLifetimeStats;
+  preferredChar: ARCharacterType;
+  unlockedChars: ARCharacterType[];
+  unlockedWeapons: ARWeaponID[];
+  achievements: ARAchievement[];
+  awwBalance: number;
+  seasonPassLevel: number;
+  hasPremiumPass: boolean;
+}
+
+export interface ARLifetimeStats {
+  totalBattles: number;
+  totalWins: number;
+  totalKills: number;
+  totalPvpKills: number;
+  totalDeaths: number;
+  totalEliteKills: number;
+  totalBossKills: number;
+  highestLevel: number;
+  longestSurvival: number;
+  totalSurvivalSec: number;
+  bestRank: number;
+  factionWins: number;
+  uniqueCountries: number;
+}
+
+export interface ARAchievement {
+  id: string;
+  name: string;
+  desc: string;
+  unlockedAt: string;
+  rarity: ARRarity;
+}
+
+// ============================================================
+// Phase 6: Character Unlock Types
+// ============================================================
+
+export interface ARCharUnlockInfo {
+  character: ARCharacterType;
+  defaultUnlock: boolean;
+  description: string;
+  locked: boolean;
+  methods: ARUnlockMethod[];
+}
+
+export interface ARUnlockMethod {
+  method: 'default' | 'quest' | 'achievement' | 'token' | 'profile' | 'season';
+  profileLevel?: number;
+  achievementId?: string;
+  tokenCost?: number;
+  seasonLevel?: number;
+}
+
+// ============================================================
+// Phase 6: Spectate Types
+// ============================================================
+
+export interface ARSpectateState {
+  playerId: string;
+  targetId: string;
+}
+
+export interface ARDeathScreenData {
+  killerId?: string;
+  killerName?: string;
+  survivalTime: number;
+  finalLevel: number;
+  kills: number;
+  pvpKills: number;
+  damageDealt: number;
+  rank: number;
+  canSpectate: boolean;
+}
+
+// ============================================================
+// Phase 6: Sound Events
+// ============================================================
+
+export type ARSoundEvent =
+  | 'attack_melee'
+  | 'attack_ranged'
+  | 'attack_magic'
+  | 'hit_physical'
+  | 'hit_fire'
+  | 'hit_frost'
+  | 'hit_lightning'
+  | 'hit_poison'
+  | 'crit_hit'
+  | 'overcritical'
+  | 'kill_normal'
+  | 'kill_elite'
+  | 'kill_miniboss'
+  | 'kill_boss'
+  | 'kill_pvp'
+  | 'player_death'
+  | 'level_up'
+  | 'tome_select'
+  | 'weapon_evolve'
+  | 'synergy_activate'
+  | 'item_pickup'
+  | 'xp_collect'
+  | 'phase_pvp_warning'
+  | 'phase_pvp_start'
+  | 'phase_settlement'
+  | 'boss_spawn'
+  | 'boss_defeated'
+  | 'sovereignty_capture'
+  | 'sovereignty_defend'
+  | 'arena_shrink'
+  | 'quest_complete'
+  | 'season_level_up';
+
+export const SOUND_PRIORITIES: Record<ARSoundEvent, number> = {
+  attack_melee: 1,
+  attack_ranged: 1,
+  attack_magic: 1,
+  hit_physical: 1,
+  hit_fire: 1,
+  hit_frost: 1,
+  hit_lightning: 1,
+  hit_poison: 1,
+  crit_hit: 2,
+  overcritical: 3,
+  kill_normal: 2,
+  kill_elite: 3,
+  kill_miniboss: 4,
+  kill_boss: 5,
+  kill_pvp: 3,
+  player_death: 5,
+  level_up: 4,
+  tome_select: 2,
+  weapon_evolve: 4,
+  synergy_activate: 4,
+  item_pickup: 2,
+  xp_collect: 1,
+  phase_pvp_warning: 5,
+  phase_pvp_start: 5,
+  phase_settlement: 5,
+  boss_spawn: 5,
+  boss_defeated: 5,
+  sovereignty_capture: 5,
+  sovereignty_defend: 5,
+  arena_shrink: 3,
+  quest_complete: 4,
+  season_level_up: 4,
+};
+
+// ============================================================
+// Phase 6: Minimap Types
+// ============================================================
+
+export interface ARMinimapEntity {
+  id: string;
+  x: number;
+  z: number;
+  type: 'player' | 'ally' | 'enemy' | 'elite' | 'miniboss' | 'boss' | 'item' | 'crystal';
+  alive: boolean;
+}
+
+export const MINIMAP_COLORS: Record<ARMinimapEntity['type'], string> = {
+  player: '#FFFF00',
+  ally: '#4CAF50',
+  enemy: '#F44336',
+  elite: '#FF9800',
+  miniboss: '#9C27B0',
+  boss: '#FFD700',
+  item: '#2196F3',
+  crystal: '#00BCD4',
+};
+
+// ============================================================
+// Quest Category Display
+// ============================================================
+
+export const QUEST_CATEGORY_INFO: Record<ARQuestCategory, { name: string; icon: string; color: string }> = {
+  kill: { name: 'Combat', icon: '⚔️', color: '#F44336' },
+  survive: { name: 'Survival', icon: '🛡️', color: '#4CAF50' },
+  build: { name: 'Build', icon: '📖', color: '#2196F3' },
+  pvp: { name: 'PvP', icon: '⚡', color: '#FF9800' },
+  sovereignty: { name: 'Sovereignty', icon: '👑', color: '#FFD700' },
+  explore: { name: 'Explore', icon: '🌍', color: '#00BCD4' },
+  challenge: { name: 'Challenge', icon: '🏆', color: '#9C27B0' },
+};
+
+// ============================================================
+// Season Era Display
+// ============================================================
+
+export const ERA_INFO: Record<ARSeasonEra, { name: string; icon: string; color: string; desc: string }> = {
+  discovery: { name: 'Discovery', icon: '🔍', color: '#4CAF50', desc: 'Lower difficulty, +50% XP' },
+  expansion: { name: 'Expansion', icon: '📈', color: '#2196F3', desc: 'Faction growth, territory control' },
+  empires: { name: 'Empires', icon: '⚔️', color: '#FF9800', desc: 'Full warfare, sovereignty battles' },
+  reckoning: { name: 'Reckoning', icon: '💀', color: '#F44336', desc: '2x sovereignty rewards, finals' },
+};
