@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { Canvas, useThree, useLoader, useFrame } from '@react-three/fiber';
-import { OrbitControls, Text } from '@react-three/drei';
+import { OrbitControls, Text, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
@@ -22,6 +22,12 @@ import { GlobeDominationLayer } from '@/components/3d/GlobeDominationLayer';
 import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
 import { GlobeWarEffects } from '@/components/3d/GlobeWarEffects';
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
+
+// v15: Flag atlas + country labels
+import { GlobeCountryLabels } from '@/components/3d/GlobeCountryLabels';
+import { loadFlagAtlas } from '@/lib/flag-atlas';
+import type { FlagAtlasResult } from '@/lib/flag-atlas';
+import { COUNTRIES } from '@/lib/country-data';
 
 interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
@@ -1090,6 +1096,41 @@ function AdaptiveOrbitControls() {
   );
 }
 
+// ─── 3D 타이틀: "AI WORLD WAR" 글로브 위 이미지 텍스처 (Last of Us 스타일) ───
+
+function GlobeTitle() {
+  const groupRef = useRef<THREE.Group>(null!);
+  const { camera } = useThree();
+  const texture = useTexture('/assets/generated/title-3d.png');
+
+  useFrame((state) => {
+    if (!groupRef.current) return;
+    // 빌보드: 항상 카메라를 향함
+    groupRef.current.quaternion.copy(camera.quaternion);
+    // 부유 애니메이션: 부드러운 상하 흔들림
+    groupRef.current.position.y = 138 + Math.sin(state.clock.elapsedTime * 0.5) * 1.5;
+  });
+
+  // 텍스처 비율에 맞춰 plane 크기 설정
+  const aspect = texture.image ? texture.image.width / texture.image.height : 4;
+  const planeHeight = 18;
+  const planeWidth = planeHeight * aspect;
+
+  return (
+    <group ref={groupRef} position={[0, 138, 0]}>
+      <mesh>
+        <planeGeometry args={[planeWidth, planeHeight]} />
+        <meshBasicMaterial
+          map={texture}
+          transparent
+          toneMapped={false}
+          depthWrite={false}
+        />
+      </mesh>
+    </group>
+  );
+}
+
 // ─── R3F: GeoJSON 데이터 로더 + 씬 구성 (Canvas 내부) ───
 // Country geometries와 centroids를 로드하여 하위 컴포넌트에 전달
 
@@ -1098,13 +1139,16 @@ function GlobeScene({
   onHover,
   dominationStates,
   wars,
+  countryStates,
 }: {
   onCountryClick?: (iso3: string, name: string) => void;
   onHover?: (iso3: string | null, name: string | null) => void;
   dominationStates: Map<string, CountryDominationState>;
   wars: WarEffectData[];
+  countryStates: Map<string, CountryClientState>;
 }) {
   const [countries, setCountries] = useState<CountryGeo[]>([]);
+  const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
 
   // GeoJSON → CountryGeo[] 로드 (1회)
   useEffect(() => {
@@ -1118,6 +1162,12 @@ function GlobeScene({
         return [];
       });
     };
+  }, []);
+
+  // v15: Flag atlas 로드 (1회)
+  useEffect(() => {
+    const iso2List = COUNTRIES.map((c) => c.iso2);
+    loadFlagAtlas(iso2List).then(setFlagAtlas).catch(console.error);
   }, []);
 
   // iso3 → BufferGeometry 맵 (GlobeDominationLayer용)
@@ -1149,6 +1199,8 @@ function GlobeScene({
       {/* 지구 텍스처 구체 + 대기 글로우 */}
       <EarthSphere />
       <AtmosphereGlow />
+      {/* 글로브 위 3D 타이틀 */}
+      <GlobeTitle />
       {/* 국가 경계선 + 라벨 + 인터랙션 */}
       <CountryBorders />
       <CountryPolygons countries={countries} />
@@ -1173,6 +1225,17 @@ function GlobeScene({
           globeRadius={RADIUS}
         />
       )}
+
+      {/* v15: Country flag + agent count labels (국기 표시의 유일한 책임) */}
+      {flagAtlas && centroidsMap.size > 0 && (
+        <GlobeCountryLabels
+          countryCentroids={centroidsMap}
+          countryStates={countryStates}
+          dominationStates={dominationStates}
+          flagAtlas={flagAtlas}
+          globeRadius={RADIUS}
+        />
+      )}
     </>
   );
 }
@@ -1191,6 +1254,7 @@ export function GlobeView({
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
   const warList = wars ?? [];
+  const cStates = countryStates ?? new Map<string, CountryClientState>();
 
   return (
     <div style={{ width: '100%', height: '100%', background: BG, position: 'relative', ...style }}>
@@ -1205,6 +1269,7 @@ export function GlobeView({
             onHover={onHover}
             dominationStates={domStates}
             wars={warList}
+            countryStates={cStates}
           />
         </SizeGate>
       </Canvas>
