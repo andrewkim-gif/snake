@@ -216,12 +216,14 @@ export function EyeInstances({
     for (const agent of agents) {
       if (agentIdx >= MAX_AGENTS) break;
 
-      const { x, y, h, m, i: id } = agent;
+      const { x, y, h, f, m, i: id } = agent;
+      // v16: character faces aim direction (f), fallback to heading (h)
+      const facing = f ?? h;
       const smIdx = indexMap.get(id);
 
       // 월드 좌표
       const [worldX, , worldZ] = toWorld(x, y, 0);
-      const rotY = headingToRotY(h);
+      const rotY = headingToRotY(facing);
       const scale = getAgentScale(m);
 
       // ─── head 애니메이션 변환 조회 ───

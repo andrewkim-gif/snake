@@ -196,9 +196,14 @@ func (ca *CountryArena) PlayerCount() int {
 
 // --- Input handling (delegates to Room) ---
 
-// HandleInput forwards player input.
+// HandleInput forwards player input (legacy single-angle).
 func (ca *CountryArena) HandleInput(agentID string, angle float64, boost bool, dash bool) {
 	ca.room.HandleInput(agentID, angle, boost, dash)
+}
+
+// HandleInputSplit forwards split move/aim input (v16).
+func (ca *CountryArena) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+	ca.room.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash)
 }
 
 // HandleChooseUpgrade forwards upgrade choice.

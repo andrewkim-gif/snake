@@ -61,7 +61,7 @@ export function FilterBar<T extends string = string>({
                 color: isActive ? accentColor : SK.textSecondary,
                 background: 'transparent',
                 border: 'none',
-                borderBottom: isActive ? `2px solid ${accentColor}` : '2px solid transparent',
+                borderBottom: isActive ? `1px solid ${accentColor}` : '1px solid transparent',
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
                 transition: 'color 150ms ease, border-color 150ms ease',

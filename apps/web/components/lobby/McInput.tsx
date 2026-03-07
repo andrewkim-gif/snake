@@ -18,7 +18,7 @@ export function McInput({ style, ...rest }: McInputProps) {
       style={{
         backgroundColor: SK.bgWarm,
         border: `1px solid ${focused ? SK.borderFocus : 'rgba(255, 255, 255, 0.08)'}`,
-        borderLeft: focused ? `2px solid ${SK.accent}` : '1px solid rgba(255, 255, 255, 0.08)',
+        borderLeft: focused ? `1px solid ${SK.accent}` : '1px solid rgba(255, 255, 255, 0.08)',
         borderRadius: 0,
         color: SK.textPrimary,
         fontFamily: bodyFont,

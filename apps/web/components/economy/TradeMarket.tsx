@@ -293,7 +293,7 @@ export default function TradeMarket({
               color: tab === t.key ? SK.gold : SK.textMuted,
               background: tab === t.key ? `${SK.gold}10` : 'transparent',
               border: 'none',
-              borderBottom: tab === t.key ? `2px solid ${SK.gold}` : '2px solid transparent',
+              borderBottom: tab === t.key ? `1px solid ${SK.gold}` : '1px solid transparent',
               cursor: 'pointer',
               letterSpacing: '1px',
             }}

@@ -12,12 +12,16 @@ import (
 // NewAgent creates a new Agent with default values at the given position.
 func NewAgent(id, name string, pos domain.Position, skin domain.AgentSkin, isBot bool, currentTick uint64, appearance string) *domain.Agent {
 	return &domain.Agent{
-		ID:       id,
-		Name:     name,
-		Position: pos,
-		Heading:  0,
-		TargetAngle: 0,
-		Speed:    BaseSpeed,
+		ID:              id,
+		Name:            name,
+		Position:        pos,
+		Heading:         0,
+		MoveHeading:     0,
+		AimHeading:      0,
+		TargetAngle:     0,
+		MoveTargetAngle: 0,
+		AimTargetAngle:  0,
+		Speed:           BaseSpeed,
 		Mass:     InitialMass,
 		Level:    InitialLevel,
 		XP:       0,
@@ -85,11 +89,26 @@ func NationalityPlayerCount(agents map[string]*domain.Agent, nationality string)
 }
 
 // ApplyInput sets the target angle and boosting state from player input.
+// v16: Legacy single-angle mode — sets both move and aim to the same angle.
 func ApplyInput(a *domain.Agent, angle float64, boost bool) {
 	if !a.Alive {
 		return
 	}
-	a.TargetAngle = normalizeAngle(angle)
+	normalized := normalizeAngle(angle)
+	a.TargetAngle = normalized
+	a.MoveTargetAngle = normalized
+	a.AimTargetAngle = normalized
+	a.Boosting = boost
+}
+
+// ApplyInputSplit sets separate move and aim target angles (v16 WASD+mouse).
+func ApplyInputSplit(a *domain.Agent, moveAngle float64, aimAngle float64, boost bool) {
+	if !a.Alive {
+		return
+	}
+	a.MoveTargetAngle = normalizeAngle(moveAngle)
+	a.AimTargetAngle = normalizeAngle(aimAngle)
+	a.TargetAngle = a.MoveTargetAngle // legacy compat
 	a.Boosting = boost
 }
 
@@ -133,9 +152,9 @@ func UpdateAgent(a *domain.Agent, currentTick uint64, terrainMods ...TerrainModi
 		}
 	}
 
-	// 4. Move position
-	a.Position.X += math.Cos(a.Heading) * movePerTick
-	a.Position.Y += math.Sin(a.Heading) * movePerTick
+	// 4. Move position (v16: use MoveHeading for movement direction)
+	a.Position.X += math.Cos(a.MoveHeading) * movePerTick
+	a.Position.Y += math.Sin(a.MoveHeading) * movePerTick
 
 	// 5. Update hitbox radius based on mass
 	a.HitboxRadius = calcHitboxRadius(a.Mass)
@@ -328,16 +347,32 @@ func GetEffectiveBoostCost(a *domain.Agent) float64 {
 
 // --- Internal helpers ---
 
-// updateHeading rotates heading toward targetAngle with TurnRate limit.
+// updateHeading rotates both MoveHeading and AimHeading toward their targets
+// with TurnRate limit. Also syncs the legacy Heading field with MoveHeading.
 func updateHeading(a *domain.Agent) {
-	diff := normalizeAngle(a.TargetAngle - a.Heading)
-	if math.Abs(diff) <= TurnRate {
-		a.Heading = a.TargetAngle
-	} else if diff > 0 {
-		a.Heading = normalizeAngle(a.Heading + TurnRate)
+	// Update MoveHeading toward MoveTargetAngle
+	moveDiff := normalizeAngle(a.MoveTargetAngle - a.MoveHeading)
+	if math.Abs(moveDiff) <= TurnRate {
+		a.MoveHeading = a.MoveTargetAngle
+	} else if moveDiff > 0 {
+		a.MoveHeading = normalizeAngle(a.MoveHeading + TurnRate)
 	} else {
-		a.Heading = normalizeAngle(a.Heading - TurnRate)
+		a.MoveHeading = normalizeAngle(a.MoveHeading - TurnRate)
 	}
+
+	// Update AimHeading toward AimTargetAngle (same turn rate for now)
+	aimDiff := normalizeAngle(a.AimTargetAngle - a.AimHeading)
+	if math.Abs(aimDiff) <= TurnRate {
+		a.AimHeading = a.AimTargetAngle
+	} else if aimDiff > 0 {
+		a.AimHeading = normalizeAngle(a.AimHeading + TurnRate)
+	} else {
+		a.AimHeading = normalizeAngle(a.AimHeading - TurnRate)
+	}
+
+	// Sync legacy fields
+	a.Heading = a.MoveHeading
+	a.TargetAngle = a.MoveTargetAngle
 }
 
 // normalizeAngle wraps an angle to [-pi, pi].

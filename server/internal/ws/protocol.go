@@ -162,11 +162,32 @@ type JoinRoomPayload struct {
 }
 
 // InputPayload is sent by the client at 30Hz with movement data.
+// v16: Supports both legacy {a,b,s} and new {ma,aa,b,d,j,s} formats.
+// Backward compat: if MoveAngle is nil (ma absent) and Angle is set, both move/aim use Angle.
 type InputPayload struct {
-	Angle float64 `json:"a"`           // heading angle in radians
-	Boost int     `json:"b"`           // 0 = no boost, 1 = boost
-	Dash  int     `json:"d,omitempty"` // v16: 0 = no dash, 1 = dash (E key, triggers PerformDash)
-	Seq   int     `json:"s"`           // sequence number for reconciliation
+	Angle     float64  `json:"a"`              // legacy: heading angle in radians (v15 compat)
+	MoveAngle *float64 `json:"ma,omitempty"`   // v16: move direction angle (WASD-based), nil = use legacy 'a'
+	AimAngle  *float64 `json:"aa,omitempty"`   // v16: aim/facing angle (mouse-based), nil = use legacy 'a'
+	Boost     int      `json:"b"`              // 0 = no boost, 1 = boost
+	Dash      int      `json:"d,omitempty"`    // v16: 0 = no dash, 1 = dash (E key, triggers PerformDash)
+	Jump      int      `json:"j,omitempty"`    // v16: 0 = no jump, 1 = jump (Space key, Phase 6)
+	Seq       int      `json:"s"`              // sequence number for reconciliation
+}
+
+// GetMoveAngle returns the effective move angle (v16 ma field, or legacy a fallback).
+func (p *InputPayload) GetMoveAngle() float64 {
+	if p.MoveAngle != nil {
+		return *p.MoveAngle
+	}
+	return p.Angle
+}
+
+// GetAimAngle returns the effective aim angle (v16 aa field, or legacy a fallback).
+func (p *InputPayload) GetAimAngle() float64 {
+	if p.AimAngle != nil {
+		return *p.AimAngle
+	}
+	return p.Angle
 }
 
 // RespawnPayload is sent by the client to request respawn.

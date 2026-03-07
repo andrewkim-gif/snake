@@ -22,7 +22,8 @@ type StateAgent struct {
 	ID          string   `json:"i"`
 	X           float64  `json:"x"`
 	Y           float64  `json:"y"`
-	Heading     float64  `json:"h"`
+	Heading     float64  `json:"h"`              // movement heading (MoveHeading)
+	Facing      float64  `json:"f,omitempty"`    // v16: aim/facing direction (AimHeading), 0 omitted for bandwidth
 	Mass        float64  `json:"m"`
 	Boosting    bool     `json:"b,omitempty"`
 	Alive       bool     `json:"a"`

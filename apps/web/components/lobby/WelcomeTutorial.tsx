@@ -107,7 +107,7 @@ export function WelcomeTutorial() {
         WebkitBackdropFilter: 'blur(20px)',
         borderRadius: 0,
         border: '1px solid rgba(255,255,255,0.06)',
-        borderTop: `2px solid ${SK.gold}`,
+        borderTop: `1px solid ${SK.gold}`,
         boxShadow: '0 12px 48px rgba(0, 0, 0, 0.5)',
         padding: '32px',
         maxWidth: '420px',

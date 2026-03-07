@@ -269,7 +269,7 @@ func (cam *CountryArenaManager) processQueueLocked(countryCode string) {
 	)
 }
 
-// RouteInput forwards player input to the correct country arena.
+// RouteInput forwards player input to the correct country arena (legacy single-angle).
 func (cam *CountryArenaManager) RouteInput(clientID string, angle float64, boost bool, dash bool) {
 	cam.mu.RLock()
 	countryCode, ok := cam.playerCountry[clientID]
@@ -284,6 +284,23 @@ func (cam *CountryArenaManager) RouteInput(clientID string, angle float64, boost
 		return
 	}
 	arena.Room.HandleInput(clientID, angle, boost, dash)
+}
+
+// RouteInputSplit forwards split move/aim input to the correct country arena (v16).
+func (cam *CountryArenaManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+	cam.mu.RLock()
+	countryCode, ok := cam.playerCountry[clientID]
+	if !ok {
+		cam.mu.RUnlock()
+		return
+	}
+	arena, exists := cam.arenas[countryCode]
+	cam.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+	arena.Room.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct arena.

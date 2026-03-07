@@ -187,9 +187,9 @@ func (ws *WeaponSystem) fireFanSwing(
 			continue
 		}
 
-		// Check angle
+		// Check angle (v16: use AimHeading for weapon direction)
 		angleToTarget := math.Atan2(target.Position.Y-attacker.Position.Y, target.Position.X-attacker.Position.X)
-		angleDiff := normalizeAngle(angleToTarget - attacker.Heading)
+		angleDiff := normalizeAngle(angleToTarget - attacker.AimHeading)
 		if math.Abs(angleDiff) > halfAngle {
 			continue
 		}
@@ -336,7 +336,7 @@ func (ws *WeaponSystem) fireMultiShot(
 		}
 
 		angleToTarget := math.Atan2(target.Position.Y-attacker.Position.Y, target.Position.X-attacker.Position.X)
-		angleDiff := normalizeAngle(angleToTarget - attacker.Heading)
+		angleDiff := normalizeAngle(angleToTarget - attacker.AimHeading) // v16: use AimHeading for weapon direction
 		if math.Abs(angleDiff) > halfAngle {
 			continue
 		}
@@ -370,8 +370,8 @@ func (ws *WeaponSystem) fireTeleportBack(
 		return nil, nil
 	}
 
-	// Teleport behind the target
-	behindAngle := nearest.Heading + math.Pi // opposite of target's heading
+	// Teleport behind the target (v16: use MoveHeading for facing direction)
+	behindAngle := nearest.MoveHeading + math.Pi // opposite of target's movement heading
 	behindDist := 20.0                        // just behind the target
 	attacker.Position.X = nearest.Position.X + math.Cos(behindAngle)*behindDist
 	attacker.Position.Y = nearest.Position.Y + math.Sin(behindAngle)*behindDist

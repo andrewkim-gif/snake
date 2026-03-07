@@ -277,9 +277,9 @@ func UpdateAgentV14(a *domain.Agent, currentTick uint64, terrainMods ...TerrainM
 		}
 	}
 
-	// 4. Move position
-	a.Position.X += math.Cos(a.Heading) * movePerTick
-	a.Position.Y += math.Sin(a.Heading) * movePerTick
+	// 4. Move position (v16: use MoveHeading for movement direction)
+	a.Position.X += math.Cos(a.MoveHeading) * movePerTick
+	a.Position.Y += math.Sin(a.MoveHeading) * movePerTick
 
 	// 5. Update hitbox radius based on level (not mass)
 	a.HitboxRadius = HitboxMinRadius + float64(a.Level)*0.5

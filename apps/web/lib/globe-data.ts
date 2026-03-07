@@ -88,6 +88,21 @@ export function getCountryColor(
   return sovereigntyColors.neutral;
 }
 
+// v15: 에이전트 제한 계산 (Go 서버 CalcMaxAgents와 동일 공식)
+const TIER_MAX_AGENTS: Record<string, number> = { S: 50, A: 35, B: 25, C: 15, D: 8 };
+const REF_POP = 50_000_000; // 기준 인구 (5천만)
+
+export function calcMaxAgents(tier: string, population: number): number {
+  const tierMax = TIER_MAX_AGENTS[tier] ?? 15;
+  if (population <= 0) return Math.max(3, Math.ceil(tierMax * 0.3));
+  const popMil = population / 1_000_000;
+  const refMil = REF_POP / 1_000_000;
+  if (popMil <= 0) return Math.max(3, Math.ceil(tierMax * 0.3));
+  const ratio = Math.log10(popMil) / Math.log10(refMil);
+  const clamped = Math.max(0.3, Math.min(1.0, ratio));
+  return Math.max(3, Math.ceil(tierMax * clamped));
+}
+
 // GeoJSON feature에서 국가 데이터 생성 (fallback용)
 export function featureToCountryState(feature: GeoJSONFeature): CountryClientState {
   const props = feature.properties;
@@ -122,7 +137,7 @@ export function featureToCountryState(feature: GeoJSONFeature): CountryClientSta
     longitude: 0,
     capitalName: '',
     terrainTheme: 'plains',
-    maxAgents: 0,
+    maxAgents: calcMaxAgents(tier, population),
     population,
   };
 }

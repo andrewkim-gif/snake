@@ -277,7 +277,9 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
     for (const agent of agents) {
       if (limbIdx >= MAX_AGENTS) break;
 
-      const { x, y, h, m, b: boosting, k: skinId, i: id } = agent;
+      const { x, y, h, f, m, b: boosting, k: skinId, i: id } = agent;
+      // v16: facing = aim direction (f), fallback to movement heading (h)
+      const facing = f ?? h;
       activeIds.add(id);
 
       // ─── appearance 해석 (네트워크 캐시 우선, fallback: skinId 레거시 변환) ───
@@ -321,7 +323,8 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
 
       // ─── 월드 좌표 + 스케일 ───
       const [worldX, , worldZ] = toWorld(x, y, 0);
-      const rotY = headingToRotY(h);
+      // v16: character faces aim direction (facing), not movement heading
+      const rotY = headingToRotY(facing);
       const scale = getAgentScale(m);
 
       // ─── 애니메이션 변환 가져오기 ───

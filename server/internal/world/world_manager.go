@@ -418,7 +418,7 @@ func (wm *WorldManager) GetSpectatorCount(countryISO string) int {
 
 // --- Input routing ---
 
-// RouteInput forwards player input to the correct country arena.
+// RouteInput forwards player input to the correct country arena (legacy single-angle).
 func (wm *WorldManager) RouteInput(clientID string, angle float64, boost bool, dash bool) {
 	wm.mu.RLock()
 	iso, ok := wm.playerCountry[clientID]
@@ -433,6 +433,23 @@ func (wm *WorldManager) RouteInput(clientID string, angle float64, boost bool, d
 		return
 	}
 	arena.HandleInput(clientID, angle, boost, dash)
+}
+
+// RouteInputSplit forwards split move/aim input to the correct country arena (v16).
+func (wm *WorldManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+	wm.mu.RLock()
+	iso, ok := wm.playerCountry[clientID]
+	if !ok {
+		wm.mu.RUnlock()
+		return
+	}
+	arena, exists := wm.activeArenas[iso]
+	wm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+	arena.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct arena.

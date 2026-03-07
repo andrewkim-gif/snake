@@ -26,12 +26,21 @@ import { VIVID_PALETTE, SKIN_TONES, HAIR_COLORS, HAT_DEFS, WEAPON_DEFS, BACK_ITE
 import { getAgentTextures, getHeadMaterials } from '@/lib/3d/agent-textures';
 import { LOBBY_DIMENSIONS, LOBBY_OFFSETS } from '@/lib/3d/cubeling-proportions';
 
+/** 쇼케이스 모드에서 순환할 모션 목록 */
+type ShowcaseMotion = 'idle' | 'walk' | 'attack' | 'victory' | 'levelup' | 'collect';
+const SHOWCASE_SEQUENCE: ShowcaseMotion[] = ['idle', 'walk', 'attack', 'victory', 'levelup', 'collect'];
+const SHOWCASE_DURATIONS: Record<ShowcaseMotion, number> = {
+  idle: 5, walk: 4, attack: 2.5, victory: 4, levelup: 3, collect: 2,
+};
+
 interface VoxelCharacterProps {
   skinId: number;
   appearance?: CubelingAppearance;
   position: [number, number, number];
   rotation?: number;
   phaseOffset?: number;
+  /** 쇼케이스 모드: 다양한 모션을 자동 순환 */
+  showcaseMode?: boolean;
 }
 
 // 큐블링 로비 치수 (cubeling-proportions에서 가져옴)
@@ -334,12 +343,16 @@ const EQUIPMENT_SIZES: Record<string, [number, number, number]> = {
   pack:   [4 * GU, 5 * GU, 3 * GU],
 };
 
-export function VoxelCharacter({ skinId, appearance, position, rotation = 0, phaseOffset = 0 }: VoxelCharacterProps) {
+export function VoxelCharacter({ skinId, appearance, position, rotation = 0, phaseOffset = 0, showcaseMode = false }: VoxelCharacterProps) {
   const leftArmRef = useRef<THREE.Mesh>(null!);
   const rightArmRef = useRef<THREE.Mesh>(null!);
   const leftLegRef = useRef<THREE.Mesh>(null!);
   const rightLegRef = useRef<THREE.Mesh>(null!);
   const headRef = useRef<THREE.Mesh>(null!);
+  const bodyRef = useRef<THREE.Mesh>(null!);
+  const groupRef = useRef<THREE.Group>(null!);
+  // 쇼케이스 모드 상태
+  const showcaseRef = useRef({ motionIndex: 0, elapsed: 0, motionElapsed: 0 });
 
   // appearance가 있으면 appearance 기반 텍스처, 없으면 레거시 skinId 기반
   const texKey = appearance ? appearanceTexKey(appearance) : `legacy-${skinId}`;
@@ -376,31 +389,150 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
   const armMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.arm }), [textures]);
   const legMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.leg }), [textures]);
 
-  // idle 애니메이션 (priority=0)
-  useFrame((state) => {
+  // 애니메이션 (priority=0)
+  useFrame((state, delta) => {
     const t = state.clock.elapsedTime + phaseOffset;
 
-    // 팔 pendulum swing (큐블링 짧은 팔 -> 진폭 유지)
-    const armSwing = Math.sin(t * 1.5) * 0.25;
-    if (leftArmRef.current) leftArmRef.current.rotation.x = armSwing;
-    if (rightArmRef.current) rightArmRef.current.rotation.x = -armSwing;
+    if (!showcaseMode) {
+      // 기본 idle 애니메이션
+      const armSwing = Math.sin(t * 1.5) * 0.25;
+      if (leftArmRef.current) leftArmRef.current.rotation.x = armSwing;
+      if (rightArmRef.current) rightArmRef.current.rotation.x = -armSwing;
+      const legSwing = Math.sin(t * 1.5) * 0.18;
+      if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
+      if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
+      if (headRef.current) {
+        headRef.current.rotation.y = Math.sin(t * 0.5) * 0.2;
+        headRef.current.position.y = HEAD_CENTER + Math.sin(t * 0.8) * 0.02;
+      }
+      return;
+    }
 
-    // 다리 pendulum swing (반대)
-    const legSwing = Math.sin(t * 1.5) * 0.18;
-    if (leftLegRef.current) leftLegRef.current.rotation.x = -legSwing;
-    if (rightLegRef.current) rightLegRef.current.rotation.x = legSwing;
+    // ── 쇼케이스 모드: 모션 자동 순환 ──
+    const sc = showcaseRef.current;
+    sc.elapsed += delta;
+    sc.motionElapsed += delta;
+    const motion = SHOWCASE_SEQUENCE[sc.motionIndex];
+    const dur = SHOWCASE_DURATIONS[motion];
 
-    // 머리 bob + 좌우 look
+    // 시간 초과 시 다음 모션으로 전환
+    if (sc.motionElapsed > dur) {
+      sc.motionIndex = (sc.motionIndex + 1) % SHOWCASE_SEQUENCE.length;
+      sc.motionElapsed = 0;
+    }
+
+    const mt = sc.motionElapsed; // 현재 모션 내 경과 시간
+    let aL = 0, aR = 0, lL = 0, lR = 0; // 팔/다리 rotX
+    let headY = HEAD_CENTER, headRotY = 0, headRotX = 0;
+    let bodyY = BODY_CENTER, bodyRotX = 0, bodyRotY = 0;
+    let groupY = 0;
+
+    switch (SHOWCASE_SEQUENCE[sc.motionIndex]) {
+      case 'idle': {
+        // 호흡 + 둘러보기
+        aL = Math.sin(mt * 1.5) * 0.25;
+        aR = -aL;
+        lL = -Math.sin(mt * 1.5) * 0.18;
+        lR = -lL;
+        headRotY = Math.sin(mt * 0.5) * 0.2;
+        headY = HEAD_CENTER + Math.sin(mt * 0.8) * 0.02;
+        break;
+      }
+      case 'walk': {
+        // 걷기: 팔/다리 교차 + 바운스
+        const freq = 3.0;
+        const swing = 0.44;
+        aL = Math.sin(mt * freq) * swing;
+        aR = -aL;
+        lL = -Math.sin(mt * freq) * swing * 0.8;
+        lR = -lL;
+        groupY = Math.abs(Math.cos(mt * freq)) * 0.03;
+        headRotX = -0.05;
+        bodyRotY = Math.sin(mt * freq) * 0.04;
+        break;
+      }
+      case 'attack': {
+        // 오른팔 휘두르기 (0.4초 원샷 반복)
+        const cycle = mt % 1.2; // 1.2초 주기로 반복
+        if (cycle < 0.4) {
+          const p = cycle / 0.4;
+          const eased = 1 - Math.pow(1 - p, 3); // easeOut
+          aR = -2.0 * (1 - eased); // -2.0 → 0
+          bodyRotY = 0.2 * (1 - eased);
+          headRotX = -0.1 * (1 - eased);
+        } else {
+          // 대기 포즈
+          aL = Math.sin(mt * 1.5) * 0.15;
+          aR = -aL;
+        }
+        break;
+      }
+      case 'victory': {
+        // 댄스: 몸 좌우 + 팔 교대 올리기
+        const danceT = mt * 4;
+        bodyRotY = Math.sin(danceT) * 0.3;
+        const phase = Math.floor(danceT / Math.PI) % 2;
+        if (phase === 0) {
+          aL = -2.0; aR = Math.sin(danceT) * 0.3;
+        } else {
+          aR = -2.0; aL = Math.sin(danceT) * 0.3;
+        }
+        lL = Math.sin(danceT) * 0.2;
+        lR = -lL;
+        groupY = Math.abs(Math.sin(danceT * 0.5)) * 0.04;
+        break;
+      }
+      case 'levelup': {
+        // 점프 + 팔 위로
+        const p = Math.min(mt / 0.8, 1);
+        groupY = Math.sin(p * Math.PI) * 0.2; // 포물선 점프
+        aL = -2.5 * Math.sin(p * Math.PI); // 팔 위로
+        aR = -2.5 * Math.sin(p * Math.PI);
+        headRotX = -0.2 * Math.sin(p * Math.PI); // 위를 봄
+        bodyY = BODY_CENTER + Math.sin(p * Math.PI) * 0.02; // 살짝 늘어남
+        break;
+      }
+      case 'collect': {
+        // 짧은 팔 뻗기
+        const cycle = mt % 0.8;
+        if (cycle < 0.25) {
+          const p = cycle / 0.25;
+          const decay = Math.exp(-p * 4);
+          aR = -1.5 * decay;
+          bodyRotX = -0.1 * decay;
+          headRotX = 0.1 * decay;
+        } else {
+          aL = Math.sin(mt * 1.5) * 0.15;
+          aR = -aL;
+        }
+        break;
+      }
+    }
+
+    // 트랜스폼 적용
+    if (leftArmRef.current) leftArmRef.current.rotation.x = aL;
+    if (rightArmRef.current) rightArmRef.current.rotation.x = aR;
+    if (leftLegRef.current) leftLegRef.current.rotation.x = lL;
+    if (rightLegRef.current) rightLegRef.current.rotation.x = lR;
     if (headRef.current) {
-      headRef.current.rotation.y = Math.sin(t * 0.5) * 0.2;
-      headRef.current.position.y = HEAD_CENTER + Math.sin(t * 0.8) * 0.02;
+      headRef.current.rotation.y = headRotY;
+      headRef.current.rotation.x = headRotX;
+      headRef.current.position.y = headY;
+    }
+    if (bodyRef.current) {
+      bodyRef.current.rotation.x = bodyRotX;
+      bodyRef.current.rotation.y = bodyRotY;
+      bodyRef.current.position.y = bodyY;
+    }
+    if (groupRef.current) {
+      groupRef.current.position.y = groupY;
     }
   });
 
   return (
-    <group position={position} rotation={[0, rotation, 0]}>
+    <group ref={groupRef} position={position} rotation={[0, rotation, 0]}>
       {/* Body */}
-      <mesh position={[0, BODY_CENTER, 0]} material={bodyMat}>
+      <mesh ref={bodyRef} position={[0, BODY_CENTER, 0]} material={bodyMat}>
         <boxGeometry args={[BODY.w, BODY.h, BODY.d]} />
       </mesh>
 

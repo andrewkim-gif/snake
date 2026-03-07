@@ -229,7 +229,8 @@ export interface AgentNetworkData {
   n: string;              // name
   x: number;              // position.x
   y: number;              // position.y
-  h: number;              // heading
+  h: number;              // heading (movement direction = MoveHeading)
+  f?: number;             // v16: facing (aim direction = AimHeading), undefined = same as h
   m: number;              // mass
   b: boolean;             // boosting
   a: boolean;             // alive

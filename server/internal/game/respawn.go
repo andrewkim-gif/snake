@@ -139,7 +139,11 @@ func (rm *RespawnManager) RespawnAgent(agent *domain.Agent, spawnPos domain.Posi
 	agent.Mass = InitialMass // 100% HP recovery
 	agent.Position = spawnPos
 	agent.Heading = 0
+	agent.MoveHeading = 0
+	agent.AimHeading = 0
 	agent.TargetAngle = 0
+	agent.MoveTargetAngle = 0
+	agent.AimTargetAngle = 0
 	agent.Speed = BaseSpeed
 	agent.Boosting = false
 	agent.LastDamagedBy = ""

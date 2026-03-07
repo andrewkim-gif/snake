@@ -164,8 +164,8 @@ export function PopupTabNav({
                   background: 'none',
                   border: 'none',
                   borderBottom: active
-                    ? `2px solid ${SK.accent}`
-                    : '2px solid transparent',
+                    ? `1px solid ${SK.accent}`
+                    : '1px solid transparent',
                   cursor: 'pointer',
                   transition: 'color 150ms ease, border-color 150ms ease',
                   whiteSpace: 'nowrap',
@@ -235,7 +235,7 @@ export function PopupTabNav({
                   padding: '6px 14px',
                   background: active ? SK.accentBg : 'transparent',
                   border: 'none',
-                  borderBottom: active ? `2px solid ${SK.accent}` : '2px solid transparent',
+                  borderBottom: active ? `1px solid ${SK.accent}` : '1px solid transparent',
                   borderRadius: '0',
                   cursor: 'pointer',
                   transition: 'all 150ms ease',

@@ -213,7 +213,7 @@ func (rm *RoomManager) GetRoom(roomID string) *Room {
 	return rm.rooms[roomID]
 }
 
-// RouteInput forwards a client's input to the correct room's arena.
+// RouteInput forwards a client's input to the correct room's arena (legacy single-angle).
 func (rm *RoomManager) RouteInput(clientID string, angle float64, boost bool, dash bool) {
 	rm.mu.RLock()
 	roomID, ok := rm.playerRoom[clientID]
@@ -232,6 +232,27 @@ func (rm *RoomManager) RouteInput(clientID string, angle float64, boost bool, da
 	}
 
 	room.HandleInput(clientID, angle, boost, dash)
+}
+
+// RouteInputSplit forwards a client's split move/aim input to the correct room (v16).
+func (rm *RoomManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+	rm.mu.RLock()
+	roomID, ok := rm.playerRoom[clientID]
+	rm.mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	rm.mu.RLock()
+	room, exists := rm.rooms[roomID]
+	rm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	room.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct room.

@@ -72,9 +72,11 @@ function FloorShadow() {
 interface CharacterPreviewPanelProps {
   appearance: CubelingAppearance;
   skinId: number;
+  /** 프리뷰 높이 (기본 240px) */
+  height?: number;
 }
 
-export function CharacterPreviewPanel({ appearance, skinId }: CharacterPreviewPanelProps) {
+export function CharacterPreviewPanel({ appearance, skinId, height = 240 }: CharacterPreviewPanelProps) {
   const angleRef = useRef(Math.PI / 2); // 카메라가 +Z 정면을 바라보도록
   const idleTimeRef = useRef(IDLE_TIMEOUT + 1); // 처음엔 자동 회전 시작
   const isDragging = useRef(false);
@@ -113,7 +115,7 @@ export function CharacterPreviewPanel({ appearance, skinId }: CharacterPreviewPa
       onPointerLeave={handlePointerUp}
       style={{
         width: '100%',
-        height: '180px',
+        height: `${height}px`,
         borderRadius: 0,
         border: `1px solid ${SK.border}`,
         backgroundColor: SK.bgWarm,
@@ -159,6 +161,7 @@ export function CharacterPreviewPanel({ appearance, skinId }: CharacterPreviewPa
             position={[0, 0, 0]}
             rotation={0}
             phaseOffset={0}
+            showcaseMode
           />
           <FloorShadow />
         </Suspense>

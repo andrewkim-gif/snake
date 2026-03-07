@@ -37,6 +37,11 @@ import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 import { generateRandomAppearance, RANDOM_CATEGORIES } from '@/lib/character-generator';
 import type { RandomCategory } from '@/lib/character-generator';
 import { CharacterPreviewPanel } from './CharacterPreviewPanel';
+import {
+  User, Palette, Smile, Scissors, Swords, Sparkles, Bookmark,
+  Shuffle, RotateCcw, Shield, Cpu, Leaf, Dice1,
+} from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 
 // ─── 상수 ───
 
@@ -51,15 +56,24 @@ const BODY_TYPES: { value: BodyType; label: string }[] = [
 
 type TabId = 'body' | 'colors' | 'face' | 'hair' | 'equip' | 'fx' | 'preset';
 
-const TABS: { id: TabId; label: string; icon: string }[] = [
-  { id: 'body', label: 'BODY', icon: '\u{1F9CD}' },
-  { id: 'colors', label: 'CLR', icon: '\u{1F3A8}' },
-  { id: 'face', label: 'FACE', icon: '\u{1F600}' },
-  { id: 'hair', label: 'HAIR', icon: '\u{1F487}' },
-  { id: 'equip', label: 'EQP', icon: '\u{2694}' },
-  { id: 'fx', label: 'FX', icon: '\u{2728}' },
-  { id: 'preset', label: 'PRE', icon: '\u{1F4E6}' },
+const TABS: { id: TabId; label: string; Icon: LucideIcon }[] = [
+  { id: 'body', label: 'BODY', Icon: User },
+  { id: 'colors', label: 'CLR', Icon: Palette },
+  { id: 'face', label: 'FACE', Icon: Smile },
+  { id: 'hair', label: 'HAIR', Icon: Scissors },
+  { id: 'equip', label: 'EQP', Icon: Swords },
+  { id: 'fx', label: 'FX', Icon: Sparkles },
+  { id: 'preset', label: 'PRE', Icon: Bookmark },
 ];
+
+/** 랜덤 카테고리 → lucide 아이콘 매핑 */
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  all: Dice1,
+  military: Shield,
+  cyber: Cpu,
+  nature: Leaf,
+  fantasy: Sparkles,
+};
 
 /** 16종 헤어스타일 이름 */
 const HAIR_STYLE_NAMES = [
@@ -228,8 +242,8 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
           </span>
         </div>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <SmallButton onClick={handleRandom} color={SK.blue}>{'\u{1F3B2}'} RND</SmallButton>
-          <SmallButton onClick={handleReset} color={SK.red}>{'\u{1F504}'} RST</SmallButton>
+          <SmallButton onClick={handleRandom} color={SK.blue}><Shuffle size={8} style={{ marginRight: 3 }} /> RND</SmallButton>
+          <SmallButton onClick={handleReset} color={SK.red}><RotateCcw size={8} style={{ marginRight: 3 }} /> RST</SmallButton>
         </div>
       </div>
 
@@ -267,7 +281,7 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
               }}
               title={`Random: ${cat.label}`}
             >
-              <span style={{ fontSize: '9px', lineHeight: 1 }}>{cat.icon}</span>
+              {(() => { const CatIcon = CATEGORY_ICONS[cat.id]; return CatIcon ? <CatIcon size={9} strokeWidth={2} /> : null; })()}
               <span>{cat.label}</span>
             </button>
           );
@@ -297,8 +311,8 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
                 color: isActive ? SK.gold : SK.textMuted,
                 border: 'none',
                 borderBottom: isActive
-                  ? `2px solid ${SK.gold}`
-                  : '2px solid transparent',
+                  ? `1px solid ${SK.gold}`
+                  : '1px solid transparent',
                 cursor: 'pointer',
                 textTransform: 'uppercase',
                 letterSpacing: '0.5px',
@@ -309,7 +323,7 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
                 gap: '1px',
               }}
             >
-              <span style={{ fontSize: '11px', lineHeight: 1 }}>{tab.icon}</span>
+              <tab.Icon size={11} strokeWidth={2} />
               <span>{tab.label}</span>
             </button>
           );

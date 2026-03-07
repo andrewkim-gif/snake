@@ -201,7 +201,7 @@ export default function FactionDashboard({
                 fontFamily: headingFont, fontSize: SKFont.xs,
                 color: tab === key ? SK.gold : SK.textMuted,
                 background: 'none', border: 'none', cursor: 'pointer',
-                borderBottom: tab === key ? `2px solid ${SK.gold}` : '2px solid transparent',
+                borderBottom: tab === key ? `1px solid ${SK.gold}` : '1px solid transparent',
                 letterSpacing: '1px',
                 transition: 'color 0.15s',
               }}

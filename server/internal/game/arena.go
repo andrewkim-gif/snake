@@ -417,7 +417,8 @@ func (a *Arena) processUpgradeTimeouts() {
 
 // --- Public API (thread-safe via mutex) ---
 
-// HandleInput processes a player input.
+// HandleInput processes a player input (legacy single-angle mode).
+// v16: dash is variadic for backward compat with bot callers.
 func (a *Arena) HandleInput(agentID string, angle float64, boost bool, dash ...bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -430,6 +431,22 @@ func (a *Arena) HandleInput(agentID string, angle float64, boost bool, dash ...b
 
 	// v16: Dash input — trigger PerformDash if requested
 	if len(dash) > 0 && dash[0] {
+		PerformDash(agent, a.tick)
+	}
+}
+
+// HandleInputSplit processes a player input with separate move/aim angles (v16).
+func (a *Arena) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+
+	agent, ok := a.agents[agentID]
+	if !ok || !agent.Alive {
+		return
+	}
+	ApplyInputSplit(agent, moveAngle, aimAngle, boost)
+
+	if dash {
 		PerformDash(agent, a.tick)
 	}
 }

@@ -305,7 +305,7 @@ function TabBar({ activeTab, onTabChange }: {
               padding: '10px 0',
               background: 'none',
               border: 'none',
-              borderBottom: isActive ? '2px solid #F59E0B' : '2px solid transparent',
+              borderBottom: isActive ? '1px solid #F59E0B' : '1px solid transparent',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',

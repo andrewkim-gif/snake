@@ -118,7 +118,7 @@ export default function DashboardPage() {
               color: activeTab === tab.id ? SK.gold : SK.textSecondary,
               background: activeTab === tab.id ? `${SK.gold}15` : "transparent",
               border: "none",
-              borderBottom: activeTab === tab.id ? `2px solid ${SK.gold}` : "2px solid transparent",
+              borderBottom: activeTab === tab.id ? `1px solid ${SK.gold}` : "1px solid transparent",
               padding: "10px 18px",
               cursor: "pointer",
               transition: "all 0.15s",

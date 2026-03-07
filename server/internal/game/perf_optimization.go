@@ -268,7 +268,7 @@ func ComputeStateDelta(
 				ID: id,
 				X:  agent.Position.X,
 				Y:  agent.Position.Y,
-				H:  agent.Heading,
+				H:  agent.MoveHeading,
 			})
 		}
 

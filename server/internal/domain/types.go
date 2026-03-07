@@ -477,8 +477,12 @@ type Agent struct {
 	ID              string       `json:"id"`
 	Name            string       `json:"name"`
 	Position        Position     `json:"position"`
-	Heading         float64      `json:"heading"`
-	TargetAngle     float64      `json:"targetAngle"`
+	Heading         float64      `json:"heading"`          // v16: alias for MoveHeading (backward compat)
+	MoveHeading     float64      `json:"moveHeading"`      // v16: movement direction (WASD)
+	AimHeading      float64      `json:"aimHeading"`       // v16: facing/aim direction (mouse)
+	TargetAngle     float64      `json:"targetAngle"`      // v16: alias for MoveTargetAngle
+	MoveTargetAngle float64      `json:"moveTargetAngle"`  // v16: target move direction
+	AimTargetAngle  float64      `json:"aimTargetAngle"`   // v16: target aim direction
 	Speed           float64      `json:"speed"`
 	Mass            float64      `json:"mass"`
 	Level           int          `json:"level"`

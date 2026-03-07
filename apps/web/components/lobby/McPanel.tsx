@@ -2,7 +2,7 @@
 
 /**
  * McPanel — Apex 스타일 패널
- * 직각 + 상단 레드 악센트 라인 2px
+ * 직각 + 상단 레드 악센트 라인 1px
  */
 
 import type { CSSProperties, ReactNode } from 'react';
@@ -28,7 +28,7 @@ export function McPanel({ children, style, className, accentColor, noAccent }: M
         backgroundColor: SK.cardBg,
         borderRadius: 0,
         border: sketchBorder(),
-        borderTop: noAccent ? sketchBorder() : `2px solid ${lineColor}`,
+        borderTop: noAccent ? sketchBorder() : `1px solid ${lineColor}`,
         position: 'relative',
         overflow: 'hidden',
         padding: '1.25rem',

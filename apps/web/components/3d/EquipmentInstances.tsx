@@ -287,7 +287,9 @@ export function EquipmentInstances({
     for (const agent of agents) {
       if (agentIdx >= MAX_AGENTS) break;
 
-      const { x, y, h, m, b: boosting, k: skinId, i: id } = agent;
+      const { x, y, h, f, m, b: boosting, k: skinId, i: id } = agent;
+      // v16: character faces aim direction (f), fallback to heading (h)
+      const facing = f ?? h;
       const appearance = getCachedAppearance(skinId, id);
 
       // 속도 추정
@@ -305,7 +307,7 @@ export function EquipmentInstances({
       vel.prevY = y;
 
       const [worldX, , worldZ] = toWorld(x, y, 0);
-      const rotY = headingToRotY(h);
+      const rotY = headingToRotY(facing);
       const scale = getAgentScale(m);
 
       // 상태 머신에서 파트 변환 가져오기

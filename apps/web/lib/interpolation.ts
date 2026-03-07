@@ -37,10 +37,16 @@ export function interpolateAgents(
     const headingDiff = angleDiff(prev.h, cur.h);
     const h = normalizeAngle(prev.h + headingDiff * t);
 
+    // v16: facing 보간 (aim direction, f 필드)
+    const prevFacing = prev.f ?? prev.h;
+    const curFacing = cur.f ?? cur.h;
+    const facingDiff = angleDiff(prevFacing, curFacing);
+    const f = normalizeAngle(prevFacing + facingDiff * t);
+
     // mass 보간 (부드러운 HP 변화)
     const m = prev.m + (cur.m - prev.m) * t;
 
-    return { ...cur, x, y, h, m };
+    return { ...cur, x, y, h, f, m };
   });
 }
 
@@ -73,9 +79,14 @@ export function applyClientPrediction(
   const x = serverAgent.x + dir.x * moveDistance;
   const y = serverAgent.y + dir.y * moveDistance;
 
+  // v16: facing prediction — if f exists, keep it (aim is client-driven)
+  // For now, facing = serverAgent.f (server authoritative aim direction)
+  const facing = serverAgent.f ?? heading;
+
   return {
     ...serverAgent,
     h: heading,
+    f: facing,
     x,
     y,
   };

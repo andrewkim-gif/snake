@@ -265,7 +265,7 @@ func cmdSetBoost(state *AgentState, agent *domain.Agent, arena *Arena, data json
 		return fmt.Errorf("set_boost: invalid params: %w", err)
 	}
 
-	arena.HandleInput(agent.ID, agent.Heading, params.Enabled)
+	arena.HandleInput(agent.ID, agent.MoveHeading, params.Enabled)
 
 	state.ActiveCommand = "set_boost"
 	return nil
@@ -609,7 +609,7 @@ func BuildObserveGameResponse(agent *domain.Agent, arena *Arena) *domain.Observe
 			X:        other.Position.X,
 			Y:        other.Position.Y,
 			Mass:     other.Mass,
-			Heading:  other.Heading,
+			Heading:  other.MoveHeading,
 			Boosting: other.Boosting,
 			Name:     other.Name,
 			Level:    other.Level,
@@ -662,7 +662,7 @@ func BuildObserveGameResponse(agent *domain.Agent, arena *Arena) *domain.Observe
 		ID:       agent.ID,
 		X:        agent.Position.X,
 		Y:        agent.Position.Y,
-		Heading:  agent.Heading,
+		Heading:  agent.MoveHeading,
 		Speed:    agent.Speed,
 		Mass:     agent.Mass,
 		Alive:    agent.Alive,

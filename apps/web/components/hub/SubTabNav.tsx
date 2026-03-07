@@ -81,8 +81,8 @@ export function SubTabNav({ tabs, isActive, className }: SubTabNavProps) {
                 color: active ? SK.accent : SK.textSecondary,
                 padding: '10px 16px',
                 borderBottom: active
-                  ? `2px solid ${SK.accent}`
-                  : '2px solid transparent',
+                  ? `1px solid ${SK.accent}`
+                  : '1px solid transparent',
                 transition: 'color 150ms ease, border-color 150ms ease',
                 whiteSpace: 'nowrap',
               }}

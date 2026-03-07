@@ -25,6 +25,7 @@ import { useSocketContext } from '@/providers/SocketProvider';
 import type { GameMode } from '@/providers/SocketProvider';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import type { MainTabKey } from '@/components/hub/PopupTabNav';
+import { ChevronRight, Minus, Settings, Globe } from 'lucide-react';
 
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
@@ -340,147 +341,137 @@ export default function Home() {
         </div>
       )}
 
-      {/* 좌측 패널 — GAME SYSTEM 버튼 + Agent Setup */}
+      {/* 좌측 패널 — Agent Setup + GAME SYSTEM */}
       <div style={{
         position: 'absolute',
-        top: 72,
+        top: 64,
         left: 16,
         zIndex: 60,
-        maxWidth: '280px',
+        maxWidth: '300px',
         width: 'calc(100vw - 32px)',
         display: 'flex',
         flexDirection: 'column',
-        gap: '8px',
+        gap: '6px',
+        pointerEvents: 'none',
       }}>
-        {/* GAME SYSTEM 버튼 */}
-        <button
-          onClick={() => handleOpenPanel()}
-          style={{
-            pointerEvents: 'auto',
-            fontFamily: headingFont,
-            fontWeight: 700,
-            fontSize: '11px',
-            color: SK.textSecondary,
-            letterSpacing: '3px',
-            textTransform: 'uppercase',
-            padding: '10px 16px',
-            background: SK.glassBg,
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: `1px solid ${SK.glassBorder}`,
-            borderRadius: 0,
-            cursor: 'pointer',
-            transition: 'all 200ms ease',
-            width: '100%',
-            textAlign: 'left',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
-          }}
-        >
-          GAME SYSTEM
-        </button>
         {setupOpen ? (
           <div style={{
+            pointerEvents: 'auto',
             backgroundColor: SK.glassBg,
             backdropFilter: 'blur(16px)',
             WebkitBackdropFilter: 'blur(16px)',
             border: `1px solid ${SK.glassBorder}`,
             borderRadius: 0,
             borderTop: '1px solid #EF4444',
-            padding: '14px',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.5)',
+            overflow: 'hidden',
           }}>
-            {/* 헤더 */}
+            {/* 헤더 바 */}
             <div style={{
               display: 'flex',
-              justifyContent: 'space-between',
               alignItems: 'center',
-              marginBottom: '12px',
+              justifyContent: 'space-between',
+              padding: '10px 14px',
+              borderBottom: `1px solid ${SK.borderDark}`,
             }}>
-              <span style={{
-                fontFamily: bodyFont,
-                fontSize: '13px',
-                fontWeight: 700,
-                color: SK.textPrimary,
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-              }}>
-                {tLobby('agentSetup')}
-              </span>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <Settings size={12} color={SK.accent} strokeWidth={2.5} />
+                <span style={{
+                  fontFamily: bodyFont,
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  color: SK.textPrimary,
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                }}>
+                  {tLobby('agentSetup')}
+                </span>
+              </div>
               <button
                 onClick={() => setSetupOpen(false)}
                 style={{
                   background: 'none',
-                  border: `1px solid ${SK.border}`,
+                  border: 'none',
                   borderRadius: 0,
-                  color: SK.textSecondary,
+                  color: SK.textMuted,
                   cursor: 'pointer',
-                  padding: '2px 8px',
-                  fontFamily: bodyFont,
-                  fontSize: SKFont.xs,
-                  fontWeight: 700,
-                  transition: 'all 150ms ease',
+                  padding: '2px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  transition: 'color 150ms ease',
                 }}
               >
-                —
+                <Minus size={14} strokeWidth={2} />
               </button>
             </div>
 
-            {/* 이름 입력 */}
-            <McInput
-              value={playerName}
-              onChange={(e) => setPlayerName(e.target.value)}
-              placeholder={tLobby('enterCallsign')}
-              style={{ marginBottom: '8px' }}
-            />
+            {/* 콘텐츠 */}
+            <div style={{ padding: '12px 14px' }}>
+              {/* 이름 입력 */}
+              <McInput
+                value={playerName}
+                onChange={(e) => setPlayerName(e.target.value)}
+                placeholder={tLobby('enterCallsign')}
+                style={{ marginBottom: '10px' }}
+              />
 
-            {/* v14: 국적 선택 */}
-            <div style={{ marginBottom: '12px' }}>
+              {/* 국적 선택 */}
+              <div style={{ marginBottom: '10px' }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                  marginBottom: '4px',
+                }}>
+                  <Globe size={9} color={SK.textMuted} strokeWidth={2} />
+                  <span style={{
+                    fontFamily: bodyFont,
+                    fontSize: '9px',
+                    fontWeight: 700,
+                    color: SK.textMuted,
+                    letterSpacing: '1.5px',
+                    textTransform: 'uppercase' as const,
+                  }}>
+                    NATIONALITY
+                  </span>
+                </div>
+                <NationalitySelector
+                  value={nationality}
+                  onChange={(iso3) => {
+                    setNationality(iso3);
+                    saveNationality(iso3);
+                  }}
+                />
+              </div>
+
+              {/* 캐릭터 에디터 (Phase 7) */}
+              <CharacterCreator
+                skinId={skinId}
+                onSelect={setSkinId}
+                appearance={appearance}
+                onAppearanceChange={setAppearance}
+              />
+
+              {/* 안내 문구 */}
               <div style={{
+                marginTop: '12px',
+                padding: '8px 0 0',
+                textAlign: 'center',
                 fontFamily: bodyFont,
                 fontSize: '9px',
-                fontWeight: 700,
                 color: SK.textMuted,
                 letterSpacing: '1.5px',
-                textTransform: 'uppercase' as const,
-                marginBottom: '4px',
+                borderTop: `1px solid ${SK.borderDark}`,
               }}>
-                NATIONALITY
+                {tLobby('clickToDeploy')}
               </div>
-              <NationalitySelector
-                value={nationality}
-                onChange={(iso3) => {
-                  setNationality(iso3);
-                  saveNationality(iso3);
-                }}
-              />
-            </div>
-
-            {/* 캐릭터 에디터 (Phase 7) */}
-            <CharacterCreator
-              skinId={skinId}
-              onSelect={setSkinId}
-              appearance={appearance}
-              onAppearanceChange={setAppearance}
-            />
-
-            {/* 안내 문구 */}
-            <div style={{
-              marginTop: '14px',
-              padding: '8px 0 0',
-              textAlign: 'center',
-              fontFamily: bodyFont,
-              fontSize: '10px',
-              color: SK.textMuted,
-              letterSpacing: '1.5px',
-              borderTop: `1px solid ${SK.borderDark}`,
-            }}>
-              {tLobby('clickToDeploy')}
             </div>
           </div>
         ) : (
           <button
             onClick={() => setSetupOpen(true)}
             style={{
+              pointerEvents: 'auto',
               fontFamily: bodyFont,
               fontWeight: 700,
               fontSize: '10px',
@@ -496,11 +487,44 @@ export default function Home() {
               WebkitBackdropFilter: 'blur(16px)',
               cursor: 'pointer',
               transition: 'all 150ms ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
           >
+            <Settings size={10} color={SK.accent} strokeWidth={2.5} />
             {tLobby('agentSetup')}
           </button>
         )}
+
+        {/* GAME SYSTEM 버튼 — 패널 아래 */}
+        <button
+          onClick={() => handleOpenPanel()}
+          style={{
+            pointerEvents: 'auto',
+            fontFamily: bodyFont,
+            fontWeight: 700,
+            fontSize: '10px',
+            color: SK.textMuted,
+            letterSpacing: '2px',
+            textTransform: 'uppercase',
+            padding: '8px 14px',
+            background: SK.glassBg,
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: `1px solid ${SK.glassBorder}`,
+            borderRadius: 0,
+            cursor: 'pointer',
+            transition: 'all 150ms ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            width: '100%',
+          }}
+        >
+          <span>GAME SYSTEM</span>
+          <ChevronRight size={12} strokeWidth={2} />
+        </button>
       </div>
 
       {/* 뉴스 피드 — 하단 고정 */}

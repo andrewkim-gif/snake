@@ -115,16 +115,22 @@ export const darkMapStyle: Record<string, unknown> = {
   ],
 };
 
+// Natural Earth → country-data.ts ISO3 별칭 매핑
+const ISO3_ALIASES: Record<string, string> = {
+  KOS: 'XKX', // Kosovo: Natural Earth uses KOS, ISO standard is XKX
+};
+
 // 국가 속성에서 ISO3 코드 추출 (GeoJSON property name varies)
 // Natural Earth에서 France/Norway/Kosovo 등은 ISO_A3="-99"이므로 ADM0_A3로 fallback
 export function getCountryISO(properties: Record<string, unknown>): string {
   const iso = properties.ISO_A3 as string;
-  if (iso && iso !== '-99') return iso;
-  return (
-    (properties.ADM0_A3 as string) ||
-    (properties.iso_a3 as string) ||
-    ''
-  );
+  let code: string;
+  if (iso && iso !== '-99') {
+    code = iso;
+  } else {
+    code = (properties.ADM0_A3 as string) || (properties.iso_a3 as string) || '';
+  }
+  return ISO3_ALIASES[code] ?? code;
 }
 
 // 국가 이름 추출

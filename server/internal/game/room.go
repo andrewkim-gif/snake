@@ -553,6 +553,18 @@ func (r *Room) HandleInput(agentID string, angle float64, boost bool, dash bool)
 	r.arena.HandleInput(agentID, angle, boost, dash)
 }
 
+// HandleInputSplit forwards split move/aim input to the arena (v16).
+func (r *Room) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+	r.mu.RLock()
+	state := r.state
+	r.mu.RUnlock()
+
+	if state != domain.RoomStatePlaying {
+		return
+	}
+	r.arena.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash)
+}
+
 // HandleChooseUpgrade forwards upgrade choice to the arena.
 func (r *Room) HandleChooseUpgrade(agentID string, choiceIndex int) {
 	r.mu.RLock()
