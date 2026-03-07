@@ -19,6 +19,9 @@ type JoinedEvent struct {
 	HeightmapWidth    int     `json:"heightmapWidth,omitempty"`    // grid width in cells
 	HeightmapHeight   int     `json:"heightmapHeight,omitempty"`   // grid height in cells
 	HeightmapCellSize float64 `json:"heightmapCellSize,omitempty"` // world units per cell (50)
+	// v16 Phase 5: Biome map + obstacle grid (gzip-compressed uint8 arrays, base64-encoded)
+	BiomeData     string `json:"biomeData,omitempty"`     // base64-encoded gzip uint8 grid (biome indices 0-5)
+	ObstacleData  string `json:"obstacleData,omitempty"`  // base64-encoded gzip uint8 grid (obstacle types)
 }
 
 // StateAgent is the per-tick serialized agent data sent to clients.
@@ -46,6 +49,9 @@ type StateAgent struct {
 	AbilityTargetY float64 `json:"ty,omitempty"` // v12: ability target Y coordinate
 	AbilityLevel   int     `json:"abl,omitempty"` // v12: ability level (1-4)
 	Nationality    string  `json:"nat,omitempty"` // v14: nationality ISO3 code
+	// v16 Phase 5: Biome + water state
+	BiomeIndex     int     `json:"bi,omitempty"`  // current biome type (0-5)
+	InWater        bool    `json:"iw,omitempty"`  // true if agent is in water
 }
 
 // StateOrb is the per-tick serialized orb data sent to clients.

@@ -43,7 +43,8 @@ type Heightmap struct {
 // The grid covers the full arena bounding box: [-radius, radius] x [-radius, radius].
 // 3-layer octave: base terrain + hills + micro detail.
 // Center is smooth/low, edges are higher (natural boundary).
-func GenerateHeightmap(seed int64, radius float64) *Heightmap {
+// If biomeMap is non-nil, applies per-biome height modifiers.
+func GenerateHeightmap(seed int64, radius float64, biomeMap ...*BiomeMap) *Heightmap {
 	gridSize := int(math.Ceil(radius*2 / HeightmapCellSize))
 	if gridSize < 4 {
 		gridSize = 4
@@ -93,6 +94,12 @@ func GenerateHeightmap(seed int64, radius float64) *Heightmap {
 			centerDepression := (1.0 - edgeFactor) * 3.0
 
 			height = height + edgeElevation - centerDepression
+
+			// v16 Phase 5: Apply biome height modifier if biome map provided
+			if len(biomeMap) > 0 && biomeMap[0] != nil {
+				biome := biomeMap[0].GetBiome(wx, wy)
+				height = BiomeHeightModifier(biome, height)
+			}
 
 			// Clamp to reasonable range
 			if height < 0 {
@@ -179,6 +186,19 @@ func (h *Heightmap) compressData() []byte {
 		return nil
 	}
 
+	return gzBuf.Bytes()
+}
+
+// compressBytesGzip compresses a byte slice with gzip.
+func compressBytesGzip(data []byte) []byte {
+	var gzBuf bytes.Buffer
+	gzWriter := gzip.NewWriter(&gzBuf)
+	if _, err := gzWriter.Write(data); err != nil {
+		return nil
+	}
+	if err := gzWriter.Close(); err != nil {
+		return nil
+	}
 	return gzBuf.Bytes()
 }
 

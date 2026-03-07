@@ -78,6 +78,9 @@ export interface JoinedPayload {
   heightmapWidth?: number;    // grid width in cells
   heightmapHeight?: number;   // grid height in cells
   heightmapCellSize?: number; // world units per cell (50)
+  // v16 Phase 5: Biome + obstacle data
+  biomeData?: string;         // base64-encoded gzip uint8 grid (biome indices 0-5)
+  obstacleData?: string;      // base64-encoded gzip uint8 grid (obstacle types 0-7)
 }
 
 /** 압축된 뱀 네트워크 데이터 */

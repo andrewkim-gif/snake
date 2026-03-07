@@ -121,11 +121,12 @@ type UpdateAgentOptions struct {
 // UpdateAgent advances the agent state by one tick.
 // terrainMods applies terrain-specific multipliers (pass DefaultTerrainModifiers() for no effect).
 func UpdateAgent(a *domain.Agent, currentTick uint64, terrainMods ...TerrainModifiers) {
-	UpdateAgentWithHeightmap(a, currentTick, nil, terrainMods...)
+	UpdateAgentWithHeightmap(a, currentTick, nil, nil, nil, terrainMods...)
 }
 
 // UpdateAgentWithHeightmap advances the agent state by one tick with heightmap terrain physics.
-func UpdateAgentWithHeightmap(a *domain.Agent, currentTick uint64, hm *Heightmap, terrainMods ...TerrainModifiers) {
+// v16 Phase 5: Also handles biome speed modifiers and obstacle collision.
+func UpdateAgentWithHeightmap(a *domain.Agent, currentTick uint64, hm *Heightmap, bm *BiomeMap, og *ObstacleGrid, terrainMods ...TerrainModifiers) {
 	if !a.Alive {
 		return
 	}
@@ -152,20 +153,59 @@ func UpdateAgentWithHeightmap(a *domain.Agent, currentTick uint64, hm *Heightmap
 	if len(terrainMods) > 0 {
 		terrainSpeedMult = terrainMods[0].SpeedMult
 	}
+
+	// v16 Phase 5: Biome speed modifier
+	biomeSpeedMult := 1.0
+	if bm != nil {
+		biome := bm.GetBiome(a.Position.X, a.Position.Y)
+		a.BiomeIndex = uint8(biome)
+		biomeMods := GetBiomeModifiers(biome)
+		biomeSpeedMult = biomeMods.SpeedMult
+	}
+
 	var movePerTick float64
 	if a.Boosting {
-		movePerTick = BoostSpeedPerTick * terrainSpeedMult
+		movePerTick = BoostSpeedPerTick * terrainSpeedMult * biomeSpeedMult
 	} else {
-		movePerTick = BaseSpeedPerTick * speedMult * terrainSpeedMult
+		movePerTick = BaseSpeedPerTick * speedMult * terrainSpeedMult * biomeSpeedMult
 		// Cap at max speed (pre-terrain)
-		if movePerTick > MaxSpeedPerTick*terrainSpeedMult {
-			movePerTick = MaxSpeedPerTick * terrainSpeedMult
+		if movePerTick > MaxSpeedPerTick*terrainSpeedMult*biomeSpeedMult {
+			movePerTick = MaxSpeedPerTick * terrainSpeedMult * biomeSpeedMult
 		}
 	}
 
 	// 4. Move position (v16: use MoveHeading for movement direction)
 	newX := a.Position.X + math.Cos(a.MoveHeading)*movePerTick
 	newY := a.Position.Y + math.Sin(a.MoveHeading)*movePerTick
+
+	// v16 Phase 5: Obstacle collision (axis-separated sliding)
+	if og != nil {
+		obstAtNew := og.Query(newX, newY)
+		if IsBlocking(obstAtNew) {
+			// Try sliding along each axis independently
+			obstX := og.Query(newX, a.Position.Y)
+			obstY := og.Query(a.Position.X, newY)
+			if !IsBlocking(obstX) {
+				newY = a.Position.Y // slide along X axis
+			} else if !IsBlocking(obstY) {
+				newX = a.Position.X // slide along Y axis
+			} else {
+				// Both axes blocked — stay in place
+				newX = a.Position.X
+				newY = a.Position.Y
+			}
+		}
+
+		// Water check: slow movement through water
+		waterCheck := og.Query(newX, newY)
+		a.InWater = IsWater(waterCheck)
+		if a.InWater {
+			dx := newX - a.Position.X
+			dy := newY - a.Position.Y
+			newX = a.Position.X + dx*0.6
+			newY = a.Position.Y + dy*0.6
+		}
+	}
 
 	// v16 Phase 4: Heightmap terrain checks (slope speed, cliff restriction)
 	if hm != nil {

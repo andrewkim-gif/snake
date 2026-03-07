@@ -55,6 +55,9 @@ type Arena struct {
 
 	// v16 Phase 4: Heightmap terrain
 	heightmap *Heightmap
+	// v16 Phase 5: Biome + obstacles
+	biomeMap     *BiomeMap
+	obstacleGrid *ObstacleGrid
 }
 
 // NewArena creates a new Arena with all subsystems initialized.
@@ -62,7 +65,14 @@ func NewArena() *Arena {
 	sh := NewSpatialHash()
 	// v16 Phase 4: Generate heightmap with random seed
 	seed := rand.Int63()
-	hm := GenerateHeightmap(seed, ArenaRadius)
+	// v16 Phase 5: Generate biome map first, then heightmap with biome modifiers
+	gridSize := int(math.Ceil(ArenaRadius * 2 / HeightmapCellSize))
+	if gridSize < 4 {
+		gridSize = 4
+	}
+	bm := GenerateBiomeMap(seed, ArenaRadius, HeightmapCellSize, gridSize, gridSize)
+	hm := GenerateHeightmap(seed, ArenaRadius, bm)
+	og := GenerateObstacleGrid(seed, ArenaRadius, bm, hm)
 	return &Arena{
 		agents:          make(map[string]*domain.Agent),
 		orbManager:      NewOrbManager(ArenaRadius),
@@ -77,6 +87,8 @@ func NewArena() *Arena {
 		eventBuffer:     make([]ArenaEvent, 0, 64),
 		terrainMods:     DefaultTerrainModifiers(),
 		heightmap:       hm,
+		biomeMap:        bm,
+		obstacleGrid:    og,
 	}
 }
 
@@ -129,7 +141,7 @@ func (a *Arena) processTick() {
 		if !agent.Alive {
 			continue
 		}
-		UpdateAgentWithHeightmap(agent, a.tick, a.heightmap, a.terrainMods)
+		UpdateAgentWithHeightmap(agent, a.tick, a.heightmap, a.biomeMap, a.obstacleGrid, a.terrainMods)
 		// Update spatial hash with new position
 		a.spatialHash.Update(agent.ID, agent.Position.X, agent.Position.Y)
 	}
@@ -720,4 +732,14 @@ func (a *Arena) IsRunning() bool {
 // GetHeightmap returns the arena's heightmap (read-only, thread-safe — immutable after creation).
 func (a *Arena) GetHeightmap() *Heightmap {
 	return a.heightmap
+}
+
+// GetBiomeMap returns the arena's biome map (v16 Phase 5).
+func (a *Arena) GetBiomeMap() *BiomeMap {
+	return a.biomeMap
+}
+
+// GetObstacleGrid returns the arena's obstacle grid (v16 Phase 5).
+func (a *Arena) GetObstacleGrid() *ObstacleGrid {
+	return a.obstacleGrid
 }

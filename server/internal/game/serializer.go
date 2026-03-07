@@ -168,6 +168,13 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 	if a.Nationality != "" {
 		sa.Nationality = a.Nationality
 	}
+	// v16 Phase 5: biome + water state
+	if a.BiomeIndex > 0 {
+		sa.BiomeIndex = int(a.BiomeIndex)
+	}
+	if a.InWater {
+		sa.InWater = true
+	}
 	return sa
 }
 

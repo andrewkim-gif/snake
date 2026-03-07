@@ -844,6 +844,14 @@ func (r *Room) GetJoinedEvent(playerID string) domain.JoinedEvent {
 		evt.HeightmapCellSize = hm.CellSize
 	}
 
+	// v16 Phase 5: Include biome map + obstacle grid (gzip → base64)
+	if bm := r.arena.GetBiomeMap(); bm != nil && len(bm.Compressed) > 0 {
+		evt.BiomeData = base64.StdEncoding.EncodeToString(bm.Compressed)
+	}
+	if og := r.arena.GetObstacleGrid(); og != nil && len(og.Compressed) > 0 {
+		evt.ObstacleData = base64.StdEncoding.EncodeToString(og.Compressed)
+	}
+
 	return evt
 }
 

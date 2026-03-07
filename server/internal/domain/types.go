@@ -516,6 +516,9 @@ type Agent struct {
 	// v16 Phase 4: Vertical position (heightmap terrain)
 	ZPos            float64      `json:"zPos"`            // height above terrain (0 = on ground)
 	ZVelocity       float64      `json:"zVelocity"`       // vertical velocity (jump/fall)
+	// v16 Phase 5: Biome + water state
+	InWater         bool         `json:"inWater,omitempty"`     // true if agent is in water
+	BiomeIndex      uint8        `json:"biomeIndex,omitempty"`  // current biome type (0-5)
 
 	IsBot           bool         `json:"isBot"`
 	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent

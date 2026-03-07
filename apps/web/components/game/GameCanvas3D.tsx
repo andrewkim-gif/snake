@@ -34,6 +34,7 @@ import type { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
 import { TerrainDeco } from '@/components/3d/TerrainDeco';
 import { HeightmapTerrain } from '@/components/3d/HeightmapTerrain';
+import { ObstacleInstances } from '@/components/3d/ObstacleInstances';
 import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
 import { MapStructures } from '@/components/3d/MapStructures';
 import { OrbInstances } from '@/components/3d/OrbInstances';
@@ -415,10 +416,18 @@ export function GameCanvas3D({
 
         {/* 6. Terrain — HeightmapTerrain(서버 동기화) 우선, 없으면 ZoneTerrain 폴백 */}
         {uiState.heightmapData ? (
-          <HeightmapTerrain data={uiState.heightmapData} />
+          <HeightmapTerrain data={uiState.heightmapData} biomeData={uiState.biomeData} />
         ) : (
           <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
         )}
+
+        {/* 6b. ObstacleInstances — 바위/나무/벽/물 InstancedMesh */}
+        <ObstacleInstances
+          obstacleData={uiState.obstacleData}
+          heightmapData={uiState.heightmapData}
+          cellSize={uiState.heightmapData?.cellSize ?? 50}
+          arenaRadius={ARENA_CONFIG.radius}
+        />
 
         {/* 7. TerrainDeco — 환경 데코레이션 (테마별) */}
         <TerrainDeco arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />

@@ -1,19 +1,23 @@
 'use client';
 
 /**
- * HeightmapTerrain — v16 Phase 4 서버 동기화 지형 렌더링
+ * HeightmapTerrain — v16 Phase 4+5 서버 동기화 지형 렌더링
  *
- * joined 이벤트에서 받은 heightmap 데이터를 디코딩(base64 → gunzip → Float32Array)한 후
- * Three.js PlaneGeometry + vertex displacement로 실제 3D 지형을 렌더링.
+ * joined 이벤트에서 받은 heightmap + biome 데이터를 디코딩하여
+ * Three.js PlaneGeometry + vertex displacement + biome-aware vertex colors로 렌더링.
  *
- * 높이에 따른 vertex color:
- * - 낮은 지역 (0~5) = 짙은 녹색 (평지/풀밭)
- * - 중간 지역 (5~15) = 밝은 녹색 → 갈색
- * - 높은 지역 (15~30) = 갈색 → 회색 (바위/절벽)
+ * Phase 5: 바이옴별 색상 매핑
+ * - Plains (0) = 밝은 녹색 (풀밭)
+ * - Forest (1) = 짙은 녹색 (숲)
+ * - Desert (2) = 모래 황갈색
+ * - Snow (3) = 밝은 회백색
+ * - Swamp (4) = 어두운 올리브
+ * - Volcanic (5) = 어두운 적갈색
  */
 
 import { useMemo } from 'react';
 import * as THREE from 'three';
+import type { BiomeGridData } from '@/lib/biome-decoder';
 
 export interface HeightmapTerrainData {
   /** Float32Array of height values (decoded from server) */
@@ -28,14 +32,31 @@ export interface HeightmapTerrainData {
 
 interface HeightmapTerrainProps {
   data: HeightmapTerrainData | null;
+  biomeData?: BiomeGridData | null;
 }
 
-// 높이별 색상 팔레트
-const COLOR_LOW = new THREE.Color(0x2d5a1e);    // 짙은 녹색 (평지)
-const COLOR_MID_LOW = new THREE.Color(0x4a8a2f); // 밝은 녹색
-const COLOR_MID = new THREE.Color(0x8a7a40);      // 갈색빛
-const COLOR_HIGH = new THREE.Color(0x6b5b3a);     // 진한 갈색
-const COLOR_PEAK = new THREE.Color(0x7a7a7a);     // 회색 (바위)
+// 바이옴별 base/peak 색상 팔레트
+const BIOME_COLORS: Array<{ base: THREE.Color; peak: THREE.Color }> = [
+  // 0: Plains — 밝은 녹색 → 연갈색
+  { base: new THREE.Color(0x5a9e3a), peak: new THREE.Color(0x8a7a50) },
+  // 1: Forest — 짙은 녹색 → 암녹색
+  { base: new THREE.Color(0x2d6a1e), peak: new THREE.Color(0x3a5a2a) },
+  // 2: Desert — 모래색 → 밝은 베이지
+  { base: new THREE.Color(0xc4a55a), peak: new THREE.Color(0xd4c490) },
+  // 3: Snow — 밝은 회백색 → 순백
+  { base: new THREE.Color(0xb0c0cc), peak: new THREE.Color(0xe8eef0) },
+  // 4: Swamp — 어두운 올리브 → 갈녹색
+  { base: new THREE.Color(0x4a5a2a), peak: new THREE.Color(0x5a6a3a) },
+  // 5: Volcanic — 어두운 적갈색 → 회흑색
+  { base: new THREE.Color(0x5a2a1e), peak: new THREE.Color(0x4a4a4a) },
+];
+
+// 높이 기반 fallback 색상
+const COLOR_LOW = new THREE.Color(0x2d5a1e);
+const COLOR_MID_LOW = new THREE.Color(0x4a8a2f);
+const COLOR_MID = new THREE.Color(0x8a7a40);
+const COLOR_HIGH = new THREE.Color(0x6b5b3a);
+const COLOR_PEAK = new THREE.Color(0x7a7a7a);
 
 const MAX_HEIGHT = 30;
 
@@ -44,23 +65,26 @@ function getHeightColor(h: number): THREE.Color {
   const color = new THREE.Color();
 
   if (t < 0.17) {
-    // 0~5: 짙은 녹색
     color.copy(COLOR_LOW).lerp(COLOR_MID_LOW, t / 0.17);
   } else if (t < 0.5) {
-    // 5~15: 밝은 녹색 → 갈색
     color.copy(COLOR_MID_LOW).lerp(COLOR_MID, (t - 0.17) / 0.33);
   } else if (t < 0.83) {
-    // 15~25: 갈색 → 진한 갈색
     color.copy(COLOR_MID).lerp(COLOR_HIGH, (t - 0.5) / 0.33);
   } else {
-    // 25~30: 진한 갈색 → 회색
     color.copy(COLOR_HIGH).lerp(COLOR_PEAK, (t - 0.83) / 0.17);
   }
 
   return color;
 }
 
-export function HeightmapTerrain({ data }: HeightmapTerrainProps) {
+function getBiomeColor(biomeIndex: number, heightT: number): THREE.Color {
+  const palette = BIOME_COLORS[biomeIndex] ?? BIOME_COLORS[0];
+  const color = new THREE.Color();
+  color.copy(palette.base).lerp(palette.peak, heightT);
+  return color;
+}
+
+export function HeightmapTerrain({ data, biomeData }: HeightmapTerrainProps) {
   const geometry = useMemo(() => {
     if (!data) return null;
 
@@ -68,33 +92,37 @@ export function HeightmapTerrain({ data }: HeightmapTerrainProps) {
     const worldWidth = width * cellSize;
     const worldHeight = height * cellSize;
 
-    // PlaneGeometry: segments = grid cells
-    // Three.js PlaneGeometry는 XY 평면 생성 → rotation으로 XZ 평면(바닥)으로 변환
     const geo = new THREE.PlaneGeometry(
       worldWidth, worldHeight,
       width - 1, height - 1,
     );
 
-    // PlaneGeometry를 바닥(XZ)으로 회전 (-90도 X축)
+    // PlaneGeometry를 바닥(XZ)으로 회전
     geo.rotateX(-Math.PI / 2);
 
     const positions = geo.attributes.position;
     const colors = new Float32Array(positions.count * 3);
-    const color = new THREE.Color();
+    const biomeGrid = biomeData?.grid;
 
     for (let i = 0; i < positions.count; i++) {
-      // PlaneGeometry vertex 순서: row-major (왼쪽→오른쪽, 위→아래)
-      // 회전 후: X = 게임 X, Y = 높이, Z = 게임 Y
       const gx = i % width;
       const gy = Math.floor(i / width);
-
       const heightValue = heightData[gy * width + gx] || 0;
 
-      // Y축(높이)에 heightmap 값 적용
+      // Y축에 heightmap 값 적용
       positions.setY(i, heightValue);
 
-      // 높이 기반 vertex color
-      const c = getHeightColor(heightValue);
+      // 바이옴 기반 or 높이 기반 vertex color
+      const heightT = Math.min(heightValue / MAX_HEIGHT, 1);
+      let c: THREE.Color;
+
+      if (biomeGrid && biomeGrid.length > 0) {
+        const biomeIdx = biomeGrid[gy * width + gx] ?? 0;
+        c = getBiomeColor(biomeIdx, heightT);
+      } else {
+        c = getHeightColor(heightValue);
+      }
+
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -102,15 +130,12 @@ export function HeightmapTerrain({ data }: HeightmapTerrainProps) {
 
     positions.needsUpdate = true;
     geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.computeVertexNormals(); // 조명 반응을 위한 법선 재계산
+    geo.computeVertexNormals();
 
     return geo;
-  }, [data]);
+  }, [data, biomeData]);
 
   if (!data || !geometry) return null;
-
-  const worldWidth = data.width * data.cellSize;
-  const worldHeight = data.height * data.cellSize;
 
   return (
     <mesh

@@ -31,6 +31,7 @@ import type { ServerDominationData } from '@/components/3d/GlobeDominationLayer'
 import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
 import type { CountryClientState } from '@/lib/globe-data';
 import { decodeHeightmap } from '@/lib/heightmap-decoder';
+import { decodeBiomeGrid, decodeObstacleGrid } from '@/lib/biome-decoder';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
 
@@ -168,6 +169,9 @@ export interface UiState {
   lastError: { code: string; message: string } | null;
   // v16 Phase 4: Heightmap terrain data (decoded from joined event)
   heightmapData: import('@/components/3d/HeightmapTerrain').HeightmapTerrainData | null;
+  // v16 Phase 5: Biome + obstacle grid data
+  biomeData: import('@/lib/biome-decoder').BiomeGridData | null;
+  obstacleData: import('@/lib/biome-decoder').ObstacleGridData | null;
 }
 
 export function useSocket() {
@@ -209,6 +213,8 @@ export function useSocket() {
     tradeRoutes: [],
     lastError: null,
     heightmapData: null,
+    biomeData: null,
+    obstacleData: null,
   });
 
   useEffect(() => {
@@ -254,6 +260,18 @@ export function useSocket() {
         );
       }
 
+      // v16 Phase 5: Decode biome + obstacle grids (same dimensions as heightmap)
+      let biomeData: import('@/lib/biome-decoder').BiomeGridData | null = null;
+      let obstacleData: import('@/lib/biome-decoder').ObstacleGridData | null = null;
+      const gridW = data.heightmapWidth ?? 0;
+      const gridH = data.heightmapHeight ?? 0;
+      if (data.biomeData && gridW > 0 && gridH > 0) {
+        biomeData = decodeBiomeGrid(data.biomeData, gridW, gridH);
+      }
+      if (data.obstacleData && gridW > 0 && gridH > 0) {
+        obstacleData = decodeObstacleGrid(data.obstacleData, gridW, gridH);
+      }
+
       setUiState(prev => ({
         ...prev, alive: true, deathInfo: null, roundEnd: null,
         currentRoomId: data.roomId, roomState: data.roomState,
@@ -268,6 +286,9 @@ export function useSocket() {
         },
         // v16 Phase 4: Decoded heightmap
         heightmapData,
+        // v16 Phase 5: Decoded biome + obstacle grids
+        biomeData,
+        obstacleData,
       }));
     });
 
