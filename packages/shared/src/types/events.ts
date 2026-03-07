@@ -114,12 +114,19 @@ export interface MapObjectNetworkData {
   active: boolean;
 }
 
+/** v16 Phase 8: 날씨 데이터 */
+export interface WeatherNetworkData {
+  wt: string;    // weather type: clear/rain/snow/sandstorm/fog
+  wi?: number;   // 0.0~1.0 transition intensity
+}
+
 export interface StatePayload {
   t: number;                 // server tick
   s: AgentNetworkData[];     // visible agents (v10, Agent 단일 좌표)
   o: OrbNetworkData[];       // visible orbs
   l?: LeaderboardEntry[];    // leaderboard (매 5번째 틱)
   mo?: MapObjectNetworkData[]; // v10 map objects (shrines, springs, altars, gates)
+  w?: WeatherNetworkData;    // v16 Phase 8: current weather state
 }
 
 export interface DeathPayload {
@@ -256,6 +263,8 @@ export interface AgentNetworkData {
   ty?: number;            // v12: ability target Y coordinate
   abl?: number;           // v12: ability level (1-4)
   nat?: string;           // v14: nationality ISO3 code
+  bi?: number;            // v16 Phase 5: biome index (0-5)
+  iw?: boolean;           // v16 Phase 5: true if agent is in water
 }
 
 // ─── v10 Upgrade Events ───

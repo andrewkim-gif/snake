@@ -27,6 +27,7 @@ import { useInputManager } from '@/hooks/useInputManager';
 import { Scene } from '@/components/3d/Scene';
 import { SkyBox } from '@/components/3d/SkyBox';
 import { TPSCamera } from '@/components/3d/TPSCamera';
+import type { KillcamState } from '@/components/3d/TPSCamera';
 import { GameLoop } from '@/components/3d/GameLoop';
 import { AgentInstances } from '@/components/3d/AgentInstances';
 import { EquipmentInstances } from '@/components/3d/EquipmentInstances';
@@ -57,6 +58,7 @@ import { SynergyPopup } from './SynergyPopup';
 import { CoachBubble } from './CoachBubble';
 import { AnalystPanel } from './AnalystPanel';
 import { GameMinimap } from './GameMinimap';
+import { Minimap } from './Minimap';
 import { MinimapHUD } from './MinimapHUD';
 import { FactionScoreboard } from './FactionScoreboard';
 import { KillFeedHUD } from './KillFeedHUD';
@@ -68,6 +70,8 @@ import type { AmbienceTheme } from '@/hooks/useAudio';
 import { useSoundEngine } from '@/hooks/useSoundEngine';
 import { PostProcessingEffects, CSSVignetteOverlay, CSSChromaticOverlay } from '@/components/3d/PostProcessingEffects';
 import type { FXQualityLevel } from '@/components/3d/PostProcessingEffects';
+import { WeatherEffects, LightningFlashOverlay, WeatherHUD } from '@/components/3d/WeatherEffects';
+import { MobileControls } from './MobileControls';
 
 // v14: Epoch HUD + overlays (HTML 오버레이)
 import { EpochHUD, WarCountdownOverlay, WarVignetteOverlay, RespawnOverlay } from './EpochHUD';
@@ -124,6 +128,17 @@ export function GameCanvas3D({
   const cameraRef = useRef<Camera | null>(null);
   const playerPosRef = useRef({ x: 0, z: 0 });
   const inputManager = useInputManager(containerRef, cameraRef, playerPosRef, !menuOpen);
+
+  // v16 Phase 8: Killcam state
+  const killcamRef = useRef<KillcamState>({
+    active: false,
+    killerId: null,
+    killerX: 0,
+    killerY: 0,
+    startTime: 0,
+    onComplete: null,
+  });
+  const [killcamActive, setKillcamActive] = useState(false);
 
   // v16 Phase 7: SoundEngine + PostProcessing
   const soundEngine = useSoundEngine();
@@ -229,6 +244,29 @@ export function GameCanvas3D({
       playSFX('death');
     }
   }, [uiState.isSpectating, uiState.deathInfo, playSFX]);
+
+  // v16 Phase 8: 킬캠 트리거 (사망 + 킬러 존재 시)
+  useEffect(() => {
+    if (!uiState.deathInfo || !uiState.deathInfo.killer) return;
+    // 킬러 에이전트 현재 위치 찾기
+    const state = dataRef.current.latestState;
+    if (!state) return;
+    const killerAgent = state.s.find(a => a.i === uiState.deathInfo!.killer);
+    if (!killerAgent) return;
+
+    // 킬캠 시작
+    killcamRef.current = {
+      active: true,
+      killerId: uiState.deathInfo.killer!,
+      killerX: killerAgent.x,
+      killerY: killerAgent.y,
+      startTime: performance.now(),
+      onComplete: () => {
+        setKillcamActive(false);
+      },
+    };
+    setKillcamActive(true);
+  }, [uiState.deathInfo, dataRef]);
 
   // v16 Phase 7: SoundEngine 기반 이벤트 연동
 
@@ -425,7 +463,8 @@ export function GameCanvas3D({
   // v12 S20: 관전 모드 표시 (사망 + 배틀 진행 중 + 배틀 결과 미표시)
   const showSpectator = uiState.isSpectating && !showBattleResult && !showRoundResult && uiState.roomState === 'playing';
   // 기존 사망 오버레이: 관전 모드 시 비활성 (SpectatorMode가 대체)
-  const showDeath = uiState.deathInfo && !showRoundResult && !showCooldown && !showSpectator && !showBattleResult && uiState.roomState !== 'ending';
+  // v16 Phase 8: 킬캠 진행 중에는 사망 오버레이 숨김
+  const showDeath = uiState.deathInfo && !showRoundResult && !showCooldown && !showSpectator && !showBattleResult && uiState.roomState !== 'ending' && !killcamActive;
   const showLevelUp = uiState.levelUp !== null && uiState.alive && !showDeath && !showRoundResult && !showBattleResult;
 
   return (
@@ -462,6 +501,7 @@ export function GameCanvas3D({
           inputManager={inputManager}
           cameraRef={cameraRef}
           playerPosRef={playerPosRef}
+          killcamRef={killcamRef}
         />
 
         {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별) */}
@@ -556,6 +596,9 @@ export function GameCanvas3D({
           chromaticIntensity={chromaticIntensity}
           vignetteIntensity={vignetteIntensity}
         />
+
+        {/* 19. WeatherEffects — v16 Phase 8 (비/눈/모래 파티클 + fog) */}
+        <WeatherEffects weather={uiState.weather} />
       </Canvas>
 
       {/* ─── v16 Phase 7: CSS Fallback Overlays (모바일/low 설정) ─── */}
@@ -565,6 +608,15 @@ export function GameCanvas3D({
           <CSSChromaticOverlay intensity={chromaticIntensity} />
         </>
       )}
+
+      {/* v16 Phase 8: 모바일 듀얼 조이스틱 */}
+      <MobileControls inputManager={inputManager} enabled={!menuOpen && uiState.alive} />
+
+      {/* v16 Phase 8: Lightning flash overlay */}
+      <LightningFlashOverlay weather={uiState.weather} />
+
+      {/* v16 Phase 8: Weather HUD (좌상단) */}
+      <WeatherHUD weather={uiState.weather} />
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
 
@@ -725,12 +777,23 @@ export function GameCanvas3D({
         })()}
       />
 
-      {/* ─── 미니맵 (우하단) ─── */}
-      <GameMinimap
-        dataRef={dataRef}
-        arenaRadius={ARENA_CONFIG.radius}
-        shrinkData={uiState.arenaShrink}
-      />
+      {/* ─── 미니맵 (우하단) — v16 Phase 8: heightmap 있으면 Minimap, 없으면 GameMinimap ─── */}
+      {uiState.heightmapData ? (
+        <Minimap
+          dataRef={dataRef}
+          arenaRadius={ARENA_CONFIG.radius}
+          shrinkData={uiState.arenaShrink}
+          heightmapData={uiState.heightmapData}
+          biomeData={uiState.biomeData}
+          obstacleData={uiState.obstacleData}
+        />
+      ) : (
+        <GameMinimap
+          dataRef={dataRef}
+          arenaRadius={ARENA_CONFIG.radius}
+          shrinkData={uiState.arenaShrink}
+        />
+      )}
 
       {/* v14: ScoreboardOverlay — Tab키 스코어보드 + 에포크/국가 순위 */}
       <ScoreboardOverlay

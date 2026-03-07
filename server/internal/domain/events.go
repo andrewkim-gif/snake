@@ -64,12 +64,19 @@ type StateOrb struct {
 	Type  OrbType `json:"t"`
 }
 
+// WeatherData is the weather state included in state updates.
+type WeatherData struct {
+	Type      string  `json:"wt"`           // weather type: clear/rain/snow/sandstorm/fog
+	Intensity float64 `json:"wi,omitempty"` // 0.0~1.0 transition intensity
+}
+
 // StateUpdate is the main 20Hz game state update.
 type StateUpdate struct {
 	Tick        uint64             `json:"t"`
 	Agents      []StateAgent       `json:"s"`
 	Orbs        []StateOrb         `json:"o"`
 	Leaderboard []LeaderboardEntry `json:"l,omitempty"`
+	Weather     *WeatherData       `json:"w,omitempty"` // v16 Phase 8: current weather
 }
 
 // DeathEvent is sent to the player who died.

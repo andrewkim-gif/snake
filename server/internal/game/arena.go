@@ -58,6 +58,8 @@ type Arena struct {
 	// v16 Phase 5: Biome + obstacles
 	biomeMap     *BiomeMap
 	obstacleGrid *ObstacleGrid
+	// v16 Phase 8: Weather system
+	weather *WeatherSystem
 }
 
 // NewArena creates a new Arena with all subsystems initialized.
@@ -89,6 +91,7 @@ func NewArena() *Arena {
 		heightmap:       hm,
 		biomeMap:        bm,
 		obstacleGrid:    og,
+		weather:         NewWeatherSystem(seed),
 	}
 }
 
@@ -134,14 +137,29 @@ func (a *Arena) processTick() {
 	a.tick++
 	a.eventBuffer = a.eventBuffer[:0]
 
+	// 0. Update weather system (v16 Phase 8)
+	if a.weather != nil {
+		dominantBiome := "forest"
+		if a.biomeMap != nil {
+			dominantBiome = a.biomeMap.DominantBiomeName()
+		}
+		a.weather.Update(dominantBiome)
+	}
+
 	// 1. Apply inputs (already applied via HandleInput)
 
-	// 2. Move agents (with terrain speed modifier + heightmap)
+	// 2. Move agents (with terrain speed modifier + heightmap + weather)
+	// v16 Phase 8: Apply weather speed modifier to terrain mods
+	effectiveMods := a.terrainMods
+	if a.weather != nil {
+		ws := a.weather.GetState()
+		effectiveMods.SpeedMult *= ws.SpeedMult
+	}
 	for _, agent := range a.agents {
 		if !agent.Alive {
 			continue
 		}
-		UpdateAgentWithHeightmap(agent, a.tick, a.heightmap, a.biomeMap, a.obstacleGrid, a.terrainMods)
+		UpdateAgentWithHeightmap(agent, a.tick, a.heightmap, a.biomeMap, a.obstacleGrid, effectiveMods)
 		// Update spatial hash with new position
 		a.spatialHash.Update(agent.ID, agent.Position.X, agent.Position.Y)
 	}
@@ -455,7 +473,7 @@ func (a *Arena) HandleInput(agentID string, angle float64, boost bool, dash ...b
 }
 
 // HandleInputSplit processes a player input with separate move/aim angles (v16).
-func (a *Arena) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+func (a *Arena) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool, jump bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -463,7 +481,7 @@ func (a *Arena) HandleInputSplit(agentID string, moveAngle float64, aimAngle flo
 	if !ok || !agent.Alive {
 		return
 	}
-	ApplyInputSplit(agent, moveAngle, aimAngle, boost)
+	ApplyInputSplit(agent, moveAngle, aimAngle, boost, jump)
 
 	if dash {
 		PerformDash(agent, a.tick)
@@ -575,6 +593,7 @@ type BroadcastSnapshot struct {
 	Leaderboard []domain.LeaderboardEntry
 	Tick        uint64
 	Radius      float64
+	Weather     WeatherState // v16 Phase 8
 }
 
 // GetBroadcastSnapshot atomically captures all state needed for broadcasting
@@ -597,12 +616,21 @@ func (a *Arena) GetBroadcastSnapshot() BroadcastSnapshot {
 	lbCopy := make([]domain.LeaderboardEntry, len(lbEntries))
 	copy(lbCopy, lbEntries)
 
+	// v16 Phase 8: Weather state
+	var weatherState WeatherState
+	if a.weather != nil {
+		weatherState = a.weather.GetState()
+	} else {
+		weatherState = WeatherState{Type: WeatherClear, Intensity: 0, SpeedMult: 1.0, VisionMult: 1.0}
+	}
+
 	return BroadcastSnapshot{
 		Agents:      agentsCopy,
 		Orbs:        orbsCopy,
 		Leaderboard: lbCopy,
 		Tick:        a.tick,
 		Radius:      a.arenaShrink.GetCurrentRadius(),
+		Weather:     weatherState,
 	}
 }
 
@@ -630,6 +658,16 @@ func (a *Arena) GetShrinkInfo() domain.ArenaShrinkEvent {
 		MinRadius:     ArenaMinRadius,
 		ShrinkRate:    a.arenaShrink.GetShrinkRate(),
 	}
+}
+
+// GetWeatherState returns the current weather state (v16 Phase 8).
+func (a *Arena) GetWeatherState() WeatherState {
+	a.mu.RLock()
+	defer a.mu.RUnlock()
+	if a.weather != nil {
+		return a.weather.GetState()
+	}
+	return WeatherState{Type: WeatherClear, Intensity: 0, SpeedMult: 1.0, VisionMult: 1.0}
 }
 
 // AliveCount returns the number of alive agents.
@@ -698,6 +736,11 @@ func (a *Arena) Reset() {
 
 	// Spawn initial orbs
 	a.orbManager.SpawnNaturalOrbs(a.tick)
+
+	// v16 Phase 8: Reset weather system with new random seed
+	if a.weather != nil {
+		a.weather = NewWeatherSystem(rand.Int63())
+	}
 }
 
 // SetTerrainModifiers sets the terrain modifiers for this arena and propagates

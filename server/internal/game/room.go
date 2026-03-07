@@ -555,7 +555,7 @@ func (r *Room) HandleInput(agentID string, angle float64, boost bool, dash bool)
 }
 
 // HandleInputSplit forwards split move/aim input to the arena (v16).
-func (r *Room) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+func (r *Room) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool, jump bool) {
 	r.mu.RLock()
 	state := r.state
 	r.mu.RUnlock()
@@ -563,7 +563,7 @@ func (r *Room) HandleInputSplit(agentID string, moveAngle float64, aimAngle floa
 	if state != domain.RoomStatePlaying {
 		return
 	}
-	r.arena.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash)
+	r.arena.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash, jump)
 }
 
 // HandleChooseUpgrade forwards upgrade choice to the arena.
@@ -677,6 +677,15 @@ func (r *Room) broadcastState(tick uint64) {
 	// Atomically snapshot all arena state under a single lock
 	snap := r.arena.GetBroadcastSnapshot()
 
+	// v16 Phase 8: Prepare weather data (shared across all players)
+	var weatherData *domain.WeatherData
+	if snap.Weather.Type != "" && snap.Weather.Type != WeatherClear {
+		weatherData = &domain.WeatherData{
+			Type:      string(snap.Weather.Type),
+			Intensity: snap.Weather.Intensity,
+		}
+	}
+
 	// For each human player, send viewport-culled state
 	for pid := range r.players {
 		viewer, ok := snap.Agents[pid]
@@ -684,6 +693,8 @@ func (r *Room) broadcastState(tick uint64) {
 			continue
 		}
 		stateUpdate := r.serializer.SerializeState(viewer, snap.Agents, snap.Orbs, snap.Leaderboard, tick)
+		// v16 Phase 8: Attach weather to state update
+		stateUpdate.Weather = weatherData
 		r.emitEvents([]RoomEvent{{
 			RoomID:   r.ID,
 			Type:     RoomEvtState,

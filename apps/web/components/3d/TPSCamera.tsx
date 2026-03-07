@@ -9,6 +9,7 @@
  * 지형 클리핑 방지: 카메라 Y를 최소 지면+10 이상으로
  *
  * v16 Phase 7: 카메라 셰이크 통합 (camera-shake.ts)
+ * v16 Phase 8: 킬캠 모드 — 사망 → 킬러 줌인 0.5s → 공전 2s → DeathOverlay
  *
  * CRITICAL: useFrame priority 0 (기본값) 사용!
  * JSX에서 GameLoop 다음에 마운트하여 실행 순서 보장.
@@ -42,6 +43,28 @@ const TRACK_SMOOTH = 10;     // 높을수록 빠름
 // 최소 지면 높이 오프셋
 const MIN_HEIGHT_OFFSET = 10;
 
+// 킬캠 타이밍 (초)
+const KILLCAM_ZOOM_DURATION = 0.5;  // 킬러로 줌인
+const KILLCAM_ORBIT_DURATION = 2.0; // 공전
+const KILLCAM_ORBIT_DISTANCE = 15;  // 공전 거리
+const KILLCAM_ORBIT_POLAR = 0.6;    // 공전 고도각
+const KILLCAM_ORBIT_SPEED = 1.5;    // 공전 속도 (rad/s)
+
+/** 킬캠 상태 */
+export interface KillcamState {
+  /** 킬캠 활성 여부 */
+  active: boolean;
+  /** 킬러 에이전트 ID */
+  killerId: string | null;
+  /** 킬러 월드 좌표 (서버 좌표계: x, y) */
+  killerX: number;
+  killerY: number;
+  /** 킬캠 시작 시간 (performance.now()) */
+  startTime: number;
+  /** 킬캠 종료 콜백 */
+  onComplete: (() => void) | null;
+}
+
 interface TPSCameraProps {
   /** 보간된 Agent 배열 ref */
   agentsRef: React.MutableRefObject<AgentNetworkData[]>;
@@ -53,11 +76,14 @@ interface TPSCameraProps {
   cameraRef: React.MutableRefObject<Camera | null>;
   /** 플레이어 위치 ref (InputManager의 aimAngle 계산용) */
   playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
+  /** v16 Phase 8: 킬캠 상태 */
+  killcamRef?: React.MutableRefObject<KillcamState>;
 }
 
 // 임시 벡터 (GC 방지)
 const _offset = new Vector3();
 const _camPos = new Vector3();
+const _killcamTarget = new Vector3();
 
 export function TPSCamera({
   agentsRef,
@@ -65,6 +91,7 @@ export function TPSCamera({
   inputManager,
   cameraRef,
   playerPosRef,
+  killcamRef,
 }: TPSCameraProps) {
   const { camera } = useThree();
 
@@ -75,6 +102,10 @@ export function TPSCamera({
   const target = useRef(new Vector3(0, 0, 0));
   const initialized = useRef(false);
 
+  // 킬캠용 보존 상태 (킬캠 전 카메라 위치)
+  const killcamSavedPos = useRef(new Vector3());
+  const killcamSavedTarget = useRef(new Vector3());
+
   // 카메라 ref를 외부에 노출 (raycasting용)
   useEffect(() => {
     cameraRef.current = camera;
@@ -84,6 +115,82 @@ export function TPSCamera({
   // priority 0 — auto-render 유지!
   // GameLoop 다음에 마운트 → GameLoop이 먼저 실행
   useFrame((_, delta) => {
+    // ─── 킬캠 모드 체크 ───
+    if (killcamRef?.current?.active) {
+      const kc = killcamRef.current;
+      const elapsed = (performance.now() - kc.startTime) / 1000; // 초
+      const totalDuration = KILLCAM_ZOOM_DURATION + KILLCAM_ORBIT_DURATION;
+
+      // 킬러 월드 위치 (실시간 추적: 킬러가 아직 보이면 업데이트)
+      let killerWorldX = kc.killerX;
+      let killerWorldZ = kc.killerY;
+      if (kc.killerId) {
+        const killerAgent = agentsRef.current.find(a => a.i === kc.killerId);
+        if (killerAgent) {
+          killerWorldX = killerAgent.x;
+          killerWorldZ = killerAgent.y;
+          kc.killerX = killerWorldX;
+          kc.killerY = killerWorldZ;
+        }
+      }
+      _killcamTarget.set(killerWorldX, 0, killerWorldZ);
+
+      if (elapsed >= totalDuration) {
+        // 킬캠 종료
+        kc.active = false;
+        if (kc.onComplete) kc.onComplete();
+        return;
+      }
+
+      if (elapsed < KILLCAM_ZOOM_DURATION) {
+        // Phase 1: 줌인 (슬로모 느낌 — 카메라가 킬러에게 부드럽게 이동)
+        const t = elapsed / KILLCAM_ZOOM_DURATION;
+        const easeT = t * t * (3 - 2 * t); // smoothstep
+
+        // 현재 카메라 → 킬러 위치로 보간
+        const targetDistance = KILLCAM_ORBIT_DISTANCE;
+        const az = azimuth.current;
+        const pol = KILLCAM_ORBIT_POLAR;
+
+        _offset.set(
+          targetDistance * Math.sin(pol) * Math.sin(az),
+          targetDistance * Math.cos(pol),
+          targetDistance * Math.sin(pol) * Math.cos(az),
+        );
+
+        const finalCamX = killerWorldX + _offset.x;
+        const finalCamY = _offset.y;
+        const finalCamZ = killerWorldZ + _offset.z;
+
+        camera.position.set(
+          camera.position.x + (finalCamX - camera.position.x) * easeT,
+          camera.position.y + (finalCamY - camera.position.y) * easeT,
+          camera.position.z + (finalCamZ - camera.position.z) * easeT,
+        );
+        camera.lookAt(_killcamTarget);
+      } else {
+        // Phase 2: 공전 (킬러 주위를 회전)
+        const orbitElapsed = elapsed - KILLCAM_ZOOM_DURATION;
+        const orbitAngle = azimuth.current + orbitElapsed * KILLCAM_ORBIT_SPEED;
+        const pol = KILLCAM_ORBIT_POLAR;
+        const dist = KILLCAM_ORBIT_DISTANCE;
+
+        _offset.set(
+          dist * Math.sin(pol) * Math.sin(orbitAngle),
+          dist * Math.cos(pol),
+          dist * Math.sin(pol) * Math.cos(orbitAngle),
+        );
+
+        _camPos.copy(_killcamTarget).add(_offset);
+        if (_camPos.y < MIN_HEIGHT_OFFSET) _camPos.y = MIN_HEIGHT_OFFSET;
+
+        camera.position.copy(_camPos);
+        camera.lookAt(_killcamTarget);
+      }
+      return;
+    }
+
+    // ─── 일반 TPS 카메라 모드 ───
     const playerId = dataRef.current.playerId;
     const agents = agentsRef.current;
 

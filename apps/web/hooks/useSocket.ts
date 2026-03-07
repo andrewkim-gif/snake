@@ -172,6 +172,8 @@ export interface UiState {
   // v16 Phase 5: Biome + obstacle grid data
   biomeData: import('@/lib/biome-decoder').BiomeGridData | null;
   obstacleData: import('@/lib/biome-decoder').ObstacleGridData | null;
+  // v16 Phase 8: Weather state (from state broadcast)
+  weather: { type: string; intensity: number } | null;
 }
 
 export function useSocket() {
@@ -215,6 +217,7 @@ export function useSocket() {
     heightmapData: null,
     biomeData: null,
     obstacleData: null,
+    weather: null,
   });
 
   useEffect(() => {
@@ -300,6 +303,19 @@ export function useSocket() {
       dataRef.current.stateTimestamp = now;
       if (data.l) {
         dataRef.current.leaderboard = data.l;
+      }
+      // v16 Phase 8: Update weather state from server broadcast
+      if (data.w) {
+        setUiState(prev => {
+          const wt = data.w!.wt;
+          const wi = data.w!.wi ?? 0;
+          if (prev.weather?.type === wt && Math.abs((prev.weather?.intensity ?? 0) - wi) < 0.05) {
+            return prev; // avoid unnecessary re-renders for small intensity changes
+          }
+          return { ...prev, weather: { type: wt, intensity: wi } };
+        });
+      } else {
+        setUiState(prev => prev.weather ? { ...prev, weather: null } : prev);
       }
     });
 

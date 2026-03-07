@@ -212,6 +212,26 @@ func (bm *BiomeMap) GetBiomeIndex(x, y float64) uint8 {
 	return uint8(bm.GetBiome(x, y))
 }
 
+// DominantBiomeName returns the name of the most common biome in the map.
+func (bm *BiomeMap) DominantBiomeName() string {
+	if len(bm.Grid) == 0 {
+		return "forest"
+	}
+	counts := make([]int, BiomeCount)
+	for _, b := range bm.Grid {
+		if int(b) < BiomeCount {
+			counts[b]++
+		}
+	}
+	maxIdx := 0
+	for i := 1; i < BiomeCount; i++ {
+		if counts[i] > counts[maxIdx] {
+			maxIdx = i
+		}
+	}
+	return BiomeName(BiomeType(maxIdx))
+}
+
 // compressUint8Grid compresses a uint8 slice with gzip.
 func compressUint8Grid(data []uint8) []byte {
 	return compressBytesGzip(data)
