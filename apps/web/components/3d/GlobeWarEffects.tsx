@@ -48,6 +48,9 @@ export interface GlobeWarEffectsProps {
 
   /** Visibility toggle */
   visible?: boolean;
+
+  /** v15 Phase 6: 모바일 LOD — 전장 안개 활성화 여부 (기본 true) */
+  enableWarFog?: boolean;
 }
 
 // ─── Constants ───
@@ -729,6 +732,7 @@ export function GlobeWarEffects({
   autoRotateCamera = true,
   onCameraTarget,
   visible = true,
+  enableWarFog = true,
 }: GlobeWarEffectsProps) {
   const prevWarIdsRef = useRef<Set<string>>(new Set());
   // v15: Camera shake triggers when a new war is declared
@@ -848,8 +852,8 @@ export function GlobeWarEffects({
               />
             )}
 
-            {/* v15: 7. War fog between warring nations */}
-            {borderCenter && (
+            {/* v15: 7. War fog between warring nations (모바일 LOD: enableWarFog로 비활성화) */}
+            {enableWarFog && borderCenter && (
               <WarFog
                 center={borderCenter}
                 globeRadius={globeRadius}

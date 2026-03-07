@@ -40,6 +40,10 @@ import { GlobeEventPulse } from '@/components/3d/GlobeEventPulse';
 import type { TradeRouteData } from '@/hooks/useSocket';
 import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 
+// v15 Phase 6: Camera auto-focus + Mobile LOD
+import { CameraAutoFocus } from '@/components/3d/CameraAutoFocus';
+import { useGlobeLOD } from '@/hooks/useGlobeLOD';
+
 interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
   selectedCountry?: string | null;
@@ -1128,7 +1132,7 @@ function GlobeTitle() {
 
   // 텍스처 비율에 맞춰 plane 크기 설정
   const aspect = texture.image ? texture.image.width / texture.image.height : 4;
-  const planeHeight = 18;
+  const planeHeight = 9;
   const planeWidth = planeHeight * aspect;
 
   return (
@@ -1171,6 +1175,17 @@ function GlobeScene({
 
   // v15 Phase 4: Shockwave ref for missile impact callback
   const shockwaveRef = useRef<GlobeShockwaveHandle>(null);
+
+  // v15 Phase 6: Camera auto-focus target ref
+  const cameraTargetRef = useRef<THREE.Vector3 | null>(null);
+
+  // v15 Phase 6: Camera target callback (shared by GlobeWarEffects + GlobeEventPulse)
+  const handleCameraTarget = useCallback((position: THREE.Vector3) => {
+    cameraTargetRef.current = position.clone();
+  }, []);
+
+  // v15 Phase 6: Mobile LOD detection
+  const lodConfig = useGlobeLOD();
 
   // GeoJSON → CountryGeo[] 로드 (1회)
   useEffect(() => {
@@ -1235,6 +1250,9 @@ function GlobeScene({
       <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
       <AdaptiveOrbitControls />
 
+      {/* v15 Phase 6: Camera auto-focus on major events (war declaration, hegemony, epoch) */}
+      <CameraAutoFocus targetRef={cameraTargetRef} globeRadius={RADIUS} />
+
       {/* v14: Domination color overlay (국가별 지배 색상) */}
       {dominationStates.size > 0 && (
         <GlobeDominationLayer
@@ -1250,23 +1268,31 @@ function GlobeScene({
           wars={wars}
           countryCentroids={centroidsMap}
           globeRadius={RADIUS}
+          onCameraTarget={handleCameraTarget}
+          enableWarFog={lodConfig.enableWarFog}
         />
       )}
 
       {/* v15 Phase 4: Missile trajectories (attacker→defender parabolic arcs) */}
+      {/* 모바일: maxMissiles 제한 (LOD config에서 제어) */}
       {wars.length > 0 && centroidsMap.size > 0 && (
         <GlobeMissileEffect
           wars={wars}
           countryCentroids={centroidsMap}
           globeRadius={RADIUS}
           onImpact={handleMissileImpact}
+          maxMissiles={lodConfig.maxMissiles}
         />
       )}
 
       {/* v15 Phase 4: Shockwave rings at missile impact points */}
-      <GlobeShockwave ref={shockwaveRef} globeRadius={RADIUS} />
+      {/* 모바일에서는 비활성화 (lodConfig.enableShockwave) */}
+      {lodConfig.enableShockwave && (
+        <GlobeShockwave ref={shockwaveRef} globeRadius={RADIUS} />
+      )}
 
       {/* v15: Country flag + agent count labels (국기 표시의 유일한 책임) */}
+      {/* 모바일: maxLabels 30 (lodConfig에서 제어, GlobeCountryLabels 내부 LOD도 동작) */}
       {flagAtlas && centroidsMap.size > 0 && (
         <GlobeCountryLabels
           countryCentroids={centroidsMap}
@@ -1274,11 +1300,13 @@ function GlobeScene({
           dominationStates={dominationStates}
           flagAtlas={flagAtlas}
           globeRadius={RADIUS}
+          maxLabels={lodConfig.maxLabels}
         />
       )}
 
       {/* v15 Phase 5: Trade route bezier lines (해상=파란 점선, 육상=초록 실선) */}
-      {tradeRoutes.length > 0 && centroidsMap.size > 0 && (
+      {/* 모바일에서는 비활성화 (lodConfig.enableTradeRoutes) */}
+      {lodConfig.enableTradeRoutes && tradeRoutes.length > 0 && centroidsMap.size > 0 && (
         <GlobeTradeRoutes
           tradeRoutes={tradeRoutes}
           countryCentroids={centroidsMap}
@@ -1287,11 +1315,13 @@ function GlobeScene({
       )}
 
       {/* v15 Phase 5: Global event pulse effects (동맹/정책/에포크/휴전/금수) */}
-      {globalEvents.length > 0 && centroidsMap.size > 0 && (
+      {/* 모바일에서도 경량 이펙트는 유지 (lodConfig.enableEventPulse) */}
+      {lodConfig.enableEventPulse && globalEvents.length > 0 && centroidsMap.size > 0 && (
         <GlobeEventPulse
           globalEvents={globalEvents}
           countryCentroids={centroidsMap}
           globeRadius={RADIUS}
+          onCameraTarget={handleCameraTarget}
         />
       )}
     </>

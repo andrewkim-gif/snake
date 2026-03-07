@@ -35,6 +35,8 @@ export interface GlobeEventPulseProps {
   globeRadius?: number;
   /** Visibility toggle */
   visible?: boolean;
+  /** v15 Phase 6: Callback when camera should focus on an event position */
+  onCameraTarget?: (position: THREE.Vector3) => void;
 }
 
 // ─── Constants ───
@@ -108,6 +110,7 @@ export function GlobeEventPulse({
   countryCentroids,
   globeRadius = DEFAULT_GLOBE_RADIUS,
   visible = true,
+  onCameraTarget,
 }: GlobeEventPulseProps) {
   const groupRef = useRef<THREE.Group>(null);
 
@@ -206,6 +209,7 @@ export function GlobeEventPulse({
     });
 
     // 3. 빈 슬롯에 대기열에서 꺼내서 활성화
+    let cameraFocusTriggered = false;
     while (
       activePulsesRef.current.length < MAX_SIMULTANEOUS &&
       queueRef.current.length > 0
@@ -214,14 +218,25 @@ export function GlobeEventPulse({
       const posData = getEventPosition(event);
       if (!posData) continue;
 
+      const eventType = event.type.toLowerCase();
       activePulsesRef.current.push({
         id: event.id,
         startTime: now,
         position: posData.position,
         normal: posData.normal,
-        color: getEventColor(event.type),
-        type: event.type.toLowerCase(),
+        color: getEventColor(eventType),
+        type: eventType,
       });
+
+      // v15 Phase 6: 주요 이벤트 시 카메라 포커스 (epoch, alliance만)
+      if (!cameraFocusTriggered && onCameraTarget) {
+        const isSignificant = eventType.includes('epoch') || eventType.includes('alliance')
+          || eventType.includes('에포크') || eventType.includes('동맹');
+        if (isSignificant) {
+          onCameraTarget(posData.position);
+          cameraFocusTriggered = true;
+        }
+      }
     }
 
     // 4. 메쉬 풀 업데이트

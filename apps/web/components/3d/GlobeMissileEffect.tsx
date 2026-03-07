@@ -36,6 +36,8 @@ export interface GlobeMissileEffectProps {
   globeRadius?: number;
   onImpact?: (position: THREE.Vector3, warId: string) => void;
   visible?: boolean;
+  /** v15 Phase 6: 모바일 LOD — 동시 미사일 최대 수 (기본 10) */
+  maxMissiles?: number;
 }
 
 // ─── Constants ───
@@ -112,6 +114,7 @@ export function GlobeMissileEffect({
   globeRadius = 100,
   onImpact,
   visible = true,
+  maxMissiles = MAX_MISSILES,
 }: GlobeMissileEffectProps) {
   const groupRef = useRef<THREE.Group>(null);
   const clockRef = useRef(0);
@@ -176,11 +179,13 @@ export function GlobeMissileEffect({
     [countryCentroids, globeRadius],
   );
 
-  // Launch a new missile
+  // Launch a new missile (v15 Phase 6: LOD-limited by maxMissiles prop)
   const launchMissile = useCallback(
     (warId: string, start: THREE.Vector3, end: THREE.Vector3, time: number) => {
       const missiles = missilesRef.current;
-      for (let i = 0; i < MAX_MISSILES; i++) {
+      // LOD 제한: maxMissiles 이내의 슬롯만 사용
+      const limit = Math.min(maxMissiles, MAX_MISSILES);
+      for (let i = 0; i < limit; i++) {
         if (!missiles[i].active) {
           const dist = start.distanceTo(end);
           missiles[i] = {
@@ -195,7 +200,7 @@ export function GlobeMissileEffect({
         }
       }
     },
-    [],
+    [maxMissiles],
   );
 
   useFrame((_, delta) => {

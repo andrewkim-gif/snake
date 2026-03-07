@@ -73,6 +73,8 @@ export interface GlobeCountryLabelsProps {
   flagAtlas: FlagAtlasResult;
   /** 글로브 반경 (기본 100) */
   globeRadius?: number;
+  /** v15 Phase 6: 모바일 LOD — 최대 표시 라벨 수 (기본 200) */
+  maxLabels?: number;
 }
 
 /** 내부 국가 라벨 데이터 */
@@ -141,6 +143,7 @@ export function GlobeCountryLabels({
   dominationStates,
   flagAtlas,
   globeRadius = 100,
+  maxLabels = MAX_COUNTRIES,
 }: GlobeCountryLabelsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const { camera } = useThree();
@@ -337,8 +340,11 @@ export function GlobeCountryLabels({
     // 원거리: activeAgents 기준 상위 N개만 (정렬은 비용이 커서 단순 필터)
     const isFarLOD = lodLevel === 2;
 
+    // v15 Phase 6: LOD 제한 — maxLabels와 MAX_COUNTRIES 중 작은 값 사용
+    const labelLimit = Math.min(maxLabels, MAX_COUNTRIES);
+
     for (let i = 0; i < entries.length; i++) {
-      if (visibleIdx >= MAX_COUNTRIES) break;
+      if (visibleIdx >= labelLimit) break;
 
       const entry = entries[i];
 
