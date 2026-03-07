@@ -16,6 +16,7 @@ import * as THREE from 'three';
 import { ARCamera } from '@/components/game/ar/ARCamera';
 import { ARPlayer } from '@/components/game/ar/ARPlayer';
 import { AREntities } from '@/components/game/ar/AREntities';
+import { ARDamageNumbers, type DamageNumber } from '@/components/game/ar/ARDamageNumbers';
 import type { AREnemyNet, ARCrystalNet } from '@/lib/3d/ar-types';
 
 const ARENA_RADIUS = 40;
@@ -31,6 +32,7 @@ interface ArenaCanvasProps {
   attackRange: number;
   hpRatio: number;
   alive: boolean;
+  damageNumbersRef: React.MutableRefObject<DamageNumber[]>;
 }
 
 // 내부 게임 루프 (Canvas 내부)
@@ -129,6 +131,7 @@ export default function ArenaCanvas({
   attackRange,
   hpRatio,
   alive,
+  damageNumbersRef,
 }: ArenaCanvasProps) {
   const yawRef = useRef(0);
   const lockedRef = useRef(false);
@@ -177,6 +180,9 @@ export default function ArenaCanvas({
 
       {/* 적 + XP 크리스탈 */}
       <AREntities enemies={enemies} xpCrystals={xpCrystals} />
+
+      {/* 데미지 넘버 */}
+      <ARDamageNumbers numbersRef={damageNumbersRef} />
     </Canvas>
   );
 }

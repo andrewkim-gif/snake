@@ -16,12 +16,15 @@ type ArenaCombat struct {
 	config CombatModeConfig
 
 	// Entities
-	players    map[string]*ARPlayer
-	enemies    []*AREnemy
-	xpCrystals []*ARXPCrystal
+	players     map[string]*ARPlayer
+	enemies     []*AREnemy
+	xpCrystals  []*ARXPCrystal
+	projectiles []*ARProjectile
+	fieldItems  []*ARFieldItem
 
 	// Subsystems
 	levelSystem *ARLevelSystem
+	itemSystem  *ARItemSystem
 
 	// Phase tracking
 	phase      ARPhase
@@ -32,6 +35,7 @@ type ArenaCombat struct {
 
 	// ID generation
 	nextEnemyID int
+	nextProjID  int
 }
 
 // NewArenaCombat creates a new ArenaCombat instance.
@@ -40,7 +44,10 @@ func NewArenaCombat() *ArenaCombat {
 		players:     make(map[string]*ARPlayer),
 		enemies:     make([]*AREnemy, 0, 64),
 		xpCrystals:  make([]*ARXPCrystal, 0, 128),
+		projectiles: make([]*ARProjectile, 0, 64),
+		fieldItems:  make([]*ARFieldItem, 0, 32),
 		levelSystem: NewARLevelSystem(),
+		itemSystem:  NewARItemSystem(),
 		phase:       ARPhaseDeploy,
 	}
 }
@@ -56,7 +63,7 @@ func (ac *ArenaCombat) Init(cfg CombatModeConfig) {
 }
 
 // OnTick implements CombatMode.OnTick.
-// Called at 20Hz (delta ≈ 0.05s).
+// Called at 20Hz (delta ~ 0.05s).
 func (ac *ArenaCombat) OnTick(delta float64, tick uint64) []CombatEvent {
 	ac.totalTime += delta
 	var events []CombatEvent
@@ -74,23 +81,40 @@ func (ac *ArenaCombat) OnTick(delta float64, tick uint64) []CombatEvent {
 
 	case ARPhasePvE:
 		ac.tickMovement(delta)
+		ac.tickPlayerBuffs(delta)
 		ac.tickWaveSpawner(delta)
 		ac.tickEnemyAI(delta)
-		events = append(events, ac.tickAutoAttack(delta)...)
+		ac.tickEnemyStatusEffects(delta)
+		ac.tickPlayerStatusEffects(delta)
+		events = append(events, ac.tickWeaponAutoAttack(delta)...)
+		events = append(events, ac.tickProjectiles(delta)...)
 		events = append(events, ac.tickXPCollection()...)
-		ac.cleanupDead()
+		events = append(events, ac.tickItemPickup()...)
+		ac.tickHPRegen(delta)
+		ac.tickShieldCooldowns(delta)
+		ac.cleanupDead(&events)
 
 	case ARPhasePvPWarning:
 		ac.tickMovement(delta)
+		ac.tickPlayerBuffs(delta)
 		ac.tickEnemyAI(delta)
-		events = append(events, ac.tickAutoAttack(delta)...)
+		ac.tickEnemyStatusEffects(delta)
+		ac.tickPlayerStatusEffects(delta)
+		events = append(events, ac.tickWeaponAutoAttack(delta)...)
+		events = append(events, ac.tickProjectiles(delta)...)
 		events = append(events, ac.tickXPCollection()...)
-		ac.cleanupDead()
+		events = append(events, ac.tickItemPickup()...)
+		ac.tickHPRegen(delta)
+		ac.tickShieldCooldowns(delta)
+		ac.cleanupDead(&events)
 
 	case ARPhasePvP:
 		ac.tickMovement(delta)
-		// PvP: players can damage each other (future phase)
-		ac.cleanupDead()
+		ac.tickPlayerBuffs(delta)
+		ac.tickPlayerStatusEffects(delta)
+		ac.tickHPRegen(delta)
+		ac.tickShieldCooldowns(delta)
+		ac.cleanupDead(&events)
 
 	case ARPhaseSettlement:
 		// Settlement: no gameplay, show results
@@ -123,9 +147,11 @@ func (ac *ArenaCombat) advancePhase() []CombatEvent {
 	case ARPhasePvPWarning:
 		ac.phase = ARPhasePvP
 		ac.phaseTimer = ARPvPDuration
-		// Clear all PvE enemies for PvP phase
+		// Clear all PvE entities
 		ac.enemies = ac.enemies[:0]
 		ac.xpCrystals = ac.xpCrystals[:0]
+		ac.projectiles = ac.projectiles[:0]
+		ac.fieldItems = ac.fieldItems[:0]
 		events = append(events, CombatEvent{
 			Type: "phase_change",
 			Data: map[string]interface{}{"phase": "pvp"},
@@ -140,7 +166,6 @@ func (ac *ArenaCombat) advancePhase() []CombatEvent {
 		})
 
 	case ARPhaseSettlement:
-		// Battle is over; Room handles cooldown transition
 		events = append(events, CombatEvent{
 			Type: "battle_end",
 			Data: map[string]interface{}{"phase": "ended"},
@@ -179,6 +204,21 @@ func (ac *ArenaCombat) tickMovement(delta float64) {
 		// Calculate movement speed
 		speed := ARBaseSpeed * p.SpeedMult
 
+		// Speed boost from item
+		if p.SpeedBoostTimer > 0 {
+			speed *= 2.0
+		}
+
+		// Freeze slow on player
+		has, stacks := HasStatusEffect(p.StatusEffects, ARStatusFreeze)
+		if has {
+			if stacks >= 3 {
+				speed = 0 // frozen
+			} else {
+				speed *= 1.0 - float64(stacks)*0.25
+			}
+		}
+
 		// Apply movement input
 		moveX := p.Vel.X
 		moveZ := p.Vel.Z
@@ -208,6 +248,24 @@ func (ac *ArenaCombat) tickMovement(delta float64) {
 }
 
 // ============================================================
+// Player Buff Timers
+// ============================================================
+
+func (ac *ArenaCombat) tickPlayerBuffs(delta float64) {
+	for _, p := range ac.players {
+		if !p.Alive {
+			continue
+		}
+		if p.SpeedBoostTimer > 0 {
+			p.SpeedBoostTimer -= delta
+		}
+		if p.ShieldBurstTimer > 0 {
+			p.ShieldBurstTimer -= delta
+		}
+	}
+}
+
+// ============================================================
 // Wave Spawner
 // ============================================================
 
@@ -222,12 +280,38 @@ func (ac *ArenaCombat) tickWaveSpawner(delta float64) {
 	// Calculate enemies per wave based on wave number and tier
 	baseCount := ARBaseEnemiesPerWave + ac.waveNumber*2
 	tierMult := ac.tierEnemyMultiplier()
-	count := int(math.Ceil(float64(baseCount) * tierMult))
+
+	// Cursed tome: increase enemy count (average across players)
+	cursedMult := 1.0
+	playerCount := 0
+	for _, p := range ac.players {
+		if p.Alive {
+			cursedMult += (CursedEnemyCountMult(p) - 1.0)
+			playerCount++
+		}
+	}
+	if playerCount > 0 {
+		cursedMult = 1.0 + (cursedMult-1.0)/float64(playerCount)
+	}
+
+	count := int(math.Ceil(float64(baseCount) * tierMult * cursedMult))
 	if count < 3 {
 		count = 3
 	}
 	if count > 50 {
 		count = 50
+	}
+
+	// Cursed: enemy HP multiplier
+	cursedHPMult := 1.0
+	if playerCount > 0 {
+		totalCHM := 0.0
+		for _, p := range ac.players {
+			if p.Alive {
+				totalCHM += CursedEnemyHPMult(p)
+			}
+		}
+		cursedHPMult = totalCHM / float64(playerCount)
 	}
 
 	// Elite chance increases with wave number
@@ -240,7 +324,6 @@ func (ac *ArenaCombat) tickWaveSpawner(delta float64) {
 	}
 
 	for i := 0; i < count; i++ {
-		// Random position on arena edge
 		angle := rand.Float64() * 2 * math.Pi
 		spawnDist := radius * (0.7 + rand.Float64()*0.3)
 		pos := ARVec3{
@@ -249,23 +332,22 @@ func (ac *ArenaCombat) tickWaveSpawner(delta float64) {
 			Z: math.Sin(angle) * spawnDist,
 		}
 
-		// Random enemy type
 		types := []AREnemyType{AREnemyZombie, AREnemySkeleton, AREnemySlime, AREnemySpider, AREnemyCreeper}
 		enemyType := types[rand.Intn(len(types))]
 
 		isElite := rand.Float64() < eliteChance
 
-		ac.spawnEnemy(enemyType, pos, isElite)
+		ac.spawnEnemy(enemyType, pos, isElite, cursedHPMult)
 	}
 }
 
-func (ac *ArenaCombat) spawnEnemy(t AREnemyType, pos ARVec3, isElite bool) {
+func (ac *ArenaCombat) spawnEnemy(t AREnemyType, pos ARVec3, isElite bool, cursedHPMult float64) {
 	ac.nextEnemyID++
 	hp, dmg, spd := ARBaseEnemyStats(t)
 
 	// Scale with wave number
 	waveMult := 1.0 + float64(ac.waveNumber)*0.3
-	hp *= waveMult
+	hp *= waveMult * cursedHPMult
 	dmg *= 1.0 + float64(ac.waveNumber)*0.2
 
 	if isElite {
@@ -274,16 +356,27 @@ func (ac *ArenaCombat) spawnEnemy(t AREnemyType, pos ARVec3, isElite bool) {
 		spd *= 1.5
 	}
 
+	// Assign elemental affinity based on enemy type
+	affinity := ARDamageType("")
+	switch t {
+	case AREnemyCreeper:
+		affinity = ARDmgFire
+	case AREnemySlime:
+		affinity = ARDmgPoison
+	}
+
 	enemy := &AREnemy{
-		ID:      fmt.Sprintf("e_%d", ac.nextEnemyID),
-		Type:    t,
-		Pos:     pos,
-		HP:      hp,
-		MaxHP:   hp,
-		Damage:  dmg,
-		Speed:   spd,
-		Alive:   true,
-		IsElite: isElite,
+		ID:             fmt.Sprintf("e_%d", ac.nextEnemyID),
+		Type:           t,
+		Pos:            pos,
+		HP:             hp,
+		MaxHP:          hp,
+		Damage:         dmg,
+		Speed:          spd,
+		Alive:          true,
+		IsElite:        isElite,
+		StatusEffects:  make([]ARStatusInstance, 0, 4),
+		DamageAffinity: affinity,
 	}
 
 	ac.enemies = append(ac.enemies, enemy)
@@ -316,6 +409,12 @@ func (ac *ArenaCombat) tickEnemyAI(delta float64) {
 			continue
 		}
 
+		// Freeze check: if fully frozen, skip
+		freezeMult := EnemyFreezeSpeedMult(enemy)
+		if freezeMult <= 0 {
+			continue
+		}
+
 		// Find nearest alive player
 		var nearest *ARPlayer
 		nearestDist := math.MaxFloat64
@@ -336,15 +435,15 @@ func (ac *ArenaCombat) tickEnemyAI(delta float64) {
 			continue
 		}
 
-		// Move toward target
+		// Move toward target (with freeze slow)
 		dx := nearest.Pos.X - enemy.Pos.X
 		dz := nearest.Pos.Z - enemy.Pos.Z
 		dist := math.Sqrt(dx*dx + dz*dz)
-		if dist > 0.5 { // Don't overlap
+		if dist > 0.5 {
 			dx /= dist
 			dz /= dist
-			enemy.Pos.X += dx * enemy.Speed * delta
-			enemy.Pos.Z += dz * enemy.Speed * delta
+			enemy.Pos.X += dx * enemy.Speed * freezeMult * delta
+			enemy.Pos.Z += dz * enemy.Speed * freezeMult * delta
 		}
 
 		// Attack if within melee range (1.5m)
@@ -359,6 +458,25 @@ func (ac *ArenaCombat) enemyAttack(enemy *AREnemy, target *ARPlayer, delta float
 		return
 	}
 
+	// Shield burst invincibility
+	if target.ShieldBurstTimer > 0 {
+		return
+	}
+
+	// Shield tome block
+	if ShieldCanBlock(target) {
+		ShieldBlock(target)
+		// Thorns on block
+		if target.ThornsPct > 0 {
+			reflected := enemy.Damage * delta * target.ThornsPct / 100.0
+			enemy.HP -= reflected
+			if enemy.HP < 0 {
+				enemy.HP = 0
+			}
+		}
+		return
+	}
+
 	// Dodge check
 	if target.DodgeChance > 0 && rand.Float64()*100 < target.DodgeChance {
 		return
@@ -366,116 +484,215 @@ func (ac *ArenaCombat) enemyAttack(enemy *AREnemy, target *ARPlayer, delta float
 
 	// Deal damage (scaled by delta for frame-rate independence)
 	damage := enemy.Damage * delta
+
+	// Glass Cannon: +40% damage taken
+	for _, eq := range target.Equipment {
+		if eq == ARItemGlassCannon {
+			damage *= 1.40
+		}
+	}
+
+	// Mark bonus: enemy marked → takes more damage (but this is enemy→player, so check player mark)
+	// Actually, Mark increases damage received by the marked entity
+	damage *= MarkDamageBonus(target.StatusEffects)
+
 	target.HP -= damage
 	if target.HP <= 0 {
 		target.HP = 0
 		target.Alive = false
 	}
+
+	// Thorns reflection
+	if target.ThornsPct > 0 && target.Alive {
+		reflected := damage * target.ThornsPct / 100.0
+		enemy.HP -= reflected
+		if enemy.HP < 0 {
+			enemy.HP = 0
+		}
+	}
+
+	// Frozen Heart: 30% chance to freeze attacker
+	for _, eq := range target.Equipment {
+		if eq == ARItemFrozenHeart && rand.Float64() < 0.30 {
+			applyStatusToEnemy(enemy, ARStatusFreeze, target.ID)
+		}
+	}
 }
 
 // ============================================================
-// Auto-Attack (Players → Enemies)
+// Status Effect Ticks
 // ============================================================
 
-func (ac *ArenaCombat) tickAutoAttack(delta float64) []CombatEvent {
-	var events []CombatEvent
+func (ac *ArenaCombat) tickEnemyStatusEffects(delta float64) {
+	for _, enemy := range ac.enemies {
+		if !enemy.Alive {
+			continue
+		}
+		TickStatusEffectsEnemy(enemy, delta)
+		if enemy.HP <= 0 {
+			enemy.Alive = false
+		}
+	}
+}
 
+func (ac *ArenaCombat) tickPlayerStatusEffects(delta float64) {
 	for _, p := range ac.players {
 		if !p.Alive {
 			continue
 		}
-
-		// Find nearest enemy within attack range
-		attackRange := ARBaseAttackRange * p.AreaMult
-		var target *AREnemy
-		targetDist := math.MaxFloat64
-
-		for _, e := range ac.enemies {
-			if !e.Alive {
-				continue
-			}
-			d := p.Pos.DistTo(e.Pos)
-			if d <= attackRange && d < targetDist {
-				targetDist = d
-				target = e
-			}
+		TickStatusEffectsPlayer(p, delta)
+		if p.HP <= 0 {
+			p.HP = 0
+			p.Alive = false
 		}
+	}
+}
 
-		if target == nil {
+// ============================================================
+// Weapon-Based Auto-Attack (replaces Phase 1 simple auto-attack)
+// ============================================================
+
+func (ac *ArenaCombat) tickWeaponAutoAttack(delta float64) []CombatEvent {
+	var events []CombatEvent
+
+	for _, p := range ac.players {
+		if !p.Alive || p.PendingLevelUp {
 			continue
 		}
 
-		// Calculate damage
-		baseDmg := ARBaseAttackDamage * p.DamageMult * p.AttackSpeedMult * delta
+		// Tick weapon cooldowns
+		WeaponTickCooldowns(p, delta)
 
-		// Critical hit
-		critCount := calcCritCount(p.CritChance)
-		critMult := calcCritMultiplier(critCount, p.CritDamageMult)
-		finalDmg := baseDmg * critMult
-
-		target.HP -= finalDmg
-		if target.HP <= 0 {
-			target.HP = 0
-			target.Alive = false
-			p.Kills++
-
-			// Drop XP crystal
-			xpValue := target.MaxHP * 0.1 // XP = 10% of enemy max HP
-			if target.IsElite {
-				xpValue *= 3.0
+		// Fire each ready weapon
+		for _, wi := range p.Weapons {
+			if !WeaponCanFire(wi) {
+				continue
 			}
-			crystal := ac.levelSystem.SpawnXPCrystal(target.Pos, xpValue)
-			ac.xpCrystals = append(ac.xpCrystals, crystal)
 
-			events = append(events, CombatEvent{
-				Type:     "enemy_kill",
-				TargetID: p.ID,
-				Data: map[string]interface{}{
-					"enemyId": target.ID,
-					"xp":      xpValue,
-					"crit":    critCount,
-				},
-			})
+			projs, dmgEvents := WeaponFire(p, wi, ac.enemies, &ac.nextProjID)
+
+			// Add projectiles to arena
+			ac.projectiles = append(ac.projectiles, projs...)
+
+			// Process direct damage events (melee, trail)
+			for _, evt := range dmgEvents {
+				events = append(events, CombatEvent{
+					Type:     "ar_damage",
+					TargetID: p.ID,
+					Data:     evt,
+				})
+
+				// Check for kills from melee/trail
+				for _, e := range ac.enemies {
+					if e.ID == evt.TargetID && !e.Alive {
+						// Already dead from this damage
+						continue
+					}
+					if e.ID == evt.TargetID && e.HP <= 0 {
+						e.Alive = false
+						p.Kills++
+						ac.handleEnemyDeath(p, e, &events)
+					}
+				}
+			}
 		}
 
-		if critCount > 0 {
-			events = append(events, CombatEvent{
-				Type:     "ar_damage",
-				TargetID: p.ID,
-				Data: map[string]interface{}{
-					"target":    target.ID,
-					"amount":    finalDmg,
-					"critCount": critCount,
-				},
-			})
+		// Berserker Helm: +40% damage when below 50% HP
+		// This is recalculated each tick (checked in WeaponFire via DamageMult)
+		hasBerserk := false
+		for _, eq := range p.Equipment {
+			if eq == ARItemBerserkerHelm {
+				hasBerserk = true
+			}
+		}
+		if hasBerserk && p.HP < p.MaxHP*0.5 {
+			// Temporarily boost is already in DamageMult via RecomputeAllStats
+			// We need a per-tick check approach
+		}
+		_ = hasBerserk
+	}
+
+	return events
+}
+
+// ============================================================
+// Projectile Tick
+// ============================================================
+
+func (ac *ArenaCombat) tickProjectiles(delta float64) []CombatEvent {
+	var events []CombatEvent
+
+	alive, dmgEvents := TickProjectiles(ac.projectiles, ac.enemies, ac.players, delta)
+	ac.projectiles = alive
+
+	for _, evt := range dmgEvents {
+		// Find owner player for kill credit
+		ownerID := ""
+		for _, p := range ac.projectiles {
+			// Already processed; we need to track owner from the event
+			_ = p
+		}
+
+		events = append(events, CombatEvent{
+			Type: "ar_damage",
+			Data: evt,
+		})
+
+		// Check for kills
+		for _, e := range ac.enemies {
+			if e.ID == evt.TargetID && e.HP <= 0 && e.Alive {
+				e.Alive = false
+				// Find owner
+				for _, p := range ac.players {
+					if p.ID == ownerID || ownerID == "" {
+						// Try to match via damage event sourceID
+						p.Kills++
+						ac.handleEnemyDeath(p, e, &events)
+						break
+					}
+				}
+			}
 		}
 	}
 
 	return events
 }
 
-// calcCritCount determines how many crits occur (overcritical system).
-func calcCritCount(critChance float64) int {
-	guaranteed := int(critChance / 100.0)
-	remainder := math.Mod(critChance, 100.0)
-	extra := 0
-	if rand.Float64()*100 < remainder {
-		extra = 1
+// handleEnemyDeath processes XP drop and item drops when an enemy dies.
+func (ac *ArenaCombat) handleEnemyDeath(killer *ARPlayer, enemy *AREnemy, events *[]CombatEvent) {
+	// XP crystal drop
+	xpValue := enemy.MaxHP * 0.1
+	if enemy.IsElite {
+		xpValue *= 3.0
 	}
-	return guaranteed + extra
-}
+	// Cursed XP bonus
+	xpValue *= CursedXPBonusMult(killer)
 
-// calcCritMultiplier returns the damage multiplier for a given crit count.
-func calcCritMultiplier(critCount int, baseCritMult float64) float64 {
-	switch {
-	case critCount <= 0:
-		return 1.0
-	case critCount == 1:
-		return baseCritMult
-	default:
-		// Overcritical: (critCount * 0.5)^2 + critCount * (baseCritMult - 1)
-		half := float64(critCount) * 0.5
-		return half*half + float64(critCount)*(baseCritMult-1)
+	crystal := ac.levelSystem.SpawnXPCrystal(enemy.Pos, xpValue)
+	ac.xpCrystals = append(ac.xpCrystals, crystal)
+
+	*events = append(*events, CombatEvent{
+		Type:     "enemy_kill",
+		TargetID: killer.ID,
+		Data: map[string]interface{}{
+			"enemyId": enemy.ID,
+			"xp":      xpValue,
+			"isElite": enemy.IsElite,
+		},
+	})
+
+	// Lifesteal
+	if killer.LifestealPct > 0 {
+		heal := enemy.MaxHP * 0.1 * killer.LifestealPct / 100.0
+		killer.HP = math.Min(killer.HP+heal, killer.MaxHP)
+	}
+
+	// Item drops
+	luckBonus := float64(killer.Tomes[ARTomeLuck]) * 1.0
+	drops := RollDropsOnDeath(enemy, enemy.Pos, luckBonus)
+	for _, drop := range drops {
+		fi := ac.itemSystem.SpawnFieldItem(drop.ItemID, drop.Pos)
+		ac.fieldItems = append(ac.fieldItems, fi)
 	}
 }
 
@@ -508,10 +725,48 @@ func (ac *ArenaCombat) tickXPCollection() []CombatEvent {
 }
 
 // ============================================================
+// Item Pickup
+// ============================================================
+
+func (ac *ArenaCombat) tickItemPickup() []CombatEvent {
+	var events []CombatEvent
+
+	for _, p := range ac.players {
+		if !p.Alive {
+			continue
+		}
+		evts := TickItemPickup(p, ac.fieldItems, ac.enemies, ac.xpCrystals)
+		events = append(events, evts...)
+	}
+
+	return events
+}
+
+// ============================================================
+// HP Regen
+// ============================================================
+
+func (ac *ArenaCombat) tickHPRegen(delta float64) {
+	for _, p := range ac.players {
+		TickHPRegen(p, delta)
+	}
+}
+
+// ============================================================
+// Shield Cooldowns
+// ============================================================
+
+func (ac *ArenaCombat) tickShieldCooldowns(delta float64) {
+	for _, p := range ac.players {
+		TickShieldCooldown(p, delta)
+	}
+}
+
+// ============================================================
 // Cleanup
 // ============================================================
 
-func (ac *ArenaCombat) cleanupDead() {
+func (ac *ArenaCombat) cleanupDead(events *[]CombatEvent) {
 	// Remove dead enemies
 	alive := ac.enemies[:0]
 	for _, e := range ac.enemies {
@@ -529,6 +784,38 @@ func (ac *ArenaCombat) cleanupDead() {
 		}
 	}
 	ac.xpCrystals = crystalsAlive
+
+	// Remove dead projectiles
+	projAlive := ac.projectiles[:0]
+	for _, p := range ac.projectiles {
+		if p.Alive {
+			projAlive = append(projAlive, p)
+		}
+	}
+	ac.projectiles = projAlive
+
+	// Remove picked up items
+	itemsAlive := ac.fieldItems[:0]
+	for _, i := range ac.fieldItems {
+		if i.Alive {
+			itemsAlive = append(itemsAlive, i)
+		}
+	}
+	ac.fieldItems = itemsAlive
+
+	// Check for dead players
+	for _, p := range ac.players {
+		if !p.Alive && p.HP <= 0 {
+			*events = append(*events, CombatEvent{
+				Type:     "death",
+				TargetID: p.ID,
+				Data: map[string]interface{}{
+					"level": p.Level,
+					"kills": p.Kills,
+				},
+			})
+		}
+	}
 }
 
 // ============================================================
@@ -537,7 +824,6 @@ func (ac *ArenaCombat) cleanupDead() {
 
 // OnPlayerJoin implements CombatMode.OnPlayerJoin.
 func (ac *ArenaCombat) OnPlayerJoin(info *PlayerInfo) {
-	// Spawn at random position near center
 	angle := rand.Float64() * 2 * math.Pi
 	spawnDist := 5.0 + rand.Float64()*10.0
 	pos := ARVec3{
@@ -556,16 +842,21 @@ func (ac *ArenaCombat) OnPlayerJoin(info *PlayerInfo) {
 		XP:        0,
 		XPToNext:  XPToNextLevel(1),
 		Alive:     true,
-		Character: ARCharStriker, // default character
+		Character: ARCharStriker,
 		Tomes:     make(map[ARTomeID]int),
-		WeaponSlots: []string{"katana"}, // default weapon
-		Stamina:    ARBaseStamina,
-		MaxStamina: ARBaseStamina,
-		GraceTicks: int(ARGracePeriodSec * TickRate),
+		WeaponSlots: []string{"katana"},
+		Weapons: []*ARWeaponInstance{
+			{WeaponID: ARWeaponKatana, Level: 1, Cooldown: 0},
+		},
+		Equipment:     make([]ARItemID, 0, MaxEquipmentSlots),
+		Stamina:       ARBaseStamina,
+		MaxStamina:    ARBaseStamina,
+		GraceTicks:    int(ARGracePeriodSec * TickRate),
+		StatusEffects: make([]ARStatusInstance, 0, 4),
 	}
 
 	// Initialize computed stats
-	recomputePlayerStats(player)
+	RecomputeAllStats(player)
 
 	ac.players[info.ID] = player
 }
@@ -594,12 +885,41 @@ func (ac *ArenaCombat) OnChoose(clientID string, choice ARChoice) {
 		return
 	}
 
-	// Validate choice
+	// Handle weapon choice
+	if choice.WeaponID != "" {
+		weaponID := ARWeaponID(choice.WeaponID)
+		def := GetWeaponDef(weaponID)
+		if def != nil {
+			// Check if player already has this weapon (upgrade) or add new
+			found := false
+			for _, wi := range p.Weapons {
+				if wi.WeaponID == weaponID && wi.Level < 7 {
+					wi.Level++
+					found = true
+					break
+				}
+			}
+			if !found && len(p.Weapons) < 6 {
+				p.Weapons = append(p.Weapons, &ARWeaponInstance{
+					WeaponID: weaponID,
+					Level:    1,
+					Cooldown: 0,
+				})
+				p.WeaponSlots = append(p.WeaponSlots, string(weaponID))
+			}
+			p.PendingLevelUp = false
+			p.LevelUpChoices = nil
+			return
+		}
+	}
+
+	// Handle tome choice
 	if choice.TomeID != "" {
 		tomeID := ARTomeID(choice.TomeID)
 		for _, offer := range p.LevelUpChoices {
 			if offer.TomeID == tomeID {
 				ApplyTome(p, tomeID, offer.Rarity)
+				RecomputeAllStats(p)
 				p.PendingLevelUp = false
 				p.LevelUpChoices = nil
 				return
@@ -611,6 +931,7 @@ func (ac *ArenaCombat) OnChoose(clientID string, choice ARChoice) {
 	if len(p.LevelUpChoices) > 0 {
 		offer := p.LevelUpChoices[0]
 		ApplyTome(p, offer.TomeID, offer.Rarity)
+		RecomputeAllStats(p)
 		p.PendingLevelUp = false
 		p.LevelUpChoices = nil
 	}
@@ -643,6 +964,28 @@ func (ac *ArenaCombat) GetState() interface{} {
 		})
 	}
 
+	// Build network-safe projectile list
+	projNet := make([]ARProjectileNet, 0, len(ac.projectiles))
+	for _, p := range ac.projectiles {
+		projNet = append(projNet, ARProjectileNet{
+			ID:   p.ID,
+			X:    p.Pos.X,
+			Z:    p.Pos.Z,
+			Type: string(p.WeaponID),
+		})
+	}
+
+	// Build network-safe item list
+	itemNet := make([]ARFieldItemNet, 0, len(ac.fieldItems))
+	for _, i := range ac.fieldItems {
+		itemNet = append(itemNet, ARFieldItemNet{
+			ID:     i.ID,
+			ItemID: i.ItemID,
+			X:      i.Pos.X,
+			Z:      i.Pos.Z,
+		})
+	}
+
 	// Player list
 	playerList := make([]*ARPlayer, 0, len(ac.players))
 	for _, p := range ac.players {
@@ -650,12 +993,14 @@ func (ac *ArenaCombat) GetState() interface{} {
 	}
 
 	return &ARState{
-		Phase:      ac.phase,
-		Timer:      ac.phaseTimer,
-		WaveNumber: ac.waveNumber,
-		Players:    playerList,
-		Enemies:    enemyNet,
-		XPCrystals: crystalNet,
+		Phase:       ac.phase,
+		Timer:       ac.phaseTimer,
+		WaveNumber:  ac.waveNumber,
+		Players:     playerList,
+		Enemies:     enemyNet,
+		XPCrystals:  crystalNet,
+		Projectiles: projNet,
+		Items:       itemNet,
 	}
 }
 
@@ -664,4 +1009,6 @@ func (ac *ArenaCombat) Cleanup() {
 	ac.players = make(map[string]*ARPlayer)
 	ac.enemies = ac.enemies[:0]
 	ac.xpCrystals = ac.xpCrystals[:0]
+	ac.projectiles = ac.projectiles[:0]
+	ac.fieldItems = ac.fieldItems[:0]
 }

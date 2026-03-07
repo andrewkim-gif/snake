@@ -45,6 +45,46 @@ export type ARTomeID =
   | 'dodge'
   | 'cursed';
 
+export type ARWeaponID =
+  | 'sniper_rifle'
+  | 'lightning_staff'
+  | 'bow'
+  | 'revolver'
+  | 'katana'
+  | 'fire_staff'
+  | 'aegis'
+  | 'wireless_dagger'
+  | 'black_hole'
+  | 'axe'
+  | 'frostwalker'
+  | 'flamewalker'
+  | 'poison_flask'
+  | 'landmine'
+  | 'shotgun'
+  | 'dice';
+
+export type ARWeaponTier = 'S' | 'A' | 'B';
+
+export type ARProjectileType = 'straight' | 'homing' | 'pierce' | 'aoe';
+
+export type ARItemID =
+  | 'health_orb_small'
+  | 'health_orb_large'
+  | 'xp_magnet'
+  | 'speed_boost'
+  | 'shield_burst'
+  | 'bomb'
+  | 'iron_boots'
+  | 'feather_cape'
+  | 'vampire_ring'
+  | 'berserker_helm'
+  | 'crown_of_thorns'
+  | 'magnet_amulet'
+  | 'glass_cannon'
+  | 'frozen_heart'
+  | 'lucky_clover'
+  | 'titan_belt';
+
 // ============================================================
 // Entity Types
 // ============================================================
@@ -70,6 +110,7 @@ export interface ARPlayerNet {
   factionId: string;
   tomes: Record<string, number>;
   weapons: string[];
+  equipment: ARItemID[];
   kills: number;
 }
 
@@ -90,6 +131,20 @@ export interface ARCrystalNet {
   value: number;
 }
 
+export interface ARProjectileNet {
+  id: string;
+  x: number;
+  z: number;
+  type: string; // weapon ID for visual selection
+}
+
+export interface ARFieldItemNet {
+  id: string;
+  itemId: ARItemID;
+  x: number;
+  z: number;
+}
+
 // ============================================================
 // Network Messages
 // ============================================================
@@ -101,6 +156,8 @@ export interface ARState {
   players: ARPlayerNet[];
   enemies: AREnemyNet[];
   xpCrystals: ARCrystalNet[];
+  projectiles: ARProjectileNet[];
+  items: ARFieldItemNet[];
 }
 
 export interface ARInput {
@@ -128,9 +185,13 @@ export interface ARLevelUpEvent {
 }
 
 export interface ARDamageEvent {
-  target: string;
+  targetId: string;
   amount: number;
   critCount: number;
+  dmgType: ARDamageType;
+  statusFx?: string;
+  x: number;
+  z: number;
 }
 
 // ============================================================
@@ -151,6 +212,18 @@ export const RARITY_BG_COLORS: Record<ARRarity, string> = {
   rare: 'rgba(33,150,243,0.15)',
   epic: 'rgba(156,39,176,0.15)',
   legendary: 'rgba(255,152,0,0.20)',
+};
+
+// ============================================================
+// Damage Type Colors
+// ============================================================
+
+export const DAMAGE_TYPE_COLORS: Record<ARDamageType, string> = {
+  physical: '#FFFFFF',
+  fire: '#FF6B35',
+  frost: '#4FC3F7',
+  lightning: '#FFD54F',
+  poison: '#66BB6A',
 };
 
 // ============================================================
@@ -177,6 +250,58 @@ export const TOME_INFO: Record<
   magnet: { name: 'Magnet', icon: '🧲', desc: '+1m XP range', tag: 'growth' },
   dodge: { name: 'Dodge', icon: '🌀', desc: '+5% dodge chance', tag: 'defense' },
   cursed: { name: 'Cursed', icon: '💀', desc: '+15% enemies, +25% XP', tag: 'risk' },
+};
+
+// ============================================================
+// Weapon Display Info
+// ============================================================
+
+export const WEAPON_INFO: Record<
+  ARWeaponID,
+  { name: string; icon: string; tier: ARWeaponTier; damageType: ARDamageType; desc: string }
+> = {
+  sniper_rifle: { name: 'Sniper Rifle', icon: '🔫', tier: 'S', damageType: 'physical', desc: 'Long-range precision' },
+  lightning_staff: { name: 'Lightning Staff', icon: '⚡', tier: 'S', damageType: 'lightning', desc: 'Chain lightning ×3' },
+  bow: { name: 'Bow', icon: '🏹', tier: 'S', damageType: 'physical', desc: 'Fast-firing ranged' },
+  revolver: { name: 'Revolver', icon: '🔫', tier: 'S', damageType: 'physical', desc: 'High-damage medium range' },
+  katana: { name: 'Katana', icon: '⚔️', tier: 'A', damageType: 'physical', desc: 'Fast melee, pierces' },
+  fire_staff: { name: 'Fire Staff', icon: '🔥', tier: 'A', damageType: 'fire', desc: 'AOE fireball' },
+  aegis: { name: 'Aegis', icon: '🛡️', tier: 'A', damageType: 'physical', desc: 'Shield bash + block' },
+  wireless_dagger: { name: 'Wireless Dagger', icon: '🗡️', tier: 'A', damageType: 'physical', desc: 'Auto-tracking' },
+  black_hole: { name: 'Black Hole', icon: '🕳️', tier: 'A', damageType: 'physical', desc: 'Pulls enemies 3s' },
+  axe: { name: 'Axe', icon: '🪓', tier: 'B', damageType: 'physical', desc: '360° melee cleave' },
+  frostwalker: { name: 'Frostwalker', icon: '❄️', tier: 'B', damageType: 'frost', desc: 'Freezing trail' },
+  flamewalker: { name: 'Flamewalker', icon: '🔥', tier: 'B', damageType: 'fire', desc: 'Burning trail' },
+  poison_flask: { name: 'Poison Flask', icon: '🧪', tier: 'B', damageType: 'poison', desc: 'Poison puddle DOT' },
+  landmine: { name: 'Landmine', icon: '💣', tier: 'B', damageType: 'physical', desc: 'Planted explosive' },
+  shotgun: { name: 'Shotgun', icon: '🔫', tier: 'B', damageType: 'physical', desc: '5-pellet cone blast' },
+  dice: { name: 'Dice', icon: '🎲', tier: 'B', damageType: 'physical', desc: 'Random 0-300 damage' },
+};
+
+// ============================================================
+// Item Display Info
+// ============================================================
+
+export const ITEM_INFO: Record<
+  ARItemID,
+  { name: string; icon: string; rarity: ARRarity; desc: string; category: 'instant' | 'equipment' }
+> = {
+  health_orb_small: { name: 'Health Orb (S)', icon: '❤️', rarity: 'common', desc: '+10% HP', category: 'instant' },
+  health_orb_large: { name: 'Health Orb (L)', icon: '💖', rarity: 'uncommon', desc: '+30% HP', category: 'instant' },
+  xp_magnet: { name: 'XP Magnet', icon: '🧲', rarity: 'rare', desc: 'Collect all XP', category: 'instant' },
+  speed_boost: { name: 'Speed Boost', icon: '💨', rarity: 'uncommon', desc: '2x speed 15s', category: 'instant' },
+  shield_burst: { name: 'Shield Burst', icon: '🛡️', rarity: 'rare', desc: '5s invincibility', category: 'instant' },
+  bomb: { name: 'Bomb', icon: '💣', rarity: 'uncommon', desc: '25% HP AOE 10m', category: 'instant' },
+  iron_boots: { name: 'Iron Boots', icon: '🥾', rarity: 'common', desc: '+30% KB resist', category: 'equipment' },
+  feather_cape: { name: 'Feather Cape', icon: '🪶', rarity: 'uncommon', desc: 'Double jump', category: 'equipment' },
+  vampire_ring: { name: 'Vampire Ring', icon: '💍', rarity: 'rare', desc: '3% lifesteal', category: 'equipment' },
+  berserker_helm: { name: 'Berserker Helm', icon: '⚔️', rarity: 'rare', desc: '+40% dmg <50% HP', category: 'equipment' },
+  crown_of_thorns: { name: 'Crown of Thorns', icon: '👑', rarity: 'epic', desc: '25% reflect + 1s invuln', category: 'equipment' },
+  magnet_amulet: { name: 'Magnet Amulet', icon: '📿', rarity: 'uncommon', desc: '+5m XP range', category: 'equipment' },
+  glass_cannon: { name: 'Glass Cannon', icon: '🔮', rarity: 'epic', desc: '+60% dmg, +40% taken', category: 'equipment' },
+  frozen_heart: { name: 'Frozen Heart', icon: '💙', rarity: 'rare', desc: '30% freeze attackers', category: 'equipment' },
+  lucky_clover: { name: 'Lucky Clover', icon: '🍀', rarity: 'uncommon', desc: 'Luck +3', category: 'equipment' },
+  titan_belt: { name: 'Titan Belt', icon: '🏋️', rarity: 'epic', desc: '+30% HP, KB immune', category: 'equipment' },
 };
 
 // ============================================================

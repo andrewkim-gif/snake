@@ -148,13 +148,15 @@ type ARPlayer struct {
 	FactionID string          `json:"factionId"`
 
 	// Build state
-	Tomes       map[ARTomeID]int `json:"tomes"`
-	WeaponSlots []string         `json:"weapons"` // weapon IDs (max 6)
+	Tomes       map[ARTomeID]int   `json:"tomes"`
+	WeaponSlots []string           `json:"weapons"` // weapon IDs (max 6)
+	Weapons     []*ARWeaponInstance `json:"-"`        // equipped weapon instances with cooldowns
+	Equipment   []ARItemID         `json:"equipment"` // equipped items (max 3)
 
 	// Movement state (server-only)
-	Grounded    bool    `json:"-"`
-	Stamina     float64 `json:"-"`
-	MaxStamina  float64 `json:"-"`
+	Grounded      bool    `json:"-"`
+	Stamina       float64 `json:"-"`
+	MaxStamina    float64 `json:"-"`
 	SlideCooldown float64 `json:"-"`
 
 	// Level-up pending
@@ -162,15 +164,30 @@ type ARPlayer struct {
 	LevelUpChoices []ARTomeOffer `json:"-"`
 
 	// Combat stats (computed from tomes)
-	DamageMult    float64 `json:"-"`
+	DamageMult      float64 `json:"-"`
 	AttackSpeedMult float64 `json:"-"`
-	CritChance    float64 `json:"-"`
-	CritDamageMult float64 `json:"-"`
-	AreaMult      float64 `json:"-"`
-	SpeedMult     float64 `json:"-"`
-	DodgeChance   float64 `json:"-"`
-	MagnetRange   float64 `json:"-"`
-	XPMult        float64 `json:"-"`
+	CritChance      float64 `json:"-"`
+	CritDamageMult  float64 `json:"-"`
+	AreaMult        float64 `json:"-"`
+	SpeedMult       float64 `json:"-"`
+	DodgeChance     float64 `json:"-"`
+	MagnetRange     float64 `json:"-"`
+	XPMult          float64 `json:"-"`
+	ProjectileExtra int     `json:"-"` // extra projectiles from Projectile tome
+	PierceExtra     int     `json:"-"` // extra pierce from Projectile tome
+	KnockbackMult   float64 `json:"-"`
+	ThornsPct       float64 `json:"-"` // thorns reflection percentage
+	LifestealPct    float64 `json:"-"` // from Vampire Ring etc.
+
+	// Status effects on this player
+	StatusEffects []ARStatusInstance `json:"-"`
+
+	// Shield tome cooldown
+	ShieldCooldown float64 `json:"-"` // seconds until next shield charge
+
+	// Temporary buffs
+	SpeedBoostTimer float64 `json:"-"` // speed boost remaining seconds
+	ShieldBurstTimer float64 `json:"-"` // invincibility remaining seconds
 
 	// Grace period
 	GraceTicks int `json:"-"`
@@ -196,9 +213,210 @@ type AREnemy struct {
 	MaxHP    float64     `json:"maxHp"`
 	Damage   float64     `json:"-"`
 	Speed    float64     `json:"-"`
+	Defense  float64     `json:"-"` // damage reduction
 	Alive    bool        `json:"alive"`
 	IsElite  bool        `json:"isElite"`
 	TargetID string      `json:"-"` // which player it targets
+
+	// Status effects applied to this enemy
+	StatusEffects []ARStatusInstance `json:"-"`
+
+	// Damage type affinity (for elemental weakness/resistance)
+	DamageAffinity ARDamageType `json:"-"`
+}
+
+// ============================================================
+// Weapon Types
+// ============================================================
+
+// ARWeaponID identifies a weapon.
+type ARWeaponID string
+
+const (
+	ARWeaponSniperRifle   ARWeaponID = "sniper_rifle"
+	ARWeaponLightningStaff ARWeaponID = "lightning_staff"
+	ARWeaponBow           ARWeaponID = "bow"
+	ARWeaponRevolver      ARWeaponID = "revolver"
+	ARWeaponKatana        ARWeaponID = "katana"
+	ARWeaponFireStaff     ARWeaponID = "fire_staff"
+	ARWeaponAegis         ARWeaponID = "aegis"
+	ARWeaponWirelessDagger ARWeaponID = "wireless_dagger"
+	ARWeaponBlackHole     ARWeaponID = "black_hole"
+	ARWeaponAxe           ARWeaponID = "axe"
+	ARWeaponFrostwalker   ARWeaponID = "frostwalker"
+	ARWeaponFlamewalker   ARWeaponID = "flamewalker"
+	ARWeaponPoisonFlask   ARWeaponID = "poison_flask"
+	ARWeaponLandmine      ARWeaponID = "landmine"
+	ARWeaponShotgun       ARWeaponID = "shotgun"
+	ARWeaponDice          ARWeaponID = "dice"
+)
+
+// ARWeaponTier classifies weapon power level.
+type ARWeaponTier string
+
+const (
+	ARWeaponTierS ARWeaponTier = "S"
+	ARWeaponTierA ARWeaponTier = "A"
+	ARWeaponTierB ARWeaponTier = "B"
+)
+
+// ARProjectileType enumerates projectile movement patterns.
+type ARProjectileType string
+
+const (
+	ARProjStraight ARProjectileType = "straight" // linear movement
+	ARProjHoming   ARProjectileType = "homing"   // tracks target
+	ARProjPierce   ARProjectileType = "pierce"   // passes through enemies
+	ARProjAOE      ARProjectileType = "aoe"      // area of effect explosion
+)
+
+// ARAttackPattern defines how a weapon attacks.
+type ARAttackPattern string
+
+const (
+	ARPatternMelee     ARAttackPattern = "melee"      // close-range cone
+	ARPatternRangedSingle ARAttackPattern = "ranged_single" // single projectile
+	ARPatternRangedChain ARAttackPattern = "ranged_chain"  // chains between targets
+	ARPatternRangedAOE  ARAttackPattern = "ranged_aoe"    // AOE blast
+	ARPatternTrail      ARAttackPattern = "trail"         // movement-based trail damage
+	ARPatternPlaced     ARAttackPattern = "placed"        // placed on ground
+	ARPatternScatter    ARAttackPattern = "scatter"       // multiple spread shots
+	ARPatternRandom     ARAttackPattern = "random"        // random effect each shot
+)
+
+// ARWeaponDef is the static definition of a weapon.
+type ARWeaponDef struct {
+	ID          ARWeaponID      `json:"id"`
+	Name        string          `json:"name"`
+	Tier        ARWeaponTier    `json:"tier"`
+	DamageType  ARDamageType    `json:"damageType"`
+	BaseDamage  float64         `json:"baseDamage"`
+	BaseRange   float64         `json:"baseRange"`   // meters
+	BaseCooldown float64        `json:"baseCooldown"` // seconds between attacks
+	Pattern     ARAttackPattern `json:"pattern"`
+	ProjType    ARProjectileType `json:"projType"`
+	ProjSpeed   float64         `json:"projSpeed"`   // m/s (0 = instant/melee)
+	PierceCount int             `json:"pierceCount"` // how many enemies to pierce
+	AOERadius   float64         `json:"aoeRadius"`   // AOE explosion radius
+	StatusApply ARStatusEffect  `json:"statusApply"` // status effect on hit ("" = none)
+	StatusChance float64        `json:"statusChance"` // 0-100 chance to apply status
+	ChainCount  int             `json:"chainCount"`  // for chain weapons
+	Description string          `json:"desc"`
+}
+
+// ARWeaponInstance is a player's equipped weapon with level.
+type ARWeaponInstance struct {
+	WeaponID   ARWeaponID `json:"weaponId"`
+	Level      int        `json:"level"`   // 1-7
+	Cooldown   float64    `json:"-"`        // current cooldown remaining
+}
+
+// ============================================================
+// Projectile Entity
+// ============================================================
+
+// ARProjectile is a live projectile in the arena.
+type ARProjectile struct {
+	ID        string           `json:"id"`
+	OwnerID   string           `json:"-"`         // player who fired
+	WeaponID  ARWeaponID       `json:"-"`
+	Pos       ARVec3           `json:"pos"`
+	Vel       ARVec3           `json:"-"`
+	DmgType   ARDamageType     `json:"-"`
+	Damage    float64          `json:"-"`
+	ProjType  ARProjectileType `json:"-"`
+	Speed     float64          `json:"-"`
+	Range     float64          `json:"-"`         // max travel distance
+	Traveled  float64          `json:"-"`
+	PierceLeft int             `json:"-"`
+	AOERadius float64          `json:"-"`
+	TargetID  string           `json:"-"`         // for homing
+	StatusFX  ARStatusEffect   `json:"-"`
+	StatusPct float64          `json:"-"`         // chance 0-100
+	Alive     bool             `json:"-"`
+	HitIDs    map[string]bool  `json:"-"`         // already-hit enemies (for pierce)
+}
+
+// ARProjectileNet is the network representation of a projectile.
+type ARProjectileNet struct {
+	ID   string  `json:"id"`
+	X    float64 `json:"x"`
+	Z    float64 `json:"z"`
+	Type string  `json:"type"` // weapon ID for visual selection
+}
+
+// ============================================================
+// Status Effect Instance
+// ============================================================
+
+// ARStatusInstance is an active status effect on an entity.
+type ARStatusInstance struct {
+	Effect    ARStatusEffect `json:"effect"`
+	Remaining float64        `json:"remaining"` // seconds left
+	Stacks    int            `json:"stacks"`
+	SourceID  string         `json:"-"` // who applied it
+}
+
+// ============================================================
+// Item Types
+// ============================================================
+
+// ARItemID identifies an item type.
+type ARItemID string
+
+const (
+	// Instant-use items
+	ARItemHealthOrbSmall ARItemID = "health_orb_small"
+	ARItemHealthOrbLarge ARItemID = "health_orb_large"
+	ARItemXPMagnet       ARItemID = "xp_magnet"
+	ARItemSpeedBoost     ARItemID = "speed_boost"
+	ARItemShieldBurst    ARItemID = "shield_burst"
+	ARItemBomb           ARItemID = "bomb"
+
+	// Equipment items
+	ARItemIronBoots    ARItemID = "iron_boots"
+	ARItemFeatherCape  ARItemID = "feather_cape"
+	ARItemVampireRing  ARItemID = "vampire_ring"
+	ARItemBerserkerHelm ARItemID = "berserker_helm"
+	ARItemCrownOfThorns ARItemID = "crown_of_thorns"
+	ARItemMagnetAmulet ARItemID = "magnet_amulet"
+	ARItemGlassCannon  ARItemID = "glass_cannon"
+	ARItemFrozenHeart  ARItemID = "frozen_heart"
+	ARItemLuckyClover  ARItemID = "lucky_clover"
+	ARItemTitanBelt    ARItemID = "titan_belt"
+)
+
+// ARItemCategory distinguishes instant vs equipment items.
+type ARItemCategory string
+
+const (
+	ARItemCatInstant   ARItemCategory = "instant"
+	ARItemCatEquipment ARItemCategory = "equipment"
+)
+
+// ARItemDef is the static definition of a droppable item.
+type ARItemDef struct {
+	ID       ARItemID       `json:"id"`
+	Name     string         `json:"name"`
+	Category ARItemCategory `json:"category"`
+	Rarity   ARRarity       `json:"rarity"`
+	Desc     string         `json:"desc"`
+}
+
+// ARFieldItem is a dropped item on the ground.
+type ARFieldItem struct {
+	ID     string   `json:"id"`
+	ItemID ARItemID `json:"itemId"`
+	Pos    ARVec3   `json:"pos"`
+	Alive  bool     `json:"-"`
+}
+
+// ARFieldItemNet is the network representation of a field item.
+type ARFieldItemNet struct {
+	ID     string   `json:"id"`
+	ItemID ARItemID `json:"itemId"`
+	X      float64  `json:"x"`
+	Z      float64  `json:"z"`
 }
 
 // ARXPCrystal is an XP drop on the ground.
@@ -215,12 +433,25 @@ type ARXPCrystal struct {
 
 // ARState is the full game state sent to clients at 20Hz.
 type ARState struct {
-	Phase      ARPhase       `json:"phase"`
-	Timer      float64       `json:"timer"` // seconds remaining in current phase
-	WaveNumber int           `json:"wave"`
-	Players    []*ARPlayer   `json:"players"`
-	Enemies    []AREnemyNet  `json:"enemies"`
-	XPCrystals []ARCrystalNet `json:"xpCrystals"`
+	Phase       ARPhase           `json:"phase"`
+	Timer       float64           `json:"timer"` // seconds remaining in current phase
+	WaveNumber  int               `json:"wave"`
+	Players     []*ARPlayer       `json:"players"`
+	Enemies     []AREnemyNet      `json:"enemies"`
+	XPCrystals  []ARCrystalNet    `json:"xpCrystals"`
+	Projectiles []ARProjectileNet `json:"projectiles"`
+	Items       []ARFieldItemNet  `json:"items"`
+}
+
+// ARDamageEvent is sent to clients for damage number rendering.
+type ARDamageEvent struct {
+	TargetID  string       `json:"targetId"`
+	Amount    float64      `json:"amount"`
+	CritCount int          `json:"critCount"`
+	DmgType   ARDamageType `json:"dmgType"`
+	StatusFX  string       `json:"statusFx,omitempty"` // status effect applied
+	X         float64      `json:"x"`
+	Z         float64      `json:"z"`
 }
 
 // AREnemyNet is a network-safe enemy representation.

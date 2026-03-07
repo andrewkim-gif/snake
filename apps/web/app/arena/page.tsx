@@ -19,8 +19,10 @@ import type {
   ARCrystalNet,
   ARTomeOffer,
   ARTomeID,
+  ARDamageType,
 } from '@/lib/3d/ar-types';
 import { TOME_INFO } from '@/lib/3d/ar-types';
+import { addDamageNumber, type DamageNumber } from '@/components/game/ar/ARDamageNumbers';
 import { ARHUD } from '@/components/game/ar/ARHUD';
 import { ARLevelUp } from '@/components/game/ar/ARLevelUp';
 
@@ -91,6 +93,9 @@ export default function ArenaPage() {
 
   // Keys
   const keysRef = useRef<Set<string>>(new Set());
+
+  // Damage numbers
+  const damageNumbersRef = useRef<DamageNumber[]>([]);
 
   useEffect(() => {
     const onDown = (e: KeyboardEvent) => keysRef.current.add(e.code);
@@ -176,7 +181,20 @@ export default function ArenaPage() {
 
       if (nearestIdx >= 0) {
         const target = enemiesRef.current[nearestIdx];
-        target.hp -= dps * dt;
+        const dmgThisTick = dps * dt;
+
+        // Critical check (5% base)
+        const critChance = 5 + (tomes['crit_chance'] || 0) * 8;
+        const roll = Math.random() * 100;
+        const critCount = roll < critChance ? 1 : 0;
+        const critMult = critCount > 0 ? 2.0 + (tomes['crit_damage'] || 0) * 0.2 : 1.0;
+        const finalDmg = dmgThisTick * critMult;
+
+        target.hp -= finalDmg;
+
+        // Spawn damage number
+        addDamageNumber(damageNumbersRef, target.x, target.z, finalDmg, critCount, 'physical');
+
         if (target.hp <= 0) {
           // Kill: spawn XP crystal
           nextIdRef.current++;
@@ -372,6 +390,7 @@ export default function ArenaPage() {
         attackRange={BASE_ATTACK_RANGE}
         hpRatio={maxHp > 0 ? hp / maxHp : 1}
         alive={alive}
+        damageNumbersRef={damageNumbersRef}
       />
 
       {/* HUD 오버레이 */}

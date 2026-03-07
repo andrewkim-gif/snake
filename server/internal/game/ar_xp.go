@@ -2,7 +2,6 @@ package game
 
 import (
 	"fmt"
-	"math"
 	"math/rand"
 )
 
@@ -175,7 +174,7 @@ func ApplyTome(player *ARPlayer, tomeID ARTomeID, rarity ARRarity) {
 	player.Tomes[tomeID]++
 
 	// Recompute derived stats from all tome stacks
-	recomputePlayerStats(player)
+	RecomputeAllStats(player)
 
 	// Special per-tome effects that scale with rarity
 	switch tomeID {
@@ -188,29 +187,4 @@ func ApplyTome(player *ARPlayer, tomeID ARTomeID, rarity ARRarity) {
 	case ARTomeSpeed:
 		player.MaxStamina += 20.0 * mult
 	}
-}
-
-// recomputePlayerStats recalculates all derived stats from tomes.
-func recomputePlayerStats(player *ARPlayer) {
-	// Diminishing returns for stacks >= 5: effect(n) = base * n^0.85
-	dimReturn := func(stacks int, perStack float64) float64 {
-		n := float64(stacks)
-		if n <= 0 {
-			return 0
-		}
-		if n < 5 {
-			return perStack * n
-		}
-		return perStack * math.Pow(n, 0.85)
-	}
-
-	player.DamageMult = 1.0 + dimReturn(player.Tomes[ARTomeDamage], 0.15)
-	player.AttackSpeedMult = 1.0 + dimReturn(player.Tomes[ARTomeAttackSpeed], 0.10)
-	player.CritChance = 5.0 + dimReturn(player.Tomes[ARTomeCritChance], 8.0) // base 5%
-	player.CritDamageMult = 2.0 + dimReturn(player.Tomes[ARTomeCritDamage], 0.20)
-	player.AreaMult = 1.0 + dimReturn(player.Tomes[ARTomeArea], 0.12)
-	player.SpeedMult = 1.0 + dimReturn(player.Tomes[ARTomeSpeed], 0.08)
-	player.DodgeChance = dimReturn(player.Tomes[ARTomeDodge], 5.0)
-	player.MagnetRange = ARXPMagnetBase + float64(player.Tomes[ARTomeMagnet])*ARXPMagnetPerTome
-	player.XPMult = 1.0 + dimReturn(player.Tomes[ARTomeXP], 0.15)
 }
