@@ -1,18 +1,20 @@
 'use client';
 
 /**
- * GlobeWarEffects — v14 Phase 7 S34
+ * GlobeWarEffects — v14 Phase 7 S34 + v15 Phase 4 enhancements
  * War visual effects on the globe:
  * 1. War declaration: red dashed arc line between nations
  * 2. Territory edge red blinking (0.5Hz)
  * 3. Explosion particles near borders
  * 4. War progress: moving arrow particles on arc
- * 5. War end: gold fireworks for winner, color transition for loser
+ * 5. War end: gold fireworks for winner, color transition for loser (ENHANCED: 300 particles, 3-stage burst)
  * 6. Camera auto-rotate to war zone
+ * 7. [v15] War fog: red fog particles at midpoint between warring nations
+ * 8. [v15] Camera shake: sin(t*40)*0.3 offset for 0.5s on war declaration
  */
 
-import { useRef, useMemo, useEffect, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
 // ─── Types ───
@@ -67,11 +69,21 @@ const BLINK_COLOR = new THREE.Color(0xff3333);
 // Particles
 const EXPLOSION_PARTICLE_COUNT = 30;
 const ARROW_PARTICLE_COUNT = 12;
-const FIREWORK_PARTICLE_COUNT = 50;
+const FIREWORK_PARTICLE_COUNT = 300; // v15: upgraded from 50 → 300
 
 // War end
 const WINNER_FIREWORK_COLOR = new THREE.Color(0xffd700); // gold
 const LOSER_TRANSITION_DURATION = 5.0; // seconds
+
+// v15: War fog constants
+const WAR_FOG_PARTICLE_COUNT = 20;
+const WAR_FOG_COLOR = new THREE.Color(0xcc2222);
+const WAR_FOG_SPREAD = 0.08; // spread relative to globe radius
+
+// v15: Camera shake constants
+const CAMERA_SHAKE_DURATION = 0.5;  // seconds
+const CAMERA_SHAKE_INTENSITY = 0.3; // position offset magnitude
+const CAMERA_SHAKE_FREQUENCY = 40;  // sin wave frequency
 
 // ─── Helpers ───
 
@@ -431,7 +443,7 @@ function ExplosionParticles({
 }
 
 /**
- * VictoryFireworks — Gold firework particles for war winner.
+ * VictoryFireworks — v15 Enhanced: 300 particles, 3-stage burst (0s, 0.5s, 1.0s), gold + nation colors
  */
 function VictoryFireworks({
   position,
@@ -445,39 +457,65 @@ function VictoryFireworks({
   const pointsRef = useRef<THREE.Points>(null);
   const timeRef = useRef(0);
 
+  // 3-stage burst: particles divided into 3 batches with delayed activation
+  const STAGE_SIZE = Math.floor(FIREWORK_PARTICLE_COUNT / 3);
+  const STAGE_DELAYS = [0, 0.5, 1.0]; // seconds
+
+  // Color palette: gold dominant + accent colors
+  const colorPalette = useMemo(() => [
+    new THREE.Color(0xffd700), // gold
+    new THREE.Color(0xffaa00), // amber
+    new THREE.Color(0xff6600), // orange
+    new THREE.Color(0xffee55), // bright gold
+    new THREE.Color(0xffffff), // white sparkle
+  ], []);
+
   const geometry = useMemo(() => {
     const positions = new Float32Array(FIREWORK_PARTICLE_COUNT * 3);
     const velocities = new Float32Array(FIREWORK_PARTICLE_COUNT * 3);
+    const colors = new Float32Array(FIREWORK_PARTICLE_COUNT * 3);
+    const stages = new Float32Array(FIREWORK_PARTICLE_COUNT); // which burst stage (0, 1, 2)
 
     for (let i = 0; i < FIREWORK_PARTICLE_COUNT; i++) {
       positions[i * 3] = position.x;
       positions[i * 3 + 1] = position.y;
       positions[i * 3 + 2] = position.z;
 
-      // Radial burst velocity
+      // Radial burst velocity with variation per stage
+      const stageIdx = Math.floor(i / STAGE_SIZE);
+      stages[i] = Math.min(stageIdx, 2);
       const theta = Math.random() * Math.PI * 2;
       const phi = Math.random() * Math.PI;
-      const speed = 2 + Math.random() * 4;
+      const speed = (2 + Math.random() * 5) * (1 + stageIdx * 0.3); // later stages are faster
       velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
       velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
       velocities[i * 3 + 2] = Math.cos(phi) * speed;
+
+      // Color from palette
+      const col = colorPalette[Math.floor(Math.random() * colorPalette.length)];
+      colors[i * 3] = col.r;
+      colors[i * 3 + 1] = col.g;
+      colors[i * 3 + 2] = col.b;
     }
 
     const geo = new THREE.BufferGeometry();
     geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
     geo.userData.velocities = velocities;
+    geo.userData.stages = stages;
+    geo.userData.originPos = position.clone();
     return geo;
-  }, [position]);
+  }, [position, colorPalette]);
 
   const material = useMemo(
     () =>
       new THREE.PointsMaterial({
-        color: WINNER_FIREWORK_COLOR,
-        size: globeRadius * 0.015,
+        size: globeRadius * 0.012,
         transparent: true,
         opacity: 1.0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
+        vertexColors: true,
       }),
     [globeRadius],
   );
@@ -488,28 +526,40 @@ function VictoryFireworks({
 
     const positions = geometry.attributes.position as THREE.BufferAttribute;
     const velocities = geometry.userData.velocities as Float32Array;
+    const stages = geometry.userData.stages as Float32Array;
+    const origin = geometry.userData.originPos as THREE.Vector3;
 
-    // 3-second animation
-    if (timeRef.current > 3.0) {
+    // 4-second total animation (3 stages)
+    if (timeRef.current > 4.0) {
       material.opacity = Math.max(0, material.opacity - delta * 0.5);
       return;
     }
 
     for (let i = 0; i < FIREWORK_PARTICLE_COUNT; i++) {
+      const stage = stages[i];
+      const stageDelay = STAGE_DELAYS[Math.min(Math.floor(stage), 2)];
+      const localTime = timeRef.current - stageDelay;
+
+      if (localTime < 0) {
+        // Not yet launched — stay at origin
+        positions.setXYZ(i, origin.x, origin.y, origin.z);
+        continue;
+      }
+
       const x = positions.getX(i) + velocities[i * 3] * delta;
       const y = positions.getY(i) + velocities[i * 3 + 1] * delta;
       const z = positions.getZ(i) + velocities[i * 3 + 2] * delta;
       positions.setXYZ(i, x, y, z);
 
-      // Gravity toward globe center
-      velocities[i * 3] *= 0.98;
-      velocities[i * 3 + 1] *= 0.98;
-      velocities[i * 3 + 2] *= 0.98;
+      // Gravity + drag
+      velocities[i * 3] *= 0.97;
+      velocities[i * 3 + 1] *= 0.97;
+      velocities[i * 3 + 2] *= 0.97;
     }
     positions.needsUpdate = true;
 
-    // Fade out
-    material.opacity = Math.max(0, 1.0 - timeRef.current / 3.0);
+    // Fade out over time
+    material.opacity = Math.max(0, 1.0 - timeRef.current / 4.0);
   });
 
   useEffect(() => {
@@ -522,6 +572,139 @@ function VictoryFireworks({
   if (!active) return null;
 
   return <points ref={pointsRef} geometry={geometry} material={material} />;
+}
+
+/**
+ * WarFog — v15: Red fog particles at midpoint between warring nations.
+ * InstancedMesh 20 particles, slowly rotating, noise-based semi-transparent.
+ */
+function WarFog({
+  center,
+  globeRadius,
+  state,
+}: {
+  center: THREE.Vector3;
+  globeRadius: number;
+  state: 'preparation' | 'active' | 'ended';
+}) {
+  const meshRef = useRef<THREE.InstancedMesh>(null);
+  const timeRef = useRef(0);
+  const _dummy = useMemo(() => new THREE.Object3D(), []);
+
+  // Particle offsets (random positions around center, computed once)
+  const offsets = useMemo(() => {
+    const arr: THREE.Vector3[] = [];
+    const spread = globeRadius * WAR_FOG_SPREAD;
+    for (let i = 0; i < WAR_FOG_PARTICLE_COUNT; i++) {
+      arr.push(new THREE.Vector3(
+        (Math.random() - 0.5) * spread * 2,
+        (Math.random() - 0.5) * spread * 2,
+        (Math.random() - 0.5) * spread * 2,
+      ));
+    }
+    return arr;
+  }, [globeRadius]);
+
+  const fogGeometry = useMemo(() => new THREE.PlaneGeometry(3, 3), []);
+  const fogMaterial = useMemo(
+    () => new THREE.MeshBasicMaterial({
+      color: WAR_FOG_COLOR,
+      transparent: true,
+      opacity: 0.15,
+      blending: THREE.AdditiveBlending,
+      depthWrite: false,
+      side: THREE.DoubleSide,
+    }),
+    [],
+  );
+
+  useFrame((stateR3F, delta) => {
+    if (!meshRef.current || state !== 'active') return;
+    timeRef.current += delta;
+    const t = timeRef.current;
+    const cam = stateR3F.camera;
+
+    for (let i = 0; i < WAR_FOG_PARTICLE_COUNT; i++) {
+      const offset = offsets[i];
+      // Slow orbital rotation around center
+      const angle = t * 0.15 + (i / WAR_FOG_PARTICLE_COUNT) * Math.PI * 2;
+      const rotatedOffset = new THREE.Vector3(
+        offset.x * Math.cos(angle) - offset.z * Math.sin(angle),
+        offset.y + Math.sin(t * 0.5 + i) * 0.5,
+        offset.x * Math.sin(angle) + offset.z * Math.cos(angle),
+      );
+
+      _dummy.position.copy(center).add(rotatedOffset);
+      // Billboard: face camera
+      _dummy.quaternion.copy(cam.quaternion);
+      // Pulse scale for organic feel
+      const scale = 1.0 + 0.3 * Math.sin(t * 0.8 + i * 1.5);
+      _dummy.scale.setScalar(scale);
+      _dummy.updateMatrix();
+      meshRef.current.setMatrixAt(i, _dummy.matrix);
+    }
+    meshRef.current.instanceMatrix.needsUpdate = true;
+  });
+
+  useEffect(() => {
+    return () => {
+      fogGeometry.dispose();
+      fogMaterial.dispose();
+    };
+  }, [fogGeometry, fogMaterial]);
+
+  if (state !== 'active') return null;
+
+  return (
+    <instancedMesh
+      ref={meshRef}
+      args={[fogGeometry, fogMaterial, WAR_FOG_PARTICLE_COUNT]}
+      frustumCulled={false}
+    />
+  );
+}
+
+/**
+ * CameraShake — v15: Screen vibration on war declaration.
+ * Applies sin(t*40)*0.3 offset to camera.position for 0.5 seconds.
+ */
+function CameraShake({ active }: { active: boolean }) {
+  const { camera } = useThree();
+  const shakeTimeRef = useRef(0);
+  const shakeActiveRef = useRef(false);
+  const origPosRef = useRef(new THREE.Vector3());
+
+  useEffect(() => {
+    if (active && !shakeActiveRef.current) {
+      shakeActiveRef.current = true;
+      shakeTimeRef.current = 0;
+      origPosRef.current.copy(camera.position);
+    }
+  }, [active, camera]);
+
+  useFrame((_, delta) => {
+    if (!shakeActiveRef.current) return;
+    shakeTimeRef.current += delta;
+
+    if (shakeTimeRef.current >= CAMERA_SHAKE_DURATION) {
+      // Restore original position
+      camera.position.copy(origPosRef.current);
+      shakeActiveRef.current = false;
+      return;
+    }
+
+    // Decay envelope: intensity decreases over time
+    const decay = 1.0 - (shakeTimeRef.current / CAMERA_SHAKE_DURATION);
+    const t = shakeTimeRef.current;
+    const offsetX = Math.sin(t * CAMERA_SHAKE_FREQUENCY) * CAMERA_SHAKE_INTENSITY * decay;
+    const offsetY = Math.cos(t * CAMERA_SHAKE_FREQUENCY * 1.3) * CAMERA_SHAKE_INTENSITY * decay * 0.7;
+
+    camera.position.copy(origPosRef.current);
+    camera.position.x += offsetX;
+    camera.position.y += offsetY;
+  });
+
+  return null;
 }
 
 // ─── Main Component ───
@@ -548,6 +731,8 @@ export function GlobeWarEffects({
   visible = true,
 }: GlobeWarEffectsProps) {
   const prevWarIdsRef = useRef<Set<string>>(new Set());
+  // v15: Camera shake triggers when a new war is declared
+  const [shakeActive, setShakeActive] = useState(false);
 
   // Get 3D positions for countries
   const getCountryPosition = useCallback(
@@ -570,22 +755,33 @@ export function GlobeWarEffects({
     [getCountryPosition, globeRadius],
   );
 
-  // Camera auto-rotation to new war zones
+  // Camera auto-rotation to new war zones + v15 camera shake
   useEffect(() => {
-    if (!autoRotateCamera || !onCameraTarget) return;
-
     const currentWarIds = new Set(wars.map((w) => w.warId));
     const prevWarIds = prevWarIdsRef.current;
+    let hasNewWar = false;
 
     // Find newly declared wars
     for (const war of wars) {
       if (!prevWarIds.has(war.warId) && (war.state === 'preparation' || war.state === 'active')) {
-        const midpoint = getBorderCenter(war.attacker, war.defender);
-        if (midpoint) {
-          onCameraTarget(midpoint);
-          break; // only rotate to first new war
+        hasNewWar = true;
+        if (autoRotateCamera && onCameraTarget) {
+          const midpoint = getBorderCenter(war.attacker, war.defender);
+          if (midpoint) {
+            onCameraTarget(midpoint);
+          }
         }
+        break; // only handle first new war
       }
+    }
+
+    // v15: Trigger camera shake on new war declaration
+    if (hasNewWar) {
+      setShakeActive(true);
+      // Auto-reset after shake duration
+      const timer = setTimeout(() => setShakeActive(false), CAMERA_SHAKE_DURATION * 1000 + 100);
+      prevWarIdsRef.current = currentWarIds;
+      return () => clearTimeout(timer);
     }
 
     prevWarIdsRef.current = currentWarIds;
@@ -611,6 +807,9 @@ export function GlobeWarEffects({
 
   return (
     <group>
+      {/* v15: Camera shake on war declaration */}
+      <CameraShake active={shakeActive} />
+
       {warEffects.map(({ war, attackerPos, defenderPos, borderCenter }) => {
         if (!attackerPos || !defenderPos) return null;
 
@@ -649,7 +848,16 @@ export function GlobeWarEffects({
               />
             )}
 
-            {/* 5. Victory fireworks for winner */}
+            {/* v15: 7. War fog between warring nations */}
+            {borderCenter && (
+              <WarFog
+                center={borderCenter}
+                globeRadius={globeRadius}
+                state={war.state}
+              />
+            )}
+
+            {/* 5. Victory fireworks for winner (v15: enhanced 300 particles, 3-stage burst) */}
             {war.state === 'ended' && war.winner && (
               <VictoryFireworks
                 position={

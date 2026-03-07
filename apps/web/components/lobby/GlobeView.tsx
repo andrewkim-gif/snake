@@ -29,6 +29,11 @@ import { loadFlagAtlas } from '@/lib/flag-atlas';
 import type { FlagAtlasResult } from '@/lib/flag-atlas';
 import { COUNTRIES } from '@/lib/country-data';
 
+// v15 Phase 4: Missile + Shockwave effects
+import { GlobeMissileEffect } from '@/components/3d/GlobeMissileEffect';
+import { GlobeShockwave } from '@/components/3d/GlobeShockwave';
+import type { GlobeShockwaveHandle } from '@/components/3d/GlobeShockwave';
+
 interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
   selectedCountry?: string | null;
@@ -1150,6 +1155,9 @@ function GlobeScene({
   const [countries, setCountries] = useState<CountryGeo[]>([]);
   const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
 
+  // v15 Phase 4: Shockwave ref for missile impact callback
+  const shockwaveRef = useRef<GlobeShockwaveHandle>(null);
+
   // GeoJSON → CountryGeo[] 로드 (1회)
   useEffect(() => {
     loadGeoJSON()
@@ -1189,6 +1197,11 @@ function GlobeScene({
     return map;
   }, [countries]);
 
+  // v15 Phase 4: Missile impact handler → triggers shockwave
+  const handleMissileImpact = useCallback((position: THREE.Vector3) => {
+    shockwaveRef.current?.trigger(position);
+  }, []);
+
   return (
     <>
       {/* 우주: 최소 ambient + 반구 필 + 실시간 태양 + 별 */}
@@ -1217,7 +1230,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v14: War visual effects (아크라인, 영토 점멸, 폭발 파티클) */}
+      {/* v14+v15: War visual effects (아크라인, 영토 점멸, 폭발 파티클, 안개, 카메라 진동) */}
       {wars.length > 0 && (
         <GlobeWarEffects
           wars={wars}
@@ -1225,6 +1238,19 @@ function GlobeScene({
           globeRadius={RADIUS}
         />
       )}
+
+      {/* v15 Phase 4: Missile trajectories (attacker→defender parabolic arcs) */}
+      {wars.length > 0 && centroidsMap.size > 0 && (
+        <GlobeMissileEffect
+          wars={wars}
+          countryCentroids={centroidsMap}
+          globeRadius={RADIUS}
+          onImpact={handleMissileImpact}
+        />
+      )}
+
+      {/* v15 Phase 4: Shockwave rings at missile impact points */}
+      <GlobeShockwave ref={shockwaveRef} globeRadius={RADIUS} />
 
       {/* v15: Country flag + agent count labels (국기 표시의 유일한 책임) */}
       {flagAtlas && centroidsMap.size > 0 && (
