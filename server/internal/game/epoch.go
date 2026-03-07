@@ -37,8 +37,11 @@ const (
 	EpochShrinkStartRadius = 3000.0
 	EpochShrinkEndRadius   = 1000.0
 
-	// Orb spawn multiplier during peace phase
-	EpochPeaceOrbMultiplier = 1.5
+	// Orb spawn multiplier during peace phase (2x per spec §S18)
+	EpochPeaceOrbMultiplier = 2.0
+
+	// War siren countdown (3 seconds before war starts)
+	EpochWarSirenTicks = 3 * TickRate // 60 ticks
 )
 
 // EpochEvent represents an event emitted by the epoch system.
@@ -59,6 +62,7 @@ const (
 	EpochEvtWarPhaseStart EpochEventType = "war_phase_start"
 	EpochEvtWarPhaseEnd   EpochEventType = "war_phase_end"
 	EpochEvtShrinkUpdate  EpochEventType = "epoch_shrink_update"
+	EpochEvtWarSiren      EpochEventType = "war_siren" // 3s pre-war siren alert
 )
 
 // EpochStartData is the payload for epoch_start events.
@@ -233,6 +237,18 @@ func (em *EpochManager) tickWarCountdown() {
 			CountryCode: em.countryCode,
 			Data:        map[string]interface{}{"countdown": secondsLeft},
 		})
+
+		// S18: Emit siren event at exactly 3 seconds before war
+		if secondsLeft == 3 {
+			em.emitEvent(EpochEvent{
+				Type:        EpochEvtWarSiren,
+				CountryCode: em.countryCode,
+				Data: map[string]interface{}{
+					"epochNumber":  em.epochNumber,
+					"sirenSeconds": 3,
+				},
+			})
+		}
 	}
 }
 
@@ -485,6 +501,20 @@ func (em *EpochManager) GetNationScores() map[string]int {
 		snapshot[k] = v
 	}
 	return snapshot
+}
+
+// IsPeacePhase returns true if the current phase is Peace (PvP OFF).
+func (em *EpochManager) IsPeacePhase() bool {
+	em.mu.RLock()
+	defer em.mu.RUnlock()
+	return em.currentPhase == EpochPhasePeace || em.currentPhase == EpochPhaseWarCountdown
+}
+
+// IsWarPhase returns true if the current phase is War or Shrink (PvP ON).
+func (em *EpochManager) IsWarPhase() bool {
+	em.mu.RLock()
+	defer em.mu.RUnlock()
+	return em.currentPhase == EpochPhaseWar || em.currentPhase == EpochPhaseShrink
 }
 
 // IsRunning returns whether the epoch system is active.

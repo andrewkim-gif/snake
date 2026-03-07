@@ -447,6 +447,76 @@ export interface NationScoreUpdatePayload {
   timeRemaining: number;
 }
 
+/** v14 Phase 4: 전쟁 사이렌 경고 (3초 전) */
+export interface WarSirenPayload {
+  epochNumber: number;
+  sirenSeconds: number;
+  countryCode: string;
+}
+
+/** v14 Phase 4: NPC 몬스터 데이터 */
+export interface NPCNetworkData {
+  id: string;
+  tier: 'weak' | 'medium' | 'strong';
+  x: number;
+  y: number;
+  hp: number;
+  maxHP: number;
+  h: number;  // heading
+  r: number;  // radius
+  xp: number; // XP reward
+}
+
+/** v14 Phase 4: 킬 보상 알림 */
+export interface KillRewardPayload {
+  victimId: string;
+  victimName: string;
+  xp: number;
+  gold: number;
+  nationScore: number;
+  isUnderdogKill: boolean;
+  isBountyKill: boolean;
+  killStreak: number;
+}
+
+/** v14 Phase 4: 현상수배 알림 */
+export interface BountyAlertPayload {
+  agentId: string;
+  agentName: string;
+  killStreak: number;
+  bountyValue: number;
+  isBountied: boolean;
+}
+
+/** v14 Phase 4: 에포크 스코어보드 데이터 */
+export interface EpochScoreboardPayload {
+  epochNumber: number;
+  countryCode: string;
+  players: EpochScoreboardEntry[];
+  nationScores: NationScoreSummary[];
+  mvp: EpochScoreboardEntry | null;
+}
+
+export interface EpochScoreboardEntry {
+  rank: number;
+  id: string;
+  name: string;
+  nationality: string;
+  kills: number;
+  deaths: number;
+  assists: number;
+  level: number;
+  score: number;
+  isBot: boolean;
+}
+
+export interface NationScoreSummary {
+  nationality: string;
+  totalScore: number;
+  playerCount: number;
+  totalKills: number;
+}
+
 /** v14: 국적 선택 페이로드 */
 export interface SelectNationalityPayload {
   nationality: string;
@@ -516,4 +586,9 @@ export interface ServerToClientEvents {
   respawn_countdown: (data: RespawnCountdownPayload) => void;
   respawn_complete: (data: RespawnCompletePayload) => void;
   nation_score_update: (data: NationScoreUpdatePayload) => void;
+  // v14 Phase 4: Deathmatch & rewards events
+  war_siren: (data: WarSirenPayload) => void;
+  kill_reward: (data: KillRewardPayload) => void;
+  bounty_alert: (data: BountyAlertPayload) => void;
+  epoch_scoreboard: (data: EpochScoreboardPayload) => void;
 }

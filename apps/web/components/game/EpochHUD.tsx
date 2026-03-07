@@ -1,12 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { EpochPhase } from '@agent-survivor/shared';
 
 // --- Phase display configuration ---
 
 interface PhaseConfig {
-  label: string;
+  labelKey: string;
   color: string;
   bgColor: string;
   borderColor: string;
@@ -15,42 +16,42 @@ interface PhaseConfig {
 
 const PHASE_CONFIGS: Record<EpochPhase, PhaseConfig> = {
   peace: {
-    label: 'PEACE',
+    labelKey: 'phasePeace',
     color: '#4A9E4A',
     bgColor: 'rgba(74, 158, 74, 0.15)',
     borderColor: '#4A9E4A',
     pulseAnimation: false,
   },
   war_countdown: {
-    label: 'WAR INCOMING',
+    labelKey: 'phaseWarIncoming',
     color: '#CC9933',
     bgColor: 'rgba(204, 153, 51, 0.2)',
     borderColor: '#CC9933',
     pulseAnimation: true,
   },
   war: {
-    label: 'WAR',
+    labelKey: 'phaseWar',
     color: '#CC3333',
     bgColor: 'rgba(204, 51, 51, 0.15)',
     borderColor: '#CC3333',
     pulseAnimation: true,
   },
   shrink: {
-    label: 'SHRINK',
+    labelKey: 'phaseShrink',
     color: '#CC5500',
     bgColor: 'rgba(204, 85, 0, 0.15)',
     borderColor: '#CC5500',
     pulseAnimation: true,
   },
   end: {
-    label: 'EPOCH END',
+    labelKey: 'phaseEpochEnd',
     color: '#8888AA',
     bgColor: 'rgba(136, 136, 170, 0.15)',
     borderColor: '#8888AA',
     pulseAnimation: false,
   },
   transition: {
-    label: 'NEXT EPOCH',
+    labelKey: 'phaseNextEpoch',
     color: '#6688BB',
     bgColor: 'rgba(102, 136, 187, 0.15)',
     borderColor: '#6688BB',
@@ -67,6 +68,14 @@ interface EpochHUDProps {
   phaseTimeRemaining: number;  // seconds remaining in current phase
   pvpEnabled: boolean;
   nationScores?: Record<string, number>;
+  // v14 Phase 4: KDA & nation score display
+  kills?: number;
+  deaths?: number;
+  assists?: number;
+  playerNationality?: string;
+  playerNationScore?: number;
+  arenaRadius?: number;      // current arena radius for shrink display
+  maxArenaRadius?: number;   // max arena radius
 }
 
 function formatTime(seconds: number): string {
@@ -84,8 +93,21 @@ export function EpochHUD({
   phaseTimeRemaining,
   pvpEnabled,
   nationScores,
+  kills = 0,
+  deaths = 0,
+  assists = 0,
+  playerNationality,
+  playerNationScore = 0,
+  arenaRadius,
+  maxArenaRadius,
 }: EpochHUDProps) {
+  const tGame = useTranslations('game');
   const config = PHASE_CONFIGS[phase] || PHASE_CONFIGS.peace;
+
+  // Shrink percentage for visual indicator
+  const shrinkPct = (arenaRadius && maxArenaRadius && maxArenaRadius > 0)
+    ? Math.round((arenaRadius / maxArenaRadius) * 100)
+    : 100;
 
   return (
     <div style={{
@@ -133,7 +155,7 @@ export function EpochHUD({
           letterSpacing: '0.1em',
           animation: config.pulseAnimation ? 'epochPulse 1.5s ease-in-out infinite' : 'none',
         }}>
-          {config.label}
+          {tGame(config.labelKey)}
         </div>
 
         {/* Timer */}
@@ -162,14 +184,60 @@ export function EpochHUD({
         }} title={pvpEnabled ? 'PvP ON' : 'PvP OFF'} />
       </div>
 
-      {/* Total epoch time (smaller, below main bar) */}
+      {/* KDA Counter + Nation Score (v14 Phase 4) */}
+      <div style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        backgroundColor: 'rgba(17, 17, 17, 0.75)',
+        padding: '3px 12px',
+        borderRadius: '3px',
+        fontFamily: '"Rajdhani", "Inter", sans-serif',
+        fontSize: '0.75rem',
+      }}>
+        {/* KDA */}
+        <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+          <span style={{ color: '#4A9E4A', fontWeight: 700 }}>{kills}</span>
+          <span style={{ color: '#555' }}>/</span>
+          <span style={{ color: '#CC3333', fontWeight: 700 }}>{deaths}</span>
+          <span style={{ color: '#555' }}>/</span>
+          <span style={{ color: '#CC9933', fontWeight: 700 }}>{assists}</span>
+        </div>
+
+        {/* Separator */}
+        <div style={{ width: '1px', height: '12px', backgroundColor: '#333' }} />
+
+        {/* Nation Score */}
+        {playerNationality && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+            <span style={{ color: '#8888AA', fontSize: '0.65rem', letterSpacing: '0.05em' }}>
+              {playerNationality}
+            </span>
+            <span style={{ color: '#CC9933', fontWeight: 700 }}>
+              {playerNationScore}
+            </span>
+          </div>
+        )}
+
+        {/* Arena shrink indicator (during shrink phase) */}
+        {(phase === 'shrink') && shrinkPct < 100 && (
+          <>
+            <div style={{ width: '1px', height: '12px', backgroundColor: '#333' }} />
+            <span style={{ color: '#CC5500', fontWeight: 700, fontSize: '0.7rem' }}>
+              {shrinkPct}%
+            </span>
+          </>
+        )}
+      </div>
+
+      {/* Total epoch time (smaller, below KDA bar) */}
       <div style={{
         fontSize: '0.65rem',
         color: '#666',
         fontFamily: '"Rajdhani", "Inter", monospace',
         letterSpacing: '0.05em',
       }}>
-        EPOCH {formatTime(timeRemaining)}
+        {tGame('epoch')} {formatTime(timeRemaining)}
       </div>
 
       {/* CSS animation */}
@@ -190,6 +258,7 @@ interface WarCountdownOverlayProps {
 }
 
 export function WarCountdownOverlay({ countdown }: WarCountdownOverlayProps) {
+  const tGame = useTranslations('game');
   const [visible, setVisible] = useState(true);
 
   useEffect(() => {
@@ -223,7 +292,7 @@ export function WarCountdownOverlay({ countdown }: WarCountdownOverlayProps) {
         marginBottom: '8px',
         textShadow: '0 0 20px rgba(204, 51, 51, 0.5)',
       }}>
-        WAR BEGINS IN
+        {tGame('warBeginsIn')}
       </div>
       <div style={{
         fontFamily: '"Black Ops One", "Inter", sans-serif',
@@ -270,6 +339,7 @@ export function EpochResultOverlay({
   personalRank,
   onDismiss,
 }: EpochResultOverlayProps) {
+  const tGame = useTranslations('game');
   // Auto-dismiss after 5 seconds
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -306,7 +376,7 @@ export function EpochResultOverlay({
         letterSpacing: '0.15em',
         marginBottom: '4px',
       }}>
-        EPOCH {epochNumber} COMPLETE
+        {tGame('epochComplete', { epochNumber })}
       </div>
 
       {/* Personal stats */}
@@ -317,11 +387,11 @@ export function EpochResultOverlay({
         fontFamily: '"Rajdhani", "Inter", sans-serif',
       }}>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '0.7rem', color: '#8888AA', letterSpacing: '0.1em' }}>YOUR RANK</div>
+          <div style={{ fontSize: '0.7rem', color: '#8888AA', letterSpacing: '0.1em' }}>{tGame('yourRank')}</div>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: '#E8E0D4' }}>#{personalRank}</div>
         </div>
         <div style={{ textAlign: 'center' }}>
-          <div style={{ fontSize: '0.7rem', color: '#8888AA', letterSpacing: '0.1em' }}>YOUR SCORE</div>
+          <div style={{ fontSize: '0.7rem', color: '#8888AA', letterSpacing: '0.1em' }}>{tGame('yourScore')}</div>
           <div style={{ fontSize: '2rem', fontWeight: 700, color: '#CC9933' }}>{personalScore}</div>
         </div>
       </div>
@@ -338,7 +408,7 @@ export function EpochResultOverlay({
           marginBottom: '8px',
           fontFamily: '"Black Ops One", "Inter", sans-serif',
         }}>
-          NATION RANKINGS
+          {tGame('nationRankings')}
         </div>
         {sortedNations.map(([nation, score], idx) => (
           <div key={nation} style={{
@@ -370,7 +440,7 @@ export function EpochResultOverlay({
             marginBottom: '8px',
             fontFamily: '"Black Ops One", "Inter", sans-serif',
           }}>
-            TOP PLAYERS
+            {tGame('topPlayersLabel')}
           </div>
           {topPlayers.slice(0, 3).map((player, idx) => (
             <div key={player.id} style={{
@@ -399,13 +469,133 @@ export function EpochResultOverlay({
         color: '#555',
         fontFamily: '"Rajdhani", "Inter", sans-serif',
       }}>
-        Next epoch starting...
+        {tGame('nextEpochStarting')}
       </div>
 
       <style>{`
         @keyframes epochResultFadeIn {
           0% { opacity: 0; transform: translateY(10px); }
           100% { opacity: 1; transform: translateY(0); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// --- War Vignette Effect (Phase 4: S22) ---
+
+interface WarVignetteProps {
+  active: boolean;  // true during war/shrink phases
+  intensity?: number; // 0.0~1.0 (default 0.5)
+}
+
+export function WarVignetteOverlay({ active, intensity = 0.5 }: WarVignetteProps) {
+  if (!active) return null;
+
+  return (
+    <div style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 20,
+      pointerEvents: 'none',
+      boxShadow: `inset 0 0 120px rgba(204, 51, 51, ${intensity * 0.3}), inset 0 0 60px rgba(204, 51, 51, ${intensity * 0.15})`,
+      animation: 'warVignettePulse 2s ease-in-out infinite',
+    }}>
+      {/* Warning text (fades in briefly) */}
+      <div style={{
+        position: 'absolute',
+        top: '60px',
+        left: '50%',
+        transform: 'translateX(-50%)',
+        fontFamily: '"Black Ops One", "Inter", sans-serif',
+        fontSize: '0.8rem',
+        color: 'rgba(204, 51, 51, 0.6)',
+        letterSpacing: '0.3em',
+        animation: 'warTextFade 4s ease-in-out forwards',
+      }}>
+        PVP ACTIVE
+      </div>
+      <style>{`
+        @keyframes warVignettePulse {
+          0%, 100% { opacity: 0.8; }
+          50% { opacity: 1; }
+        }
+        @keyframes warTextFade {
+          0% { opacity: 0; }
+          15% { opacity: 0.8; }
+          60% { opacity: 0.4; }
+          100% { opacity: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// --- Arena Shrink Visual (Phase 4: S22) ---
+
+interface ArenaShrinkIndicatorProps {
+  currentRadius: number;
+  maxRadius: number;
+  visible: boolean; // true during shrink phase
+}
+
+export function ArenaShrinkIndicator({ currentRadius, maxRadius, visible }: ArenaShrinkIndicatorProps) {
+  if (!visible || currentRadius >= maxRadius) return null;
+
+  const pct = Math.round((currentRadius / maxRadius) * 100);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      bottom: '20px',
+      left: '50%',
+      transform: 'translateX(-50%)',
+      zIndex: 22,
+      pointerEvents: 'none',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      gap: '4px',
+    }}>
+      <div style={{
+        fontFamily: '"Black Ops One", "Inter", sans-serif',
+        fontSize: '0.7rem',
+        color: '#CC5500',
+        letterSpacing: '0.1em',
+        animation: 'shrinkPulse 1.5s ease-in-out infinite',
+      }}>
+        ARENA SHRINKING
+      </div>
+      {/* Progress bar */}
+      <div style={{
+        width: '120px',
+        height: '4px',
+        backgroundColor: 'rgba(204, 85, 0, 0.2)',
+        borderRadius: '2px',
+        overflow: 'hidden',
+      }}>
+        <div style={{
+          width: `${pct}%`,
+          height: '100%',
+          backgroundColor: pct > 50 ? '#CC9933' : pct > 25 ? '#CC5500' : '#CC3333',
+          borderRadius: '2px',
+          transition: 'width 1s linear, background-color 1s',
+        }} />
+      </div>
+      <div style={{
+        fontSize: '0.6rem',
+        color: '#888',
+        fontFamily: '"Rajdhani", "Inter", monospace',
+      }}>
+        {Math.round(currentRadius)}px
+      </div>
+      <style>{`
+        @keyframes shrinkPulse {
+          0%, 100% { opacity: 1; }
+          50% { opacity: 0.5; }
         }
       `}</style>
     </div>
@@ -420,6 +610,7 @@ interface RespawnOverlayProps {
 }
 
 export function RespawnOverlay({ countdown, isRespawning }: RespawnOverlayProps) {
+  const tGame = useTranslations('game');
   if (!isRespawning && countdown <= 0) return null;
 
   // Respawn glow effect (after respawn)
@@ -448,7 +639,7 @@ export function RespawnOverlay({ countdown, isRespawning }: RespawnOverlayProps)
           letterSpacing: '0.2em',
           animation: 'respawnTextFade 1.5s ease-out forwards',
         }}>
-          RESPAWNED
+          {tGame('respawned')}
         </div>
         <style>{`
           @keyframes respawnGlow {
@@ -487,7 +678,7 @@ export function RespawnOverlay({ countdown, isRespawning }: RespawnOverlayProps)
         letterSpacing: '0.15em',
         marginBottom: '8px',
       }}>
-        RESPAWNING IN
+        {tGame('respawningIn')}
       </div>
       <div style={{
         fontFamily: '"Black Ops One", "Inter", sans-serif',
@@ -505,7 +696,7 @@ export function RespawnOverlay({ countdown, isRespawning }: RespawnOverlayProps)
         color: '#666',
         fontFamily: '"Rajdhani", "Inter", sans-serif',
       }}>
-        Level & build preserved
+        {tGame('levelBuildPreserved')}
       </div>
       <style>{`
         @keyframes respawnCountBounce {
