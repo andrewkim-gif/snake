@@ -12,7 +12,7 @@
  * useFrame priority=0 (auto-render 유지)
  */
 
-import { useRef, useEffect, useCallback } from 'react';
+import { useRef, useEffect, useCallback, memo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -37,7 +37,7 @@ interface ARCameraProps {
   yawRef: React.MutableRefObject<number>;
 }
 
-export function ARCamera({ playerPosRef, locked, yawRef }: ARCameraProps) {
+function ARCameraInner({ playerPosRef, locked, yawRef }: ARCameraProps) {
   const { camera, gl } = useThree();
   const yaw = useRef(0);
   const pitch = useRef(DEFAULT_PITCH);
@@ -113,3 +113,5 @@ export function ARCamera({ playerPosRef, locked, yawRef }: ARCameraProps) {
 
   return null;
 }
+
+export const ARCamera = memo(ARCameraInner);

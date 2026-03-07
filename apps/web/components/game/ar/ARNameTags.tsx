@@ -7,7 +7,7 @@
  * 같은 팩션 = 파란색, 다른 팩션 = 빨간색.
  */
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, memo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
@@ -43,7 +43,7 @@ const DEAD_COLOR = '#888888';      // 사망 = 회색
 
 // ── 컴포넌트 ────────────────────────────────────────────
 
-export default function ARNameTags({
+function ARNameTagsInner({
   players,
   myId,
   myFactionId,
@@ -65,6 +65,9 @@ export default function ARNameTags({
     </group>
   );
 }
+
+const ARNameTags = memo(ARNameTagsInner);
+export default ARNameTags;
 
 // ── 단일 이름태그 ────────────────────────────────────────
 

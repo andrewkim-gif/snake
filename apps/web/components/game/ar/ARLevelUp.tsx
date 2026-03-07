@@ -10,7 +10,7 @@
  * - 게임이 일시정지되지 않음 (투명 배경으로 시야 유지)
  */
 
-import { useCallback } from 'react';
+import { useCallback, memo } from 'react';
 import type { ARTomeOffer } from '@/lib/3d/ar-types';
 import { TOME_INFO, RARITY_COLORS, RARITY_BG_COLORS } from '@/lib/3d/ar-types';
 
@@ -20,7 +20,7 @@ interface ARLevelUpProps {
   onChoose: (tomeId: string) => void;
 }
 
-export function ARLevelUp({ level, choices, onChoose }: ARLevelUpProps) {
+function ARLevelUpInner({ level, choices, onChoose }: ARLevelUpProps) {
   const handleSelect = useCallback(
     (tomeId: string) => {
       onChoose(tomeId);
@@ -175,3 +175,5 @@ export function ARLevelUp({ level, choices, onChoose }: ARLevelUpProps) {
     </div>
   );
 }
+
+export const ARLevelUp = memo(ARLevelUpInner);

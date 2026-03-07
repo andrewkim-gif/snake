@@ -11,7 +11,7 @@
  * useFrame priority=0
  */
 
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import * as THREE from 'three';
 import type { ARTerrainTheme } from '@/lib/3d/ar-types';
 import { TERRAIN_VISUALS } from '@/lib/3d/ar-types';
@@ -22,7 +22,7 @@ interface ARTerrainProps {
   theme: ARTerrainTheme;
 }
 
-export function ARTerrain({ theme }: ARTerrainProps) {
+function ARTerrainInner({ theme }: ARTerrainProps) {
   const visual = TERRAIN_VISUALS[theme] || TERRAIN_VISUALS.urban;
 
   // 바닥 색상
@@ -133,6 +133,8 @@ export function ARTerrain({ theme }: ARTerrainProps) {
     </group>
   );
 }
+
+export const ARTerrain = memo(ARTerrainInner);
 
 function obstacleBaseSize(type: string): number {
   switch (type) {

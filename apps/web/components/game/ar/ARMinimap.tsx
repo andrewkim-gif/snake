@@ -14,7 +14,7 @@
  * - PvP shrink boundary (during PvP phase)
  */
 
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
 import type { ARMinimapEntity, ARPhase } from '@/lib/3d/ar-types';
 import { MINIMAP_COLORS } from '@/lib/3d/ar-types';
 
@@ -31,7 +31,7 @@ interface ARMinimapProps {
 const MINIMAP_RADIUS = 60; // display radius in px
 const MINIMAP_PADDING = 8;
 
-export function ARMinimap({
+function ARMinimapInner({
   entities,
   playerX,
   playerZ,
@@ -199,3 +199,5 @@ export function ARMinimap({
     </div>
   );
 }
+
+export const ARMinimap = memo(ARMinimapInner);

@@ -12,7 +12,7 @@
  * - PvP kill feed
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, memo } from 'react';
 import type {
   ARPhase,
   ARFactionPvPScoreNet,
@@ -58,7 +58,7 @@ function getFactionColor(factionId: string): string {
 
 // ── Component ────────────────────────────────────────────────
 
-export function ARPvPOverlay({
+function ARPvPOverlayInner({
   phase,
   timer,
   pvpRadius,
@@ -408,3 +408,5 @@ export function ARPvPOverlay({
     </>
   );
 }
+
+export const ARPvPOverlay = memo(ARPvPOverlayInner);

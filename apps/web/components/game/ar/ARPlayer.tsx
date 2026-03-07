@@ -11,7 +11,7 @@
  * useFrame priority=0 (auto-render 유지)
  */
 
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, memo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -47,7 +47,7 @@ interface ARPlayerProps {
   posRef: React.MutableRefObject<{ x: number; y: number; z: number }>;
 }
 
-export function ARPlayer({
+function ARPlayerInner({
   position,
   rotation,
   moving,
@@ -189,3 +189,5 @@ export function ARPlayer({
     </group>
   );
 }
+
+export const ARPlayer = memo(ARPlayerInner);

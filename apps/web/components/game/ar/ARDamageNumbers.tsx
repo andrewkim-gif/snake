@@ -9,7 +9,7 @@
  * - 속성별 색상: fire=주황, frost=하늘, lightning=노랑, poison=초록
  */
 
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef, useMemo, useCallback, memo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ARDamageType } from '@/lib/3d/ar-types';
@@ -80,7 +80,7 @@ export function addDamageNumber(
  * ARDamageNumbers 컴포넌트
  * Billboard sprite 기반 데미지 숫자 렌더링
  */
-export function ARDamageNumbers({ numbersRef }: ARDamageNumbersProps) {
+function ARDamageNumbersInner({ numbersRef }: ARDamageNumbersProps) {
   const groupRef = useRef<THREE.Group>(null);
   const spritesRef = useRef<THREE.Sprite[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -206,3 +206,5 @@ export function ARDamageNumbers({ numbersRef }: ARDamageNumbersProps) {
 
   return <group ref={groupRef} />;
 }
+
+export const ARDamageNumbers = memo(ARDamageNumbersInner);

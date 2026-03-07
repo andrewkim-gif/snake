@@ -13,6 +13,7 @@
  * - 킬 카운터
  */
 
+import { memo } from 'react';
 import type { ARPhase } from '@/lib/3d/ar-types';
 
 interface ARHUDProps {
@@ -50,7 +51,7 @@ function formatTimer(seconds: number): string {
   return `${m}:${s.toString().padStart(2, '0')}`;
 }
 
-export function ARHUD({
+function ARHUDInner({
   hp,
   maxHp,
   xp,
@@ -265,3 +266,5 @@ export function ARHUD({
     </>
   );
 }
+
+export const ARHUD = memo(ARHUDInner);
