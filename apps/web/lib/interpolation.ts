@@ -46,7 +46,12 @@ export function interpolateAgents(
     // mass 보간 (부드러운 HP 변화)
     const m = prev.m + (cur.m - prev.m) * t;
 
-    return { ...cur, x, y, h, f, m };
+    // v16 Phase 4: z (높이) 보간
+    const prevZ = prev.z ?? 0;
+    const curZ = cur.z ?? 0;
+    const z = prevZ + (curZ - prevZ) * t;
+
+    return { ...cur, x, y, h, f, m, z };
   });
 }
 

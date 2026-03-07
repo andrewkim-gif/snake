@@ -5,19 +5,19 @@
   "plan_file": "docs/designs/v16-game-experience-plan.md",
   "project_type": "GAME",
   "current_stage": 3,
-  "current_phase": 4,
+  "current_phase": 5,
   "total_phases": 9,
   "phases": [
     {"name": "Phase 0: 상수 동기화", "status": "done"},
     {"name": "Phase 1: 서버 프로토콜", "status": "done"},
     {"name": "Phase 2: WASD + TPS 카메라", "status": "done"},
-    {"name": "Phase 3: 애니메이션 강화", "design_needed": false, "status": "pending"},
+    {"name": "Phase 3: 애니메이션 강화", "status": "done"},
     {"name": "Phase 4: Heightmap 지형", "design_needed": false, "status": "pending"},
     {"name": "Phase 5: 바이옴 + 장애물", "design_needed": true, "status": "pending"},
     {"name": "Phase 6: 지형 반응 애니메이션", "design_needed": false, "status": "pending"},
     {"name": "Phase 7: 사운드 + 이펙트", "design_needed": false, "status": "pending"},
     {"name": "Phase 8: 날씨 + 미니맵 + 킬캠", "design_needed": true, "status": "pending"}
   ],
-  "last_skill": "turbo_phase2_done",
-  "last_update": "2026-03-07T00:30:00Z"
+  "last_skill": "turbo_phase3_done",
+  "last_update": "2026-03-07T00:40:00Z"
 }

@@ -129,6 +129,7 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 		ID:           a.ID,
 		X:            math.Round(a.Position.X*10) / 10, // 1 decimal precision
 		Y:            math.Round(a.Position.Y*10) / 10,
+		Z:            math.Round(a.ZPos*10) / 10,       // v16 Phase 4: vertical position (1 decimal)
 		Heading:      math.Round(a.MoveHeading*100) / 100, // 2 decimal precision (v16: MoveHeading)
 		Facing:       math.Round(a.AimHeading*100) / 100,  // v16: AimHeading for facing direction
 		Mass:         math.Round(a.Mass*10) / 10,

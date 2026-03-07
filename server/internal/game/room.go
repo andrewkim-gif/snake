@@ -2,6 +2,7 @@ package game
 
 import (
 	"context"
+	"encoding/base64"
 	"fmt"
 	"log/slog"
 	"sync"
@@ -823,7 +824,7 @@ func (r *Room) GetJoinedEvent(playerID string) domain.JoinedEvent {
 		spawn = agent.Position
 	}
 
-	return domain.JoinedEvent{
+	evt := domain.JoinedEvent{
 		RoomID:        r.ID,
 		ID:            playerID,
 		Spawn:         spawn,
@@ -834,6 +835,16 @@ func (r *Room) GetJoinedEvent(playerID string) domain.JoinedEvent {
 		TerrainTheme:  r.Config.TerrainTheme,
 		TurnRate:      TurnRate,
 	}
+
+	// v16 Phase 4: Include heightmap data (gzip → base64)
+	if hm := r.arena.GetHeightmap(); hm != nil && len(hm.Compressed) > 0 {
+		evt.HeightmapData = base64.StdEncoding.EncodeToString(hm.Compressed)
+		evt.HeightmapWidth = hm.Width
+		evt.HeightmapHeight = hm.Height
+		evt.HeightmapCellSize = hm.CellSize
+	}
+
+	return evt
 }
 
 // --- Internal helpers ---

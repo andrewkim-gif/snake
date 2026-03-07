@@ -30,6 +30,7 @@ import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 import type { ServerDominationData } from '@/components/3d/GlobeDominationLayer';
 import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
 import type { CountryClientState } from '@/lib/globe-data';
+import { decodeHeightmap } from '@/lib/heightmap-decoder';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
 
@@ -165,6 +166,8 @@ export interface UiState {
   tradeRoutes: TradeRouteData[];
   // v15: Server error (arena_full, join_failed, etc.)
   lastError: { code: string; message: string } | null;
+  // v16 Phase 4: Heightmap terrain data (decoded from joined event)
+  heightmapData: import('@/components/3d/HeightmapTerrain').HeightmapTerrainData | null;
 }
 
 export function useSocket() {
@@ -205,6 +208,7 @@ export function useSocket() {
     epochScoreboard: [],
     tradeRoutes: [],
     lastError: null,
+    heightmapData: null,
   });
 
   useEffect(() => {
@@ -238,6 +242,18 @@ export function useSocket() {
       dataRef.current.currentRoomId = data.roomId;
       dataRef.current.roomState = data.roomState;
       dataRef.current.timeRemaining = data.timeRemaining;
+
+      // v16 Phase 4: Decode heightmap data if present
+      let heightmapData: import('@/components/3d/HeightmapTerrain').HeightmapTerrainData | null = null;
+      if (data.heightmapData && data.heightmapWidth && data.heightmapHeight && data.heightmapCellSize) {
+        heightmapData = decodeHeightmap(
+          data.heightmapData,
+          data.heightmapWidth,
+          data.heightmapHeight,
+          data.heightmapCellSize,
+        );
+      }
+
       setUiState(prev => ({
         ...prev, alive: true, deathInfo: null, roundEnd: null,
         currentRoomId: data.roomId, roomState: data.roomState,
@@ -250,6 +266,8 @@ export function useSocket() {
           radius: data.arenaRadius,
           turnRate: data.turnRate ?? ARENA_CONFIG.turnRate,
         },
+        // v16 Phase 4: Decoded heightmap
+        heightmapData,
       }));
     });
 

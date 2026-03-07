@@ -136,6 +136,8 @@ function setPartMatrix(
   animPosZ = 0,
   scaleX = 1,
   scaleY = 1,
+  /** v16 Phase 4: 지형 높이에 의한 수직 오프셋 */
+  agentWorldY = 0,
 ): void {
   _qAgent.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, headingRotY);
 
@@ -147,7 +149,7 @@ function setPartMatrix(
   );
   _pos.applyQuaternion(_qAgent);
 
-  _obj.position.set(agentWorldX + _pos.x, _pos.y, agentWorldZ + _pos.z);
+  _obj.position.set(agentWorldX + _pos.x, agentWorldY + _pos.y, agentWorldZ + _pos.z);
 
   // 파트 로컬 회전 (X → Y → Z 순서: Euler XYZ)
   _qPart.setFromEuler(_euler.set(partRotX, partRotY, partRotZ));
@@ -329,7 +331,9 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       }
 
       // ─── 월드 좌표 + 스케일 ───
-      const [worldX, , worldZ] = toWorld(x, y, 0);
+      // v16 Phase 4: agent z (서버 높이) → Three.js Y 좌표
+      const agentZ = agent.z ?? 0;
+      const [worldX, worldY, worldZ] = toWorld(x, y, agentZ);
       // v16: character faces aim direction (facing), not movement heading
       const rotY = headingToRotY(facing);
       const scale = getAgentScale(m);
@@ -355,7 +359,8 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
           P.body.offset[0], P.body.offset[1], P.body.offset[2],
           anim.body.rotX + rollX, anim.body.rotY, anim.body.rotZ,
           anim.body.posX, anim.body.posY, anim.body.posZ,
-          anim.body.scaleX, anim.body.scaleY);
+          anim.body.scaleX, anim.body.scaleY,
+          worldY);
 
         // body 색상 = topColor (HIT 플래시 시 흰색)
         if (isFlashing) {
@@ -376,25 +381,29 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       // ─── ArmL (상체: rotY = facing) ───
       setPartMatrix(armLMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armL.offset[0], P.armL.offset[1], P.armL.offset[2],
-        anim.armL.rotX + rollX, 0, anim.armL.rotZ);
+        anim.armL.rotX + rollX, 0, anim.armL.rotZ,
+        0, 0, 0, 1, 1, worldY);
       armLMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(topColorHex));
 
       // ─── ArmR (상체: rotY = facing) ───
       setPartMatrix(armRMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armR.offset[0], P.armR.offset[1], P.armR.offset[2],
-        anim.armR.rotX + rollX, 0, anim.armR.rotZ);
+        anim.armR.rotX + rollX, 0, anim.armR.rotZ,
+        0, 0, 0, 1, 1, worldY);
       armRMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(topColorHex));
 
       // ─── LegL (하체: rotY = facing + lowerTwist) ───
       setPartMatrix(legLMesh, limbIdx, worldX, worldZ, rotY + lowerTwist, scale,
         P.legL.offset[0], P.legL.offset[1], P.legL.offset[2],
-        anim.legL.rotX + rollX);
+        anim.legL.rotX + rollX, 0, 0,
+        0, 0, 0, 1, 1, worldY);
       legLMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(bottomColorHex));
 
       // ─── LegR (하체: rotY = facing + lowerTwist) ───
       setPartMatrix(legRMesh, limbIdx, worldX, worldZ, rotY + lowerTwist, scale,
         P.legR.offset[0], P.legR.offset[1], P.legR.offset[2],
-        anim.legR.rotX + rollX);
+        anim.legR.rotX + rollX, 0, 0,
+        0, 0, 0, 1, 1, worldY);
       legRMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(bottomColorHex));
 
       limbIdx++;

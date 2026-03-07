@@ -73,6 +73,11 @@ export interface JoinedPayload {
   terrainTheme?: string; // v11: country terrain theme (urban, desert, tundra, etc.)
   // v16: Dynamic arena settings (server is master, client overrides defaults)
   turnRate?: number;
+  // v16 Phase 4: Heightmap terrain data
+  heightmapData?: string;     // base64-encoded gzip binary (float32 array)
+  heightmapWidth?: number;    // grid width in cells
+  heightmapHeight?: number;   // grid height in cells
+  heightmapCellSize?: number; // world units per cell (50)
 }
 
 /** 압축된 뱀 네트워크 데이터 */
@@ -229,6 +234,7 @@ export interface AgentNetworkData {
   n: string;              // name
   x: number;              // position.x
   y: number;              // position.y
+  z?: number;             // v16 Phase 4: vertical position (height above terrain), 0 = ground
   h: number;              // heading (movement direction = MoveHeading)
   f?: number;             // v16: facing (aim direction = AimHeading), undefined = same as h
   m: number;              // mass

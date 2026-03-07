@@ -33,6 +33,7 @@ import { EquipmentInstances } from '@/components/3d/EquipmentInstances';
 import type { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
 import { TerrainDeco } from '@/components/3d/TerrainDeco';
+import { HeightmapTerrain } from '@/components/3d/HeightmapTerrain';
 import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
 import { MapStructures } from '@/components/3d/MapStructures';
 import { OrbInstances } from '@/components/3d/OrbInstances';
@@ -412,8 +413,12 @@ export function GameCanvas3D({
           agentIndexMapRef={agentIndexMapRef}
         />
 
-        {/* 6. ZoneTerrain — 3개 동심원 존 바닥 (테마별) */}
-        <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
+        {/* 6. Terrain — HeightmapTerrain(서버 동기화) 우선, 없으면 ZoneTerrain 폴백 */}
+        {uiState.heightmapData ? (
+          <HeightmapTerrain data={uiState.heightmapData} />
+        ) : (
+          <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
+        )}
 
         {/* 7. TerrainDeco — 환경 데코레이션 (테마별) */}
         <TerrainDeco arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />

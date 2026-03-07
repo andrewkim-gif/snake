@@ -112,9 +112,20 @@ func ApplyInputSplit(a *domain.Agent, moveAngle float64, aimAngle float64, boost
 	a.Boosting = boost
 }
 
+// UpdateAgentOptions holds optional parameters for UpdateAgent.
+type UpdateAgentOptions struct {
+	TerrainMods TerrainModifiers
+	Heightmap   *Heightmap
+}
+
 // UpdateAgent advances the agent state by one tick.
 // terrainMods applies terrain-specific multipliers (pass DefaultTerrainModifiers() for no effect).
 func UpdateAgent(a *domain.Agent, currentTick uint64, terrainMods ...TerrainModifiers) {
+	UpdateAgentWithHeightmap(a, currentTick, nil, terrainMods...)
+}
+
+// UpdateAgentWithHeightmap advances the agent state by one tick with heightmap terrain physics.
+func UpdateAgentWithHeightmap(a *domain.Agent, currentTick uint64, hm *Heightmap, terrainMods ...TerrainModifiers) {
 	if !a.Alive {
 		return
 	}
@@ -153,8 +164,50 @@ func UpdateAgent(a *domain.Agent, currentTick uint64, terrainMods ...TerrainModi
 	}
 
 	// 4. Move position (v16: use MoveHeading for movement direction)
-	a.Position.X += math.Cos(a.MoveHeading) * movePerTick
-	a.Position.Y += math.Sin(a.MoveHeading) * movePerTick
+	newX := a.Position.X + math.Cos(a.MoveHeading)*movePerTick
+	newY := a.Position.Y + math.Sin(a.MoveHeading)*movePerTick
+
+	// v16 Phase 4: Heightmap terrain checks (slope speed, cliff restriction)
+	if hm != nil {
+		curHeight := hm.GetHeight(a.Position.X, a.Position.Y)
+		newHeight := hm.GetHeight(newX, newY)
+		heightDiff := math.Abs(newHeight - curHeight)
+
+		// Cliff restriction: can't climb steep cliffs
+		if heightDiff > ClimbMaxDelta {
+			// Block movement — stay at current position
+			newX = a.Position.X
+			newY = a.Position.Y
+		} else {
+			// Slope speed reduction: steep slopes slow you down
+			slope := hm.GetSlope(newX, newY)
+			if slope > SlopeThreshold {
+				slopePenalty := 1.0 - slope*0.5
+				if slopePenalty < 0.3 {
+					slopePenalty = 0.3
+				}
+				dx := newX - a.Position.X
+				dy := newY - a.Position.Y
+				newX = a.Position.X + dx*slopePenalty
+				newY = a.Position.Y + dy*slopePenalty
+			}
+		}
+	}
+
+	a.Position.X = newX
+	a.Position.Y = newY
+
+	// v16 Phase 4: Vertical physics (gravity + ground clamping)
+	if hm != nil {
+		groundHeight := hm.GetHeight(a.Position.X, a.Position.Y)
+		a.ZVelocity -= Gravity
+		a.ZPos += a.ZVelocity
+		// Ground clamping
+		if a.ZPos <= groundHeight {
+			a.ZPos = groundHeight
+			a.ZVelocity = 0
+		}
+	}
 
 	// 5. Update hitbox radius based on mass
 	a.HitboxRadius = calcHitboxRadius(a.Mass)

@@ -52,11 +52,17 @@ type Arena struct {
 
 	// Terrain modifiers (Phase 2: terrain bonus engine)
 	terrainMods TerrainModifiers
+
+	// v16 Phase 4: Heightmap terrain
+	heightmap *Heightmap
 }
 
 // NewArena creates a new Arena with all subsystems initialized.
 func NewArena() *Arena {
 	sh := NewSpatialHash()
+	// v16 Phase 4: Generate heightmap with random seed
+	seed := rand.Int63()
+	hm := GenerateHeightmap(seed, ArenaRadius)
 	return &Arena{
 		agents:          make(map[string]*domain.Agent),
 		orbManager:      NewOrbManager(ArenaRadius),
@@ -70,6 +76,7 @@ func NewArena() *Arena {
 		running:         false,
 		eventBuffer:     make([]ArenaEvent, 0, 64),
 		terrainMods:     DefaultTerrainModifiers(),
+		heightmap:       hm,
 	}
 }
 
@@ -117,12 +124,12 @@ func (a *Arena) processTick() {
 
 	// 1. Apply inputs (already applied via HandleInput)
 
-	// 2. Move agents (with terrain speed modifier)
+	// 2. Move agents (with terrain speed modifier + heightmap)
 	for _, agent := range a.agents {
 		if !agent.Alive {
 			continue
 		}
-		UpdateAgent(agent, a.tick, a.terrainMods)
+		UpdateAgentWithHeightmap(agent, a.tick, a.heightmap, a.terrainMods)
 		// Update spatial hash with new position
 		a.spatialHash.Update(agent.ID, agent.Position.X, agent.Position.Y)
 	}
@@ -496,6 +503,12 @@ func (a *Arena) AddAgent(agent *domain.Agent) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
+	// v16 Phase 4: Set initial Z position to terrain height
+	if a.heightmap != nil {
+		agent.ZPos = a.heightmap.GetHeight(agent.Position.X, agent.Position.Y)
+		agent.ZVelocity = 0
+	}
+
 	a.agents[agent.ID] = agent
 	a.spatialHash.Insert(agent.ID, agent.Position.X, agent.Position.Y)
 }
@@ -702,4 +715,9 @@ func (a *Arena) IsRunning() bool {
 	a.mu.RLock()
 	defer a.mu.RUnlock()
 	return a.running
+}
+
+// GetHeightmap returns the arena's heightmap (read-only, thread-safe — immutable after creation).
+func (a *Arena) GetHeightmap() *Heightmap {
+	return a.heightmap
 }

@@ -513,6 +513,10 @@ type Agent struct {
 	AbilityTargetX     float64     `json:"abilityTargetX,omitempty"`
 	AbilityTargetY     float64     `json:"abilityTargetY,omitempty"`
 	AbilityLevel       int         `json:"abilityLevel,omitempty"`
+	// v16 Phase 4: Vertical position (heightmap terrain)
+	ZPos            float64      `json:"zPos"`            // height above terrain (0 = on ground)
+	ZVelocity       float64      `json:"zVelocity"`       // vertical velocity (jump/fall)
+
 	IsBot           bool         `json:"isBot"`
 	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent
 	AgentID         string       `json:"agentId,omitempty"` // agent identifier

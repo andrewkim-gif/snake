@@ -14,6 +14,11 @@ type JoinedEvent struct {
 	TerrainTheme  string    `json:"terrainTheme,omitempty"` // v11: country terrain theme
 	// v16: Dynamic arena settings (server is master, client overrides defaults)
 	TurnRate      float64   `json:"turnRate,omitempty"`
+	// v16 Phase 4: Heightmap terrain data (gzip-compressed float32 array, base64-encoded)
+	HeightmapData     string  `json:"heightmapData,omitempty"`     // base64-encoded gzip binary
+	HeightmapWidth    int     `json:"heightmapWidth,omitempty"`    // grid width in cells
+	HeightmapHeight   int     `json:"heightmapHeight,omitempty"`   // grid height in cells
+	HeightmapCellSize float64 `json:"heightmapCellSize,omitempty"` // world units per cell (50)
 }
 
 // StateAgent is the per-tick serialized agent data sent to clients.
@@ -22,6 +27,7 @@ type StateAgent struct {
 	ID          string   `json:"i"`
 	X           float64  `json:"x"`
 	Y           float64  `json:"y"`
+	Z           float64  `json:"z,omitempty"`    // v16 Phase 4: vertical position (height above terrain)
 	Heading     float64  `json:"h"`              // movement heading (MoveHeading)
 	Facing      float64  `json:"f,omitempty"`    // v16: aim/facing direction (AimHeading), 0 omitted for bandwidth
 	Mass        float64  `json:"m"`
