@@ -11,3 +11,6 @@ export { FilterBar } from './FilterBar';
 export { DetailModal } from './DetailModal';
 export { LoadingSkeleton } from './LoadingSkeleton';
 export { CountryFilterBadge } from './CountryFilterBadge';
+export { GameSystemPopup } from './GameSystemPopup';
+export { PopupTabNav } from './PopupTabNav';
+export type { MainTabKey } from './PopupTabNav';

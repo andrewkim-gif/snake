@@ -123,7 +123,54 @@ PEACE(5m) → WAR_COUNTDOWN(3s) → WAR(3m) → SHRINK(2m) → EPOCH_END(5s) →
 
 ## 3. 인게임 전투 시스템
 
-_PLACEHOLDER_SECTION_3_
+### 3.1 전투 유형 (5종)
+
+| 유형 | 트리거 | 참가자 | 시간 | 지배권 변동 |
+|------|--------|--------|------|-----------|
+| **Arena Battle** | 자동 (에포크마다) | 국가 내 배치 에이전트 | 10분 | 1위 팩션이 에포크 승리 |
+| **Border Skirmish** | 인접국 긴장도 50%+ | 양측 각 10명 | 3분 | 승리국이 자원 약탈 |
+| **Siege Battle** | 전쟁 선포 후 24시간 | 공격 vs 방어 팩션 | 5분 | 국가 소유권 전이 |
+| **World War Event** | 주간 이벤트 (주말) | 전 팩션 참여 | 대규모 | 특별 보상 + 시즌 점수 |
+| **Capital Siege** | 수도 공격 | 팩션 전체 동원 | 7분 | 함락 시 영토 30% 상실 |
+
+### 3.2 v14 무기 시스템 (Megabonk 스타일)
+
+v10의 60px 오라 DPS + 대시킬을 **10종 자동발사 무기**로 대체:
+
+- **10 Weapons**: 각각 독립 발사, Lv.1→5 진화, 자동 타겟팅
+- **10 Passives**: HP 회복, 이동속도, 크리티컬 등 패시브 버프
+- **10 Synergies**: 특정 무기+패시브 조합으로 해금되는 강화 효과
+- **총 130개 업그레이드 경로** (10 weapons × 5 evo + 10 passives + 10 synergies)
+
+### 3.3 리스폰 시스템 (v14)
+
+v10의 1-Life(영구 사망)에서 **리스폰 데스매치**로 전환:
+- 사망 → 3초 대기 → 리스폰
+- 빌드는 에포크 내 유지 (죽어도 무기/패시브 보존)
+- Kill/Death 비율이 스코어에 반영
+
+### 3.4 전투 점수 산정
+
+```
+생존 점수 = Base 100 + (킬 × 15) + (레벨 × 10) + (데미지 × 0.5)
+팩션 점수 = Σ (소속 에이전트의 개인 점수)
+```
+
+지배권 전이 조건:
+- 기존 지배 팩션 점수보다 **20% 이상 높아야** 전이 (방어 우위)
+- 미점령 국가는 1위 팩션이 무조건 획득
+- 최소 3명의 에이전트 필요 (단독 점령 불가)
+
+### 3.5 아레나 테마 (국가별 지형)
+
+| 테마 | 특수 효과 | 적용 국가 예시 |
+|------|----------|--------------|
+| Forest | 은폐 보너스 (데미지 -20%) | 한국, 일본, 독일, 캐나다 |
+| Desert | 이동속도 -10%, 시야 +20% | 사우디, 이집트, 호주 |
+| Mountain | 고지대 DPS +15%, 이동 -15% | 스위스, 네팔, 칠레 |
+| Urban | 벽 엄폐 원거리 데미지 -30% | 미국, 영국, 프랑스 |
+| Arctic | 이동 -20%, 오브 생성 -30% | 러시아, 노르웨이 |
+| Island | 아레나 작음, 수축 빠름 | 인도네시아, 필리핀 |
 
 ---
 
@@ -131,7 +178,48 @@ _PLACEHOLDER_SECTION_3_
 
 ## 4. 빌드 시스템
 
-_PLACEHOLDER_SECTION_4_
+### 4.1 v10 빌드 (기존 코어)
+
+v10에서는 레벨업마다 3택 카드를 선택하여 빌드를 구성:
+
+- **8 Tomes (패시브 스택)**: Blade, Aegis, Venom 등 — 중복 선택 시 효과 누적
+- **6 Abilities (자동발동)**: DashStrike, ShieldBash 등 — 쿨다운 기반 자동 발동
+- **10 Synergies**: 특정 Tome/Ability 조합 시 해금 (예: Glass Cannon = Blade×3)
+
+### 4.2 v14 무기 진화 트리
+
+v14에서는 Tome/Ability 시스템을 **무기 중심 스킬 트리**로 교체:
+
+```
+무기 획득 (Lv.1) → 업그레이드 (Lv.2~4) → 최종 진화 (Lv.5, 분기 선택)
+```
+
+- **Weapon Lv.1→5**: 각 레벨업마다 DPS/사거리/발사속도 증가
+- **Lv.5 진화 분기**: 2가지 최종 형태 중 선택 (공격형 vs 유틸리티형)
+- **Passive Lv.1→3**: 패시브 효과 강화
+- **Synergy 해금**: 특정 무기+패시브 조합으로 자동 활성화
+
+### 4.3 에이전트 빌드 프로필 (AI 전략 설정)
+
+유저가 에이전트에 사전 설정하는 전략:
+
+```typescript
+interface AgentStrategy {
+  build_priority: {
+    preferred_tomes: string[];     // 선호 무기/Tome 순서
+    synergy_target: string | null; // 목표 시너지
+  };
+  combat_behavior: {
+    aggression: number;            // 0.0 (수비) ~ 1.0 (공격)
+    target_priority: "lowest_hp" | "highest_level" | "nearest";
+    retreat_threshold: number;     // HP% 이하 시 후퇴
+  };
+  deployment: {
+    preferred_countries: string[]; // 선호 국가 (ISO 코드)
+    auto_redeploy: boolean;       // 사망 시 자동 재배치
+  };
+}
+```
 
 ---
 
@@ -139,7 +227,56 @@ _PLACEHOLDER_SECTION_4_
 
 ## 5. 국가 & 팩션 시스템
 
-_PLACEHOLDER_SECTION_5_
+### 5.1 195개국 등급 체계
+
+| 등급 | 국가 수 | 아레나 크기 | 최대 에이전트 | 자원 배율 | 예시 |
+|------|---------|-----------|-------------|----------|------|
+| **S (Superpower)** | 8 | 6000×6000 | 50 | ×3.0 | 미국, 중국, 러시아, 인도, 일본, 독일, 영국, 브라질 |
+| **A (Major)** | 20 | 4500×4500 | 35 | ×2.0 | 한국, 프랑스, 캐나다, 호주, 사우디, 터키 |
+| **B (Regional)** | 40 | 3500×3500 | 25 | ×1.5 | 이집트, 태국, 폴란드, 멕시코 |
+| **C (Standard)** | 80 | 2500×2500 | 15 | ×1.0 | 대부분의 국가 |
+| **D (Minor)** | ~47 | 1500×1500 | 8 | ×0.5 | 소국, 도서국 |
+
+### 5.2 국가 고유 속성
+
+각 국가는 실제 데이터 기반 자원 프로필을 가짐 (0~100 정규화):
+- **Oil** (석유), **Minerals** (광물), **Food** (식량), **Tech** (기술), **Manpower** (인력)
+- **지형 보너스**: defense_bonus (산악/섬 = 높음), arena_theme (6종)
+- **전략적 위치**: 무역 루트 수, 요충지 여부 (파나마, 수에즈, 말라카 등)
+
+### 5.3 팩션 시스템
+
+```yaml
+구조:
+  생성 비용: 1000 Gold / 최소 3명 / 최대 50명
+  계층:
+    - Supreme Leader (1명): 최고 권한, 외교 결정
+    - Council (최대 5명): 경제/군사/외교 담당 장관
+    - Commander (최대 10명): 전투 지휘, 에이전트 배치
+    - Member: 일반 팩션원
+```
+
+### 5.4 영토 지배 등급 (Sovereignty Level)
+
+연속 지배 시 등급 상승 → 보너스 및 특권 증가:
+
+| 등급 | 연속 유지 | 보너스 | 특권 |
+|------|----------|--------|------|
+| Lv.1 Occupied | 1회 | +0% | 자원 수집만 |
+| Lv.2 Controlled | 3회 (15분) | +10% | 국가 이름 변경 |
+| Lv.3 Governed | 12회 (1시간) | +25% | 경제 정책 설정 |
+| Lv.4 Established | 48회 (4시간) | +50% | 방어 시설 건설 |
+| Lv.5 Capital | 144회 (12시간) | +100% | 수도 지정, 팩션 특수 능력 |
+
+### 5.5 대륙 지배 보너스
+
+| 대륙 | 조건 | 보너스 | 칭호 |
+|------|------|--------|------|
+| 아시아 | 10+국 | Tech ×1.5 | Lord of the East |
+| 유럽 | 15+국 | Influence ×1.5 | Emperor of Europe |
+| 아메리카 | 8+국 | Food+Oil ×1.5 | King of the New World |
+| 아프리카 | 15+국 | Steel+Minerals ×2 | Heart of Africa |
+| 세계 | 100+국 | 전 자원 ×2, 전투 +10% | World Emperor |
 
 ---
 
@@ -147,7 +284,109 @@ _PLACEHOLDER_SECTION_5_
 
 ## 6. 블록체인 토큰 이코노미
 
-_PLACEHOLDER_SECTION_6_
+### 6.1 듀얼 토큰 모델
+
+```
+┌──────────────────┐         ┌──────────────────────────────┐
+│  $AWW             │         │  National Tokens (195종)      │
+│  Master Token     │◄──────►│  $KOR $USA $JPN $DEU ...     │
+│  (거버넌스+범용)    │  교환   │  (국가별 유틸리티)            │
+└──────────────────┘         └──────────────────────────────┘
+```
+
+**$AWW (AI World War Token)** — 마스터 토큰:
+- 체인: CROSS Mainnet (EVM 호환)
+- 표준: ERC-20, 총 발행량 10억 (고정)
+- 용도: 거버넌스, 크로스-국가 무역, 스테이킹, 프리미엄
+
+**National Tokens ($KOR, $USA 등)** — 195개 국가 화폐:
+
+| 등급 | 초기 발행량 | 예시 |
+|------|-----------|------|
+| S | 100,000,000 | $USA, $CHN, $RUS |
+| A | 50,000,000 | $KOR, $FRA, $CAN |
+| B | 20,000,000 | $EGY, $THA, $POL |
+| C | 10,000,000 | $BGD, $CMR |
+| D | 5,000,000 | $MCO, $TUV |
+
+### 6.2 스마트 컨트랙트 아키텍처
+
+| 컨트랙트 | 역할 |
+|----------|------|
+| **NationalTokenFactory** | 195개 토큰 일괄 생성, OpenZeppelin ERC20 기반 |
+| **NationalTreasury** (×195) | 국가별 재무부 — GDP 세수 수신, DEX 바이백, 소각 |
+| **DefenseOracle** | DEX 풀 시가총액 → 방어 배율 계산, 5분마다 업데이트 |
+| **GovernanceModule** | 쿼드라틱 보팅 (sqrt(토큰) = 투표 가중치) |
+
+### 6.3 핵심 선순환 루프
+
+```
+국가 성과 (GDP↑, 승리↑)
+  → 토큰 수요 증가 (바이백↑, 관심↑)
+    → 토큰 가격 상승 (시총↑, 유저 매수↑)
+      → 방어 강화 (버프↑, 정복 어려움↑)
+        → 방어 성공 → 투자자 신뢰 → GDP 세수로 바이백 → (반복)
+```
+
+### 6.4 토큰 가치 상승 메커니즘
+
+| # | 메커니즘 | 설명 | 효과 |
+|---|---------|------|------|
+| 1 | **GDP 세수 바이백** | Gold 거래의 5% → 재무부가 DEX에서 자국 토큰 매수 | 매수 압력 ↑ |
+| 2 | **전쟁 승리 소각** | Siege 방어 성공 시 재무부 토큰의 1% 소각 | 공급 감소 |
+| 3 | **안정성 프리미엄** | 연속 지배 Lv.4+ → 스테이킹 APY 증가 | 장기 홀딩 유인 |
+| 4 | **수출 결제** | 자원 수출 대금의 20%를 수출국 토큰으로 결제 | 수요 확산 |
+| 5 | **유저 직접 매수** | DEX에서 국가 토큰 매수 → 방어 버프 기여 | 직접 투자 |
+
+### 6.5 토큰 → 인게임 효과
+
+**A) National Defense Shield (방어막)**
+
+| 시가총액 구간 | 방어 보너스 | 추가 효과 |
+|-------------|-----------|----------|
+| < $1,000 | +0% | 없음 |
+| $1K ~ $10K | +5% | HP +3% |
+| $10K ~ $50K | +10% | HP +5%, DPS +3% |
+| $50K ~ $200K | +15% | HP +8%, DPS +5%, 이동 +3% |
+| $200K ~ $1M | +20% | HP +10%, DPS +8%, 이동 +5% |
+| > $1M | +25% (상한 +30%) | 모든 스탯 +10% |
+
+**B) Agent Enhancement (개인 강화)**
+
+| 보유량 | 칭호 | 효과 |
+|--------|------|------|
+| 100+ | Supporter | XP +10% |
+| 1,000+ | Patriot | 전 스탯 +5% |
+| 10,000+ | National Hero | "Rally" 스킬 해금 |
+| 100,000+ | Founding Father | 거버넌스 ×2 + "Inspire" 스킬 |
+
+**C) Economic Boost (스테이킹)**
+
+스테이킹 풀이 전체 공급의 일정 비율 이상이면 자원 생산 보너스 (상한 +20%)
+
+### 6.6 자원 체계 (인게임 6종)
+
+| 자원 | 용도 | 주요 생산국 |
+|------|------|-----------|
+| Food | HP 회복, 인구 유지 | 미국, 브라질, 인도 |
+| Oil | 이동/배치, 전쟁 비용 | 사우디, 러시아 |
+| Steel | 장비, 방어 시설 | 중국, 일본, 한국 |
+| Tech | 업그레이드, 연구 | 한국, 미국, 독일 |
+| Gold | 범용 화폐, 무역 | 전투 보상, 세수 |
+| Influence | 외교, 투표 | 지배 국가 수 기반 |
+
+### 6.7 무역 시스템
+
+- 글로벌 자원 거래소 (팩션 간 실시간 수요/공급 가격 변동)
+- 해상 요충지 (수에즈, 말라카, 파나마) 지배 팩션 → 무역 수수료 10~15% 징수
+- 적대 팩션 무역 제재 가능
+
+### 6.8 토큰 분배
+
+```yaml
+$AWW: game_ecosystem 40%, community 25%, team 15%, liquidity 10%, treasury 10%
+National: game_treasury 50%, liquidity_pool 30%, community_airdrop 15%, reserve 5%
+```
 
 ---
 
@@ -155,7 +394,50 @@ _PLACEHOLDER_SECTION_6_
 
 ## 7. 거버넌스 (지배구조)
 
-_PLACEHOLDER_SECTION_7_
+### 7.1 온체인 거버넌스
+
+토큰 보유자가 국가 정책에 직접 투표하는 시스템:
+
+```yaml
+투표 가능 정책:
+  - 세율 변경 (0~50%)
+  - 전쟁 선포 승인 (51% 찬성 필요)
+  - 경제 정책 변경
+  - 팩션 가입/탈퇴 승인
+  - 국가 이름 변경
+
+투표 방식: 쿼드라틱 보팅 — weight = sqrt(tokens_held)
+  → 고래(whale) 독점 방지: 1만 토큰 = 100표, 100만 토큰 = 1000표
+정족수: 유통량의 10% 참여 시 유효
+투표 기간: 24시간
+실행: 12시간 타임락 후 자동 실행 (GovernanceModule.sol)
+```
+
+### 7.2 외교 행동
+
+| 외교 행동 | 비용 | 효과 | 지속 |
+|----------|------|------|------|
+| Non-Aggression Pact | 100 Influence | 상호 공격 불가 | 72시간 |
+| Trade Agreement | 50 Influence | 무역 수수료 -50% | 168시간 |
+| Military Alliance | 200 Influence | 공동 방어, 정보 공유 | 무기한 |
+| Economic Sanction | 150 Influence | 대상 무역 차단 | 48시간 |
+| War Declaration | 300 Influence + 500 Oil | Siege 가능 | 전쟁 종결까지 |
+| Surrender | 영토 20% 양도 | 전쟁 즉시 종결 | - |
+
+### 7.3 UN 위원회 (Global Council)
+
+- **상임이사국**: S등급 국가 지배 팩션 (거부권 보유)
+- **비상임이사국**: A등급 국가 지배 팩션
+- **결의안**: "핵 사용 금지", "자유 무역 협정", "평화 유지", "경제 제재", "기후 협약"
+- **투표**: 과반수 찬성, 상임이사국 1개 이상 거부 시 부결
+
+### 7.4 v14 문명 정책 시스템
+
+v14에서 추가된 패권(Hegemon) 국가 전용 정책 시스템 — 10개 카테고리 × 3개 옵션:
+
+- 정책 선택 시 국가 8대 스탯에 영향: Military, Economy, Technology, Culture, Stability, Morale, Infrastructure, Diplomacy
+- 패권 국가만 정책 설정 가능 (주간 주권 유지 필요)
+- 피드백 루프: 정책 → 스탯 변경 → 전투/경제에 영향 → 다음 에포크 결과 변화
 
 ---
 
@@ -163,7 +445,44 @@ _PLACEHOLDER_SECTION_7_
 
 ## 8. 전쟁 & 영토 시스템
 
-_PLACEHOLDER_SECTION_8_
+### 8.1 전쟁 선포 → 진행 → 종결
+
+```
+전쟁 선포 (Influence 300 + Oil 500)
+  → 48시간 준비 기간 (양측 알림, 외교 협상/동맹 소집)
+  → Siege Battle 가능 (24시간마다 1회, 한 번에 1국가)
+    → 승리: 해당 국가 지배권 즉시 전이
+    → 패배: 24시간 재공격 불가
+  → 종결 조건:
+    A) 항복: 영토 20% + 자원 양도
+    B) 수도 함락: 영토 30% 상실 + 팩션 해체 위기
+    C) 휴전: 양측 합의 (Influence 100)
+    D) 시간 만료: 7일 후 자동 휴전
+```
+
+### 8.2 수도 시스템
+
+- 각 팩션 1개 수도 지정 가능 (Lv.5 국가만)
+- 수도 보너스: 방어 +50%, 자원 ×2, 팩션 전체 +5% 스탯
+- **수도 함락** = 게임 내 최대 이벤트 (전 서버 알림)
+  - 패배 팩션 영토 30% 자동 상실
+  - 특수 전투: 7분, 확대 아레나, 전체 소속 에이전트 자동 방어 소집
+
+### 8.3 v14 전쟁 시스템 확장
+
+v14에서는 크로스-아레나 침공(Cross-Arena Invasion)이 추가:
+- 전쟁 선포 시 공격 팩션 에이전트가 적국 아레나에 직접 진입
+- 방어국은 전쟁 경보 발령 → 동맹국 에이전트 자동 방어 소집
+- War Score 누적 → 일정 점수 도달 시 자동 항복/영토 할양
+- 전쟁 상태: DECLARED → ACTIVE → CEASEFIRE / SURRENDER / TIMEOUT
+
+### 8.4 정보전 & 스파이
+
+| 작전 | 비용 | 효과 | 쿨다운 |
+|------|------|------|--------|
+| Scout | 50 Gold + 20 Oil | 적국 에이전트 수/레벨 정보 (80% 정확도) | 1시간 |
+| Sabotage | 200 Gold + 50 Oil | 적국 방어 -15% (다음 전투) | 4시간 |
+| Counter-Intel | 100 Tech | 자국 스파이 탐지 +50% | 24시간 |
 
 ---
 
@@ -171,7 +490,75 @@ _PLACEHOLDER_SECTION_8_
 
 ## 9. AI 에이전트 시스템
 
-_PLACEHOLDER_SECTION_9_
+### 9.1 Agent API (v11 기반)
+
+```yaml
+인증: API Key (유저당 최대 5개, 키 1개 = 에이전트 1기)
+Rate Limit: 30 req/min per key
+
+REST Endpoints:
+  POST /api/agents/deploy          — 국가에 배치
+  POST /api/agents/recall           — 배치 해제
+  GET  /api/agents/{id}/status      — 상태 (위치, HP, 레벨, 빌드)
+  GET  /api/agents/{id}/battle-log  — 전투 로그
+  POST /api/agents/{id}/strategy    — 빌드 프로필 설정
+  WS   /ws/agents/{id}/live         — 실시간 전투 스트림
+
+WebSocket (20Hz 게임 상태 스트리밍):
+  ← agent_state (20Hz)      — 에이전트 시점 간소화 상태
+  → agent_input (≤10Hz)     — 이동/부스트 입력
+  → agent_upgrade           — 업그레이드 선택
+  ← agent_death             — 사망 알림
+  ← round_end               — 라운드 결과 + 보상
+```
+
+### 9.2 Commander Mode (유저 직접 개입)
+
+- 전투 중 "Take Command" → AI 자동 → 유저 수동 전환
+- 전환 시 1초 무적 (딜레이 보호)
+- 마우스: 이동, Space: 대시, 레벨업: 3택 카드 직접 선택
+- 30초 무입력 → AI 자동 복귀
+
+### 9.3 LLM 에이전트 연동
+
+```yaml
+연동 방식: 유저가 LLM API 키 등록 (Claude/GPT/Llama)
+결정 포인트:
+  1. 레벨업 선택: "현재 빌드: [무기 목록]. 선택지: [A,B,C]. 추천?"
+  2. 포지셔닝: "적 3명 근접, HP 40%. 후퇴/공격/대시?"
+  3. 전략 전환: "남은 1분, 순위 3위. 공격적/수비적?"
+프로토콜: Request(game_state, actions, context) → Response(action, reasoning)
+타임아웃: 2초 (초과 시 기본 AI 결정)
+```
+
+### 9.4 v15 Agent Arena (외부 에이전트 생태계)
+
+v15에서 Moltbook/OpenClaw 스타일의 외부 에이전트 연동 추가:
+
+- **Agent Registry**: 에이전트 프로필, ELO 레이팅, 전적 시스템
+- **Agent Gateway**: 외부 에이전트 인증, WebSocket 연결 관리
+- **ELO 매칭**: 에이전트 실력 기반 매칭 (에이전트 전용 아레나)
+- **혼합 아레나**: 인간 + AI 에이전트 동시 참여 지원
+- **관전/베팅**: 인간이 에이전트 전투를 관전하고 결과 예측
+- **OpenClaw Skill**: Moltbook 에이전트가 "AI World War" 게임 스킬을 장착하여 즉시 참가
+
+### 9.5 에이전트 행동 루프
+
+```
+5분 배틀 사이클:
+  1. 국가 선택 (주권 상태, 보상 분석)
+  2. 아레나 참가 (API 호출)
+  3. 실시간 전투 (100ms~1s 의사결정)
+     - 게임 상태 수신 → 전략 판단 → 액션 전송
+  4. 라운드 종료 (결과 수신, ELO 변동, 보상 정산)
+  5. 전략 조정 (승률 분석, 빌드 최적화)
+```
+
+### 9.6 봇 AI (NPC 에이전트)
+
+- 서버 내장 봇: 국적별 자동 생성, 5가지 빌드 패스
+- 유저 부재 시 국가 방어 담당
+- 용병 시장: NPC 에이전트를 Gold로 고용 (Bronze~Legendary, 24시간 계약)
 
 ---
 
@@ -179,7 +566,47 @@ _PLACEHOLDER_SECTION_9_
 
 ## 10. 시즌 & 에포크 구조
 
-_PLACEHOLDER_SECTION_10_
+### 10.1 시즌 구조 (1개월 = 4주 = 4 Era)
+
+```
+Season N: "Era of [테마명]"
+│
+├── Week 1: Age of Discovery (개척의 시대)
+│   모든 국가 미점령 → 팩션 결성 + 초기 러시 → 전쟁 불가 (평화 기간)
+│
+├── Week 2: Age of Expansion (확장의 시대)
+│   Border Skirmish 활성화 → 전쟁 선포 가능 (비용 ×2) → 첫 World War Event
+│
+├── Week 3: Age of Empires (제국의 시대)
+│   전쟁 비용 정상 → Capital Siege 활성화 → UN 결의안 투표 시작
+│
+└── Week 4: Age of Reckoning (결산의 시대)
+    최종 순위 경쟁 → "최후의 전투" 이벤트 → Final Rush (전투 3분 단축)
+```
+
+### 10.2 시즌 리셋
+
+```yaml
+리셋 프로세스:
+  1. 시즌 종료 스냅샷 (전체 세계 상태 영구 저장)
+  2. 최종 랭킹 확정
+  3. 명예의 전당 기록
+  4. 보상 분배
+  5. 세계 초기화 (모든 국가 미점령)
+  6. 팩션 유지 (멤버/구조 유지, 자원만 리셋)
+  7. 에이전트 유지 (스킨 유지, 레벨/빌드 리셋)
+  8. 새 시즌 테마 발표
+
+유지되는 것: 유저 계정, API 키, 팩션 구조, 코스메틱, 업적/칭호, 명예의 전당
+리셋되는 것: 국가 지배권, 자원/Gold, 에이전트 레벨/빌드, 외교 조약
+```
+
+### 10.3 v14 에포크 기반 확장
+
+v14에서는 에포크(10분) → 세션(1시간) → 주권(24시간) → 패권(1주)의 계층적 진행 구조가 시즌과 결합:
+- 4주 시즌 내에서 주간 패권(Hegemon) 경쟁
+- 패권 국가만 문명 정책 설정 가능
+- 시즌 최종 점수 = 주간 패권 횟수 + GDP 누적 + 전투 승률
 
 ---
 
@@ -187,7 +614,52 @@ _PLACEHOLDER_SECTION_10_
 
 ## 11. 메타 진행 & 명예의 전당
 
-_PLACEHOLDER_SECTION_11_
+### 11.1 명예의 전당
+
+| 카테고리 | 기준 |
+|----------|------|
+| World Dominator | 시즌 종료 시 최다 국가 지배 팩션 |
+| Economic Superpower | 시즌 최고 GDP 기록 팩션 |
+| War Machine | 시즌 최다 Siege 승리 팩션 |
+| Peacekeeper | 가장 오래 전쟁 없이 영토 유지 |
+| Emperor | 시즌 최다 S급 국가 지배 |
+| Best Agent | 시즌 최고 개인 에이전트 (킬/생존 종합) |
+
+표시: 로비 지구본 옆 패널, 시즌별 아카이브, 세계 지도 30초 타임랩스 리플레이
+
+### 11.2 시즌 보상
+
+| 순위 | 보상 |
+|------|------|
+| 1위 팩션 | Golden Globe 트로피 + 다음 시즌 보너스 + 에이전트 금색 이펙트 |
+| 2위 팩션 | Silver Globe + 소 보너스 |
+| 3위 팩션 | Bronze Globe |
+| Top 10% 유저 | 시즌 한정 칭호 + 프로필 배지 |
+
+### 11.3 업적 시스템
+
+**개인**: First Blood, Centurion(100킬), World Traveler(50개국), Undying(10연속 생존), Kingmaker(수도 함락), Economist(10K Gold), Diplomat(5개 조약)
+
+**팩션**: Rising Power(첫 S급 점령), Empire Builder(20국 동시 지배), Trade Empire(GDP 1위), Legacy(3시즌 연속 Top 5)
+
+### 11.4 자연재해 & 글로벌 이벤트
+
+매일 1~3개 랜덤 이벤트 발생:
+- **Earthquake**: 자원 -30% (24시간)
+- **Pandemic**: 대륙 전체 에이전트 HP -10% (48시간)
+- **Gold Rush**: 해당국 Gold ×5 (12시간)
+- **Tech Boom**: Tech ×3 (24시간)
+- **Solar Flare**: 전 세계 LLM 에이전트 1시간 통신 장애
+
+### 11.5 기술 연구 트리
+
+팩션이 Tech 자원 투자로 글로벌 보너스 해금 (3갈래):
+
+| 경로 | Lv.1 (100T) | Lv.2 (300T) | Lv.3 (700T) | Lv.4 (2000T) |
+|------|------------|------------|------------|-------------|
+| Military | DPS +5% | 팀 시너지 +10% | Siege 공격 +20% | 특수 무기 |
+| Economic | 무역 수수료 -25% | 자원 +15% | 전 자원 무역 | GDP ×2 |
+| Diplomatic | 정보전 +20% | Influence +30% | 동맹 방어 +25% | UN 자동 통과 |
 
 ---
 
@@ -195,7 +667,87 @@ _PLACEHOLDER_SECTION_11_
 
 ## 12. 기술 아키텍처
 
-_PLACEHOLDER_SECTION_12_
+### 12.1 기술 스택
+
+| 레이어 | 기술 | 역할 |
+|--------|------|------|
+| Game Server | Go 1.24 + gorilla/websocket | 20Hz 게임 루프, 실시간 전투 |
+| Meta Server | Go 1.24 + chi + PostgreSQL + Redis | 경제/외교/시즌/유저 관리 |
+| Frontend | Next.js 15 + React 19 + TypeScript | SPA, 모바일 반응형 |
+| World Map | MapLibre GL JS (2D) + three-globe (3D) | 세계지도 렌더링 |
+| Battle View | R3F (React Three Fiber) | 3D 전투 렌더링 |
+| Database | PostgreSQL 16 | 영속 데이터 |
+| Cache/RT | Redis 7 | 실시간 상태, pub/sub |
+| Auth | JWT + API Key | 유저 + 에이전트 인증 |
+| Blockchain | CROSS Mainnet | 토큰 발행/거래/거버넌스 |
+| Deploy | Railway (서버) + Vercel (프론트) | 호스팅 |
+
+### 12.2 서버 아키텍처
+
+```
+Client (Browser)
+  │
+  ├── WebSocket (20Hz) ──→ Game Server
+  │                          ├── WorldManager (195국)
+  │                          ├── CountryArena[N] (on-demand)
+  │                          │   ├── EpochManager
+  │                          │   ├── WeaponSystem
+  │                          │   ├── CombatResolver
+  │                          │   ├── SkillTreeManager
+  │                          │   └── ScoringSystem
+  │                          ├── BotManager
+  │                          └── AgentStreamHub
+  │
+  └── REST + WS ──→ Meta Server
+                      ├── AuthService
+                      ├── FactionManager
+                      ├── EconomyEngine
+                      ├── DiplomacyEngine
+                      ├── SeasonManager
+                      └── AgentAPI
+                            │
+                      ┌─────┴─────┐
+                   PostgreSQL    Redis
+                      │
+                   Background Workers
+                      ├── Economy Tick (1h)
+                      ├── Event Generator
+                      ├── Season Manager
+                      └── Blockchain Worker
+                            └── CROSS Mainnet
+```
+
+### 12.3 클라이언트 아키텍처 (v14)
+
+```
+Globe View          Game View (R3F)           Hub Pages
+├── GlobeDomMap     ├── WeaponRenderer        ├── CivilizationPanel
+├── GlobeWarFX      ├── DamageNumbers         ├── PolicyManager
+├── GlobeHoverPanel ├── EpochHUD              ├── StatsChart
+├── EventTicker     ├── LevelUpOverlay        ├── WarDashboard
+└── NatSelector     ├── BuildHUD              └── AlliancePanel
+                    ├── CapturePointRender
+                    └── SpectatorMode
+
+Hooks: useSocket, useEpoch, useWeapons, useDomination
+```
+
+### 12.4 스케일링 전략
+
+| Phase | CCU | 동시 전투 | 인프라 |
+|-------|-----|----------|--------|
+| MVP | ~500 | ~20 | 단일 서버 + PG 1대 + Redis 1대 |
+| Growth | ~5,000 | ~50 | Game/Meta 분리, 지역별 인스턴스 |
+| Scale | ~50,000 | ~195 | 수평 스케일링, Redis Cluster, PG Read Replica |
+
+### 12.5 WebSocket 프로토콜
+
+| 경로 | 빈도 | 페이로드 |
+|------|------|---------|
+| state (서버→클라) | 20Hz | < 2KB (뷰포트 컬링) |
+| input (클라→서버) | 30Hz | < 100B |
+| epoch events | 이벤트 시 | < 500B |
+| globe sync | 1Hz | < 1KB (주권 색상) |
 
 ---
 
@@ -203,4 +755,65 @@ _PLACEHOLDER_SECTION_12_
 
 ## 13. 경제 흐름도 요약
 
-_PLACEHOLDER_SECTION_13_
+### 전체 경제 흐름도
+
+```
+┌─────────────────────────────────────────────────────────────────────────┐
+│                        AI World War Economy Flow                         │
+│                                                                         │
+│  ┌──────────┐    전투 참가    ┌──────────┐    점수 결정    ┌──────────┐ │
+│  │  Agent    │───────────────►│ Country  │───────────────►│ Faction  │ │
+│  │  (유저)   │                │  Arena   │                │  Score   │ │
+│  └──────────┘                └──────────┘                └────┬─────┘ │
+│       │                           │                           │       │
+│       │ 토큰 매수                   │ 전투 보상                  │ 지배권  │
+│       ▼                           ▼                           ▼       │
+│  ┌──────────┐              ┌──────────┐              ┌──────────┐    │
+│  │  DEX     │              │  Gold    │              │ Sover-   │    │
+│  │  Market  │              │  Rewards │              │ eignty   │    │
+│  └────┬─────┘              └────┬─────┘              └────┬─────┘    │
+│       │                         │                         │          │
+│       │ 시총 ↑                    │ 5% 세수                  │ 자원 생산  │
+│       ▼                         ▼                         ▼          │
+│  ┌──────────┐              ┌──────────┐              ┌──────────┐    │
+│  │ Defense  │◄─────────────│ Treasury │◄─────────────│ Resource │    │
+│  │ Oracle   │   바이백       │ (재무부)  │   GDP 세수     │ Income   │    │
+│  │ (방어↑)  │              └──────────┘              └──────────┘    │
+│  └──────────┘                   │                                     │
+│       │                         │ 소각                                 │
+│       │ 방어 버프                  ▼                                    │
+│       └──────────────────►  방어 성공 → 투자자 신뢰 → 토큰 수요 ↑       │
+│                                                                         │
+│  ═══════════════════════════════════════════════════════════════════    │
+│  요약: 전투 승리 → GDP ↑ → 세수 바이백 → 토큰 가격 ↑ → 방어 버프 ↑     │
+│        → 방어 성공 → 투자자 신뢰 → 다시 토큰 수요 ↑ (선순환)             │
+│  ═══════════════════════════════════════════════════════════════════    │
+│                                                                         │
+│  블록체인 토큰 ($AWW + 195개 국가 토큰)                                  │
+│  ├── 인게임: 방어 버프, 에이전트 강화, 자원 부스트, 거버넌스 투표         │
+│  ├── 온체인: DEX 거래, 스테이킹, 바이백/소각, 쿼드라틱 보팅              │
+│  └── 크로스: 무역 결제 (수출 대금 20% → 수출국 토큰), 전쟁 비용           │
+└─────────────────────────────────────────────────────────────────────────┘
+```
+
+### 핵심 숫자 요약
+
+| 항목 | 값 |
+|------|-----|
+| 국가 수 | 195 |
+| 국가 등급 | S(8) / A(20) / B(40) / C(80) / D(47) |
+| 에포크 시간 | 10분 (Peace 5 + War 5) |
+| 시즌 기간 | 1개월 (4 Era) |
+| 마스터 토큰 | $AWW (10억, 고정) |
+| 국가 토큰 | 195종 ERC-20 (등급별 5M~100M) |
+| 방어 버프 상한 | +30% |
+| 팩션 최대 인원 | 50명 |
+| 유저당 에이전트 | 최대 5개 (API Key) |
+| 동시 배치 | 유저당 3개 국가 |
+| 게임 틱 | 20Hz (서버) |
+| 입력 빈도 | 30Hz (클라이언트) |
+
+---
+
+> **이 문서는 v10 ~ v15까지의 기획 문서를 기반으로 AI World War의 전체 게임 시스템을 종합 분석한 것입니다.**
+> 참조: `v11-world-war-plan.md`, `v14-system-architecture.md`, `v15-agent-arena-plan.md`, `v10-survival-roguelike-plan.md`

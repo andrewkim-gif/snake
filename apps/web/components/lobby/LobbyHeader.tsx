@@ -1,17 +1,14 @@
 'use client';
 
 /**
- * LobbyHeader — 프리미엄 다크 헤더 바
- * v15: Gemini 생성 로고 + TopNavBar 3항목 + 햄버거 + LanguageSwitcher + 상태
- * Chakra Petch + Space Grotesk 폰트, 인디고 에지 글로우
+ * LobbyHeader — 프리미엄 다크 헤더 바 (간소화)
+ * 좌측: 로고 + ALPHA 뱃지
+ * 우측: LanguageSwitcher + 연결 상태
+ * GAME SYSTEM 버튼은 page.tsx에서 에이전트 설정 패널 위에 배치
  */
 
-import { useState } from 'react';
-import Image from 'next/image';
 import { SK, bodyFont } from '@/lib/sketch-ui';
-import { TopNavBar } from '@/components/navigation/TopNavBar';
 import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
-import { GameLogo } from '@/components/lobby/GameLogo';
 import { useTranslations } from 'next-intl';
 
 interface LobbyHeaderProps {
@@ -19,9 +16,7 @@ interface LobbyHeaderProps {
 }
 
 export function LobbyHeader({ connected }: LobbyHeaderProps) {
-  const tCommon = useTranslations('common');
   const tLobby = useTranslations('lobby');
-  const [imgError, setImgError] = useState(false);
 
   return (
     <header style={{
@@ -49,43 +44,17 @@ export function LobbyHeader({ connected }: LobbyHeaderProps) {
         gap: '10px',
         pointerEvents: 'auto',
       }}>
-        {/* Gemini 생성 로고 (fallback: CSS GameLogo) */}
-        {!imgError ? (
-          <Image
-            src="/images/logo-aww.png"
-            alt="AI World War"
-            width={160}
-            height={160}
-            priority
-            onError={() => setImgError(true)}
-            style={{
-              height: '40px',
-              width: 'auto',
-              filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.5))',
-            }}
-          />
-        ) : (
-          <GameLogo variant="compact" />
-        )}
-
-        <span style={{
-          fontFamily: bodyFont,
-          fontSize: '9px',
-          fontWeight: 700,
-          color: SK.blue,
-          letterSpacing: '1px',
-          padding: '2px 6px',
-          border: `1px solid ${SK.blue}30`,
-          borderRadius: '4px',
-          textTransform: 'uppercase',
-        }}>
-          {tCommon('alpha')}
-        </span>
-      </div>
-
-      {/* 중앙: TopNavBar 3항목 + 햄버거 (데스크탑) */}
-      <div style={{ pointerEvents: 'auto', height: '100%' }}>
-        <TopNavBar />
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/assets/generated/logo-header.png"
+          alt="AI WORLD WAR"
+          style={{
+            height: '22px',
+            width: 'auto',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))',
+          }}
+        />
       </div>
 
       {/* 우측: Language + Status */}

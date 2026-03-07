@@ -47,6 +47,7 @@ export function I18nClientWrapper({
       <NextIntlClientProvider
         locale={locale}
         messages={allMessages[locale] as Record<string, unknown>}
+        timeZone="UTC"
       >
         {children}
       </NextIntlClientProvider>

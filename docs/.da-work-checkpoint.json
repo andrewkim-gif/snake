@@ -1,0 +1,22 @@
+{
+  "pipeline": "da:work",
+  "execution_mode": "plan",
+  "pipeline_mode": "turbo",
+  "plan_file": "docs/designs/v15-globe-effects-plan.md",
+  "project_type": "GAME",
+  "current_stage": 4,
+  "current_phase": 6,
+  "total_phases": 6,
+  "phases": [
+    {"name": "인구 기반 에이전트 제한 + 서버/클라이언트 데이터 파이프라인", "design_needed": false, "status": "done"},
+    {"name": "국기 텍스처 아틀라스 + 에이전트 수 라벨", "design_needed": true, "status": "done"},
+    {"name": "국기 텍스처 아틀라스 + 에이전트 수 라벨", "design_needed": true, "status": "done"},
+    {"name": "점령 이펙트 강화", "design_needed": true, "status": "done"},
+    {"name": "전쟁 이펙트 대폭 강화", "design_needed": true, "status": "done"},
+    {"name": "무역 루트 시각화 + 글로벌 이벤트 파동", "design_needed": false, "status": "done"},
+    {"name": "카메라 포커스 + 성능 최적화 + 모바일 LOD + 최종 통합", "design_needed": false, "status": "done"}
+  ],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
+  "last_skill": "turbo_phase6_done",
+  "last_update": "2026-03-07T01:10:00Z"
+}
