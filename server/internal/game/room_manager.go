@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sort"
 	"sync"
 	"time"
@@ -23,35 +24,46 @@ type RoomManager struct {
 	playerRoom map[string]string // clientID → roomID
 	config     RoomConfig
 
+	// v17: Track which countries are currently in use (ISO3 → roomID)
+	activeCountries map[string]string // ISO3 → roomID
+	rng             *rand.Rand
+
 	// Event callback (set by main.go to bridge game→ws)
 	OnEvents RoomEventCallback
 }
 
 // NewRoomManager creates a RoomManager with the configured number of rooms.
+// v17: Selects random countries from the pool and creates country-based arenas.
 func NewRoomManager(cfg RoomConfig) *RoomManager {
 	rm := &RoomManager{
-		rooms:      make(map[string]*Room),
-		playerRoom: make(map[string]string),
-		config:     cfg,
+		rooms:           make(map[string]*Room),
+		playerRoom:      make(map[string]string),
+		config:          cfg,
+		activeCountries: make(map[string]string),
+		rng:             rand.New(rand.NewSource(time.Now().UnixNano())),
 	}
 
-	// Create rooms
-	roomNames := []string{
-		"Overworld",
-		"Nether",
-		"The End",
-		"Deep Dark",
-		"Cherry Grove",
-	}
-	for i := 0; i < cfg.MaxRooms; i++ {
-		name := fmt.Sprintf("Room %d", i+1)
-		if i < len(roomNames) {
-			name = roomNames[i]
+	// Select random countries for arenas
+	countries := SelectRandomCountries(cfg.MaxRooms)
+
+	for _, country := range countries {
+		roomID := fmt.Sprintf("room_%s", country.ISO3)
+		roomCfg := cfg
+		roomCfg.CountryISO3 = country.ISO3
+		roomCfg.CountryName = country.Name
+		// Scale max bots by country tier (larger countries = more bots)
+		if country.MaxAgents > 0 && country.MaxAgents < cfg.MaxBotsPerRoom {
+			roomCfg.MaxBotsPerRoom = country.MaxAgents
 		}
-		roomID := fmt.Sprintf("room_%d", i+1)
-		room := NewRoom(roomID, name, cfg)
+
+		room := NewRoom(roomID, country.Name, roomCfg)
+		// v17: Stagger auto-start — random delay 0~180s so rooms don't all start simultaneously
+		room.stateTicksLeft = rm.rng.Intn(180 * TickRate)
 		rm.rooms[roomID] = room
+		rm.activeCountries[country.ISO3] = roomID
 	}
+
+	slog.Info("room manager created with country arenas", "count", len(rm.rooms))
 
 	return rm
 }
@@ -63,6 +75,7 @@ func (rm *RoomManager) Start(ctx context.Context) {
 
 	for _, room := range rm.rooms {
 		room.OnEvents = rm.forwardEvents
+		room.OnRotate = rm.rotateRoom
 		go room.Run(ctx)
 	}
 
@@ -235,7 +248,7 @@ func (rm *RoomManager) RouteInput(clientID string, angle float64, boost bool, da
 }
 
 // RouteInputSplit forwards a client's split move/aim input to the correct room (v16).
-func (rm *RoomManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+func (rm *RoomManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool, jump bool) {
 	rm.mu.RLock()
 	roomID, ok := rm.playerRoom[clientID]
 	rm.mu.RUnlock()
@@ -252,7 +265,7 @@ func (rm *RoomManager) RouteInputSplit(clientID string, moveAngle float64, aimAn
 		return
 	}
 
-	room.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash)
+	room.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash, jump)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct room.
@@ -274,6 +287,48 @@ func (rm *RoomManager) RouteChooseUpgrade(clientID string, choiceIndex int) {
 	}
 
 	room.HandleChooseUpgrade(clientID, choiceIndex)
+}
+
+// RouteARInput forwards Arena combat input to the correct room.
+func (rm *RoomManager) RouteARInput(clientID string, input ARInput) {
+	rm.mu.RLock()
+	roomID, ok := rm.playerRoom[clientID]
+	rm.mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	rm.mu.RLock()
+	room, exists := rm.rooms[roomID]
+	rm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	room.HandleARInput(clientID, input)
+}
+
+// RouteARChoose forwards Arena tome/weapon choice to the correct room.
+func (rm *RoomManager) RouteARChoose(clientID string, choice ARChoice) {
+	rm.mu.RLock()
+	roomID, ok := rm.playerRoom[clientID]
+	rm.mu.RUnlock()
+
+	if !ok {
+		return
+	}
+
+	rm.mu.RLock()
+	room, exists := rm.rooms[roomID]
+	rm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+
+	room.HandleARChoose(clientID, choice)
 }
 
 // GetRoomList returns info for all rooms (for lobby display).
@@ -333,6 +388,58 @@ func (rm *RoomManager) BroadcastLobbyUpdate() domain.RoomsUpdateEvent {
 		Rooms:         rm.GetRoomList(),
 		RecentWinners: rm.GetRecentWinners(),
 	}
+}
+
+// rotateRoom replaces a room's country with an unused one after cooldown ends.
+// Called by Room.tickCooldown via OnRotate callback (holds Room.mu lock, NOT rm.mu).
+func (rm *RoomManager) rotateRoom(roomID string) {
+	rm.mu.Lock()
+	defer rm.mu.Unlock()
+
+	room, ok := rm.rooms[roomID]
+	if !ok {
+		return
+	}
+
+	oldISO3 := room.Config.CountryISO3
+
+	// Pick a random unused country
+	newCountry := rm.pickUnusedCountryLocked()
+	if newCountry == nil {
+		// No unused countries available; keep current
+		return
+	}
+
+	// Remove old country from active set
+	delete(rm.activeCountries, oldISO3)
+
+	// Update room config with new country
+	room.Config.CountryISO3 = newCountry.ISO3
+	room.Config.CountryName = newCountry.Name
+	room.Name = newCountry.Name
+
+	// Track new country
+	rm.activeCountries[newCountry.ISO3] = roomID
+
+	slog.Info("room rotated to new country",
+		"roomId", roomID,
+		"from", oldISO3,
+		"to", newCountry.ISO3,
+		"country", newCountry.Name,
+	)
+}
+
+// pickUnusedCountryLocked selects a random country not currently in use.
+// Caller must hold rm.mu.
+func (rm *RoomManager) pickUnusedCountryLocked() *CountryData {
+	// Build list of unused countries
+	pool := SelectRandomCountries(195) // Get all shuffled
+	for _, c := range pool {
+		if _, inUse := rm.activeCountries[c.ISO3]; !inUse {
+			return &c
+		}
+	}
+	return nil // All 195 are in use (shouldn't happen with 50 rooms)
 }
 
 // StartLobbyBroadcast starts a 1Hz goroutine that calls the broadcaster.

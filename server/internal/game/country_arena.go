@@ -287,7 +287,7 @@ func (cam *CountryArenaManager) RouteInput(clientID string, angle float64, boost
 }
 
 // RouteInputSplit forwards split move/aim input to the correct country arena (v16).
-func (cam *CountryArenaManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+func (cam *CountryArenaManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool, jump bool) {
 	cam.mu.RLock()
 	countryCode, ok := cam.playerCountry[clientID]
 	if !ok {
@@ -300,7 +300,7 @@ func (cam *CountryArenaManager) RouteInputSplit(clientID string, moveAngle float
 	if !exists {
 		return
 	}
-	arena.Room.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash)
+	arena.Room.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash, jump)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct arena.
@@ -318,6 +318,40 @@ func (cam *CountryArenaManager) RouteChooseUpgrade(clientID string, choiceIndex 
 		return
 	}
 	arena.Room.HandleChooseUpgrade(clientID, choiceIndex)
+}
+
+// RouteARInput forwards Arena combat input to the correct country arena.
+func (cam *CountryArenaManager) RouteARInput(clientID string, input ARInput) {
+	cam.mu.RLock()
+	countryCode, ok := cam.playerCountry[clientID]
+	if !ok {
+		cam.mu.RUnlock()
+		return
+	}
+	arena, exists := cam.arenas[countryCode]
+	cam.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+	arena.Room.HandleARInput(clientID, input)
+}
+
+// RouteARChoose forwards Arena tome/weapon choice to the correct arena.
+func (cam *CountryArenaManager) RouteARChoose(clientID string, choice ARChoice) {
+	cam.mu.RLock()
+	countryCode, ok := cam.playerCountry[clientID]
+	if !ok {
+		cam.mu.RUnlock()
+		return
+	}
+	arena, exists := cam.arenas[countryCode]
+	cam.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+	arena.Room.HandleARChoose(clientID, choice)
 }
 
 // GetPlayerCountry returns the country code a player is currently in.

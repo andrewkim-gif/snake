@@ -190,6 +190,14 @@ const (
 // Room Configuration
 // ============================================================
 
+// CombatModeType selects which combat system a Room uses.
+type CombatModeType string
+
+const (
+	CombatModeClassic CombatModeType = "classic" // v10-v17 snake/aura combat
+	CombatModeArena   CombatModeType = "arena"   // v18 Arena survival roguelike
+)
+
 // RoomConfig holds room lifecycle timing constants.
 type RoomConfig struct {
 	MaxRooms          int    // Phase 1: 5, max: 50
@@ -202,12 +210,18 @@ type RoomConfig struct {
 	CooldownSec       int    // Cooldown between rounds
 	MinPlayersToStart int    // Min humans to start countdown
 	TerrainTheme      string // v11: country terrain theme (urban, desert, tundra, etc.)
+	CountryISO3       string // v17: ISO3 code of the country this room represents
+	CountryName       string // v17: display name of the country
+
+	// v18 Phase 4: Combat mode selection
+	CombatMode  CombatModeType // "classic" or "arena"
+	CountryTier string         // "S","A","B","C","D" — used for tier-based scaling
 }
 
 // DefaultRoomConfig returns the default room configuration.
 func DefaultRoomConfig() RoomConfig {
 	return RoomConfig{
-		MaxRooms:          5,
+		MaxRooms:          50,
 		MaxPlayersPerRoom: 100,
 		MaxHumansPerRoom:  85,
 		MaxBotsPerRoom:    15,
@@ -215,7 +229,7 @@ func DefaultRoomConfig() RoomConfig {
 		CountdownSec:      0,
 		EndingSec:         5,
 		CooldownSec:       15,
-		MinPlayersToStart: 1,
+		MinPlayersToStart: 0, // v17: auto-start with bots (no human required)
 	}
 }
 

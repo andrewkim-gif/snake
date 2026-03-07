@@ -31,6 +31,16 @@ const (
 	RoomEvtRoundAnalysis  RoomEventType = "round_analysis"
 	RoomEvtBattleComplete    RoomEventType = "battle_complete"    // v11: cooldown ended
 	RoomEvtAbilityTriggered  RoomEventType = "ability_triggered"  // v12: ability visual effect
+
+	// v18 Phase 4: Arena combat events
+	RoomEvtARState          RoomEventType = "ar_state"           // 20Hz arena state broadcast
+	RoomEvtARDamage         RoomEventType = "ar_damage"          // damage number event
+	RoomEvtARLevelUp        RoomEventType = "ar_level_up"        // tome/weapon choice prompt
+	RoomEvtARKill           RoomEventType = "ar_kill"            // enemy kill notification
+	RoomEvtARPhaseChange    RoomEventType = "ar_phase_change"    // phase transition
+	RoomEvtARMinibossDeath  RoomEventType = "ar_miniboss_death"  // miniboss killed
+	RoomEvtAREliteExplosion RoomEventType = "ar_elite_explosion" // explosive elite death
+	RoomEvtARBattleEnd      RoomEventType = "ar_battle_end"      // battle ended
 )
 
 // RoomEvent is a lifecycle event emitted by a Room.
@@ -86,6 +96,9 @@ type Room struct {
 
 	// Terrain modifiers (Phase 2: terrain bonus engine)
 	terrainMods TerrainModifiers
+
+	// v18 Phase 4: Arena combat state (nil when using classic mode)
+	arState *ARRoomState
 
 	// Event callback (set by main.go)
 	OnEvents RoomEventCallback
