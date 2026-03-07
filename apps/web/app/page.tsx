@@ -79,7 +79,7 @@ export default function Home() {
 
   // v13: 전역 SocketContext에서 소켓 데이터 + 액션 가져오기
   const {
-    dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput,
+    dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput, sendInputV16,
     respawn, chooseUpgrade, dismissSynergyPopup, setGameMode, switchArena,
   } = useSocketContext();
 
@@ -252,6 +252,7 @@ export default function Home() {
         dataRef={dataRef}
         uiState={uiState}
         sendInput={sendInput}
+        sendInputV16={sendInputV16}
         respawn={respawn}
         playerName={playerName}
         skinId={skinId}

@@ -778,6 +778,25 @@ export function useSocket() {
     });
   }, []);
 
+  /** v16: 이동/조준 분리 입력 전송 (WASD + 마우스) */
+  const sendInputV16 = useCallback((
+    moveAngle: number | null,
+    aimAngle: number,
+    boost: boolean,
+    seq: number,
+    dash?: boolean,
+    jump?: boolean,
+  ) => {
+    socketRef.current?.emit('input', {
+      ...(moveAngle !== null ? { ma: Math.round(moveAngle * 100) / 100 } : { a: aimAngle }),
+      aa: Math.round(aimAngle * 100) / 100,
+      b: boost ? 1 : 0,
+      s: seq,
+      ...(dash ? { d: 1 } : {}),
+      ...(jump ? { j: 1 } : {}),
+    });
+  }, []);
+
   const respawn = useCallback((name?: string, skinId?: number, appearance?: string) => {
     socketRef.current?.emit('respawn', { name, skinId, appearance });
   }, []);
@@ -894,6 +913,7 @@ export function useSocket() {
     joinRoom,
     leaveRoom,
     sendInput,
+    sendInputV16,
     respawn,
     disconnect,
     chooseUpgrade,

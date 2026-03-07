@@ -51,37 +51,55 @@ export function interpolateAgents(
 }
 
 /**
- * 클라이언트 예측: 서버 state 기반으로 마우스 방향을 즉시 반영
- * 서버 확인 전까지 로컬에서 Agent를 회전시켜 조작감 개선
+ * 클라이언트 예측: 서버 state 기반으로 입력 방향을 즉시 반영
+ * 서버 확인 전까지 로컬에서 Agent를 이동/회전시켜 조작감 개선
+ *
+ * v16: moveAngle과 aimAngle 분리
+ * - moveAngle: WASD 기반 이동 방향 (null = 정지)
+ * - aimAngle: 마우스 기반 조준 방향 (facing)
  */
 export function applyClientPrediction(
   serverAgent: AgentNetworkData,
   targetAngle: number,
   dt: number,
+  /** v16: 이동 방향 (null이면 targetAngle 사용 — 하위 호환) */
+  moveAngle?: number | null,
+  /** v16: 조준 방향 (undefined이면 targetAngle 사용 — 하위 호환) */
+  aimAngle?: number,
 ): AgentNetworkData {
   // 서버 turnRate는 tick 기반(20Hz), 클라이언트는 frame 기반(60fps)
   const turnRate = ARENA_CONFIG.turnRate * 20; // rad/tick → rad/sec
   const speed = serverAgent.b ? ARENA_CONFIG.boostSpeed : ARENA_CONFIG.baseSpeed;
 
-  // 1. heading을 targetAngle 쪽으로 dt 기반 회전
+  // v16: moveAngle이 명시되면 이동/조준 분리
+  const effectiveMoveAngle = moveAngle !== undefined ? moveAngle : targetAngle;
+  const effectiveAimAngle = aimAngle !== undefined ? aimAngle : targetAngle;
+
+  // 1. heading(이동 방향)을 moveAngle 쪽으로 dt 기반 회전
   let heading = serverAgent.h;
-  const diff = angleDiff(heading, targetAngle);
-  const maxTurn = turnRate * dt;
-  if (Math.abs(diff) <= maxTurn) {
-    heading = targetAngle;
-  } else {
-    heading = normalizeAngle(heading + Math.sign(diff) * maxTurn);
+  if (effectiveMoveAngle !== null) {
+    const diff = angleDiff(heading, effectiveMoveAngle);
+    const maxTurn = turnRate * dt;
+    if (Math.abs(diff) <= maxTurn) {
+      heading = effectiveMoveAngle;
+    } else {
+      heading = normalizeAngle(heading + Math.sign(diff) * maxTurn);
+    }
+  }
+  // effectiveMoveAngle === null → 정지, heading 유지
+
+  // 2. 위치 예측 (moveAngle이 null이면 이동 안 함)
+  let x = serverAgent.x;
+  let y = serverAgent.y;
+  if (effectiveMoveAngle !== null) {
+    const moveDistance = speed * dt;
+    const dir = angleToVector(heading);
+    x += dir.x * moveDistance;
+    y += dir.y * moveDistance;
   }
 
-  // 2. 위치 예측 (dt 기반)
-  const moveDistance = speed * dt;
-  const dir = angleToVector(heading);
-  const x = serverAgent.x + dir.x * moveDistance;
-  const y = serverAgent.y + dir.y * moveDistance;
-
-  // v16: facing prediction — if f exists, keep it (aim is client-driven)
-  // For now, facing = serverAgent.f (server authoritative aim direction)
-  const facing = serverAgent.f ?? heading;
+  // 3. facing 예측 (aimAngle은 클라이언트 드리븐 → 즉시 반영)
+  const facing = effectiveAimAngle;
 
   return {
     ...serverAgent,

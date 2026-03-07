@@ -38,6 +38,7 @@ export interface SocketStableContextValue {
   joinRoom: (roomId: string, name: string, skinId?: number, appearance?: string) => void;
   leaveRoom: () => void;
   sendInput: (angle: number, boost: boolean, seq: number, dash?: boolean) => void;
+  sendInputV16: (moveAngle: number | null, aimAngle: number, boost: boolean, seq: number, dash?: boolean, jump?: boolean) => void;
   respawn: (name?: string, skinId?: number, appearance?: string) => void;
   chooseUpgrade: (choiceId: string) => void;
   dismissSynergyPopup: (synergyId: string) => void;
@@ -84,6 +85,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     joinRoom,
     leaveRoom,
     sendInput,
+    sendInputV16,
     respawn,
     chooseUpgrade,
     dismissSynergyPopup,
@@ -133,6 +135,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       joinRoom,
       leaveRoom,
       sendInput,
+      sendInputV16,
       respawn,
       chooseUpgrade,
       dismissSynergyPopup,
@@ -150,6 +153,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       joinRoom,
       leaveRoom,
       sendInput,
+      sendInputV16,
       respawn,
       chooseUpgrade,
       dismissSynergyPopup,

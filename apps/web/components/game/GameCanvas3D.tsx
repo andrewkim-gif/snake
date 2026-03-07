@@ -15,16 +15,18 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
+import type { Camera } from 'three';
 import type { GameData, UiState } from '@/hooks/useSocket';
 import type { AgentNetworkData, OrbNetworkData } from '@agent-survivor/shared';
 import { ARENA_CONFIG } from '@agent-survivor/shared';
 import { populateAppearanceCache, clearAppearanceCache } from '@/lib/3d/appearance-cache';
 import { getTerrainBonusDescription } from '@/lib/3d/terrain-textures';
+import { useInputManager } from '@/hooks/useInputManager';
 
 // 3D 컴포넌트
 import { Scene } from '@/components/3d/Scene';
 import { SkyBox } from '@/components/3d/SkyBox';
-import { PlayCamera } from '@/components/3d/PlayCamera';
+import { TPSCamera } from '@/components/3d/TPSCamera';
 import { GameLoop } from '@/components/3d/GameLoop';
 import { AgentInstances } from '@/components/3d/AgentInstances';
 import { EquipmentInstances } from '@/components/3d/EquipmentInstances';
@@ -75,6 +77,8 @@ interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
   sendInput: (angle: number, boost: boolean, seq: number, dash?: boolean) => void;
+  /** v16: 이동/조준 분리 입력 전송 */
+  sendInputV16: (moveAngle: number | null, aimAngle: number, boost: boolean, seq: number, dash?: boolean, jump?: boolean) => void;
   respawn: (name?: string, skinId?: number) => void;
   playerName: string;
   skinId: number;
@@ -87,6 +91,7 @@ export function GameCanvas3D({
   dataRef,
   uiState,
   sendInput,
+  sendInputV16,
   respawn,
   playerName,
   skinId,
@@ -109,6 +114,51 @@ export function GameCanvas3D({
   // v14 S09: 플레이어 ID ref (FlagSprite용, rAF에서 동기화)
   const playerIdRef = useRef<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+
+  // v16: InputManager + TPSCamera refs
+  const cameraRef = useRef<Camera | null>(null);
+  const playerPosRef = useRef({ x: 0, z: 0 });
+  const inputManager = useInputManager(containerRef, cameraRef, playerPosRef, !menuOpen);
+
+  // v16: 입력 전송 루프 (30Hz) — InputManager 상태를 서버에 전송
+  const lastSentRef = useRef({ ma: 0 as number | null, aa: 0, b: false, d: false, j: false });
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const inp = inputManager.inputRef.current;
+      const last = lastSentRef.current;
+
+      // 변경 감지 (dead-reckoning 최적화)
+      const changed =
+        inp.moveAngle !== last.ma ||
+        Math.abs(inp.aimAngle - last.aa) > 0.02 ||
+        inp.boost !== last.b ||
+        inp.dash !== last.d ||
+        inp.jump !== last.j;
+
+      if (changed) {
+        inputSeqRef.current++;
+        sendInputV16(
+          inp.moveAngle,
+          inp.aimAngle,
+          inp.boost,
+          inputSeqRef.current,
+          inp.dash || undefined,
+          inp.jump || undefined,
+        );
+
+        last.ma = inp.moveAngle;
+        last.aa = inp.aimAngle;
+        last.b = inp.boost;
+        last.d = inp.dash;
+        last.j = inp.jump;
+
+        // one-shot 소비
+        if (inp.dash) inputManager.consumeDash();
+        if (inp.jump) inputManager.consumeJump();
+      }
+    }, 33); // 30Hz
+    return () => clearInterval(interval);
+  }, [sendInputV16, inputManager]);
   const [terrainToast, setTerrainToast] = useState<string | null>(null);
   // v12 S20: Spectator mode + battle result
   const [spectatorTarget, setSpectatorTarget] = useState<string | null>(null);
@@ -234,172 +284,30 @@ export function GameCanvas3D({
     };
   }, [dataRef]);
 
-  // ─── 입력 처리 (마우스 + 키보드 + 터치) ───
+  // ─── ESC 메뉴 토글 (InputManager 외부 — 메뉴 키는 별도 관리) ───
   useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    // 마우스 이동 → 방향 계산
-    const handleMouseMove = (e: MouseEvent) => {
-      if (menuOpen) return;
-      const rect = container.getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      const dx = e.clientX - rect.left - cx;
-      const dy = e.clientY - rect.top - cy;
-      let angle = Math.atan2(dy, dx);
-      if (angle < 0) angle += Math.PI * 2;
-      angleRef.current = angle;
-      inputSeqRef.current++;
-      sendInput(angle, boostRef.current, inputSeqRef.current);
-    };
-
-    // 마우스 클릭 → 부스트
-    const handleMouseDown = () => {
-      if (menuOpen) return;
-      boostRef.current = true;
-      inputSeqRef.current++;
-      sendInput(angleRef.current, true, inputSeqRef.current);
-    };
-    const handleMouseUp = () => {
-      boostRef.current = false;
-      inputSeqRef.current++;
-      sendInput(angleRef.current, false, inputSeqRef.current);
-    };
-
-    // ─── 터치 이벤트 (모바일) ───
-    let lastTapTime = 0;
-
-    const handleTouchAngle = (touch: Touch) => {
-      if (menuOpen) return;
-      const rect = container.getBoundingClientRect();
-      const cx = rect.width / 2;
-      const cy = rect.height / 2;
-      const dx = touch.clientX - rect.left - cx;
-      const dy = touch.clientY - rect.top - cy;
-      let angle = Math.atan2(dy, dx);
-      if (angle < 0) angle += Math.PI * 2;
-      angleRef.current = angle;
-      inputSeqRef.current++;
-      sendInput(angle, boostRef.current, inputSeqRef.current);
-    };
-
-    const handleTouchStart = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 0) return;
-      const touch = e.touches[0];
-      handleTouchAngle(touch);
-
-      // 더블탭 → 부스트 토글
-      const now = Date.now();
-      if (now - lastTapTime < 300) {
-        boostRef.current = !boostRef.current;
-        inputSeqRef.current++;
-        sendInput(angleRef.current, boostRef.current, inputSeqRef.current);
-      }
-      lastTapTime = now;
-    };
-
-    const handleTouchMove = (e: TouchEvent) => {
-      e.preventDefault();
-      if (e.touches.length === 0) return;
-      handleTouchAngle(e.touches[0]);
-    };
-
-    const handleTouchEnd = (e: TouchEvent) => {
-      // 모든 터치가 끝나면 부스트 해제
-      if (e.touches.length === 0 && boostRef.current) {
-        boostRef.current = false;
-        inputSeqRef.current++;
-        sendInput(angleRef.current, false, inputSeqRef.current);
-      }
-    };
-
-    // 키보드 방향/부스트
-    const keys = { up: false, down: false, left: false, right: false };
-    const directionKeys: Record<string, keyof typeof keys> = {
-      KeyW: 'up', ArrowUp: 'up',
-      KeyS: 'down', ArrowDown: 'down',
-      KeyA: 'left', ArrowLeft: 'left',
-      KeyD: 'right', ArrowRight: 'right',
-    };
-
-    const updateKeyboardAngle = () => {
-      let dx = 0, dy = 0;
-      if (keys.right) dx += 1;
-      if (keys.left) dx -= 1;
-      if (keys.down) dy += 1;
-      if (keys.up) dy -= 1;
-      if (dx === 0 && dy === 0) return;
-      let angle = Math.atan2(dy, dx);
-      if (angle < 0) angle += Math.PI * 2;
-      angleRef.current = angle;
-      inputSeqRef.current++;
-      sendInput(angle, boostRef.current, inputSeqRef.current);
-    };
-
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handleEsc = (e: KeyboardEvent) => {
       if (e.code === 'Escape') {
         e.preventDefault();
         setMenuOpen(prev => !prev);
-        return;
-      }
-      if (e.code === 'Space') {
-        e.preventDefault();
-        boostRef.current = true;
-        inputSeqRef.current++;
-        sendInput(angleRef.current, true, inputSeqRef.current);
-        return;
-      }
-      // v16: E key → Dash (one-shot, triggers server PerformDash)
-      if (e.code === 'KeyE') {
-        e.preventDefault();
-        inputSeqRef.current++;
-        sendInput(angleRef.current, boostRef.current, inputSeqRef.current, true);
-        return;
-      }
-      const dir = directionKeys[e.code];
-      if (dir) {
-        e.preventDefault();
-        keys[dir] = true;
-        updateKeyboardAngle();
       }
     };
+    window.addEventListener('keydown', handleEsc);
+    return () => window.removeEventListener('keydown', handleEsc);
+  }, []);
 
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (e.code === 'Space') {
-        boostRef.current = false;
-        inputSeqRef.current++;
-        sendInput(angleRef.current, false, inputSeqRef.current);
-        return;
-      }
-      const dir = directionKeys[e.code];
-      if (dir) {
-        keys[dir] = false;
-        updateKeyboardAngle();
-      }
+  // v16: angleRef/boostRef를 InputManager 상태와 동기화 (GameLoop 하위 호환용)
+  useEffect(() => {
+    let raf = 0;
+    const sync = () => {
+      const inp = inputManager.inputRef.current;
+      angleRef.current = inp.moveAngle ?? inp.aimAngle;
+      boostRef.current = inp.boost;
+      raf = requestAnimationFrame(sync);
     };
-
-    container.addEventListener('mousemove', handleMouseMove);
-    container.addEventListener('mousedown', handleMouseDown);
-    container.addEventListener('mouseup', handleMouseUp);
-    container.addEventListener('touchstart', handleTouchStart, { passive: false });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd);
-    window.addEventListener('keydown', handleKeyDown);
-    window.addEventListener('keyup', handleKeyUp);
-
-    return () => {
-      container.removeEventListener('mousemove', handleMouseMove);
-      container.removeEventListener('mousedown', handleMouseDown);
-      container.removeEventListener('mouseup', handleMouseUp);
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-      window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('keyup', handleKeyUp);
-    };
-  }, [menuOpen, sendInput]);
+    raf = requestAnimationFrame(sync);
+    return () => cancelAnimationFrame(raf);
+  }, [inputManager]);
 
   // ─── 리스폰 핸들러 (v11: disabled in 1-life mode) ───
   const handleRespawn = useCallback(() => {
@@ -463,12 +371,16 @@ export function GameCanvas3D({
           agentsRef={agentsRef}
           angleRef={angleRef}
           boostRef={boostRef}
+          inputStateRef={inputManager.inputRef}
         />
 
-        {/* 2. PlayCamera — 보간된 Agent 위치 추적 */}
-        <PlayCamera
+        {/* 2. TPSCamera — v16 TPS 오비탈 카메라 (보간된 Agent 위치 추적) */}
+        <TPSCamera
           agentsRef={agentsRef}
           dataRef={dataRef}
+          inputManager={inputManager}
+          cameraRef={cameraRef}
+          playerPosRef={playerPosRef}
         />
 
         {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별) */}
