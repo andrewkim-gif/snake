@@ -31,6 +31,8 @@ import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import { resolveAppearance } from '@/lib/3d/skin-migration';
 import { getCachedNetworkAppearance } from '@/lib/3d/appearance-cache';
 import { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
+import { biomeToStepParticle } from './MCParticles';
+import type { MCParticlesHandle } from './MCParticles';
 import { HeadGroupManager } from './HeadGroupManager';
 import { EyeInstances } from './EyeInstances';
 import { VIVID_PALETTE } from '@agent-survivor/shared';
@@ -59,9 +61,12 @@ const _whiteColor = new THREE.Color(0xffffff);
 interface AgentMotionState {
   prevX: number;
   prevY: number;
+  prevZ: number;          // v16 Phase 6: previous Z for slope estimation
   velocity: number;
   deathTime: number;
   wasAlive: boolean;
+  slopeAngle: number;     // v16 Phase 6: smoothed slope angle (rad)
+  walkPhase: number;      // v16 Phase 6: walk step phase for footstep particles
 }
 
 const motionCache = new Map<string, AgentMotionState>();
@@ -101,6 +106,8 @@ interface AgentInstancesProps {
   stateMachineRef: React.MutableRefObject<AnimationStateMachine | null>;
   /** 에이전트 ID → 상태 머신 인덱스 매핑 (외부 공유용) */
   agentIndexMapRef: React.MutableRefObject<Map<string, number>>;
+  /** v16 Phase 6: 파티클 엔진 ref (footstep 파티클용, optional) */
+  particlesRef?: React.MutableRefObject<MCParticlesHandle | null>;
 }
 
 // ─── 애니메이션 헬퍼 ───
@@ -174,7 +181,7 @@ function hideInstance(mesh: THREE.InstancedMesh, idx: number): void {
 
 // ─── Component ───
 
-export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIndexMapRef }: AgentInstancesProps) {
+export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIndexMapRef, particlesRef }: AgentInstancesProps) {
   // ─── Body 패턴별 IM refs (4 IM) ───
   const bodyRefs = useRef<(THREE.InstancedMesh | null)[]>([null, null, null, null]);
 
@@ -279,7 +286,7 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
     for (const agent of agents) {
       if (limbIdx >= MAX_AGENTS) break;
 
-      const { x, y, h, f, m, b: boosting, k: skinId, i: id } = agent;
+      const { x, y, h, f, m, b: boosting, k: skinId, i: id, bi: biomeIndex, iw: inWater } = agent;
       // v16: facing = aim direction (f), fallback to movement heading (h)
       const facing = f ?? h;
       activeIds.add(id);
@@ -290,7 +297,7 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       // ─── 속도 추정 ───
       let motion = motionCache.get(id);
       if (!motion) {
-        motion = { prevX: x, prevY: y, velocity: 0, deathTime: 0, wasAlive: true };
+        motion = { prevX: x, prevY: y, prevZ: agent.z ?? 0, velocity: 0, deathTime: 0, wasAlive: true, slopeAngle: 0, walkPhase: 0 };
         motionCache.set(id, motion);
       }
       const dx = x - motion.prevX;
@@ -298,8 +305,36 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       const dist = Math.sqrt(dx * dx + dy * dy);
       const rawVel = delta > 0 ? dist / delta : 0;
       motion.velocity = motion.velocity * 0.7 + rawVel * 0.3;
+
+      // v16 Phase 6: Slope angle estimation from z-delta vs horizontal distance
+      const currentZ = agent.z ?? 0;
+      if (dist > 0.5) { // avoid noise when stationary
+        const dz = currentZ - motion.prevZ;
+        const rawSlope = Math.atan2(dz, dist);
+        motion.slopeAngle = motion.slopeAngle * 0.8 + rawSlope * 0.2; // smooth
+      }
+
+      // v16 Phase 6: Walk step phase for footstep particles
+      if (motion.velocity > 5) {
+        motion.walkPhase += motion.velocity * delta * 0.02;
+      }
+
+      // v16 Phase 6: Emit footstep particles on walk step transitions
+      if (particlesRef?.current && motion.velocity > 10 && !inWater) {
+        const prevStep = Math.floor((motion.walkPhase - motion.velocity * delta * 0.02) / Math.PI);
+        const currStep = Math.floor(motion.walkPhase / Math.PI);
+        if (currStep > prevStep) {
+          const stepType = biomeToStepParticle(biomeIndex ?? 0);
+          if (stepType) {
+            const [wx, wy, wz] = toWorld(x, y, currentZ);
+            particlesRef.current.emit(stepType, [wx, wy, wz]);
+          }
+        }
+      }
+
       motion.prevX = x;
       motion.prevY = y;
+      motion.prevZ = currentZ;
 
       // ─── 상태 머신: 에이전트 인덱스 매핑 + 활성화 ───
       let smIdx = indexMap.get(id);
@@ -321,12 +356,18 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       // 고부하(40+ 에이전트) 시: 2프레임 중 1프레임만 상태 머신 업데이트
       // v16: moveAngle(h), aimAngle(f), agentId 전달
       if (!isHighLoad || (limbIdx % 2 === 0)) {
+        // v16 Phase 6: isJumping = agent is airborne (z > ground + threshold)
+        const agentZVal = agent.z ?? 0;
+        const isJumping = agentZVal > 1.0; // rough airborne threshold
         sm.updateAgent(smIdx, {
           velocity: motion.velocity,
           boosting,
           moveAngle: h,
           aimAngle: facing,
           agentId: id,
+          biomeIndex,
+          inWater: !!inWater,
+          isJumping,
         }, isHighLoad ? delta * 2 : delta);
       }
 
@@ -340,7 +381,10 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
 
       // ─── 애니메이션 변환 가져오기 ───
       // v16: moveAngle(h), aimAngle(facing) 전달 (상/하체 분리)
-      const anim = sm.getTransforms(smIdx, motion.velocity, boosting, h, facing);
+      // v16 Phase 6: pass slope, water, jump info to animation
+      const agentZForAnim = agent.z ?? 0;
+      const isJumpingAnim = agentZForAnim > 1.0;
+      const anim = sm.getTransforms(smIdx, motion.velocity, boosting, h, facing, motion.slopeAngle ?? 0, !!inWater, isJumpingAnim);
 
       // ─── HIT 플래시: 흰색으로 일시 오버라이드 ───
       const isFlashing = sm.getHitFlashRemaining(smIdx) > 0;

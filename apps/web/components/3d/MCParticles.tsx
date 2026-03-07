@@ -32,7 +32,11 @@ export type ParticleType =
   | 'LEVELUP_STAR'
   | 'HEAL_HEART'
   | 'AURA_SPARK'
-  | 'DASH_TRAIL';
+  | 'DASH_TRAIL'
+  | 'STEP_GRASS'
+  | 'STEP_SAND'
+  | 'STEP_STONE'
+  | 'STEP_SNOW';
 
 /** 파티클 타입별 스펙 */
 interface ParticleSpec {
@@ -100,6 +104,43 @@ const PARTICLE_SPECS: Record<ParticleType, ParticleSpec> = {
     speedMin: 2,
     speedMax: 10,
   },
+  // v16 Phase 6: Biome footstep particles
+  STEP_GRASS: {
+    color: new THREE.Color('#4A9E4A'),
+    count: 2,
+    life: 0.4,
+    gravity: -30,
+    size: 2,
+    speedMin: 5,
+    speedMax: 15,
+  },
+  STEP_SAND: {
+    color: new THREE.Color('#D4A86A'),
+    count: 3,
+    life: 0.5,
+    gravity: -15,
+    size: 2.5,
+    speedMin: 3,
+    speedMax: 12,
+  },
+  STEP_STONE: {
+    color: new THREE.Color('#888888'),
+    count: 2,
+    life: 0.3,
+    gravity: -50,
+    size: 1.5,
+    speedMin: 8,
+    speedMax: 20,
+  },
+  STEP_SNOW: {
+    color: new THREE.Color('#FFFFFF'),
+    count: 3,
+    life: 0.6,
+    gravity: -8,
+    size: 2,
+    speedMin: 2,
+    speedMax: 8,
+  },
 };
 
 // ─── Particle Pool ───
@@ -135,6 +176,21 @@ function createParticle(): Particle {
 
 const _obj = new THREE.Object3D();
 const _color = new THREE.Color();
+
+// ─── v16 Phase 6: Biome → footstep particle mapping ───
+
+/** Map biome index to footstep particle type (returns null for biomes without footsteps) */
+export function biomeToStepParticle(biomeIndex: number): ParticleType | null {
+  switch (biomeIndex) {
+    case 0: return 'STEP_GRASS';   // plains
+    case 1: return 'STEP_GRASS';   // forest
+    case 2: return 'STEP_SAND';    // desert
+    case 3: return 'STEP_SNOW';    // snow
+    case 4: return null;           // swamp (water, no footsteps)
+    case 5: return 'STEP_STONE';   // volcanic
+    default: return null;
+  }
+}
 
 // ─── Public API ───
 

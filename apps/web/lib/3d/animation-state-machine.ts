@@ -663,6 +663,10 @@ interface AgentAnimState {
   variation: AgentVariation;
   /** v16: 개성 생성용 agentId (캐시) */
   variationId: string;
+  /** v16 Phase 6: 이전 프레임에서 점프 중이었는지 (착지 감지) */
+  wasJumping: boolean;
+  /** v16 Phase 6: 착지 스쿼시 남은 시간 (초, 0이면 비활성) */
+  landSquashTime: number;
 }
 
 // ─── AnimInput: 외부에서 전달하는 에이전트 상태 ───
@@ -692,6 +696,14 @@ export interface AnimInput {
   aimAngle?: number;
   /** v16: 에이전트 ID (per-agent variation 해시용) */
   agentId?: string;
+  /** v16 Phase 6: 바이옴 인덱스 (0=plains, 1=forest, 2=desert, 3=snow, 4=swamp, 5=volcanic) */
+  biomeIndex?: number;
+  /** v16 Phase 6: 물 속 여부 (swamp/lake) */
+  inWater?: boolean;
+  /** v16 Phase 6: 경사 각도 (rad, 양수=오르막, 음수=내리막) */
+  slopeAngle?: number;
+  /** v16 Phase 6: 점프 중 여부 (지면에서 떠있음) */
+  isJumping?: boolean;
 }
 
 // ─── 원샷 상태인지 판단 ───
@@ -725,6 +737,10 @@ function lerp(a: number, b: number, t: number): number {
 /** smoothstep easing (easeInOut) for blend transitions */
 function smoothstep(t: number): number {
   return t * t * (3 - 2 * t);
+}
+
+function clamp(v: number, min: number, max: number): number {
+  return v < min ? min : v > max ? max : v;
 }
 
 function clamp01(v: number): number {
@@ -892,6 +908,8 @@ export class AnimationStateMachine {
         secondary: createSecondaryMotion(),
         variation: { ...DEFAULT_VARIATION },
         variationId: '',
+        wasJumping: false,
+        landSquashTime: 0,
       });
     }
 
@@ -1081,6 +1099,17 @@ export class AnimationStateMachine {
     sec.equipPhase += walkFreq * dt * PI2;
 
     sec.prevHeading = input.moveAngle ?? sec.prevHeading;
+
+    // v16 Phase 6: Landing squash detection
+    const isJumping = !!input.isJumping;
+    if (state.wasJumping && !isJumping) {
+      // Transition from airborne to ground → trigger squash
+      state.landSquashTime = 0.25; // 250ms squash
+    }
+    state.wasJumping = isJumping;
+    if (state.landSquashTime > 0) {
+      state.landSquashTime = Math.max(0, state.landSquashTime - dt);
+    }
   }
 
   /**
@@ -1119,7 +1148,7 @@ export class AnimationStateMachine {
    * 블렌딩 적용: previous → current 전환 중이면 lerp
    * v16 Phase 3: 2차 모션 + 개성 파라미터 + 상/하체 분리 오버레이
    */
-  getTransforms(agentIndex: number, velocity: number, boosting: boolean, moveAngle?: number, aimAngle?: number): PartTransforms {
+  getTransforms(agentIndex: number, velocity: number, boosting: boolean, moveAngle?: number, aimAngle?: number, slopeAngle?: number, inWater?: boolean, isJumping?: boolean): PartTransforms {
     const state = this.states[agentIndex];
     if (!state || !state.active) return createDefaultTransforms();
 
@@ -1243,6 +1272,57 @@ export class AnimationStateMachine {
       result.lowerBodyRotY = twist;
       // upperBodyRotY: 상체는 0 (에이전트의 facing = aimAngle이 이미 기본 방향)
       result.upperBodyRotY = 0;
+    }
+
+    // ─── v16 Phase 6: Terrain-reactive overlays ───
+
+    // 1. Slope tilt: 경사면에서 상체 기울임 (±15° = ±0.26 rad)
+    if (slopeAngle !== undefined && slopeAngle !== 0 && velocity > WALK_THRESHOLD) {
+      const slopeTilt = clamp(slopeAngle, -0.26, 0.26);
+      result.body.rotX += slopeTilt;
+      result.head.rotX += slopeTilt * 0.5; // 머리는 절반만 기울임
+    }
+
+    // 2. Swimming motion: 물 속일 때 다리 숨기고 팔 수영 동작
+    if (inWater) {
+      // 다리 접기 (시각적으로 숨김)
+      result.legL.rotX = 0.8; // 뒤로 접힘
+      result.legR.rotX = 0.8;
+      // 팔 수영 크롤 모션
+      const swimPhase = seededElapsed * 3.0; // 빠른 수영 주기
+      result.armL.rotX = Math.sin(swimPhase) * 1.2;
+      result.armR.rotX = Math.sin(swimPhase + PI) * 1.2;
+      result.armL.rotZ = -0.3; // 팔 벌림
+      result.armR.rotZ = 0.3;
+      // 몸체 약간 앞으로 기울임 (수영 자세)
+      result.body.rotX += 0.15;
+      // 바운스 억제 (물에서는 부유감)
+      result.body.posY *= 0.3;
+    }
+
+    // 3. Jump animation: 공중에서 팔 위로 + 착지 시 스쿼시
+    if (isJumping) {
+      // 팔 올림 (공중 자세)
+      result.armL.rotX -= 0.6;
+      result.armR.rotX -= 0.6;
+      result.armL.rotZ -= 0.2;
+      result.armR.rotZ += 0.2;
+      // 다리 살짝 오므림
+      result.legL.rotX += 0.2;
+      result.legR.rotX -= 0.2;
+    }
+
+    // 4. Landing squash: 착지 시 바디 찌그러짐 + 복원
+    if (state.landSquashTime > 0) {
+      const landT = state.landSquashTime / 0.25; // 1→0 decay
+      const squash = landT * 0.25; // max 25% squash
+      result.body.scaleX = 1.0 + squash;
+      result.body.scaleY = 1.0 - squash;
+      result.head.scaleX = 1.0 + squash * 0.5;
+      result.head.scaleY = 1.0 - squash * 0.5;
+      // 다리 약간 벌림 (착지 자세)
+      result.legL.rotX += squash * 0.6;
+      result.legR.rotX -= squash * 0.6;
     }
 
     return result;

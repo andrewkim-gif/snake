@@ -519,6 +519,9 @@ type Agent struct {
 	// v16 Phase 5: Biome + water state
 	InWater         bool         `json:"inWater,omitempty"`     // true if agent is in water
 	BiomeIndex      uint8        `json:"biomeIndex,omitempty"`  // current biome type (0-5)
+	// v16 Phase 6: Jump
+	JumpRequested   bool         `json:"-"`                     // transient: player pressed jump this tick
+	LastJumpTick    uint64       `json:"-"`                     // tick of last jump (cooldown)
 
 	IsBot           bool         `json:"isBot"`
 	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent

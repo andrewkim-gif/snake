@@ -102,7 +102,7 @@ func ApplyInput(a *domain.Agent, angle float64, boost bool) {
 }
 
 // ApplyInputSplit sets separate move and aim target angles (v16 WASD+mouse).
-func ApplyInputSplit(a *domain.Agent, moveAngle float64, aimAngle float64, boost bool) {
+func ApplyInputSplit(a *domain.Agent, moveAngle float64, aimAngle float64, boost bool, jump bool) {
 	if !a.Alive {
 		return
 	}
@@ -110,6 +110,7 @@ func ApplyInputSplit(a *domain.Agent, moveAngle float64, aimAngle float64, boost
 	a.AimTargetAngle = normalizeAngle(aimAngle)
 	a.TargetAngle = a.MoveTargetAngle // legacy compat
 	a.Boosting = boost
+	a.JumpRequested = jump
 }
 
 // UpdateAgentOptions holds optional parameters for UpdateAgent.
@@ -237,9 +238,18 @@ func UpdateAgentWithHeightmap(a *domain.Agent, currentTick uint64, hm *Heightmap
 	a.Position.X = newX
 	a.Position.Y = newY
 
-	// v16 Phase 4: Vertical physics (gravity + ground clamping)
+	// v16 Phase 4+6: Vertical physics (gravity + ground clamping + jump)
 	if hm != nil {
 		groundHeight := hm.GetHeight(a.Position.X, a.Position.Y)
+		onGround := a.ZPos <= groundHeight+0.1
+
+		// v16 Phase 6: Jump trigger
+		if a.JumpRequested && onGround && (currentTick-a.LastJumpTick) >= JumpCooldownTicks {
+			a.ZVelocity = JumpVelocity
+			a.LastJumpTick = currentTick
+		}
+		a.JumpRequested = false // always clear after processing
+
 		a.ZVelocity -= Gravity
 		a.ZPos += a.ZVelocity
 		// Ground clamping
@@ -247,6 +257,8 @@ func UpdateAgentWithHeightmap(a *domain.Agent, currentTick uint64, hm *Heightmap
 			a.ZPos = groundHeight
 			a.ZVelocity = 0
 		}
+	} else {
+		a.JumpRequested = false
 	}
 
 	// 5. Update hitbox radius based on mass

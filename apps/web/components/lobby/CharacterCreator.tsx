@@ -34,8 +34,7 @@ import {
   CHARACTER_PRESETS,
 } from '@agent-survivor/shared';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
-import { generateRandomAppearance, RANDOM_CATEGORIES } from '@/lib/character-generator';
-import type { RandomCategory } from '@/lib/character-generator';
+import { generateRandomAppearance, type RandomCategory } from '@/lib/character-generator';
 import { CharacterPreviewPanel } from './CharacterPreviewPanel';
 import {
   User, Palette, Smile, Scissors, Swords, Sparkles, Bookmark,
@@ -73,6 +72,15 @@ const CATEGORY_ICONS: Record<string, LucideIcon> = {
   cyber: Cpu,
   nature: Leaf,
   fantasy: Sparkles,
+};
+
+/** 랜덤 카테고리 풀네임 (툴팁용) */
+const CATEGORY_FULLNAMES: Record<string, string> = {
+  all: 'All Styles',
+  military: 'Military',
+  cyber: 'Cyberpunk',
+  nature: 'Nature',
+  fantasy: 'Fantasy',
 };
 
 /** 16종 헤어스타일 이름 */
@@ -184,8 +192,10 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const handleRandom = useCallback(() => {
-    const rnd = generateRandomAppearance(randomCategory);
+  const handleRandom = useCallback((cat?: RandomCategory) => {
+    const targetCat = cat ?? randomCategory;
+    if (cat) setRandomCategory(targetCat);
+    const rnd = generateRandomAppearance(targetCat);
     if (!externalAppearance) setInternalAppearance(rnd);
     onAppearanceChange?.(rnd);
     saveAppearance(rnd);
@@ -242,50 +252,9 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
           </span>
         </div>
         <div style={{ display: 'flex', gap: '4px' }}>
-          <SmallButton onClick={handleRandom} color={SK.blue}><Shuffle size={8} style={{ marginRight: 3 }} /> RND</SmallButton>
+          <SmallButton onClick={() => handleRandom()} color={SK.blue}><Shuffle size={8} style={{ marginRight: 3 }} /> RND</SmallButton>
           <SmallButton onClick={handleReset} color={SK.red}><RotateCcw size={8} style={{ marginRight: 3 }} /> RST</SmallButton>
         </div>
-      </div>
-
-      {/* 랜덤 카테고리 선택기 */}
-      <div style={{
-        display: 'flex',
-        gap: '2px',
-        padding: '2px',
-        borderRadius: 0,
-        backgroundColor: `${SK.border}40`,
-      }}>
-        {RANDOM_CATEGORIES.map(cat => {
-          const isActive = randomCategory === cat.id;
-          return (
-            <button
-              key={cat.id}
-              onClick={() => setRandomCategory(cat.id)}
-              style={{
-                flex: 1,
-                fontFamily: bodyFont,
-                fontWeight: isActive ? 700 : 500,
-                fontSize: '7px',
-                padding: '3px 2px',
-                backgroundColor: isActive ? `${SK.blue}20` : 'transparent',
-                color: isActive ? SK.blue : SK.textMuted,
-                border: isActive ? `1px solid ${SK.blue}40` : '1px solid transparent',
-                borderRadius: 0,
-                cursor: 'pointer',
-                letterSpacing: '0.5px',
-                transition: 'all 120ms ease',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: '1px',
-              }}
-              title={`Random: ${cat.label}`}
-            >
-              {(() => { const CatIcon = CATEGORY_ICONS[cat.id]; return CatIcon ? <CatIcon size={9} strokeWidth={2} /> : null; })()}
-              <span>{cat.label}</span>
-            </button>
-          );
-        })}
       </div>
 
       {/* 탭 바 */}

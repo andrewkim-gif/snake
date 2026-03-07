@@ -125,10 +125,18 @@ func (cs *CollisionSystem) ProcessAuraCombat(
 				continue
 			}
 
+			// v16 Phase 6: Airborne aura immunity — skip aura if either agent is jumping
+			agentAirborne := agent.ZVelocity != 0
+			otherAirborne := other.ZVelocity != 0
+
 			// Mutual DPS exchange (terrain modifiers: DPSMult on offense, DamageReceiveMult on defense)
 			// Agent damages other
-			if !IsInGracePeriod(other, currentTick) {
+			if !IsInGracePeriod(other, currentTick) && !otherAirborne {
 				agentDPS := GetEffectiveAuraDPS(agent) * cs.terrainMods.DPSMult
+				// v16 Phase 6: High ground DPS bonus (+10% when attacking from higher ground)
+				if agent.ZPos-other.ZPos >= HighGroundMinDelta {
+					agentDPS *= (1.0 + HighGroundDPSBonus)
+				}
 				TakeDamage(other, agentDPS*cs.terrainMods.DamageReceiveMult, agent.ID, currentTick)
 
 				if !other.Alive || other.Mass <= 0 {
@@ -148,8 +156,12 @@ func (cs *CollisionSystem) ProcessAuraCombat(
 			}
 
 			// Other damages agent
-			if !IsInGracePeriod(agent, currentTick) {
+			if !IsInGracePeriod(agent, currentTick) && !agentAirborne {
 				otherDPS := GetEffectiveAuraDPS(other) * cs.terrainMods.DPSMult
+				// v16 Phase 6: High ground DPS bonus
+				if other.ZPos-agent.ZPos >= HighGroundMinDelta {
+					otherDPS *= (1.0 + HighGroundDPSBonus)
+				}
 				TakeDamage(agent, otherDPS*cs.terrainMods.DamageReceiveMult, other.ID, currentTick)
 
 				if !agent.Alive || agent.Mass <= 0 {

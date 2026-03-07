@@ -21,6 +21,18 @@ const HeightmapMaxHeight = 30.0
 // Gravity is the gravitational acceleration for jump/fall physics (game units/tick²).
 const Gravity = 0.04
 
+// JumpVelocity is the initial upward velocity when jumping (game units/tick).
+const JumpVelocity = 0.8
+
+// JumpCooldownTicks is the minimum ticks between jumps (20 ticks = 1 second at 20Hz).
+const JumpCooldownTicks = 20
+
+// HighGroundDPSBonus is the DPS multiplier bonus for attacking from higher ground (+10%).
+const HighGroundDPSBonus = 0.10
+
+// HighGroundMinDelta is the minimum height difference to qualify for high ground bonus.
+const HighGroundMinDelta = 3.0
+
 // ClimbMaxDelta is the max height difference an agent can climb per move.
 const ClimbMaxDelta = 10.0
 

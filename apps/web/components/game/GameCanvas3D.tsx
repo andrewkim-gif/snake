@@ -397,6 +397,7 @@ export function GameCanvas3D({
           elapsedRef={elapsedRef}
           stateMachineRef={stateMachineRef}
           agentIndexMapRef={agentIndexMapRef}
+          particlesRef={particlesRef}
         />
 
         {/* 5.1. FlagSprite — 에이전트 머리 위 국기 + 이름 Billboard (v14 S09) */}
