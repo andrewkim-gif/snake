@@ -20,11 +20,15 @@ import type {
   ARTomeOffer,
   ARTomeID,
   ARDamageType,
+  ARCharacterType,
+  ARTerrainTheme,
+  ARSynergyID,
 } from '@/lib/3d/ar-types';
-import { TOME_INFO } from '@/lib/3d/ar-types';
+import { TOME_INFO, CHARACTER_INFO, SYNERGY_INFO } from '@/lib/3d/ar-types';
 import { addDamageNumber, type DamageNumber } from '@/components/game/ar/ARDamageNumbers';
 import { ARHUD } from '@/components/game/ar/ARHUD';
 import { ARLevelUp } from '@/components/game/ar/ARLevelUp';
+import { ARCharacterSelect } from '@/components/game/ar/ARCharacterSelect';
 
 // Dynamic Canvas import (SSR 불가)
 const ArenaCanvas = dynamic(() => import('./ArenaCanvas'), { ssr: false });
@@ -60,6 +64,12 @@ const MAGNET_RANGE = 2.5;
 const WAVE_INTERVAL = 3;
 
 export default function ArenaPage() {
+  // Character selection (Phase 3)
+  const [selectedCharacter, setSelectedCharacter] = useState<ARCharacterType | null>(null);
+  const [gameStarted, setGameStarted] = useState(false);
+  const [terrain] = useState<ARTerrainTheme>('urban');
+  const [activeSynergies, setActiveSynergies] = useState<ARSynergyID[]>([]);
+
   // Player state
   const [hp, setHp] = useState(BASE_HP);
   const [maxHp, setMaxHp] = useState(BASE_HP);
@@ -72,6 +82,23 @@ export default function ArenaPage() {
   const [phase] = useState<ARPhase>('pve');
   const [timer, setTimer] = useState(300);
   const [wave, setWave] = useState(0);
+
+  // Character selection handler
+  const handleCharacterSelect = useCallback((character: ARCharacterType) => {
+    setSelectedCharacter(character);
+    const charInfo = CHARACTER_INFO[character];
+    if (charInfo) {
+      // Apply character base stats
+      const baseHPMap: Record<ARCharacterType, number> = {
+        striker: 100, guardian: 130, pyro: 90, frost_mage: 85,
+        sniper: 80, gambler: 95, berserker: 110, shadow: 75,
+      };
+      const charHP = baseHPMap[character] || BASE_HP;
+      setHp(charHP);
+      setMaxHp(charHP);
+    }
+    setGameStarted(true);
+  }, []);
 
   // Level-up popup
   const [levelUpChoices, setLevelUpChoices] = useState<ARTomeOffer[] | null>(null);
@@ -379,36 +406,81 @@ export default function ArenaPage() {
         overflow: 'hidden',
       }}
     >
+      {/* Character Selection Screen (Phase 3) */}
+      {!gameStarted && (
+        <ARCharacterSelect onSelect={handleCharacterSelect} />
+      )}
+
       {/* 3D Canvas */}
-      <ArenaCanvas
-        enemies={enemyNet}
-        xpCrystals={crystalNet}
-        playerPosRef={playerPosRef}
-        playerRotRef={playerRotRef}
-        movingRef={movingRef}
-        keysRef={keysRef}
-        attackRange={BASE_ATTACK_RANGE}
-        hpRatio={maxHp > 0 ? hp / maxHp : 1}
-        alive={alive}
-        damageNumbersRef={damageNumbersRef}
-      />
+      {gameStarted && (
+        <ArenaCanvas
+          enemies={enemyNet}
+          xpCrystals={crystalNet}
+          playerPosRef={playerPosRef}
+          playerRotRef={playerRotRef}
+          movingRef={movingRef}
+          keysRef={keysRef}
+          attackRange={BASE_ATTACK_RANGE}
+          hpRatio={maxHp > 0 ? hp / maxHp : 1}
+          alive={alive}
+          damageNumbersRef={damageNumbersRef}
+        />
+      )}
 
       {/* HUD 오버레이 */}
-      <ARHUD
-        hp={hp}
-        maxHp={maxHp}
-        xp={xp}
-        xpToNext={xpToNext}
-        level={level}
-        phase={phase}
-        timer={timer}
-        wave={wave}
-        kills={kills}
-        alive={alive}
-      />
+      {gameStarted && (
+        <ARHUD
+          hp={hp}
+          maxHp={maxHp}
+          xp={xp}
+          xpToNext={xpToNext}
+          level={level}
+          phase={phase}
+          timer={timer}
+          wave={wave}
+          kills={kills}
+          alive={alive}
+        />
+      )}
+
+      {/* Active Synergies display (Phase 3) */}
+      {gameStarted && activeSynergies.length > 0 && (
+        <div
+          style={{
+            position: 'absolute',
+            top: 80,
+            right: 16,
+            zIndex: 50,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            fontFamily: '"Rajdhani", sans-serif',
+          }}
+        >
+          {activeSynergies.map((synId) => {
+            const info = SYNERGY_INFO[synId];
+            return (
+              <div
+                key={synId}
+                style={{
+                  padding: '4px 10px',
+                  backgroundColor: 'rgba(0,0,0,0.7)',
+                  border: `1px solid ${info?.color || '#888'}`,
+                  borderRadius: 4,
+                  fontSize: 11,
+                  color: info?.color || '#ccc',
+                  fontWeight: 600,
+                }}
+              >
+                {info?.name || synId}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* 레벨업 선택 */}
-      {levelUpChoices && (
+      {gameStarted && levelUpChoices && (
         <ARLevelUp
           level={level}
           choices={levelUpChoices}
@@ -417,24 +489,31 @@ export default function ArenaPage() {
       )}
 
       {/* 조작 가이드 */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 100,
-          right: 16,
-          fontSize: 11,
-          color: '#666',
-          fontFamily: '"Rajdhani", sans-serif',
-          pointerEvents: 'none',
-          zIndex: 50,
-          textAlign: 'right',
-        }}
-      >
-        <div>WASD: Move</div>
-        <div>Mouse: Camera</div>
-        <div>Click: Lock Cursor</div>
-        <div>Auto-Attack: Enabled</div>
-      </div>
+      {gameStarted && (
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 100,
+            right: 16,
+            fontSize: 11,
+            color: '#666',
+            fontFamily: '"Rajdhani", sans-serif',
+            pointerEvents: 'none',
+            zIndex: 50,
+            textAlign: 'right',
+          }}
+        >
+          <div>WASD: Move</div>
+          <div>Mouse: Camera</div>
+          <div>Click: Lock Cursor</div>
+          <div>Auto-Attack: Enabled</div>
+          {selectedCharacter && (
+            <div style={{ color: '#CC9933', marginTop: 4 }}>
+              {CHARACTER_INFO[selectedCharacter].name}: {CHARACTER_INFO[selectedCharacter].passive}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }

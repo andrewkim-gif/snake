@@ -156,6 +156,114 @@ var weaponRegistry = map[ARWeaponID]*ARWeaponDef{
 		AOERadius: 0, StatusApply: "", StatusChance: 0,
 		Description: "Random damage 0-300. Random damage type each shot.",
 	},
+
+	// ── Evolved Weapons (Phase 3) ─────────────────────────────
+	ARWeaponStormBow: {
+		ID: ARWeaponStormBow, Name: "Storm Bow", Tier: ARWeaponTierS,
+		DamageType: ARDmgLightning, BaseDamage: 120, BaseRange: 28,
+		BaseCooldown: 0.4, Pattern: ARPatternRangedSingle,
+		ProjType: ARProjStraight, ProjSpeed: 50, PierceCount: 2,
+		AOERadius: 0, StatusApply: ARStatusShock, StatusChance: 40,
+		ChainCount: 2,
+		Description: "Evolved Bow: arrows carry chain lightning.",
+	},
+	ARWeaponDexecutioner: {
+		ID: ARWeaponDexecutioner, Name: "Dexecutioner", Tier: ARWeaponTierS,
+		DamageType: ARDmgPhysical, BaseDamage: 140, BaseRange: 3.5,
+		BaseCooldown: 0.3, Pattern: ARPatternMelee,
+		ProjType: ARProjPierce, ProjSpeed: 0, PierceCount: 5,
+		AOERadius: 0, StatusApply: ARStatusMark, StatusChance: 100,
+		Description: "Evolved Katana: executes enemies below 30% HP.",
+	},
+	ARWeaponInferno: {
+		ID: ARWeaponInferno, Name: "Inferno", Tier: ARWeaponTierS,
+		DamageType: ARDmgFire, BaseDamage: 110, BaseRange: 20,
+		BaseCooldown: 0.8, Pattern: ARPatternRangedAOE,
+		ProjType: ARProjAOE, ProjSpeed: 30, PierceCount: 0,
+		AOERadius: 10, StatusApply: ARStatusBurn, StatusChance: 80,
+		Description: "Evolved Fire Staff: screen-wide fire storm.",
+	},
+	ARWeaponDragonBreath: {
+		ID: ARWeaponDragonBreath, Name: "Dragon Breath", Tier: ARWeaponTierS,
+		DamageType: ARDmgFire, BaseDamage: 100, BaseRange: 10,
+		BaseCooldown: 0.2, Pattern: ARPatternScatter,
+		ProjType: ARProjStraight, ProjSpeed: 40, PierceCount: 0,
+		AOERadius: 2, StatusApply: ARStatusBurn, StatusChance: 60,
+		Description: "Evolved Shotgun: continuous flame spray.",
+	},
+	ARWeaponPandemic: {
+		ID: ARWeaponPandemic, Name: "Pandemic", Tier: ARWeaponTierS,
+		DamageType: ARDmgPoison, BaseDamage: 80, BaseRange: 15,
+		BaseCooldown: 1.5, Pattern: ARPatternRangedAOE,
+		ProjType: ARProjAOE, ProjSpeed: 20, PierceCount: 0,
+		AOERadius: 8, StatusApply: ARStatusPoison, StatusChance: 100,
+		Description: "Evolved Poison Flask: poison spreads between enemies.",
+	},
+}
+
+// ============================================================
+// Weapon Evolution System (Phase 3)
+// ============================================================
+
+// AREvolutionPath defines the requirements to evolve a weapon.
+type AREvolutionPath struct {
+	BaseWeapon   ARWeaponID `json:"baseWeapon"`
+	RequiredTome ARTomeID   `json:"requiredTome"`
+	TomeStacks   int        `json:"tomeStacks"` // minimum stacks required
+	EvolvedTo    ARWeaponID `json:"evolvedTo"`
+}
+
+// AllEvolutionPaths returns the 5 weapon evolution paths.
+func AllEvolutionPaths() []AREvolutionPath {
+	return evolutionPaths
+}
+
+var evolutionPaths = []AREvolutionPath{
+	{BaseWeapon: ARWeaponBow, RequiredTome: ARTomeSpeed, TomeStacks: 3, EvolvedTo: ARWeaponStormBow},
+	{BaseWeapon: ARWeaponKatana, RequiredTome: ARTomeCritChance, TomeStacks: 3, EvolvedTo: ARWeaponDexecutioner},
+	{BaseWeapon: ARWeaponFireStaff, RequiredTome: ARTomeArea, TomeStacks: 3, EvolvedTo: ARWeaponInferno},
+	{BaseWeapon: ARWeaponShotgun, RequiredTome: ARTomeKnockback, TomeStacks: 3, EvolvedTo: ARWeaponDragonBreath},
+	{BaseWeapon: ARWeaponPoisonFlask, RequiredTome: ARTomeCursed, TomeStacks: 2, EvolvedTo: ARWeaponPandemic},
+}
+
+// CheckWeaponEvolution checks if any of the player's weapons can evolve.
+// Returns the first evolution found, or nil if none qualify.
+func CheckWeaponEvolution(player *ARPlayer) *AREvolutionPath {
+	for _, path := range evolutionPaths {
+		// Check if player has the base weapon at level 7
+		for _, wi := range player.Weapons {
+			if wi.WeaponID == path.BaseWeapon && wi.Level >= 7 {
+				// Check tome requirement
+				if player.Tomes[path.RequiredTome] >= path.TomeStacks {
+					return &path
+				}
+			}
+		}
+	}
+	return nil
+}
+
+// AREvolveWeapon replaces a player's weapon with its evolved version.
+// Returns true if evolution succeeded.
+func AREvolveWeapon(player *ARPlayer, path *AREvolutionPath) bool {
+	for i, wi := range player.Weapons {
+		if wi.WeaponID == path.BaseWeapon {
+			player.Weapons[i] = &ARWeaponInstance{
+				WeaponID: path.EvolvedTo,
+				Level:    7,
+				Cooldown: 0,
+			}
+			// Update weapon slots
+			for j, slot := range player.WeaponSlots {
+				if ARWeaponID(slot) == path.BaseWeapon {
+					player.WeaponSlots[j] = string(path.EvolvedTo)
+					break
+				}
+			}
+			return true
+		}
+	}
+	return false
 }
 
 // ============================================================

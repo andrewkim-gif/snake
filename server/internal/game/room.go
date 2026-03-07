@@ -51,6 +51,7 @@ type PlayerInfo struct {
 	Name       string
 	SkinID     int
 	Appearance string // v10 Phase 2: packed BigInt string (pass-through)
+	Character  string // v18 Phase 3: character type for Arena combat
 }
 
 // Room wraps an Arena with a state machine for round lifecycle management.
@@ -88,6 +89,9 @@ type Room struct {
 
 	// Event callback (set by main.go)
 	OnEvents RoomEventCallback
+
+	// v17: Room rotation callback — called when cooldown ends, allowing RoomManager to reassign country
+	OnRotate func(roomID string)
 
 	// Arena cancel func (to stop arena loop)
 	arenaCancel context.CancelFunc
@@ -164,7 +168,13 @@ func (r *Room) tick() {
 // --- State tick handlers ---
 
 func (r *Room) tickWaiting() {
-	// Transition when enough human players join
+	// v17: Stagger delay — wait for initial countdown before auto-starting
+	if r.stateTicksLeft > 0 {
+		r.stateTicksLeft--
+		return
+	}
+
+	// Transition when enough human players join (or auto-start at MinPlayersToStart=0)
 	if len(r.players) >= r.Config.MinPlayersToStart {
 		if r.Config.CountdownSec <= 0 {
 			// Skip countdown, start immediately
@@ -248,9 +258,14 @@ func (r *Room) tickCooldown() {
 			RoomID: r.ID,
 			Type:   RoomEvtBattleComplete,
 			Data: domain.BattleCompleteEvent{
-				CountryISO: r.ID, // Room ID = country ISO in v11
+				CountryISO: r.Config.CountryISO3,
 			},
 		}})
+
+		// v17: Notify RoomManager to rotate this room's country assignment
+		if r.OnRotate != nil {
+			r.OnRotate(r.ID)
+		}
 
 		// Arena already stopped in endRound(); just reset for next round
 		r.transitionTo(domain.RoomStateWaiting)
@@ -777,6 +792,7 @@ func (r *Room) GetInfo() domain.RoomInfo {
 		MaxPlayers:    r.Config.MaxHumansPerRoom,
 		TimeRemaining: timeRemaining,
 		Round:         r.round,
+		CountryISO3:   r.Config.CountryISO3,
 	}
 }
 

@@ -98,6 +98,58 @@ const (
 	AREnemyCreeper  AREnemyType = "creeper"
 )
 
+// ARMinibossType enumerates miniboss kinds.
+type ARMinibossType string
+
+const (
+	ARMinibossGolem      ARMinibossType = "golem"
+	ARMinibossWraith     ARMinibossType = "wraith"
+	ARMinibossDragonWhelp ARMinibossType = "dragon_whelp"
+	ARMinibossLichKing   ARMinibossType = "lich_king"
+	ARMinibossTheArena   ARMinibossType = "the_arena"
+)
+
+// AREliteAffix enumerates elite modifier types.
+type AREliteAffix string
+
+const (
+	AREliteArmored   AREliteAffix = "armored"   // +50% defense
+	AREliteSwift     AREliteAffix = "swift"      // speed ×2
+	AREliteVampiric  AREliteAffix = "vampiric"   // lifesteal on attack
+	AREliteExplosive AREliteAffix = "explosive"  // explodes on death
+	AREliteShielded  AREliteAffix = "shielded"   // blocks 1 hit per 3s
+)
+
+// ARSynergyID identifies a synergy combination.
+type ARSynergyID string
+
+const (
+	ARSynergyInfernal    ARSynergyID = "infernal"
+	ARSynergyBlizzard    ARSynergyID = "blizzard"
+	ARSynergyThunderGod  ARSynergyID = "thunder_god"
+	ARSynergyPlagueDoc   ARSynergyID = "plague_doctor"
+	ARSynergyJuggernaut  ARSynergyID = "juggernaut"
+	ARSynergyGlassCannon ARSynergyID = "glass_cannon_syn"
+	ARSynergySpeedDemon  ARSynergyID = "speed_demon"
+	ARSynergyHolyTrinity ARSynergyID = "holy_trinity"
+	ARSynergyVampireLord ARSynergyID = "vampire_lord"
+	ARSynergyFortress    ARSynergyID = "fortress"
+)
+
+// ARTerrainTheme represents the 6 national terrain themes.
+type ARTerrainTheme string
+
+const (
+	ARTerrainUrban    ARTerrainTheme = "urban"
+	ARTerrainDesert   ARTerrainTheme = "desert"
+	ARTerrainMountain ARTerrainTheme = "mountain"
+	ARTerrainForest   ARTerrainTheme = "forest"
+	ARTerrainArctic   ARTerrainTheme = "arctic"
+	ARTerrainIsland   ARTerrainTheme = "island"
+)
+
+// Evolved weapon IDs are defined as ARWeaponID constants (see weapon ID constants above).
+
 // ============================================================
 // Entity Structs
 // ============================================================
@@ -194,6 +246,13 @@ type ARPlayer struct {
 
 	// Kill tracking
 	Kills int `json:"kills"`
+
+	// Character passive timers (Phase 3)
+	GuardianDefTimer float64 `json:"-"` // Guardian: defense buff remaining seconds
+	StealthTimer     float64 `json:"-"` // Shadow: stealth remaining seconds
+
+	// Active synergies (Phase 3)
+	ActiveSynergies []ARSynergyID `json:"synergies,omitempty"`
 }
 
 // ARTomeOffer is a single tome option presented during level-up.
@@ -223,6 +282,14 @@ type AREnemy struct {
 
 	// Damage type affinity (for elemental weakness/resistance)
 	DamageAffinity ARDamageType `json:"-"`
+
+	// Miniboss fields (Phase 3)
+	IsMiniboss   bool           `json:"isMiniboss,omitempty"`
+	MinibossType ARMinibossType `json:"minibossType,omitempty"`
+
+	// Elite affix (Phase 3)
+	EliteAffix       AREliteAffix `json:"eliteAffix,omitempty"`
+	EliteShieldTimer float64      `json:"-"` // shielded affix cooldown
 }
 
 // ============================================================
@@ -249,6 +316,13 @@ const (
 	ARWeaponLandmine      ARWeaponID = "landmine"
 	ARWeaponShotgun       ARWeaponID = "shotgun"
 	ARWeaponDice          ARWeaponID = "dice"
+
+	// Evolved weapons (Phase 3)
+	ARWeaponStormBow     ARWeaponID = "storm_bow"
+	ARWeaponDexecutioner ARWeaponID = "dexecutioner"
+	ARWeaponInferno      ARWeaponID = "inferno"
+	ARWeaponDragonBreath ARWeaponID = "dragon_breath"
+	ARWeaponPandemic     ARWeaponID = "pandemic"
 )
 
 // ARWeaponTier classifies weapon power level.
@@ -433,14 +507,16 @@ type ARXPCrystal struct {
 
 // ARState is the full game state sent to clients at 20Hz.
 type ARState struct {
-	Phase       ARPhase           `json:"phase"`
-	Timer       float64           `json:"timer"` // seconds remaining in current phase
-	WaveNumber  int               `json:"wave"`
-	Players     []*ARPlayer       `json:"players"`
-	Enemies     []AREnemyNet      `json:"enemies"`
-	XPCrystals  []ARCrystalNet    `json:"xpCrystals"`
-	Projectiles []ARProjectileNet `json:"projectiles"`
-	Items       []ARFieldItemNet  `json:"items"`
+	Phase        ARPhase           `json:"phase"`
+	Timer        float64           `json:"timer"` // seconds remaining in current phase
+	WaveNumber   int               `json:"wave"`
+	Terrain      ARTerrainTheme    `json:"terrain,omitempty"`
+	Tier         string            `json:"tier,omitempty"`
+	Players      []*ARPlayer       `json:"players"`
+	Enemies      []AREnemyNet      `json:"enemies"`
+	XPCrystals   []ARCrystalNet    `json:"xpCrystals"`
+	Projectiles  []ARProjectileNet `json:"projectiles"`
+	Items        []ARFieldItemNet  `json:"items"`
 }
 
 // ARDamageEvent is sent to clients for damage number rendering.
@@ -456,13 +532,16 @@ type ARDamageEvent struct {
 
 // AREnemyNet is a network-safe enemy representation.
 type AREnemyNet struct {
-	ID      string      `json:"id"`
-	Type    AREnemyType `json:"type"`
-	X       float64     `json:"x"`
-	Z       float64     `json:"z"`
-	HP      float64     `json:"hp"`
-	MaxHP   float64     `json:"maxHp"`
-	IsElite bool        `json:"isElite"`
+	ID           string         `json:"id"`
+	Type         AREnemyType    `json:"type"`
+	X            float64        `json:"x"`
+	Z            float64        `json:"z"`
+	HP           float64        `json:"hp"`
+	MaxHP        float64        `json:"maxHp"`
+	IsElite      bool           `json:"isElite"`
+	IsMiniboss   bool           `json:"isMiniboss,omitempty"`
+	MinibossType ARMinibossType `json:"minibossType,omitempty"`
+	EliteAffix   AREliteAffix   `json:"eliteAffix,omitempty"`
 }
 
 // ARCrystalNet is a network-safe XP crystal representation.

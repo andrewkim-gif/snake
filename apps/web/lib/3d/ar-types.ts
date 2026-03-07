@@ -61,7 +61,13 @@ export type ARWeaponID =
   | 'poison_flask'
   | 'landmine'
   | 'shotgun'
-  | 'dice';
+  | 'dice'
+  // Evolved weapons (Phase 3)
+  | 'storm_bow'
+  | 'dexecutioner'
+  | 'inferno'
+  | 'dragon_breath'
+  | 'pandemic';
 
 export type ARWeaponTier = 'S' | 'A' | 'B';
 
@@ -84,6 +90,31 @@ export type ARItemID =
   | 'frozen_heart'
   | 'lucky_clover'
   | 'titan_belt';
+
+// Phase 3: Miniboss types
+export type ARMinibossType = 'golem' | 'wraith' | 'dragon_whelp' | 'lich_king' | 'the_arena';
+
+// Phase 3: Elite affixes
+export type AREliteAffix = 'armored' | 'swift' | 'vampiric' | 'explosive' | 'shielded';
+
+// Phase 3: Synergy IDs
+export type ARSynergyID =
+  | 'infernal'
+  | 'blizzard'
+  | 'thunder_god'
+  | 'plague_doctor'
+  | 'juggernaut'
+  | 'glass_cannon_syn'
+  | 'speed_demon'
+  | 'holy_trinity'
+  | 'vampire_lord'
+  | 'fortress';
+
+// Phase 3: Terrain themes
+export type ARTerrainTheme = 'urban' | 'desert' | 'mountain' | 'forest' | 'arctic' | 'island';
+
+// Phase 3: Country tier
+export type ARCountryTier = 'S' | 'A' | 'B' | 'C' | 'D';
 
 // ============================================================
 // Entity Types
@@ -112,6 +143,7 @@ export interface ARPlayerNet {
   weapons: string[];
   equipment: ARItemID[];
   kills: number;
+  synergies?: ARSynergyID[];
 }
 
 export interface AREnemyNet {
@@ -122,6 +154,10 @@ export interface AREnemyNet {
   hp: number;
   maxHp: number;
   isElite: boolean;
+  // Phase 3 fields
+  isMiniboss?: boolean;
+  minibossType?: ARMinibossType;
+  eliteAffix?: AREliteAffix;
 }
 
 export interface ARCrystalNet {
@@ -153,6 +189,8 @@ export interface ARState {
   phase: ARPhase;
   timer: number;
   wave: number;
+  terrain?: ARTerrainTheme;
+  tier?: ARCountryTier;
   players: ARPlayerNet[];
   enemies: AREnemyNet[];
   xpCrystals: ARCrystalNet[];
@@ -195,6 +233,52 @@ export interface ARDamageEvent {
 }
 
 // ============================================================
+// Terrain Visual Info (Phase 3)
+// ============================================================
+
+export interface ARTerrainVisual {
+  floorColor: string;
+  fogColor: string;
+  fogDensity: number;
+  ambientLight: number;
+  obstacleType: string;
+  obstacleCount: number;
+}
+
+export const TERRAIN_VISUALS: Record<ARTerrainTheme, ARTerrainVisual> = {
+  urban: {
+    floorColor: '#3a3a3a', fogColor: '#222222',
+    fogDensity: 0.02, ambientLight: 0.6,
+    obstacleType: 'building', obstacleCount: 20,
+  },
+  desert: {
+    floorColor: '#c2a360', fogColor: '#d4b577',
+    fogDensity: 0.015, ambientLight: 0.9,
+    obstacleType: 'rock', obstacleCount: 8,
+  },
+  mountain: {
+    floorColor: '#5a5a4a', fogColor: '#8a8a7a',
+    fogDensity: 0.03, ambientLight: 0.5,
+    obstacleType: 'rock', obstacleCount: 15,
+  },
+  forest: {
+    floorColor: '#2d4a2d', fogColor: '#1a3a1a',
+    fogDensity: 0.04, ambientLight: 0.4,
+    obstacleType: 'tree', obstacleCount: 25,
+  },
+  arctic: {
+    floorColor: '#c8d8e4', fogColor: '#e0e8f0',
+    fogDensity: 0.025, ambientLight: 0.8,
+    obstacleType: 'ice', obstacleCount: 10,
+  },
+  island: {
+    floorColor: '#3a7a3a', fogColor: '#6aaa8a',
+    fogDensity: 0.01, ambientLight: 0.7,
+    obstacleType: 'water', obstacleCount: 12,
+  },
+};
+
+// ============================================================
 // Rarity Colors
 // ============================================================
 
@@ -224,6 +308,116 @@ export const DAMAGE_TYPE_COLORS: Record<ARDamageType, string> = {
   frost: '#4FC3F7',
   lightning: '#FFD54F',
   poison: '#66BB6A',
+};
+
+// ============================================================
+// Character Display Info (Phase 3)
+// ============================================================
+
+export interface ARCharacterInfo {
+  name: string;
+  icon: string;
+  startWeapon: ARWeaponID;
+  passive: string;
+  tag: string;
+}
+
+export const CHARACTER_INFO: Record<ARCharacterType, ARCharacterInfo> = {
+  striker: {
+    name: 'Striker', icon: '⚔️',
+    startWeapon: 'katana', passive: 'Every 5 kills: +5% attack speed',
+    tag: 'melee',
+  },
+  guardian: {
+    name: 'Guardian', icon: '🛡️',
+    startWeapon: 'aegis', passive: 'On hit: +20% defense for 2s',
+    tag: 'tank',
+  },
+  pyro: {
+    name: 'Pyro', icon: '🔥',
+    startWeapon: 'fire_staff', passive: '+25% fire damage, burn +1s',
+    tag: 'mage',
+  },
+  frost_mage: {
+    name: 'Frost Mage', icon: '❄️',
+    startWeapon: 'frostwalker', passive: 'Frost hits: 20% instant freeze',
+    tag: 'mage',
+  },
+  sniper: {
+    name: 'Sniper', icon: '🎯',
+    startWeapon: 'sniper_rifle', passive: '+20% ranged dmg, +5m range',
+    tag: 'ranged',
+  },
+  gambler: {
+    name: 'Gambler', icon: '🎲',
+    startWeapon: 'dice', passive: '4 choices per level-up',
+    tag: 'growth',
+  },
+  berserker: {
+    name: 'Berserker', icon: '💢',
+    startWeapon: 'axe', passive: 'Below 50% HP: +35% damage',
+    tag: 'melee',
+  },
+  shadow: {
+    name: 'Shadow', icon: '🌑',
+    startWeapon: 'wireless_dagger', passive: 'After slide: 2s stealth',
+    tag: 'assassin',
+  },
+};
+
+// ============================================================
+// Synergy Display Info (Phase 3)
+// ============================================================
+
+export interface ARSynergyInfo {
+  name: string;
+  desc: string;
+  color: string;
+}
+
+export const SYNERGY_INFO: Record<ARSynergyID, ARSynergyInfo> = {
+  infernal: { name: 'Infernal', desc: 'Fire weapon + Damage 3 + Area 2: +50% fire, burn spreads', color: '#FF4500' },
+  blizzard: { name: 'Blizzard', desc: 'Frost weapon + Speed 3 + Area 2: freeze field trail', color: '#4FC3F7' },
+  thunder_god: { name: 'Thunder God', desc: 'Lightning + Crit 3 + AtkSpd 3: crit chain lightning', color: '#FFD54F' },
+  plague_doctor: { name: 'Plague Doctor', desc: 'Poison + Curse 2 + HP 3: poison x2, kills heal', color: '#66BB6A' },
+  juggernaut: { name: 'Juggernaut', desc: 'Shield 3 + HP 3 + Thorns 3: shockwave + 50% reflect', color: '#9E9E9E' },
+  glass_cannon_syn: { name: 'Glass Cannon', desc: 'Damage 5 + Crit 5 + HP 0: dmg x2, HP locked at 1', color: '#F44336' },
+  speed_demon: { name: 'Speed Demon', desc: 'Speed 5 + Dodge 5: speed-proportional damage', color: '#00BCD4' },
+  holy_trinity: { name: 'Holy Trinity', desc: 'XP 5 + Luck 5 + Cursed 3: XP x3, legendary chance', color: '#FFC107' },
+  vampire_lord: { name: 'Vampire Lord', desc: 'Crit 3 + VampRing + BerserkHelm: crit lifesteal', color: '#880E4F' },
+  fortress: { name: 'Fortress', desc: 'Aegis + Shield 3 + Thorns 2 + Guardian: 360 shield', color: '#607D8B' },
+};
+
+// ============================================================
+// Miniboss Display Info (Phase 3)
+// ============================================================
+
+export const MINIBOSS_COLORS: Record<ARMinibossType, string> = {
+  golem: '#795548',
+  wraith: '#9C27B0',
+  dragon_whelp: '#FF5722',
+  lich_king: '#3F51B5',
+  the_arena: '#FFD700',
+};
+
+export const MINIBOSS_INFO: Record<ARMinibossType, { name: string; desc: string }> = {
+  golem: { name: 'Stone Golem', desc: 'Charge attack, high HP, slow' },
+  wraith: { name: 'Wraith', desc: 'Teleports, AOE frost nova' },
+  dragon_whelp: { name: 'Dragon Whelp', desc: 'Fire breath cone, summons adds' },
+  lich_king: { name: 'Lich King', desc: 'Summons undead, frost lance' },
+  the_arena: { name: 'The Arena', desc: 'Final boss, scales with survivors' },
+};
+
+// ============================================================
+// Elite Affix Colors (Phase 3)
+// ============================================================
+
+export const ELITE_AFFIX_COLORS: Record<AREliteAffix, string> = {
+  armored: '#9E9E9E',
+  swift: '#00BCD4',
+  vampiric: '#880E4F',
+  explosive: '#FF5722',
+  shielded: '#2196F3',
 };
 
 // ============================================================
@@ -261,7 +455,7 @@ export const WEAPON_INFO: Record<
   { name: string; icon: string; tier: ARWeaponTier; damageType: ARDamageType; desc: string }
 > = {
   sniper_rifle: { name: 'Sniper Rifle', icon: '🔫', tier: 'S', damageType: 'physical', desc: 'Long-range precision' },
-  lightning_staff: { name: 'Lightning Staff', icon: '⚡', tier: 'S', damageType: 'lightning', desc: 'Chain lightning ×3' },
+  lightning_staff: { name: 'Lightning Staff', icon: '⚡', tier: 'S', damageType: 'lightning', desc: 'Chain lightning x3' },
   bow: { name: 'Bow', icon: '🏹', tier: 'S', damageType: 'physical', desc: 'Fast-firing ranged' },
   revolver: { name: 'Revolver', icon: '🔫', tier: 'S', damageType: 'physical', desc: 'High-damage medium range' },
   katana: { name: 'Katana', icon: '⚔️', tier: 'A', damageType: 'physical', desc: 'Fast melee, pierces' },
@@ -269,13 +463,19 @@ export const WEAPON_INFO: Record<
   aegis: { name: 'Aegis', icon: '🛡️', tier: 'A', damageType: 'physical', desc: 'Shield bash + block' },
   wireless_dagger: { name: 'Wireless Dagger', icon: '🗡️', tier: 'A', damageType: 'physical', desc: 'Auto-tracking' },
   black_hole: { name: 'Black Hole', icon: '🕳️', tier: 'A', damageType: 'physical', desc: 'Pulls enemies 3s' },
-  axe: { name: 'Axe', icon: '🪓', tier: 'B', damageType: 'physical', desc: '360° melee cleave' },
+  axe: { name: 'Axe', icon: '🪓', tier: 'B', damageType: 'physical', desc: '360 melee cleave' },
   frostwalker: { name: 'Frostwalker', icon: '❄️', tier: 'B', damageType: 'frost', desc: 'Freezing trail' },
   flamewalker: { name: 'Flamewalker', icon: '🔥', tier: 'B', damageType: 'fire', desc: 'Burning trail' },
   poison_flask: { name: 'Poison Flask', icon: '🧪', tier: 'B', damageType: 'poison', desc: 'Poison puddle DOT' },
   landmine: { name: 'Landmine', icon: '💣', tier: 'B', damageType: 'physical', desc: 'Planted explosive' },
   shotgun: { name: 'Shotgun', icon: '🔫', tier: 'B', damageType: 'physical', desc: '5-pellet cone blast' },
   dice: { name: 'Dice', icon: '🎲', tier: 'B', damageType: 'physical', desc: 'Random 0-300 damage' },
+  // Evolved weapons (Phase 3)
+  storm_bow: { name: 'Storm Bow', icon: '⚡', tier: 'S', damageType: 'lightning', desc: 'Evolved: arrows with chain lightning' },
+  dexecutioner: { name: 'Dexecutioner', icon: '⚔️', tier: 'S', damageType: 'physical', desc: 'Evolved: executes below 30% HP' },
+  inferno: { name: 'Inferno', icon: '🔥', tier: 'S', damageType: 'fire', desc: 'Evolved: screen-wide fire storm' },
+  dragon_breath: { name: 'Dragon Breath', icon: '🐉', tier: 'S', damageType: 'fire', desc: 'Evolved: continuous flame spray' },
+  pandemic: { name: 'Pandemic', icon: '☠️', tier: 'S', damageType: 'poison', desc: 'Evolved: spreading poison cloud' },
 };
 
 // ============================================================
