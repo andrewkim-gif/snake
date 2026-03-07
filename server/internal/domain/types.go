@@ -467,6 +467,19 @@ type Agent struct {
 	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent
 	AgentID         string       `json:"agentId,omitempty"` // agent identifier
 	Nationality     string       `json:"nationality,omitempty"` // v14: ISO3 country code
+	// v14 Phase 2: Megabonk combat system fields
+	HP              float64        `json:"hp"`              // current HP (base 100, +10/level)
+	MaxHP           float64        `json:"maxHP"`           // max HP
+	Defense         float64        `json:"defense"`         // damage reduction (from IronSkin)
+	BaseDPS         float64        `json:"baseDPS"`         // base weapon DPS output
+	CritChance      float64        `json:"critChance"`      // 0.0~1.0 (base 0.05)
+	Invincible      bool           `json:"invincible"`      // respawn invincibility
+	InvincibleEnd   uint64         `json:"invincibleEnd"`   // tick when invincibility ends
+	WeaponSlots     []WeaponSlot   `json:"weaponSlots"`     // equipped weapons (max 5)
+	StatusEffects   []StatusEffect `json:"statusEffects"`   // active status effects (burn, slow, stun...)
+	DashCooldownEnd uint64         `json:"dashCooldownEnd"` // tick when dash is available again
+	Deaths          int            `json:"deaths"`          // v14: death count (respawn deathmatch)
+	Assists         int            `json:"assists"`         // v14: assist count
 }
 
 // UpgradeChoice represents a single upgrade option presented at level-up.
