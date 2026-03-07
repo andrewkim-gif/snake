@@ -1,5 +1,7 @@
 package world
 
+import "math"
+
 // CountryTier represents the strategic importance tier of a country.
 type CountryTier string
 
@@ -34,6 +36,47 @@ type Resources struct {
 	Food     int `json:"food"`
 	Tech     int `json:"tech"`
 	Manpower int `json:"manpower"`
+}
+
+// tierReferencePop maps each tier to the population at which a country
+// receives 100% of that tier's MaxAgents. Countries with smaller populations
+// get a proportionally reduced share (down to 30% minimum).
+var tierReferencePop = map[CountryTier]int64{
+	TierS: 330_000_000, // USA baseline
+	TierA: 100_000_000,
+	TierB: 50_000_000,
+	TierC: 20_000_000,
+	TierD: 5_000_000,
+}
+
+// CalcMaxAgents computes the population-adjusted max agents within the tier range.
+// Formula: floor(tierMax * clamp(log10(pop/1e6) / log10(tierRefPop/1e6), 0.3, 1.0))
+// Minimum guarantee: max(result, 5)
+func CalcMaxAgents(tier CountryTier, population int64) int {
+	cfg, ok := TierConfigs[tier]
+	if !ok {
+		return 5
+	}
+	refPop, ok := tierReferencePop[tier]
+	if !ok {
+		return cfg.MaxAgents
+	}
+
+	if population <= 0 {
+		result := int(float64(cfg.MaxAgents) * 0.3)
+		if result < 5 {
+			return 5
+		}
+		return result
+	}
+
+	ratio := math.Log10(float64(population)/1e6) / math.Log10(float64(refPop)/1e6)
+	clamped := math.Max(0.3, math.Min(1.0, ratio))
+	result := int(math.Floor(float64(cfg.MaxAgents) * clamped))
+	if result < 5 {
+		return 5
+	}
+	return result
 }
 
 // CountrySeed holds static data for seeding a country into the database.

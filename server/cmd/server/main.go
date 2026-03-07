@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"os"
@@ -487,6 +488,37 @@ func main() {
 	}
 
 	// ================================================================
+	// 7c-5. Wire v15 Domination events → WebSocket Hub (domination_update)
+	// ================================================================
+	v14ArenaManager.OnDominationEvent = func(event game.DominationEvent) {
+		// Map DominationStatus → level int
+		level := 0
+		switch {
+		case event.Type == game.DomEvtNewDominant || event.Type == game.DomEvtDefended:
+			level = 1
+		}
+		msg := ws.DominationUpdateMsg{
+			Countries: []ws.DominationCountryData{{
+				CountryCode:    event.CountryCode,
+				DominantNation: event.DominantNation,
+				Status:         string(event.Type),
+				Level:          level,
+			}},
+		}
+		frame, err := ws.EncodeFrame(ws.EventDominationUpdate, msg)
+		if err != nil {
+			slog.Error("failed to encode domination_update", "error", err)
+			return
+		}
+		hub.BroadcastAll(frame)
+	}
+
+	// ================================================================
+	// 7c-6. Wire v15 TradeEngine → WebSocket Hub (trade_route_update)
+	// ================================================================
+	tradeEngine.SetBroadcaster(&tradeBroadcasterAdapter{hub: hub})
+
+	// ================================================================
 	// 7b. Auto-initialize Season 1 if no season active (S45)
 	// ================================================================
 	if seasonEngine.GetCurrentSeason() == nil {
@@ -792,6 +824,27 @@ func main() {
 	}
 
 	slog.Info("server shutdown complete")
+}
+
+// tradeBroadcasterAdapter implements meta.TradeBroadcaster for WS broadcasting.
+type tradeBroadcasterAdapter struct {
+	hub *ws.Hub
+}
+
+func (t *tradeBroadcasterAdapter) BroadcastTradeRoute(from, to, routeType string, volume int64, resource string) {
+	msg := ws.TradeRouteUpdateMsg{
+		From:     from,
+		To:       to,
+		Type:     routeType,
+		Volume:   volume,
+		Resource: resource,
+	}
+	frame, err := ws.EncodeFrame(ws.EventTradeRouteUpdate, msg)
+	if err != nil {
+		slog.Error("failed to encode trade_route_update", "error", err)
+		return
+	}
+	t.hub.BroadcastAll(frame)
 }
 
 // V14Systems bundles all v14 in-game systems for event handler access.
@@ -1153,8 +1206,14 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 
 		// Delegate to existing WorldManager join flow
 		if err := wm.JoinCountry(client.ID, payload.CountryCode, payload.Name, payload.SkinID, ""); err != nil {
+			// v15: distinguish arena_full from other join errors
+			code := "join_failed"
+			var arenaFullErr *world.ArenaFullError
+			if errors.As(err, &arenaFullErr) {
+				code = "arena_full"
+			}
 			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
-				Code:    "join_failed",
+				Code:    code,
 				Message: err.Error(),
 			})
 			client.Send(errFrame)

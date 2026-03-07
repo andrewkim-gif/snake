@@ -34,6 +34,9 @@ type CountryArenaManager struct {
 
 	// Capture point event callback (bridges capture events to ws layer)
 	OnCaptureEvent func(event CapturePointEvent)
+
+	// v15: Domination event callback (bridges domination events to ws layer)
+	OnDominationEvent func(event DominationEvent)
 }
 
 // QueueEntry represents a player waiting to join a full arena.
@@ -109,6 +112,9 @@ func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string
 	// Wire CapturePoints.OnEvent callback to forward capture events
 	capturePoints.OnEvent = cam.forwardCaptureEvent
 
+	// v15: Wire DominationEngine.OnEvent callback to forward domination events
+	domination.OnEvent = cam.forwardDominationEvent
+
 	// Start the epoch cycle so Tick() processes phase transitions
 	epoch.Start()
 
@@ -166,6 +172,9 @@ func (cam *CountryArenaManager) JoinCountryArena(clientID, countryCode, countryN
 
 		// Wire CapturePoints.OnEvent callback to forward capture events
 		capturePoints.OnEvent = cam.forwardCaptureEvent
+
+		// v15: Wire DominationEngine.OnEvent callback to forward domination events
+		domination.OnEvent = cam.forwardDominationEvent
 
 		// Start the epoch cycle so Tick() processes phase transitions
 		epoch.Start()
@@ -352,6 +361,13 @@ func (cam *CountryArenaManager) forwardEpochEvents(events []EpochEvent) {
 func (cam *CountryArenaManager) forwardCaptureEvent(event CapturePointEvent) {
 	if cam.OnCaptureEvent != nil {
 		cam.OnCaptureEvent(event)
+	}
+}
+
+// forwardDominationEvent bridges domination events to the external callback.
+func (cam *CountryArenaManager) forwardDominationEvent(event DominationEvent) {
+	if cam.OnDominationEvent != nil {
+		cam.OnDominationEvent(event)
 	}
 }
 

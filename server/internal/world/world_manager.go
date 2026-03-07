@@ -124,6 +124,7 @@ type CountryState struct {
 	Latitude          float64     `json:"latitude"`
 	Longitude         float64     `json:"longitude"`
 	CapitalName       string      `json:"capital_name"`
+	Population        int64       `json:"population"` // v15: from CountrySeed
 }
 
 // CountryBroadcastState is a compact representation for 1Hz broadcasts.
@@ -134,6 +135,9 @@ type CountryBroadcastState struct {
 	SovereigntyLevel int    `json:"sovereigntyLevel"`
 	ActiveAgents     int    `json:"activeAgents"`
 	SpectatorCount   int    `json:"spectatorCount"`
+	// v15: population-based agent limits
+	MaxAgents  int   `json:"maxAgents"`
+	Population int64 `json:"population"`
 }
 
 // NewWorldManager creates a WorldManager and initializes all 195 countries.
@@ -166,12 +170,13 @@ func NewWorldManager(cfg WorldConfig, redisClient *cache.RedisClient) *WorldMana
 			ActiveAgents:      0,
 			SpectatorCount:    0,
 			ArenaRadius:       tierCfg.ArenaRadius,
-			MaxAgents:         tierCfg.MaxAgents,
+			MaxAgents:         CalcMaxAgents(seed.Tier, seed.Population),
 			TerrainTheme:      seed.TerrainTheme,
 			Adjacent:          seed.Adjacency,
 			Latitude:          seed.Latitude,
 			Longitude:         seed.Longitude,
 			CapitalName:       seed.CapitalName,
+			Population:        seed.Population,
 		}
 	}
 
@@ -262,6 +267,17 @@ func (wm *WorldManager) GetActiveArena(countryISO string) *CountryArena {
 
 // --- Player management ---
 
+// ArenaFullError indicates that a country arena has reached its max agent capacity.
+type ArenaFullError struct {
+	CountryCode string
+	MaxAgents   int
+	Current     int
+}
+
+func (e *ArenaFullError) Error() string {
+	return fmt.Sprintf("arena %s full: %d/%d agents", e.CountryCode, e.Current, e.MaxAgents)
+}
+
 // JoinCountry places a player into a country's arena (creating it on-demand).
 func (wm *WorldManager) JoinCountry(clientID, countryISO, name string, skinID int, appearance string) error {
 	wm.mu.Lock()
@@ -271,6 +287,15 @@ func (wm *WorldManager) JoinCountry(clientID, countryISO, name string, skinID in
 	state, ok := wm.countries[countryISO]
 	if !ok {
 		return fmt.Errorf("country %s not found", countryISO)
+	}
+
+	// v15: Check population-based agent limit
+	if state.ActiveAgents >= state.MaxAgents {
+		return &ArenaFullError{
+			CountryCode: countryISO,
+			MaxAgents:   state.MaxAgents,
+			Current:     state.ActiveAgents,
+		}
 	}
 
 	// Leave current country if any
@@ -867,6 +892,8 @@ func (wm *WorldManager) broadcastCountriesState() {
 				SovereigntyLevel: state.SovereigntyLevel,
 				ActiveAgents:     state.ActiveAgents,
 				SpectatorCount:   state.SpectatorCount,
+				MaxAgents:        state.MaxAgents,
+				Population:       state.Population,
 			})
 		}
 	}

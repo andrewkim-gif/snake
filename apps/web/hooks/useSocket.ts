@@ -104,6 +104,16 @@ export interface RespawnState {
   invincibleSec: number;
 }
 
+// v15: Trade route data received from server
+export interface TradeRouteData {
+  from: string;     // ISO3 seller faction/country
+  to: string;       // ISO3 buyer faction/country
+  type: 'sea' | 'land';
+  volume: number;
+  resource: string;
+  timestamp: number;
+}
+
 export interface UiState {
   connected: boolean;
   alive: boolean;
@@ -145,6 +155,10 @@ export interface UiState {
   globalEvents: Array<{ id: string; type: string; message: string; timestamp: number }>;
   // v14: Epoch scoreboard (full player data)
   epochScoreboard: EpochScoreboardEntry[];
+  // v15: Trade route visualization data
+  tradeRoutes: TradeRouteData[];
+  // v15: Server error (arena_full, join_failed, etc.)
+  lastError: { code: string; message: string } | null;
 }
 
 export function useSocket() {
@@ -182,6 +196,8 @@ export function useSocket() {
     wars: [],
     globalEvents: [],
     epochScoreboard: [],
+    tradeRoutes: [],
+    lastError: null,
   });
 
   useEffect(() => {
@@ -293,6 +309,8 @@ export function useSocket() {
       sovereigntyLevel: number;
       activeAgents: number;
       spectatorCount: number;
+      maxAgents?: number;
+      population?: number;
     }>) => {
       setUiState(prev => {
         const next = new Map(prev.countryStates);
@@ -306,6 +324,8 @@ export function useSocket() {
               sovereignFaction: cs.sovereignFaction,
               sovereigntyLevel: cs.sovereigntyLevel,
               activeAgents: cs.activeAgents,
+              maxAgents: cs.maxAgents ?? existing.maxAgents,
+              population: cs.population ?? existing.population,
             });
           } else {
             // 새로운 국가 — 최소 데이터로 생성 (GeoJSON fallback이 이후 보강)
@@ -324,6 +344,8 @@ export function useSocket() {
               longitude: 0,
               capitalName: '',
               terrainTheme: 'plains',
+              maxAgents: cs.maxAgents ?? 0,
+              population: cs.population ?? 0,
             });
           }
         }
@@ -619,6 +641,40 @@ export function useSocket() {
         }
         return { ...prev, dominationStates: next };
       });
+    });
+
+    // ─── v15: Server error events (arena_full, join_failed, etc.) ───
+
+    socket.on('error', (data: { code: string; message: string }) => {
+      setUiState(prev => ({ ...prev, lastError: data }));
+      // 5초 후 자동 클리어
+      setTimeout(() => {
+        setUiState(prev => prev.lastError === data ? { ...prev, lastError: null } : prev);
+      }, 5000);
+    });
+
+    // ─── v15: Trade route updates (실시간 거래 시각화) ───
+
+    socket.on('trade_route_update', (data: { from: string; to: string; type: string; volume: number; resource: string }) => {
+      const route: TradeRouteData = {
+        from: data.from,
+        to: data.to,
+        type: data.type as 'sea' | 'land',
+        volume: data.volume,
+        resource: data.resource,
+        timestamp: Date.now(),
+      };
+      setUiState(prev => ({
+        ...prev,
+        tradeRoutes: [...prev.tradeRoutes, route].slice(-100), // 최근 100개만 유지
+      }));
+      // 30초 후 자동 만료
+      setTimeout(() => {
+        setUiState(prev => ({
+          ...prev,
+          tradeRoutes: prev.tradeRoutes.filter(r => r !== route),
+        }));
+      }, 30000);
     });
 
     // ─── v14: Global events (EventTicker / NewsFeed) ───

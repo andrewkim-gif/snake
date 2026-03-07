@@ -42,6 +42,9 @@ export interface CountryClientState {
   longitude: number;
   capitalName: string;
   terrainTheme: string;
+  // v15: population-based agent limits
+  maxAgents: number;
+  population: number;
 }
 
 // GeoJSON 캐시
@@ -101,6 +104,9 @@ export function featureToCountryState(feature: GeoJSONFeature): CountryClientSta
   else if (gdpPc > 50000) tier = 'C';
   else tier = 'D';
 
+  // v15: POP_EST → population (Natural Earth GeoJSON field)
+  const population = (props.POP_EST as number) || 0;
+
   return {
     iso3,
     name,
@@ -116,6 +122,8 @@ export function featureToCountryState(feature: GeoJSONFeature): CountryClientSta
     longitude: 0,
     capitalName: '',
     terrainTheme: 'plains',
+    maxAgents: 0,
+    population,
   };
 }
 

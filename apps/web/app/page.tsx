@@ -10,6 +10,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { CubelingAppearance } from '@agent-survivor/shared';
 import { createDefaultAppearance, packAppearance } from '@agent-survivor/shared';
@@ -19,9 +20,11 @@ import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { NationalitySelector, loadNationality, saveNationality } from '@/components/lobby/NationalitySelector';
 import { Tutorial } from '@/components/game/Tutorial';
 import { NewsFeed } from '@/components/lobby/NewsFeed';
+import { GameSystemPopup } from '@/components/hub/GameSystemPopup';
 import { useSocketContext } from '@/providers/SocketProvider';
 import type { GameMode } from '@/providers/SocketProvider';
-import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import type { MainTabKey } from '@/components/hub/PopupTabNav';
 
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
@@ -36,6 +39,7 @@ const NEWS_FEED_HEIGHT = 36;
 
 export default function Home() {
   const tLobby = useTranslations('lobby');
+  const searchParams = useSearchParams();
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing'>('lobby');
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
@@ -46,6 +50,31 @@ export default function Home() {
   const [newsExpanded, setNewsExpanded] = useState(false);
   // v14 S36: 에포크 상태 요약 (로비 복귀 시 표시)
   const [epochSummary, setEpochSummary] = useState<string | null>(null);
+
+  // 게임 시스템 팝업 상태
+  const [panelOpen, setPanelOpen] = useState(false);
+  const [panelTab, setPanelTab] = useState<MainTabKey>('economy');
+  const [panelSubTab, setPanelSubTab] = useState<string | undefined>();
+
+  // URL ?panel= 파라미터로 자동 오픈
+  useEffect(() => {
+    const panel = searchParams.get('panel');
+    if (panel) {
+      setPanelTab(panel as MainTabKey);
+      const sub = searchParams.get('tab') || undefined;
+      setPanelSubTab(sub);
+      setPanelOpen(true);
+    }
+  }, [searchParams]);
+
+  const handleOpenPanel = useCallback((tab?: MainTabKey) => {
+    if (tab) setPanelTab(tab);
+    setPanelOpen(true);
+  }, []);
+
+  const handleClosePanel = useCallback(() => {
+    setPanelOpen(false);
+  }, []);
 
   // v13: 전역 SocketContext에서 소켓 데이터 + 액션 가져오기
   const {
@@ -309,15 +338,44 @@ export default function Home() {
         </div>
       )}
 
-      {/* Agent Setup 패널 — 좌측 */}
+      {/* 좌측 패널 — GAME SYSTEM 버튼 + Agent Setup */}
       <div style={{
         position: 'absolute',
-        top: 92,
+        top: 72,
         left: 16,
         zIndex: 60,
         maxWidth: '280px',
         width: 'calc(100vw - 32px)',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '8px',
       }}>
+        {/* GAME SYSTEM 버튼 */}
+        <button
+          onClick={() => handleOpenPanel()}
+          style={{
+            pointerEvents: 'auto',
+            fontFamily: headingFont,
+            fontWeight: 700,
+            fontSize: '11px',
+            color: SK.textSecondary,
+            letterSpacing: '3px',
+            textTransform: 'uppercase',
+            padding: '10px 16px',
+            background: SK.glassBg,
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+            border: `1px solid ${SK.glassBorder}`,
+            borderRadius: '6px',
+            cursor: 'pointer',
+            transition: 'all 200ms ease',
+            width: '100%',
+            textAlign: 'left',
+            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.4)',
+          }}
+        >
+          GAME SYSTEM
+        </button>
         {setupOpen ? (
           <div style={{
             backgroundColor: SK.glassBg,
@@ -454,6 +512,38 @@ export default function Home() {
           onToggleExpand={() => setNewsExpanded(prev => !prev)}
         />
       </div>
+
+      {/* 게임 시스템 팝업 — 글로브 위 오버레이 */}
+      <GameSystemPopup
+        open={panelOpen}
+        onClose={handleClosePanel}
+        initialTab={panelTab}
+        initialSubTab={panelSubTab}
+      />
+
+      {/* v15: Server error toast (arena_full, join_failed 등) */}
+      {uiState.lastError && (
+        <div style={{
+          position: 'fixed',
+          top: 20,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 9999,
+          backgroundColor: 'rgba(204, 51, 51, 0.95)',
+          color: '#fff',
+          padding: '10px 24px',
+          borderRadius: '6px',
+          fontSize: '14px',
+          fontWeight: 600,
+          boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+          pointerEvents: 'none',
+          animation: 'fadeIn 200ms ease',
+        }}>
+          {uiState.lastError.code === 'arena_full'
+            ? 'This arena is full. Try another country!'
+            : uiState.lastError.message}
+        </div>
+      )}
     </div>
   );
 }

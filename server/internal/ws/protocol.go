@@ -71,6 +71,10 @@ const (
 	EventWarDeclared        = "war_declared"
 	EventWarEnded           = "war_ended"
 	EventCapturePointUpdate = "capture_point_update"
+
+	// v15: Globe effects events (server → client)
+	EventDominationUpdate = "domination_update"
+	EventTradeRouteUpdate = "trade_route_update"
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -225,4 +229,28 @@ type PongPayload struct {
 type ErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// --- v15: Globe effects message structs ---
+
+// DominationUpdateMsg is the payload for domination_update S2C events.
+type DominationUpdateMsg struct {
+	Countries []DominationCountryData `json:"countries"`
+}
+
+// DominationCountryData holds per-country domination state for broadcast.
+type DominationCountryData struct {
+	CountryCode    string `json:"countryCode"`
+	DominantNation string `json:"dominantNation"`
+	Status         string `json:"status"` // "none", "sovereignty", "hegemony"
+	Level          int    `json:"level"`  // 0-2 (none, sov, heg)
+}
+
+// TradeRouteUpdateMsg is the payload for trade_route_update S2C events.
+type TradeRouteUpdateMsg struct {
+	From     string `json:"from"`     // ISO3 seller country
+	To       string `json:"to"`       // ISO3 buyer country
+	Type     string `json:"type"`     // "sea" | "land"
+	Volume   int64  `json:"volume"`   // trade quantity
+	Resource string `json:"resource"` // "oil" | "minerals" | "food" | "tech" | "manpower"
 }

@@ -131,6 +131,12 @@ func DefaultTradeConfig() TradeConfig {
 	}
 }
 
+// TradeBroadcaster is an interface for broadcasting trade route updates via WS.
+// This avoids importing the ws package directly.
+type TradeBroadcaster interface {
+	BroadcastTradeRoute(from, to, routeType string, volume int64, resource string)
+}
+
 // TradeEngine manages the global resource exchange.
 type TradeEngine struct {
 	mu sync.RWMutex
@@ -158,6 +164,9 @@ type TradeEngine struct {
 	factionManager  *FactionManager
 	diplomacyEngine *DiplomacyEngine
 	economyEngine   *EconomyEngine
+
+	// v15: WS broadcaster for trade route updates
+	broadcaster TradeBroadcaster
 }
 
 // NewTradeEngine creates a new trade engine.
@@ -202,6 +211,11 @@ func (te *TradeEngine) SetDiplomacyEngine(de *DiplomacyEngine) {
 // SetEconomyEngine sets the economy engine reference for market price sync.
 func (te *TradeEngine) SetEconomyEngine(ee *EconomyEngine) {
 	te.economyEngine = ee
+}
+
+// SetBroadcaster sets the WS broadcaster for real-time trade route updates.
+func (te *TradeEngine) SetBroadcaster(b TradeBroadcaster) {
+	te.broadcaster = b
 }
 
 // --- Order Management ---
@@ -450,6 +464,17 @@ func (te *TradeEngine) matchOrders(resource ResourceType) {
 			"seller", bestSell.FactionID,
 			"fee", routeFee,
 		)
+
+		// v15: Broadcast trade route update via WS
+		if te.broadcaster != nil {
+			te.broadcaster.BroadcastTradeRoute(
+				bestSell.FactionID, // from (seller)
+				bestBuy.FactionID,  // to (buyer)
+				string(routeType),
+				fillQty,
+				string(resource),
+			)
+		}
 	}
 
 	// Update order book references
