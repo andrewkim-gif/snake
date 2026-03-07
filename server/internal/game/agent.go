@@ -42,6 +42,48 @@ func NewAgent(id, name string, pos domain.Position, skin domain.AgentSkin, isBot
 	}
 }
 
+// NewAgentWithNationality creates a new Agent with nationality set.
+func NewAgentWithNationality(id, name string, pos domain.Position, skin domain.AgentSkin, isBot bool, currentTick uint64, appearance, nationality string) *domain.Agent {
+	agent := NewAgent(id, name, pos, skin, isBot, currentTick, appearance)
+	agent.Nationality = nationality
+	return agent
+}
+
+// SetNationality sets the agent's nationality.
+func SetNationality(a *domain.Agent, nationality string) {
+	a.Nationality = nationality
+}
+
+// IsSameNation returns true if two agents share the same nationality (allies).
+func IsSameNation(a, b *domain.Agent) bool {
+	if a.Nationality == "" || b.Nationality == "" {
+		return false
+	}
+	return a.Nationality == b.Nationality
+}
+
+// GroupByNationality groups agents by their nationality.
+func GroupByNationality(agents map[string]*domain.Agent) map[string][]*domain.Agent {
+	groups := make(map[string][]*domain.Agent)
+	for _, agent := range agents {
+		if agent.Nationality != "" {
+			groups[agent.Nationality] = append(groups[agent.Nationality], agent)
+		}
+	}
+	return groups
+}
+
+// NationalityPlayerCount returns the number of players of a given nationality.
+func NationalityPlayerCount(agents map[string]*domain.Agent, nationality string) int {
+	count := 0
+	for _, agent := range agents {
+		if agent.Nationality == nationality {
+			count++
+		}
+	}
+	return count
+}
+
 // ApplyInput sets the target angle and boosting state from player input.
 func ApplyInput(a *domain.Agent, angle float64, boost bool) {
 	if !a.Alive {

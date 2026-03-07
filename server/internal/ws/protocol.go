@@ -15,6 +15,10 @@ const (
 	EventPing           = "ping"
 	EventChooseUpgrade  = "choose_upgrade"
 
+	// v14: New client → server events
+	EventSelectNationality  = "select_nationality"
+	EventJoinCountryArena   = "join_country_arena"
+
 	// Agent-specific events (client → server)
 	EventAgentAuth          = "agent_auth"
 	EventAgentCommand       = "agent_command"
@@ -53,6 +57,15 @@ const (
 
 	// v12: ability effect events (server → client)
 	EventAbilityTriggered   = "ability_triggered"
+
+	// v14: Epoch & respawn events (server → client)
+	EventEpochStart         = "epoch_start"
+	EventEpochEnd           = "epoch_end"
+	EventWarPhaseStart      = "war_phase_start"
+	EventWarPhaseEnd        = "war_phase_end"
+	EventRespawnCountdown   = "respawn_countdown"
+	EventRespawnComplete    = "respawn_complete"
+	EventNationScoreUpdate  = "nation_score_update"
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -179,6 +192,20 @@ type AgentChooseUpgradePayload struct {
 type AgentCommandPayload struct {
 	Cmd  string          `json:"cmd"`
 	Data json.RawMessage `json:"data,omitempty"`
+}
+
+// SelectNationalityPayload is sent by the client to set nationality.
+type SelectNationalityPayload struct {
+	Nationality string `json:"nationality"`
+}
+
+// JoinCountryArenaPayload is sent by the client to join a country arena.
+type JoinCountryArenaPayload struct {
+	CountryCode string `json:"countryCode"`
+	Name        string `json:"name"`
+	SkinID      int    `json:"skinId"`
+	Appearance  string `json:"appearance,omitempty"`
+	Nationality string `json:"nationality"`
 }
 
 // --- Server → Client payload types ---

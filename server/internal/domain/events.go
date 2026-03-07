@@ -36,6 +36,7 @@ type StateAgent struct {
 	AbilityTargetX float64 `json:"tx,omitempty"` // v12: ability target X coordinate
 	AbilityTargetY float64 `json:"ty,omitempty"` // v12: ability target Y coordinate
 	AbilityLevel   int     `json:"abl,omitempty"` // v12: ability level (1-4)
+	Nationality    string  `json:"nat,omitempty"` // v14: nationality ISO3 code
 }
 
 // StateOrb is the per-tick serialized orb data sent to clients.
@@ -316,4 +317,70 @@ type MapObjectActivatedEvent struct {
 	AgentID   string `json:"agentId"`
 	AgentName string `json:"agentName"`
 	Effect    string `json:"effect"`
+}
+
+// --- v14: Epoch & Respawn event payloads ---
+
+// EpochStartEvent is sent when a new epoch begins.
+type EpochStartEvent struct {
+	EpochNumber    int    `json:"epochNumber"`
+	Phase          string `json:"phase"`
+	DurationSec    int    `json:"durationSec"`
+	PeaceDuration  int    `json:"peaceDurationSec"`
+	WarDuration    int    `json:"warDurationSec"`
+	ShrinkDuration int    `json:"shrinkDurationSec"`
+	CountryCode    string `json:"countryCode"`
+}
+
+// EpochEndEvent is sent when an epoch ends with results.
+type EpochEndEvent struct {
+	EpochNumber  int            `json:"epochNumber"`
+	CountryCode  string         `json:"countryCode"`
+	NationScores map[string]int `json:"nationScores"`
+	TopPlayers   []EpochPlayer  `json:"topPlayers"`
+}
+
+// EpochPlayer is a player entry in epoch results.
+type EpochPlayer struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Nationality string `json:"nationality"`
+	Score       int    `json:"score"`
+	Kills       int    `json:"kills"`
+}
+
+// WarPhaseStartEvent is sent when the war phase begins.
+type WarPhaseStartEvent struct {
+	EpochNumber int    `json:"epochNumber"`
+	WarDuration int    `json:"warDurationSec"`
+	CountryCode string `json:"countryCode"`
+}
+
+// WarPhaseEndEvent is sent when the war phase ends.
+type WarPhaseEndEvent struct {
+	EpochNumber int    `json:"epochNumber"`
+	CountryCode string `json:"countryCode"`
+}
+
+// RespawnCountdownEvent is sent during the 3-second respawn delay.
+type RespawnCountdownEvent struct {
+	SecondsLeft int `json:"secondsLeft"`
+}
+
+// RespawnCompleteEvent is sent when the agent respawns.
+type RespawnCompleteEvent struct {
+	Spawn           Position `json:"spawn"`
+	Tick            uint64   `json:"tick"`
+	InvincibleSec   int      `json:"invincibleSec"`
+	SpeedPenaltySec int      `json:"speedPenaltySec"`
+	Level           int      `json:"level"`
+}
+
+// NationScoreUpdateEvent is sent periodically with per-nation scores.
+type NationScoreUpdateEvent struct {
+	EpochNumber   int            `json:"epochNumber"`
+	CountryCode   string         `json:"countryCode"`
+	NationScores  map[string]int `json:"nationScores"`
+	Phase         string         `json:"phase"`
+	TimeRemaining int            `json:"timeRemaining"`
 }

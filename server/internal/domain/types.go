@@ -466,6 +466,7 @@ type Agent struct {
 	IsBot           bool         `json:"isBot"`
 	IsAgent         bool         `json:"isAgent,omitempty"` // true if controlled by AI agent
 	AgentID         string       `json:"agentId,omitempty"` // agent identifier
+	Nationality     string       `json:"nationality,omitempty"` // v14: ISO3 country code
 }
 
 // UpgradeChoice represents a single upgrade option presented at level-up.

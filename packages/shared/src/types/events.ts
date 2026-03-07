@@ -243,6 +243,7 @@ export interface AgentNetworkData {
   tx?: number;            // v12: ability target X coordinate
   ty?: number;            // v12: ability target Y coordinate
   abl?: number;           // v12: ability level (1-4)
+  nat?: string;           // v14: nationality ISO3 code
 }
 
 // ─── v10 Upgrade Events ───
@@ -377,6 +378,89 @@ export interface ArenaShrinkPayload {
   shrinkRate: number;  // px/min
 }
 
+// ─── v14: Epoch & Respawn Event Payloads ───
+
+/** v14: 에포크 페이즈 타입 */
+export type EpochPhase = 'peace' | 'war_countdown' | 'war' | 'shrink' | 'end' | 'transition';
+
+/** v14: 에포크 시작 이벤트 */
+export interface EpochStartPayload {
+  epochNumber: number;
+  phase: EpochPhase;
+  durationSec: number;
+  peaceDurationSec: number;
+  warDurationSec: number;
+  shrinkDurationSec: number;
+  countryCode: string;
+}
+
+/** v14: 에포크 종료 이벤트 */
+export interface EpochEndPayload {
+  epochNumber: number;
+  countryCode: string;
+  nationScores: Record<string, number>;
+  topPlayers: EpochTopPlayerEntry[];
+}
+
+/** v14: 에포크 결과 플레이어 엔트리 */
+export interface EpochTopPlayerEntry {
+  id: string;
+  name: string;
+  nationality: string;
+  score: number;
+  kills: number;
+}
+
+/** v14: 전쟁 페이즈 시작 */
+export interface WarPhaseStartPayload {
+  epochNumber: number;
+  warDurationSec: number;
+  countryCode: string;
+}
+
+/** v14: 전쟁 페이즈 종료 */
+export interface WarPhaseEndPayload {
+  epochNumber: number;
+  countryCode: string;
+}
+
+/** v14: 리스폰 카운트다운 */
+export interface RespawnCountdownPayload {
+  secondsLeft: number;
+}
+
+/** v14: 리스폰 완료 */
+export interface RespawnCompletePayload {
+  spawn: Position;
+  tick: number;
+  invincibleSec: number;
+  speedPenaltySec: number;
+  level: number;
+}
+
+/** v14: 국가별 점수 업데이트 */
+export interface NationScoreUpdatePayload {
+  epochNumber: number;
+  countryCode: string;
+  nationScores: Record<string, number>;
+  phase: EpochPhase;
+  timeRemaining: number;
+}
+
+/** v14: 국적 선택 페이로드 */
+export interface SelectNationalityPayload {
+  nationality: string;
+}
+
+/** v14: 국가 아레나 참가 페이로드 */
+export interface JoinCountryArenaPayload {
+  countryCode: string;
+  name: string;
+  skinId?: number;
+  appearance?: string;
+  nationality: string;
+}
+
 // ─── Socket.IO Event Maps ───
 
 export interface ClientToServerEvents {
@@ -391,6 +475,9 @@ export interface ClientToServerEvents {
   observe_game: (data: ObserveGamePayload, callback: (response: any) => void) => void;
   agent_command: (data: AgentCommandPayload) => void;
   set_training_profile: (data: SetTrainingProfilePayload) => void;
+  // v14: Epoch & Nationality
+  select_nationality: (data: SelectNationalityPayload) => void;
+  join_country_arena: (data: JoinCountryArenaPayload) => void;
 }
 
 export interface ServerToClientEvents {
@@ -421,4 +508,12 @@ export interface ServerToClientEvents {
   battle_complete: (data: BattleCompletePayload) => void;
   // v12: Ability triggered visual effect
   ability_triggered: (data: AbilityTriggeredPayload) => void;
+  // v14: Epoch & Respawn events
+  epoch_start: (data: EpochStartPayload) => void;
+  epoch_end: (data: EpochEndPayload) => void;
+  war_phase_start: (data: WarPhaseStartPayload) => void;
+  war_phase_end: (data: WarPhaseEndPayload) => void;
+  respawn_countdown: (data: RespawnCountdownPayload) => void;
+  respawn_complete: (data: RespawnCompletePayload) => void;
+  nation_score_update: (data: NationScoreUpdatePayload) => void;
 }

@@ -15,6 +15,10 @@ import type {
   RoomStatus, RoundEndPayload, LeaderboardEntry,
   LevelUpPayload, ArenaShrinkPayload, SynergyActivatedPayload,
   AgentNetworkData, BattleCompletePayload,
+  EpochStartPayload, EpochEndPayload,
+  WarPhaseStartPayload, WarPhaseEndPayload,
+  RespawnCountdownPayload, RespawnCompletePayload,
+  NationScoreUpdatePayload, EpochPhase,
 } from '@agent-survivor/shared';
 import type { CountryClientState } from '@/lib/globe-data';
 
@@ -75,6 +79,23 @@ function createInitialData(): GameData {
   };
 }
 
+// v14: Epoch state for client
+export interface EpochState {
+  epochNumber: number;
+  phase: EpochPhase;
+  timeRemaining: number;
+  phaseTimeRemaining: number;
+  pvpEnabled: boolean;
+  nationScores: Record<string, number>;
+}
+
+// v14: Respawn state
+export interface RespawnState {
+  countdown: number;
+  isRespawning: boolean;
+  invincibleSec: number;
+}
+
 export interface UiState {
   connected: boolean;
   alive: boolean;
@@ -99,6 +120,12 @@ export interface UiState {
   terrainTheme: string | null;
   isSpectating: boolean;
   battleComplete: BattleCompletePayload | null;
+  // v14: Epoch & Respawn
+  epoch: EpochState | null;
+  epochResult: EpochEndPayload | null;
+  respawnState: RespawnState | null;
+  warCountdown: number | null;
+  nationality: string | null;
 }
 
 export function useSocket() {
@@ -125,6 +152,11 @@ export function useSocket() {
     terrainTheme: null,
     isSpectating: false,
     battleComplete: null,
+    epoch: null,
+    epochResult: null,
+    respawnState: null,
+    warCountdown: null,
+    nationality: null,
   });
 
   useEffect(() => {
@@ -317,6 +349,10 @@ export function useSocket() {
         roundAnalysis: null,
         isSpectating: false,
         battleComplete: null,
+        epoch: null,
+        epochResult: null,
+        respawnState: null,
+        warCountdown: null,
       }));
     });
 
@@ -353,6 +389,91 @@ export function useSocket() {
     // v11: battle complete — cooldown ended, return to lobby
     socket.on('battle_complete', (data: BattleCompletePayload) => {
       setUiState(prev => ({ ...prev, battleComplete: data }));
+    });
+
+    // ─── v14: Epoch 이벤트 ───
+
+    socket.on('epoch_start', (data: EpochStartPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        epoch: {
+          epochNumber: data.epochNumber,
+          phase: data.phase,
+          timeRemaining: data.durationSec,
+          phaseTimeRemaining: data.peaceDurationSec,
+          pvpEnabled: false,
+          nationScores: {},
+        },
+        epochResult: null,
+        warCountdown: null,
+      }));
+    });
+
+    socket.on('epoch_end', (data: EpochEndPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        epochResult: data,
+        epoch: prev.epoch ? { ...prev.epoch, phase: 'end' as EpochPhase } : null,
+      }));
+    });
+
+    socket.on('war_phase_start', (data: WarPhaseStartPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        epoch: prev.epoch ? {
+          ...prev.epoch,
+          phase: 'war' as EpochPhase,
+          pvpEnabled: true,
+          phaseTimeRemaining: data.warDurationSec,
+        } : null,
+        warCountdown: null,
+      }));
+    });
+
+    socket.on('war_phase_end', (_data: WarPhaseEndPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        epoch: prev.epoch ? { ...prev.epoch, pvpEnabled: false } : null,
+      }));
+    });
+
+    // ─── v14: Respawn 이벤트 ───
+
+    socket.on('respawn_countdown', (data: RespawnCountdownPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        respawnState: { countdown: data.secondsLeft, isRespawning: false, invincibleSec: 0 },
+      }));
+    });
+
+    socket.on('respawn_complete', (data: RespawnCompletePayload) => {
+      dataRef.current.alive = true;
+      dataRef.current.deathInfo = null;
+      setUiState(prev => ({
+        ...prev,
+        alive: true,
+        deathInfo: null,
+        isSpectating: false,
+        respawnState: { countdown: 0, isRespawning: true, invincibleSec: data.invincibleSec },
+      }));
+      setTimeout(() => {
+        setUiState(prev => ({
+          ...prev,
+          respawnState: prev.respawnState ? { ...prev.respawnState, isRespawning: false } : null,
+        }));
+      }, 2000);
+    });
+
+    socket.on('nation_score_update', (data: NationScoreUpdatePayload) => {
+      setUiState(prev => ({
+        ...prev,
+        epoch: prev.epoch ? {
+          ...prev.epoch,
+          nationScores: data.nationScores,
+          phase: data.phase,
+          timeRemaining: data.timeRemaining,
+        } : null,
+      }));
     });
 
     // WebSocket 연결 시작 (ping은 GameSocket 내부에서 처리)
@@ -400,6 +521,10 @@ export function useSocket() {
       terrainTheme: null,
       isSpectating: false,
       battleComplete: null,
+      epoch: null,
+      epochResult: null,
+      respawnState: null,
+      warCountdown: null,
     }));
   }, []);
 
@@ -436,6 +561,34 @@ export function useSocket() {
     socketRef.current?.emit('set_training_profile', { agentId, profile });
   }, []);
 
+  /** v14: 국적 선택 */
+  const selectNationality = useCallback((nationality: string) => {
+    socketRef.current?.emit('select_nationality', { nationality });
+    setUiState(prev => ({ ...prev, nationality }));
+  }, []);
+
+  /** v14: 국가 아레나 참가 */
+  const joinCountryArena = useCallback((
+    countryCode: string,
+    name: string,
+    nationality: string,
+    skinId?: number,
+    appearance?: string,
+  ) => {
+    socketRef.current?.emit('join_country_arena', {
+      countryCode,
+      name,
+      skinId,
+      appearance,
+      nationality,
+    });
+  }, []);
+
+  /** v14: 에포크 결과 닫기 */
+  const dismissEpochResult = useCallback(() => {
+    setUiState(prev => ({ ...prev, epochResult: null }));
+  }, []);
+
   return {
     dataRef,
     uiState,
@@ -447,5 +600,8 @@ export function useSocket() {
     chooseUpgrade,
     dismissSynergyPopup,
     setTrainingProfile,
+    selectNationality,
+    joinCountryArena,
+    dismissEpochResult,
   };
 }

@@ -102,6 +102,9 @@ export interface Agent {
   joinedAt: number;
   lastInputSeq: number;
 
+  // v14: Nationality system
+  nationality?: string;     // ISO3 country code (e.g., "KOR", "USA")
+
   // 히트박스 (파생값)
   hitboxRadius: number;     // mass 기반 동적 크기
 

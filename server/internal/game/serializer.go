@@ -162,6 +162,10 @@ func serializeAgent(a *domain.Agent) domain.StateAgent {
 		sa.AbilityTargetY = math.Round(a.AbilityTargetY*10) / 10
 		sa.AbilityLevel = a.AbilityLevel
 	}
+	// v14: nationality
+	if a.Nationality != "" {
+		sa.Nationality = a.Nationality
+	}
 	return sa
 }
 
