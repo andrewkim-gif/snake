@@ -5,7 +5,7 @@
  * earth-blue-marble 텍스처 + GeoJSON earcut 삼각분할
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
 import { Canvas, useThree, useLoader, useFrame } from '@react-three/fiber';
 import { OrbitControls, Text, useTexture } from '@react-three/drei';
 import * as THREE from 'three';
@@ -43,6 +43,7 @@ import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 // v15 Phase 6: Camera auto-focus + Mobile LOD
 import { CameraAutoFocus } from '@/components/3d/CameraAutoFocus';
 import { useGlobeLOD } from '@/hooks/useGlobeLOD';
+import { geoToXYZ } from '@/lib/globe-utils';
 
 // v17: Intro camera animation
 import { GlobeIntroCamera } from '@/components/3d/GlobeIntroCamera';
@@ -78,18 +79,7 @@ const BG = '#030305';
 const RADIUS = 100;
 const ALT = 0.15; // 구체 표면 밀착 (최소 z-fighting 방지 오프셋)
 
-// ─── 좌표 변환: (lon, lat) → 구면 (x, y, z) ───
-
-function geoToXYZ(
-  lon: number, lat: number, r: number,
-  out: Float32Array, offset: number,
-) {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lon + 180) * (Math.PI / 180);
-  out[offset]     = -r * Math.sin(phi) * Math.cos(theta);
-  out[offset + 1] =  r * Math.cos(phi);
-  out[offset + 2] =  r * Math.sin(phi) * Math.sin(theta);
-}
+// ─── 좌표 변환: geoToXYZ → @/lib/globe-utils (v20 통합) ───
 
 // ─── 역변환: 구면 (x, y, z) → (lon, lat) ───
 
@@ -1339,11 +1329,13 @@ function GlobeScene({
 
       {/* v17: Conflict indicators — "분쟁중" badges on active country arenas */}
       {centroidsMap.size > 0 && activeConflictCountries.size > 0 && (
-        <GlobeConflictIndicators
-          countryCentroids={centroidsMap}
-          activeConflictCountries={activeConflictCountries}
-          globeRadius={RADIUS}
-        />
+        <Suspense fallback={null}>
+          <GlobeConflictIndicators
+            countryCentroids={centroidsMap}
+            activeConflictCountries={activeConflictCountries}
+            globeRadius={RADIUS}
+          />
+        </Suspense>
       )}
 
       {/* v15 Phase 5: Trade route bezier lines (해상=파란 점선, 육상=초록 실선) */}

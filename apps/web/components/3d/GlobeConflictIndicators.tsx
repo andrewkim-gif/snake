@@ -1,117 +1,64 @@
 'use client';
 
 /**
- * GlobeConflictIndicators — 3D 지구본 위 "분쟁중" 배지 표시 (v17)
- *
- * 책임: 활성 분쟁 국가(playing/countdown 상태) 위에 빨간 "분쟁중" 펄스 배지 표시
+ * GlobeConflictIndicators — 3D 지구본 표면에 전투 아이콘 표시 (v17)
  *
  * 구현:
- *   - CanvasTexture 프리렌더: 256×48px "분쟁중" 배지 (1회)
- *   - InstancedMesh: 최대 50개, ShaderMaterial (billboard + pulse + glow)
- *   - 뒷면 오클루전: centroid normal · camDir < threshold → 숨김
- *   - 거리 기반 fade + 중심 페이드
+ *   - Gemini 생성 아이콘 텍스처 (conflict-icon-256.png) — 교차 검 + 폭발
+ *   - 2-Layer InstancedMesh:
+ *     Layer 1: 아이콘 (표면 부착, 천천히 회전)
+ *     Layer 2: 글로우 링 (확장/수축 펄스)
+ *   - 뒷면 오클루전 + 거리 기반 fade
  *
- * 최적화: Canvas 1회 렌더, GPU 단일 드로콜, ~50KB 메모리
+ * 최적화: GPU 2 드로콜, ~100KB 메모리
  */
 
 import { useRef, useMemo, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame, useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
+import { latLngToXYZ } from '@/lib/globe-utils';
 
 // ─── Constants ───
 
-const MAX_BADGES = 50;
-const BADGE_W = 256;
-const BADGE_H = 48;
+const MAX_ICONS = 50;
 
-/** Billboard 월드 크기 */
-const WORLD_W = 6.0;
-const WORLD_H = WORLD_W * (BADGE_H / BADGE_W);
+/** 아이콘 월드 크기 (정사각형) */
+const ICON_SIZE = 5.0;
 
-/** centroid 높이 오프셋 (구체 표면 위) */
-const BADGE_ALT = 5.0;
-/** 국가 라벨보다 위에 배치 */
-const BADGE_UP_OFFSET = 3.5;
+/** centroid 높이 오프셋 (구체 표면 바로 위) */
+const SURFACE_ALT = 1.5;
+
+/** 글로우 링 크기 (아이콘보다 큼) */
+const RING_SIZE = 10.0;
 
 /** 뒷면 오클루전 임계값 */
 const BACKFACE_THRESHOLD = 0.05;
-/** 카메라 거리 최대 (배지 숨김) */
+/** 카메라 거리 범위 */
 const CAM_HIDE_DIST = 400;
 const CAM_FADE_START = 280;
 
 // ─── Types ───
 
 export interface GlobeConflictIndicatorsProps {
-  /** iso3 → [lat, lng] centroid 좌표 맵 */
   countryCentroids: Map<string, [number, number]>;
-  /** ISO3 set of countries with active conflicts */
   activeConflictCountries: Set<string>;
-  /** 글로브 반경 (기본 100) */
   globeRadius?: number;
 }
 
 // ─── 좌표 변환 ───
-
-function latLngToXYZ(lat: number, lng: number, r: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  return new THREE.Vector3(
-    -r * Math.sin(phi) * Math.cos(theta),
-     r * Math.cos(phi),
-     r * Math.sin(phi) * Math.sin(theta),
-  );
-}
+// latLngToXYZ → @/lib/globe-utils (v20 통합)
 
 // ─── 재사용 임시 객체 ───
 
 const _obj = new THREE.Object3D();
 const _camDir = new THREE.Vector3();
-const _upVec = new THREE.Vector3();
+const _lookTarget = new THREE.Vector3();
+const _q = new THREE.Quaternion();
+const _axis = new THREE.Vector3();
 
-// ─── Canvas 프리렌더: "분쟁중" 배지 (1회) ───
+// ─── Icon Shader (표면 부착 + 회전 + 펄스) ───
 
-function createBadgeTexture(): THREE.CanvasTexture {
-  const canvas = document.createElement('canvas');
-  canvas.width = BADGE_W;
-  canvas.height = BADGE_H;
-  const ctx = canvas.getContext('2d')!;
-
-  // 배경: 다크 레드 반투명 라운드 사각형
-  const padX = 4;
-  const padY = 4;
-  ctx.fillStyle = 'rgba(140, 20, 20, 0.85)';
-  ctx.beginPath();
-  ctx.roundRect(padX, padY, BADGE_W - padX * 2, BADGE_H - padY * 2, 8);
-  ctx.fill();
-
-  // 테두리: 밝은 빨간
-  ctx.strokeStyle = 'rgba(255, 80, 60, 0.9)';
-  ctx.lineWidth = 2;
-  ctx.stroke();
-
-  // 텍스트: "⚔ 분쟁중" (Bold 24px, 흰색)
-  ctx.font = 'bold 22px "Noto Sans KR", "Apple SD Gothic Neo", sans-serif';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-
-  // 텍스트 글로우
-  ctx.shadowColor = 'rgba(255, 60, 30, 0.8)';
-  ctx.shadowBlur = 8;
-  ctx.fillStyle = '#FFFFFF';
-  ctx.fillText('⚔ 분쟁중', BADGE_W / 2, BADGE_H / 2);
-
-  // 글로우 리셋
-  ctx.shadowBlur = 0;
-
-  const tex = new THREE.CanvasTexture(canvas);
-  tex.minFilter = THREE.LinearFilter;
-  tex.magFilter = THREE.LinearFilter;
-  return tex;
-}
-
-// ─── Shader ───
-
-const vertexShader = /* glsl */ `
+const iconVertexShader = /* glsl */ `
   attribute float alphaVal;
   varying vec2 vUv;
   varying float vAlpha;
@@ -119,34 +66,93 @@ const vertexShader = /* glsl */ `
   void main() {
     vUv = uv;
     vAlpha = alphaVal;
-
     vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
     gl_Position = projectionMatrix * mvPosition;
   }
 `;
 
-const fragmentShader = /* glsl */ `
-  uniform sampler2D badge;
+const iconFragmentShader = /* glsl */ `
+  uniform sampler2D uIcon;
   uniform float uTime;
   varying vec2 vUv;
   varying float vAlpha;
 
   void main() {
-    vec4 texColor = texture2D(badge, vUv);
-    if (texColor.a < 0.05) discard;
+    vec4 texColor = texture2D(uIcon, vUv);
 
-    // 1.5Hz 펄스 (부드러운 밝기 변화)
-    float pulse = 0.7 + 0.3 * sin(uTime * 9.42); // 2π * 1.5 ≈ 9.42
+    // 검은 배경을 투명으로 처리 (luminance threshold)
+    float lum = dot(texColor.rgb, vec3(0.299, 0.587, 0.114));
+    if (lum < 0.04) discard;
 
-    // 가장자리 글로우 (UV 기반 거리)
-    vec2 center = vec2(0.5, 0.5);
-    float edgeDist = length(vUv - center);
-    vec3 glow = vec3(1.0, 0.3, 0.1) * smoothstep(0.5, 0.0, edgeDist) * 0.3;
+    // 1.2Hz 펄스 (레티클 느낌 — 안정적이지만 살짝 깜빡)
+    float pulse = 0.85 + 0.15 * sin(uTime * 7.54);
 
-    vec3 color = texColor.rgb * pulse + glow;
-    float alpha = texColor.a * vAlpha * pulse;
+    // 밝기 부스트 + 빨간색 강조
+    vec3 boosted = texColor.rgb * 1.5;
+    // 빨간 채널 추가 강조 (레티클 선이 더 선명하게)
+    boosted.r = min(boosted.r * 1.2, 1.0);
 
+    vec3 color = boosted * pulse;
+
+    // 원형 마스크 (가장자리를 부드럽게)
+    float dist = length(vUv - vec2(0.5));
+    float circleMask = smoothstep(0.5, 0.42, dist);
+
+    float alpha = vAlpha * circleMask * (pulse * 0.7 + 0.3);
     gl_FragColor = vec4(color, alpha);
+  }
+`;
+
+// ─── Ring Shader (확장/수축 글로우 링) ───
+
+const ringVertexShader = /* glsl */ `
+  attribute float alphaVal;
+  varying vec2 vUv;
+  varying float vAlpha;
+
+  void main() {
+    vUv = uv;
+    vAlpha = alphaVal;
+    vec4 mvPosition = modelViewMatrix * instanceMatrix * vec4(position, 1.0);
+    gl_Position = projectionMatrix * mvPosition;
+  }
+`;
+
+const ringFragmentShader = /* glsl */ `
+  uniform float uTime;
+  varying vec2 vUv;
+  varying float vAlpha;
+
+  void main() {
+    vec2 center = vec2(0.5, 0.5);
+    float dist = length(vUv - center) * 2.0; // 0~1 범위
+
+    // 펄스 링: 중심에서 확장되는 동심원
+    float ringPhase = fract(uTime * 0.5);   // 2초 주기 확장
+    float ring1 = smoothstep(0.02, 0.0, abs(dist - ringPhase * 1.0)) * (1.0 - ringPhase);
+
+    float ringPhase2 = fract(uTime * 0.5 + 0.5); // 1초 offset
+    float ring2 = smoothstep(0.02, 0.0, abs(dist - ringPhase2 * 1.0)) * (1.0 - ringPhase2);
+
+    float rings = ring1 + ring2;
+
+    // 중심 글로우
+    float centerGlow = smoothstep(0.4, 0.0, dist) * 0.3;
+
+    // 외곽 페이드 (원 바깥 제거)
+    float circleMask = smoothstep(1.0, 0.9, dist);
+
+    // 색상: 빨강~오렌지 그라데이션
+    vec3 color = mix(
+      vec3(1.0, 0.15, 0.0),  // 진한 빨강
+      vec3(1.0, 0.5, 0.0),   // 오렌지
+      dist
+    );
+
+    float alpha = (rings * 0.8 + centerGlow) * circleMask * vAlpha;
+
+    if (alpha < 0.01) discard;
+    gl_FragColor = vec4(color * 1.5, alpha);
   }
 `;
 
@@ -157,47 +163,69 @@ export function GlobeConflictIndicators({
   activeConflictCountries,
   globeRadius = 100,
 }: GlobeConflictIndicatorsProps) {
-  const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const iconMeshRef = useRef<THREE.InstancedMesh>(null!);
+  const ringMeshRef = useRef<THREE.InstancedMesh>(null!);
   const { camera } = useThree();
 
-  // 배지 텍스처 (1회 생성)
-  const badgeTexture = useMemo(() => createBadgeTexture(), []);
+  // Gemini 생성 아이콘 텍스처
+  const iconTexture = useLoader(
+    THREE.TextureLoader,
+    '/assets/generated/conflict/tactical-reticle-256.png'
+  );
 
-  // per-instance alpha 버퍼
-  const alphaBuf = useMemo(() => new Float32Array(MAX_BADGES).fill(1), []);
+  useEffect(() => {
+    if (iconTexture) {
+      iconTexture.minFilter = THREE.LinearFilter;
+      iconTexture.magFilter = THREE.LinearFilter;
+      iconTexture.colorSpace = THREE.SRGBColorSpace;
+    }
+  }, [iconTexture]);
 
-  // Geometry + Material
-  const geometry = useMemo(() => {
-    return new THREE.PlaneGeometry(WORLD_W, WORLD_H);
-  }, []);
+  // per-instance alpha 버퍼 (아이콘 + 링 공유)
+  const alphaBuf = useMemo(() => new Float32Array(MAX_ICONS).fill(1), []);
 
-  const material = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        badge: { value: badgeTexture },
-        uTime: { value: 0 },
-      },
-      vertexShader,
-      fragmentShader,
-      transparent: true,
-      depthWrite: false,
-      side: THREE.DoubleSide,
-    });
-  }, [badgeTexture]);
+  // Geometry
+  const iconGeo = useMemo(() => new THREE.PlaneGeometry(ICON_SIZE, ICON_SIZE), []);
+  const ringGeo = useMemo(() => new THREE.PlaneGeometry(RING_SIZE, RING_SIZE), []);
+
+  // Materials
+  const iconMat = useMemo(() => new THREE.ShaderMaterial({
+    uniforms: {
+      uIcon: { value: iconTexture },
+      uTime: { value: 0 },
+    },
+    vertexShader: iconVertexShader,
+    fragmentShader: iconFragmentShader,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }), [iconTexture]);
+
+  const ringMat = useMemo(() => new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+    },
+    vertexShader: ringVertexShader,
+    fragmentShader: ringFragmentShader,
+    transparent: true,
+    depthWrite: false,
+    side: THREE.DoubleSide,
+  }), []);
 
   // 정리
   useEffect(() => {
     return () => {
-      geometry.dispose();
-      material.dispose();
-      badgeTexture.dispose();
+      iconGeo.dispose();
+      ringGeo.dispose();
+      iconMat.dispose();
+      ringMat.dispose();
     };
-  }, [geometry, material, badgeTexture]);
+  }, [iconGeo, ringGeo, iconMat, ringMat]);
 
-  // centroid 캐시: iso3 → { normal, pos }
+  // centroid 캐시
   const centroidCache = useMemo(() => {
     const cache = new Map<string, { normal: THREE.Vector3; pos: THREE.Vector3 }>();
-    const r = globeRadius + BADGE_ALT;
+    const r = globeRadius + SURFACE_ALT;
     countryCentroids.forEach(([lat, lng], iso3) => {
       const pos = latLngToXYZ(lat, lng, r);
       const normal = pos.clone().normalize();
@@ -206,39 +234,44 @@ export function GlobeConflictIndicators({
     return cache;
   }, [countryCentroids, globeRadius]);
 
-  // ─── useFrame: 위치 + billboard + 애니메이션 ───
+  // ─── useFrame ───
   useFrame(({ clock }) => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
+    const iconMesh = iconMeshRef.current;
+    const ringMesh = ringMeshRef.current;
+    if (!iconMesh || !ringMesh) return;
 
-    // 셰이더 시간 업데이트
-    material.uniforms.uTime.value = clock.getElapsedTime();
+    const t = clock.getElapsedTime();
+    iconMat.uniforms.uTime.value = t;
+    ringMat.uniforms.uTime.value = t;
 
     const camDist = camera.position.length();
 
-    // 카메라 거리 초과 시 전부 숨김
     if (camDist > CAM_HIDE_DIST || activeConflictCountries.size === 0) {
-      mesh.count = 0;
+      iconMesh.count = 0;
+      ringMesh.count = 0;
       return;
     }
 
-    // 전체 페이드
     const zoomFade = 1 - THREE.MathUtils.clamp(
       (camDist - CAM_FADE_START) / (CAM_HIDE_DIST - CAM_FADE_START), 0, 1,
     );
 
-    // lazy init: alpha 어트리뷰트
-    if (!mesh.geometry.getAttribute('alphaVal')) {
-      mesh.geometry.setAttribute('alphaVal',
+    // lazy init alpha attribute
+    if (!iconMesh.geometry.getAttribute('alphaVal')) {
+      iconMesh.geometry.setAttribute('alphaVal',
         new THREE.InstancedBufferAttribute(alphaBuf, 1));
+    }
+    if (!ringMesh.geometry.getAttribute('alphaVal')) {
+      ringMesh.geometry.setAttribute('alphaVal',
+        new THREE.InstancedBufferAttribute(new Float32Array(alphaBuf), 1));
     }
 
     _camDir.copy(camera.position).normalize();
 
-    let visibleIdx = 0;
+    let idx = 0;
 
     for (const iso3 of activeConflictCountries) {
-      if (visibleIdx >= MAX_BADGES) break;
+      if (idx >= MAX_ICONS) break;
 
       const cached = centroidCache.get(iso3);
       if (!cached) continue;
@@ -247,45 +280,82 @@ export function GlobeConflictIndicators({
       const dot = cached.normal.dot(_camDir);
       if (dot < BACKFACE_THRESHOLD) continue;
 
-      // Billboard 위치 — 국가 라벨 위에 배치
+      // ─── 아이콘: 구체 표면에 부착 (법선 방향 lookAt) ───
       _obj.position.copy(cached.pos);
-      _obj.quaternion.copy(camera.quaternion);
 
-      // 카메라-로컬 상향 오프셋 (국가 이름 텍스트 위로)
-      _upVec.set(0, BADGE_UP_OFFSET, 0).applyQuaternion(camera.quaternion);
-      _obj.position.add(_upVec);
+      // 법선 방향으로 lookAt (표면에 평행하게 놓임)
+      _lookTarget.copy(cached.pos).add(cached.normal);
+      _obj.lookAt(_lookTarget);
+
+      // 법선 축 기준으로 천천히 회전 (개별 아이콘마다 다른 속도)
+      const rotSpeed = 0.3 + (iso3.charCodeAt(0) % 10) * 0.05;
+      _q.setFromAxisAngle(cached.normal, t * rotSpeed);
+      _obj.quaternion.premultiply(_q);
 
       // 거리 기반 스케일
       const distT = THREE.MathUtils.clamp((camDist - 150) / 250, 0, 1);
-      const distScale = THREE.MathUtils.lerp(2.0, 0.8, distT);
-
-      // 뒷면 페이드
+      const distScale = THREE.MathUtils.lerp(1.5, 0.6, distT);
       const dotFade = THREE.MathUtils.clamp((dot - BACKFACE_THRESHOLD) / 0.3, 0, 1);
-
       const scale = distScale * dotFade;
+
       _obj.scale.set(scale, scale, 1);
       _obj.updateMatrix();
-      mesh.setMatrixAt(visibleIdx, _obj.matrix);
+      iconMesh.setMatrixAt(idx, _obj.matrix);
+
+      // ─── 글로우 링: 같은 위치, 약간 더 크게 ───
+      // 링은 회전 없이 표면에 평행
+      _obj.position.copy(cached.pos);
+      _lookTarget.copy(cached.pos).add(cached.normal);
+      _obj.lookAt(_lookTarget);
+
+      // 링 스케일 펄스
+      const ringPulse = 1.0 + 0.15 * Math.sin(t * 3.0);
+      const ringScale = scale * ringPulse;
+      _obj.scale.set(ringScale, ringScale, 1);
+      _obj.updateMatrix();
+      ringMesh.setMatrixAt(idx, _obj.matrix);
 
       // alpha
-      alphaBuf[visibleIdx] = dotFade * zoomFade;
+      alphaBuf[idx] = dotFade * zoomFade;
 
-      visibleIdx++;
+      idx++;
     }
 
-    mesh.count = visibleIdx;
-    mesh.instanceMatrix.needsUpdate = true;
+    iconMesh.count = idx;
+    ringMesh.count = idx;
+    iconMesh.instanceMatrix.needsUpdate = true;
+    ringMesh.instanceMatrix.needsUpdate = true;
 
-    const alphaAttr = mesh.geometry.getAttribute('alphaVal') as THREE.InstancedBufferAttribute;
-    if (alphaAttr) alphaAttr.needsUpdate = true;
+    const iconAlpha = iconMesh.geometry.getAttribute('alphaVal') as THREE.InstancedBufferAttribute;
+    if (iconAlpha) {
+      iconAlpha.needsUpdate = true;
+    }
+    const ringAlpha = ringMesh.geometry.getAttribute('alphaVal') as THREE.InstancedBufferAttribute;
+    if (ringAlpha) {
+      // 링은 alpha를 공유하되 alpha 값 복사
+      for (let i = 0; i < idx; i++) {
+        (ringAlpha.array as Float32Array)[i] = alphaBuf[i] * 0.6; // 링은 좀 더 투명
+      }
+      ringAlpha.needsUpdate = true;
+    }
   });
 
   return (
-    <instancedMesh
-      ref={meshRef}
-      args={[geometry, material, MAX_BADGES]}
-      frustumCulled={false}
-      renderOrder={110}
-    />
+    <group>
+      {/* 글로우 링 (아이콘 뒤에 렌더) */}
+      <instancedMesh
+        ref={ringMeshRef}
+        args={[ringGeo, ringMat, MAX_ICONS]}
+        frustumCulled={false}
+        renderOrder={109}
+      />
+      {/* 전투 아이콘 */}
+      <instancedMesh
+        ref={iconMeshRef}
+        args={[iconGeo, iconMat, MAX_ICONS]}
+        frustumCulled={false}
+        renderOrder={110}
+      />
+    </group>
   );
 }

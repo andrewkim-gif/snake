@@ -1,11 +1,14 @@
 'use client';
 
 /**
- * useGlobeLOD — 디바이스 성능 기반 LOD(Level of Detail) 설정 훅 (v15 Phase 6)
+ * useGlobeLOD — 디바이스 성능 기반 LOD(Level of Detail) 설정 훅 (v15 Phase 6 + v20 landmark 확장)
  *
  * navigator.hardwareConcurrency + 화면 크기로 성능 등급 판별:
- * - Desktop (고성능): 모든 이펙트 활성, 195개국 라벨
- * - Mobile (저성능): 파티클 50%, 라벨 상위 30개국, 무역라인/안개/충격파 비활성화
+ * - Desktop (고성능): 모든 이펙트 활성, 195개국 라벨, 42개 랜드마크
+ * - Mobile (저성능): 파티클 50%, 라벨 상위 30개국, 15개 랜드마크, 무역라인/안개/충격파 비활성화
+ *
+ * ⚠️ 참고: useGlobeLOD(2-tier)와 performance.ts(3-tier AdaptiveQuality)는 완전 별개 시스템.
+ *    랜드마크는 useGlobeLOD만 사용. AdaptiveQuality 연동은 v20 Phase 5 별도 브리지.
  *
  * 반환값: GlobeLODConfig 객체 (각 컴포넌트에서 참조)
  */
@@ -33,6 +36,13 @@ export interface GlobeLODConfig {
   particleMultiplier: number;
   /** 성능 등급 문자열 (디버그용) */
   tier: 'desktop' | 'mobile';
+
+  // ─── v20 Landmark System ───
+
+  /** 표시할 최대 랜드마크 수 (모바일: 15, 데스크탑: 42) */
+  maxLandmarks: number;
+  /** 랜드마크 디테일 수준 (모바일: 'low', 데스크탑: 'high') */
+  landmarkDetail: 'high' | 'low';
 }
 
 // ─── 감지 함수 ───
@@ -66,6 +76,9 @@ const DESKTOP_CONFIG: GlobeLODConfig = {
   enableEventPulse: true,
   particleMultiplier: 1.0,
   tier: 'desktop',
+  // v20 Landmark
+  maxLandmarks: 42,
+  landmarkDetail: 'high',
 };
 
 const MOBILE_CONFIG: GlobeLODConfig = {
@@ -78,6 +91,9 @@ const MOBILE_CONFIG: GlobeLODConfig = {
   enableEventPulse: true,  // 가벼운 링 이펙트는 유지
   particleMultiplier: 0.5,
   tier: 'mobile',
+  // v20 Landmark
+  maxLandmarks: 15,
+  landmarkDetail: 'low',
 };
 
 // ─── Hook ───

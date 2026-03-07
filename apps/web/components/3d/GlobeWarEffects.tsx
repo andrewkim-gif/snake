@@ -16,6 +16,7 @@
 import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { latLngToVector3 } from '@/lib/globe-utils';
 
 // ─── Types ───
 
@@ -90,17 +91,7 @@ const CAMERA_SHAKE_FREQUENCY = 40;  // sin wave frequency
 
 // ─── Helpers ───
 
-/**
- * Convert lat/lng to 3D position on a sphere.
- */
-function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  const x = -radius * Math.sin(phi) * Math.cos(theta);
-  const y = radius * Math.cos(phi);
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  return new THREE.Vector3(x, y, z);
-}
+// latLngToVector3 → @/lib/globe-utils (v20 통합)
 
 /**
  * Create a curved arc between two points on a sphere.

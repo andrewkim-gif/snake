@@ -19,6 +19,7 @@
 import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { latLngToXYZ } from '@/lib/globe-utils';
 import { getCountryByISO3 } from '@/lib/country-data';
 import type { FlagAtlasResult } from '@/lib/flag-atlas';
 import type { CountryClientState } from '@/lib/globe-data';
@@ -89,16 +90,7 @@ interface LabelEntry {
 }
 
 // ─── 좌표 변환 ───
-
-function latLngToXYZ(lat: number, lng: number, r: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  return new THREE.Vector3(
-    -r * Math.sin(phi) * Math.cos(theta),
-     r * Math.cos(phi),
-     r * Math.sin(phi) * Math.sin(theta),
-  );
-}
+// latLngToXYZ → @/lib/globe-utils (v20 통합)
 
 // ─── 재사용 임시 객체 (GC 방지) ───
 

@@ -13,6 +13,7 @@
 import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { latLngToVector3 } from '@/lib/globe-utils';
 
 // ─── Types ───
 
@@ -50,16 +51,7 @@ const HEAD_COLOR = new THREE.Color(0xff4422);
 const TAIL_COLOR = new THREE.Color(0xff8800);
 
 // ─── Helpers ───
-
-function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  return new THREE.Vector3(
-    -radius * Math.sin(phi) * Math.cos(theta),
-    radius * Math.cos(phi),
-    radius * Math.sin(phi) * Math.sin(theta),
-  );
-}
+// latLngToVector3 → @/lib/globe-utils (v20 통합)
 
 /** Quadratic bezier point along parabolic arc on the globe */
 function getArcPoint(

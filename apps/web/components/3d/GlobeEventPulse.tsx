@@ -16,6 +16,7 @@
 import { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { latLngToVector3 } from '@/lib/globe-utils';
 
 // ─── Types ───
 
@@ -59,16 +60,7 @@ const EVENT_COLORS: Record<string, THREE.Color> = {
 };
 
 // ─── Helpers ───
-
-/** lat/lng → 3D 구면 좌표 */
-function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  const x = -radius * Math.sin(phi) * Math.cos(theta);
-  const y = radius * Math.cos(phi);
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  return new THREE.Vector3(x, y, z);
-}
+// latLngToVector3 → @/lib/globe-utils (v20 통합)
 
 /** 이벤트 타입 → 색상 */
 function getEventColor(type: string): THREE.Color {

@@ -13,6 +13,7 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { latLngToVector3 } from '@/lib/globe-utils';
 import type { TradeRouteData } from '@/hooks/useSocket';
 
 // ─── Types ───
@@ -43,16 +44,7 @@ const CARGO_COLOR_SEA = new THREE.Color(0x66bbff);
 const CARGO_COLOR_LAND = new THREE.Color(0x66ee88);
 
 // ─── Helpers ───
-
-/** lat/lng → 3D 구면 좌표 */
-function latLngToVector3(lat: number, lng: number, radius: number): THREE.Vector3 {
-  const phi = (90 - lat) * (Math.PI / 180);
-  const theta = (lng + 180) * (Math.PI / 180);
-  const x = -radius * Math.sin(phi) * Math.cos(theta);
-  const y = radius * Math.cos(phi);
-  const z = radius * Math.sin(phi) * Math.sin(theta);
-  return new THREE.Vector3(x, y, z);
-}
+// latLngToVector3 → @/lib/globe-utils (v20 통합)
 
 /** 두 구면 점 사이의 베지어 곡선 포인트 배열 생성 */
 function createBezierArcPoints(
