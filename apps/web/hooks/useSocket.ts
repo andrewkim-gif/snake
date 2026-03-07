@@ -637,6 +637,9 @@ export function useSocket() {
             color: '',  // GlobeDominationLayer의 getNationColor가 처리
             transitionProgress: existing ? 0 : 1,
             previousColor: existing?.color ?? '',
+            // v15 Phase 3: 분쟁 상태 + 이전 레벨 추적
+            contested: d.contested ?? false,
+            previousLevel: existing?.level ?? 'none',
           });
         }
         return { ...prev, dominationStates: next };
