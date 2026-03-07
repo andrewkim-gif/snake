@@ -47,6 +47,9 @@ import { geoToXYZ } from '@/lib/globe-utils';
 
 // v17: Intro camera animation
 import { GlobeIntroCamera } from '@/components/3d/GlobeIntroCamera';
+
+// v20: Landmark sprites on globe surface
+import { GlobeLandmarks } from '@/components/3d/GlobeLandmarks';
 // v17: Conflict indicators on globe
 import { GlobeConflictIndicators } from '@/components/3d/GlobeConflictIndicators';
 
@@ -1326,6 +1329,13 @@ function GlobeScene({
           maxLabels={lodConfig.maxLabels}
         />
       )}
+
+      {/* v20: Landmark sprites (Far LOD — Tier 1 icons on globe surface) */}
+      <GlobeLandmarks
+        globeRadius={RADIUS}
+        maxLandmarks={lodConfig.maxLandmarks}
+        landmarkDetail={lodConfig.landmarkDetail}
+      />
 
       {/* v17: Conflict indicators — "분쟁중" badges on active country arenas */}
       {centroidsMap.size > 0 && activeConflictCountries.size > 0 && (
