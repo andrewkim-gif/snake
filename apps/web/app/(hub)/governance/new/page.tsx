@@ -2,9 +2,7 @@
 
 /**
  * /governance/new — 새 제안 작성 페이지
- * ProposalForm 컴포넌트 연결
- * URL param ?country=KOR → 해당 국가 pre-select
- * 5종 정책 카테고리 선택
+ * DashboardPage(maxWidth 700) + mock data 모듈 사용
  */
 
 import { Suspense, useCallback, useState } from 'react';
@@ -12,27 +10,15 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
-import { PageHeader } from '@/components/hub';
+import { DashboardPage } from '@/components/hub';
+import { GOVERNANCE_COUNTRIES } from '@/lib/mock-data';
 import { Plus } from 'lucide-react';
 import type { ProposalType } from '@/components/governance/types';
 
-// Lazy load ProposalForm
 const ProposalForm = dynamic(
   () => import('@/components/governance/ProposalForm'),
   { ssr: false }
 );
-
-// 지원 국가 목록 (mock)
-const COUNTRIES = [
-  { iso3: 'KOR', name: 'Republic of Korea', symbol: '$KOR' },
-  { iso3: 'USA', name: 'United States', symbol: '$USA' },
-  { iso3: 'JPN', name: 'Japan', symbol: '$JPN' },
-  { iso3: 'GBR', name: 'United Kingdom', symbol: '$GBR' },
-  { iso3: 'DEU', name: 'Germany', symbol: '$DEU' },
-  { iso3: 'FRA', name: 'France', symbol: '$FRA' },
-  { iso3: 'CHN', name: 'China', symbol: '$CHN' },
-  { iso3: 'BRA', name: 'Brazil', symbol: '$BRA' },
-] as const;
 
 function NewProposalPageInner() {
   const tGov = useTranslations('governance');
@@ -40,9 +26,8 @@ function NewProposalPageInner() {
   const router = useRouter();
   const countryParam = searchParams.get('country')?.toUpperCase() ?? '';
 
-  // 국가 선택 상태: URL param에서 pre-select
   const [selectedCountry, setSelectedCountry] = useState(
-    COUNTRIES.find((c) => c.iso3 === countryParam) ?? null
+    GOVERNANCE_COUNTRIES.find((c) => c.iso3 === countryParam) ?? null
   );
   const [submitted, setSubmitted] = useState(false);
 
@@ -53,10 +38,8 @@ function NewProposalPageInner() {
       description: string;
       proposalType: ProposalType;
     }) => {
-      // Mock 제출: 실제로는 블록체인 트랜잭션
       console.log('[Governance] New proposal submitted:', data);
       setSubmitted(true);
-      // 3초 후 목록으로 이동
       setTimeout(() => {
         router.push(`/governance?country=${data.iso3}`);
       }, 3000);
@@ -68,7 +51,6 @@ function NewProposalPageInner() {
     router.push('/governance');
   }, [router]);
 
-  // 제출 완료 상태
   if (submitted) {
     return (
       <div
@@ -119,15 +101,14 @@ function NewProposalPageInner() {
   }
 
   return (
-    <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-      <PageHeader
-        icon={Plus}
-        title={tGov('newProposal')}
-        description={tGov('createProposal')}
-        accentColor={SK.green}
-        heroImage="/images/hero-governance.png"
-      />
-
+    <DashboardPage
+      icon={Plus}
+      title={tGov('newProposal')}
+      description={tGov('createProposal')}
+      accentColor={SK.green}
+      heroImage="/images/hero-governance.png"
+      maxWidth={700}
+    >
       {/* 국가 선택 (ProposalForm 전에) */}
       {!selectedCountry && (
         <div
@@ -160,7 +141,7 @@ function NewProposalPageInner() {
               gap: '8px',
             }}
           >
-            {COUNTRIES.map((country) => (
+            {GOVERNANCE_COUNTRIES.map((country) => (
               <button
                 key={country.iso3}
                 onClick={() => setSelectedCountry(country)}
@@ -205,7 +186,6 @@ function NewProposalPageInner() {
       {/* ProposalForm — 국가 선택 후 표시 */}
       {selectedCountry && (
         <>
-          {/* 선택된 국가 표시 */}
           <div
             style={{
               display: 'inline-flex',
@@ -248,7 +228,7 @@ function NewProposalPageInner() {
           />
         </>
       )}
-    </div>
+    </DashboardPage>
   );
 }
 

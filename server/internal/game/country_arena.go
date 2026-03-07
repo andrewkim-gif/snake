@@ -31,6 +31,9 @@ type CountryArenaManager struct {
 
 	// Epoch event callback (bridges epoch events to ws layer)
 	OnEpochEvents func(events []EpochEvent)
+
+	// Capture point event callback (bridges capture events to ws layer)
+	OnCaptureEvent func(event CapturePointEvent)
 }
 
 // QueueEntry represents a player waiting to join a full arena.
@@ -103,6 +106,12 @@ func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string
 		NationScore:   nationScore,
 	}
 
+	// Wire CapturePoints.OnEvent callback to forward capture events
+	capturePoints.OnEvent = cam.forwardCaptureEvent
+
+	// Start the epoch cycle so Tick() processes phase transitions
+	epoch.Start()
+
 	cam.arenas[countryCode] = wrapper
 
 	slog.Info("country arena created (lazy)",
@@ -154,6 +163,13 @@ func (cam *CountryArenaManager) JoinCountryArena(clientID, countryCode, countryN
 			Domination:    domination,
 			NationScore:   nationScore,
 		}
+
+		// Wire CapturePoints.OnEvent callback to forward capture events
+		capturePoints.OnEvent = cam.forwardCaptureEvent
+
+		// Start the epoch cycle so Tick() processes phase transitions
+		epoch.Start()
+
 		cam.arenas[countryCode] = arena
 	}
 
@@ -332,7 +348,14 @@ func (cam *CountryArenaManager) forwardEpochEvents(events []EpochEvent) {
 	}
 }
 
-// TickActiveArenas ticks only active arenas' epoch managers.
+// forwardCaptureEvent bridges capture point events to the external callback.
+func (cam *CountryArenaManager) forwardCaptureEvent(event CapturePointEvent) {
+	if cam.OnCaptureEvent != nil {
+		cam.OnCaptureEvent(event)
+	}
+}
+
+// TickActiveArenas ticks only active arenas' epoch managers and capture point systems.
 // Called from the main game loop at 20Hz.
 func (cam *CountryArenaManager) TickActiveArenas(tick uint64) {
 	cam.mu.RLock()
@@ -341,6 +364,25 @@ func (cam *CountryArenaManager) TickActiveArenas(tick uint64) {
 	for _, arena := range cam.arenas {
 		if arena.PlayerCount > 0 {
 			arena.Epoch.Tick(tick)
+
+			// Tick capture points: build agent positions from arena agents
+			if arena.Room != nil && arena.CapturePoints != nil {
+				agents := arena.Room.GetArena().GetAgents()
+				agentPositions := make([]AgentPosition, 0, len(agents))
+				for _, a := range agents {
+					if a.Alive {
+						agentPositions = append(agentPositions, AgentPosition{
+							ID:          a.ID,
+							X:           a.Position.X,
+							Y:           a.Position.Y,
+							Nationality: a.Nationality,
+							Alive:       true,
+						})
+					}
+				}
+				nearbyAgents := arena.CapturePoints.GetAgentsNearPoints(agentPositions)
+				arena.CapturePoints.Tick(nearbyAgents)
+			}
 		}
 	}
 }

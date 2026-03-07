@@ -419,6 +419,7 @@ func main() {
 		EventLog:        v14EventLog,
 		TickProfiler:    tickProfiler,
 		CrossArenaMgr:   v14CrossArenaMgr,
+		Hub:             hub,
 	}
 	worldManager.OnEvents = createWorldEventHandler(hub, v14SysForEvents)
 
@@ -472,6 +473,20 @@ func main() {
 	}
 
 	// ================================================================
+	// 7c-4. Wire v14 CapturePoint events → WebSocket Hub
+	// ================================================================
+	v14ArenaManager.OnCaptureEvent = func(event game.CapturePointEvent) {
+		frame, err := ws.EncodeFrame(ws.EventCapturePointUpdate, event)
+		if err != nil {
+			slog.Error("failed to encode capture_point_update", "error", err)
+			return
+		}
+		if event.CountryCode != "" {
+			hub.BroadcastToRoom(event.CountryCode, frame)
+		}
+	}
+
+	// ================================================================
 	// 7b. Auto-initialize Season 1 if no season active (S45)
 	// ================================================================
 	if seasonEngine.GetCurrentSeason() == nil {
@@ -514,6 +529,7 @@ func main() {
 		EventLog:        v14EventLog,
 		TickProfiler:    tickProfiler,
 		CrossArenaMgr:   v14CrossArenaMgr,
+		Hub:             hub,
 	})
 
 	// ================================================================
@@ -789,6 +805,7 @@ type V14Systems struct {
 	EventLog         *game.EventLog
 	TickProfiler     *game.TickProfiler
 	CrossArenaMgr    *game.CrossArenaManager
+	Hub              *ws.Hub
 }
 
 // registerEventHandlers sets up all client→server event handlers.
@@ -1209,6 +1226,70 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 		}
 	})
 
+	// declare_war (C→S): Declare war on a target country
+	router.On(ws.EventDeclareWar, func(client *ws.Client, data json.RawMessage) {
+		var payload struct {
+			Attacker  string   `json:"attacker"`  // attacking nationality ISO3
+			Defender  string   `json:"defender"`   // defending nationality ISO3
+			Coalition []string `json:"coalition"`  // coalition members (for coalition declaration)
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			slog.Warn("invalid declare_war payload", "clientId", client.ID, "error", err)
+			return
+		}
+
+		if payload.Attacker == "" || payload.Defender == "" {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "invalid_war_params",
+				Message: "attacker and defender nationalities are required",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		if v14 == nil || v14.WarSystem == nil {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "war_system_unavailable",
+				Message: "war system is not available",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		warID, err := v14.WarSystem.DeclareWar(payload.Attacker, payload.Defender, payload.Coalition)
+		if err != nil {
+			slog.Info("declare_war rejected",
+				"clientId", client.ID,
+				"attacker", payload.Attacker,
+				"defender", payload.Defender,
+				"error", err,
+			)
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "war_declaration_failed",
+				Message: err.Error(),
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		slog.Info("war declared via client",
+			"clientId", client.ID,
+			"warId", warID,
+			"attacker", payload.Attacker,
+			"defender", payload.Defender,
+			"coalition", payload.Coalition,
+		)
+
+		// Send confirmation to the declaring client
+		confirmFrame, _ := ws.EncodeFrame(ws.EventWarDeclared, map[string]interface{}{
+			"warId":     warID,
+			"attacker":  payload.Attacker,
+			"defender":  payload.Defender,
+			"coalition": payload.Coalition,
+		})
+		client.Send(confirmFrame)
+	})
+
 	// get_account_level (C→S): Request account level snapshot
 	router.On("get_account_level", func(client *ws.Client, data json.RawMessage) {
 		if v14 == nil || v14.AccountLevelMgr == nil {
@@ -1558,6 +1639,46 @@ func processEpochEndForV14(endData game.EpochEndData, v14Sys *V14Systems) {
 				TotalPlayers: totalPlayers,
 			}
 			v14Sys.AchievementMgr.ProcessEpochData(epochData)
+		}
+	}
+
+	// --- NationScoreTracker: record each agent's contribution ---
+	if arena.NationScore != nil {
+		for _, agent := range agents {
+			if agent.IsBot || agent.Nationality == "" {
+				continue
+			}
+			arena.NationScore.RecordPlayerScore(agent, endData.EpochNumber)
+		}
+
+		// Finalize the epoch to compute nation totals and store in history
+		nationScores := arena.NationScore.FinalizeEpoch(endData.EpochNumber)
+
+		// Broadcast nation_score_update to all clients in this arena
+		if len(nationScores) > 0 {
+			scorePayload := map[string]interface{}{
+				"countryCode":  endData.CountryCode,
+				"epochNumber":  endData.EpochNumber,
+				"nationScores": nationScores,
+			}
+			if v14Sys.Hub != nil {
+				frame, err := ws.EncodeFrame(ws.EventNationScoreUpdate, scorePayload)
+				if err == nil {
+					v14Sys.Hub.BroadcastToRoom(endData.CountryCode, frame)
+				}
+			}
+		}
+
+		// --- DominationEngine: check if a domination evaluation is needed ---
+		if arena.Domination != nil {
+			evaluated := arena.Domination.OnEpochEnd(arena.NationScore, endData.EpochNumber)
+			if evaluated {
+				slog.Info("domination evaluation triggered",
+					"country", endData.CountryCode,
+					"epoch", endData.EpochNumber,
+					"dominant", arena.Domination.GetDominantNation(),
+				)
+			}
 		}
 	}
 

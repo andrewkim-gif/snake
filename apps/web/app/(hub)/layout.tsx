@@ -7,13 +7,12 @@
  * 콘텐츠: max-width 1200px, 중앙 정렬
  */
 
-import { SK, bodyFont, sketchShadow } from '@/lib/sketch-ui';
+import { SK, headingFont, bodyFont, sketchShadow } from '@/lib/sketch-ui';
 import { TopNavBar } from '@/components/navigation/TopNavBar';
 import { BottomTabBar } from '@/components/navigation/BottomTabBar';
 import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
-import Image from 'next/image';
 import { useTranslations } from 'next-intl';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { WalletState, TokenBalance } from '@/lib/crossx-config';
@@ -25,7 +24,6 @@ export default function HubLayout({
 }) {
   const tCommon = useTranslations('common');
   const tBlockchain = useTranslations('blockchain');
-  const [imgError, setImgError] = useState(false);
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [showBalances, setShowBalances] = useState(false);
   const [mockBalances] = useState<TokenBalance[]>([]);
@@ -104,33 +102,17 @@ export default function HubLayout({
             textDecoration: 'none',
           }}
         >
-          {!imgError ? (
-            <Image
-              src="/images/logo-aww.png"
-              alt="AI World War"
-              width={160}
-              height={160}
-              priority
-              onError={() => setImgError(true)}
-              style={{
-                height: '36px',
-                width: 'auto',
-                filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.5))',
-              }}
-            />
-          ) : (
-            <span
-              style={{
-                fontFamily: bodyFont,
-                fontWeight: 800,
-                fontSize: '18px',
-                color: SK.textPrimary,
-                letterSpacing: '2px',
-              }}
-            >
-              AI WORLD WAR
-            </span>
-          )}
+          <span
+            style={{
+              fontFamily: headingFont,
+              fontWeight: 800,
+              fontSize: '18px',
+              color: SK.textPrimary,
+              letterSpacing: '2px',
+            }}
+          >
+            AI WORLD WAR
+          </span>
 
           {/* ALPHA 뱃지 */}
           <span

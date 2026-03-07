@@ -1,0 +1,143 @@
+/**
+ * Governance mock data — 제안/투표 이력
+ */
+
+import type { Proposal } from '@/components/governance/types';
+import type { VoteHistoryEntry } from '@/components/governance/types';
+
+export const MOCK_PROPOSALS: Proposal[] = [
+  {
+    id: 42, iso3: 'KOR',
+    proposer: '0x1234567890abcdef1234567890abcdef12345678',
+    title: 'Reduce Korea tax rate from 5% to 3%',
+    description: 'Lowering the national tax rate will attract more agents and increase overall economic activity in the Korean arena.',
+    proposalType: 'tax',
+    forVotes: 124.5, againstVotes: 46.2,
+    startTime: Math.floor(Date.now() / 1000) - 86400,
+    endTime: Math.floor(Date.now() / 1000) + 86400 * 2,
+    status: 'active', executed: false, totalVoters: 89,
+  },
+  {
+    id: 41, iso3: 'JPN',
+    proposer: '0xabcdef1234567890abcdef1234567890abcdef12',
+    title: 'Japan-Korea Trade Agreement',
+    description: 'Establish a bilateral trade corridor reducing cross-border token transfer fees by 50%.',
+    proposalType: 'trade',
+    forVotes: 210.3, againstVotes: 21.1,
+    startTime: Math.floor(Date.now() / 1000) - 86400 * 5,
+    endTime: Math.floor(Date.now() / 1000) - 86400,
+    status: 'passed', executed: false, totalVoters: 156,
+  },
+  {
+    id: 40, iso3: 'USA',
+    proposer: '0x9876543210fedcba9876543210fedcba98765432',
+    title: 'Increase US defense budget by 20%',
+    description: 'Boost the national defense multiplier to strengthen arena combat effectiveness for all US-aligned agents.',
+    proposalType: 'defense',
+    forVotes: 89.7, againstVotes: 102.4,
+    startTime: Math.floor(Date.now() / 1000) - 86400 * 10,
+    endTime: Math.floor(Date.now() / 1000) - 86400 * 3,
+    status: 'rejected', executed: false, totalVoters: 201,
+  },
+  {
+    id: 39, iso3: 'KOR',
+    proposer: '0xfedcba9876543210fedcba9876543210fedcba98',
+    title: 'Korean treasury allocation for staking rewards',
+    description: 'Allocate 10% of the Korean national treasury to increase staking APR for $KOR holders.',
+    proposalType: 'treasury',
+    forVotes: 156.8, againstVotes: 34.2,
+    startTime: Math.floor(Date.now() / 1000) - 86400 * 15,
+    endTime: Math.floor(Date.now() / 1000) - 86400 * 8,
+    status: 'executed', executed: true, totalVoters: 112,
+  },
+  {
+    id: 38, iso3: 'GBR',
+    proposer: '0x1111222233334444555566667777888899990000',
+    title: 'UK diplomatic immunity proposal',
+    description: 'Grant temporary diplomatic immunity to UK agents during cross-border raids for 24 hours.',
+    proposalType: 'other',
+    forVotes: 67.3, againstVotes: 12.1,
+    startTime: Math.floor(Date.now() / 1000) - 86400 * 2,
+    endTime: Math.floor(Date.now() / 1000) + 86400 * 5,
+    status: 'active', executed: false, totalVoters: 45,
+  },
+  {
+    id: 37, iso3: 'JPN',
+    proposer: '0xaaaa11112222333344445555666677778888',
+    title: 'Japanese arena expansion to 200 concurrent players',
+    description: 'Expand the Japanese national arena capacity from 100 to 200 concurrent players.',
+    proposalType: 'other',
+    forVotes: 198.4, againstVotes: 5.6,
+    startTime: Math.floor(Date.now() / 1000) - 86400 * 20,
+    endTime: Math.floor(Date.now() / 1000) - 86400 * 13,
+    status: 'executed', executed: true, totalVoters: 88,
+  },
+];
+
+export const MOCK_VOTE_HISTORY: VoteHistoryEntry[] = [
+  {
+    proposalId: 42,
+    title: 'Reduce Korea tax rate from 5% to 3%',
+    iso3: 'KOR',
+    support: true,
+    quadraticWeight: 31.62,
+    tokensUsed: '1000',
+    timestamp: Math.floor(Date.now() / 1000) - 3600,
+  },
+  {
+    proposalId: 41,
+    title: 'Japan-Korea Trade Agreement',
+    iso3: 'JPN',
+    support: true,
+    quadraticWeight: 22.36,
+    tokensUsed: '500',
+    timestamp: Math.floor(Date.now() / 1000) - 86400 * 3,
+  },
+  {
+    proposalId: 40,
+    title: 'Increase US defense budget by 20%',
+    iso3: 'USA',
+    support: false,
+    quadraticWeight: 14.14,
+    tokensUsed: '200',
+    timestamp: Math.floor(Date.now() / 1000) - 86400 * 7,
+  },
+  {
+    proposalId: 39,
+    title: 'Korean treasury allocation for staking rewards',
+    iso3: 'KOR',
+    support: true,
+    quadraticWeight: 44.72,
+    tokensUsed: '2000',
+    timestamp: Math.floor(Date.now() / 1000) - 86400 * 10,
+  },
+  {
+    proposalId: 38,
+    title: 'UK diplomatic immunity proposal',
+    iso3: 'GBR',
+    support: true,
+    quadraticWeight: 10.0,
+    tokensUsed: '100',
+    timestamp: Math.floor(Date.now() / 1000) - 86400 * 12,
+  },
+  {
+    proposalId: 35,
+    title: 'Brazil rainforest defense zone creation',
+    iso3: 'BRA',
+    support: false,
+    quadraticWeight: 17.32,
+    tokensUsed: '300',
+    timestamp: Math.floor(Date.now() / 1000) - 86400 * 18,
+  },
+];
+
+export const GOVERNANCE_COUNTRIES = [
+  { iso3: 'KOR', name: 'Republic of Korea', symbol: '$KOR' },
+  { iso3: 'USA', name: 'United States', symbol: '$USA' },
+  { iso3: 'JPN', name: 'Japan', symbol: '$JPN' },
+  { iso3: 'GBR', name: 'United Kingdom', symbol: '$GBR' },
+  { iso3: 'DEU', name: 'Germany', symbol: '$DEU' },
+  { iso3: 'FRA', name: 'France', symbol: '$FRA' },
+  { iso3: 'CHN', name: 'China', symbol: '$CHN' },
+  { iso3: 'BRA', name: 'Brazil', symbol: '$BRA' },
+] as const;

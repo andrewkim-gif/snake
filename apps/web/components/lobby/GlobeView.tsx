@@ -899,22 +899,7 @@ function HoverBorderGlow() {
 
 // ─── R3F: 국가 폴리곤 렌더러 ───
 
-function CountryPolygons() {
-  const [countries, setCountries] = useState<CountryGeo[]>([]);
-
-  useEffect(() => {
-    loadGeoJSON()
-      .then((data) => setCountries(buildCountryGeometries(data)))
-      .catch(console.error);
-
-    return () => {
-      setCountries((prev) => {
-        prev.forEach((c) => c.geometry.dispose());
-        return [];
-      });
-    };
-  }, []);
-
+function CountryPolygons({ countries }: { countries: CountryGeo[] }) {
   return (
     <group>
       {countries.length > 0 && (
@@ -1105,6 +1090,93 @@ function AdaptiveOrbitControls() {
   );
 }
 
+// ─── R3F: GeoJSON 데이터 로더 + 씬 구성 (Canvas 내부) ───
+// Country geometries와 centroids를 로드하여 하위 컴포넌트에 전달
+
+function GlobeScene({
+  onCountryClick,
+  onHover,
+  dominationStates,
+  wars,
+}: {
+  onCountryClick?: (iso3: string, name: string) => void;
+  onHover?: (iso3: string | null, name: string | null) => void;
+  dominationStates: Map<string, CountryDominationState>;
+  wars: WarEffectData[];
+}) {
+  const [countries, setCountries] = useState<CountryGeo[]>([]);
+
+  // GeoJSON → CountryGeo[] 로드 (1회)
+  useEffect(() => {
+    loadGeoJSON()
+      .then((data) => setCountries(buildCountryGeometries(data)))
+      .catch(console.error);
+
+    return () => {
+      setCountries((prev) => {
+        prev.forEach((c) => c.geometry.dispose());
+        return [];
+      });
+    };
+  }, []);
+
+  // iso3 → BufferGeometry 맵 (GlobeDominationLayer용)
+  const countryGeoMap = useMemo(() => {
+    const map = new Map<string, THREE.BufferGeometry>();
+    for (const c of countries) map.set(c.iso3, c.geometry);
+    return map;
+  }, [countries]);
+
+  // iso3 → [lat, lng] centroid 맵 (GlobeWarEffects용)
+  // computeCentroid()은 [lon, lat] (GeoJSON 컨벤션)을 반환하므로 [lat, lng]로 스왑
+  const centroidsMap = useMemo(() => {
+    const map = new Map<string, [number, number]>();
+    for (const c of countries) {
+      // centroid는 3D Vector3 → 역변환하여 [lat, lng] 추출
+      const [lon, lat] = xyzToGeo(c.centroid, LABEL_R);
+      map.set(c.iso3, [lat, lon]);
+    }
+    return map;
+  }, [countries]);
+
+  return (
+    <>
+      {/* 우주: 최소 ambient + 반구 필 + 실시간 태양 + 별 */}
+      <ambientLight intensity={0.35} color="#1a2a4a" />
+      <hemisphereLight args={['#334466', '#0a0e18', 0.25]} />
+      <SunLight />
+      <Starfield />
+      {/* 지구 텍스처 구체 + 대기 글로우 */}
+      <EarthSphere />
+      <AtmosphereGlow />
+      {/* 국가 경계선 + 라벨 + 인터랙션 */}
+      <CountryBorders />
+      <CountryPolygons countries={countries} />
+      <HoverBorderGlow />
+      <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
+      <AdaptiveOrbitControls />
+
+      {/* v14: Domination color overlay (국가별 지배 색상) */}
+      {dominationStates.size > 0 && (
+        <GlobeDominationLayer
+          dominationStates={dominationStates}
+          countryGeometries={countryGeoMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
+      {/* v14: War visual effects (아크라인, 영토 점멸, 폭발 파티클) */}
+      {wars.length > 0 && (
+        <GlobeWarEffects
+          wars={wars}
+          countryCentroids={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+    </>
+  );
+}
+
 // ─── 메인 컴포넌트 ───
 
 export function GlobeView({
@@ -1119,7 +1191,6 @@ export function GlobeView({
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
   const warList = wars ?? [];
-  const centroids = countryCentroids ?? new Map<string, [number, number]>();
 
   return (
     <div style={{ width: '100%', height: '100%', background: BG, position: 'relative', ...style }}>
@@ -1129,37 +1200,12 @@ export function GlobeView({
         onCreated={({ gl }) => { gl.setClearColor(BG); }}
       >
         <SizeGate>
-          {/* 우주: 최소 ambient + 반구 필 + 실시간 태양 + 별 */}
-          <ambientLight intensity={0.35} color="#1a2a4a" />
-          <hemisphereLight args={['#334466', '#0a0e18', 0.25]} />
-          <SunLight />
-          <Starfield />
-          {/* 지구 텍스처 구체 + 대기 글로우 */}
-          <EarthSphere />
-          <AtmosphereGlow />
-          {/* 국가 경계선 + 라벨 + 인터랙션 */}
-          <CountryBorders />
-          <CountryPolygons />
-          <HoverBorderGlow />
-          <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
-          <AdaptiveOrbitControls />
-
-          {/* v14: Domination color overlay (국가별 지배 색상) */}
-          {domStates.size > 0 && (
-            <GlobeDominationLayer
-              dominationStates={domStates}
-              globeRadius={RADIUS}
-            />
-          )}
-
-          {/* v14: War visual effects (아크라인, 영토 점멸, 폭발 파티클) */}
-          {warList.length > 0 && (
-            <GlobeWarEffects
-              wars={warList}
-              countryCentroids={centroids}
-              globeRadius={RADIUS}
-            />
-          )}
+          <GlobeScene
+            onCountryClick={onCountryClick}
+            onHover={onHover}
+            dominationStates={domStates}
+            wars={warList}
+          />
         </SizeGate>
       </Canvas>
     </div>

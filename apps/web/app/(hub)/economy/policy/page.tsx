@@ -2,35 +2,21 @@
 
 /**
  * /economy/policy — 경제 정책 페이지
- * PageHeader 통합 컴포넌트 사용
+ * DashboardPage 래핑
  */
 
 import { useState, Suspense } from 'react';
-import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
-import { PageHeader } from '@/components/hub';
+import { DashboardPage, LoadingSkeleton } from '@/components/hub';
 import { ScrollText } from 'lucide-react';
 
 const PolicyPanel = dynamic(
   () => import('@/components/economy/PolicyPanel'),
   {
-    loading: () => (
-      <div
-        style={{
-          background: SK.cardBg,
-          border: `1px solid ${SK.border}`,
-          borderRadius: '12px',
-          padding: '40px',
-          textAlign: 'center',
-          color: SK.textSecondary,
-          fontFamily: bodyFont,
-        }}
-      >
-        Loading policy panel...
-      </div>
-    ),
+    loading: () => <LoadingSkeleton text="Loading policy panel..." />,
     ssr: false,
   },
 );
@@ -54,15 +40,13 @@ function PolicyPageInner() {
   const [currentUserId] = useState('');
 
   return (
-    <div>
-      <PageHeader
-        icon={ScrollText}
-        title={tEconomy('economicPolicy')}
-        description={tEconomy('economicPolicyDesc')}
-        accentColor={SK.blue}
-        heroImage="/images/hero-economy.png"
-      />
-
+    <DashboardPage
+      icon={ScrollText}
+      title={tEconomy('economicPolicy')}
+      description={tEconomy('economicPolicyDesc')}
+      accentColor={SK.blue}
+      heroImage="/images/hero-economy.png"
+    >
       <PolicyPanel
         serverUrl={serverUrl}
         countryISO={countryISO}
@@ -71,7 +55,7 @@ function PolicyPageInner() {
         currentUserId={currentUserId}
         canEdit={false}
       />
-    </div>
+    </DashboardPage>
   );
 }
 

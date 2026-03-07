@@ -2,21 +2,20 @@
 
 /**
  * /profile — 프로필 페이지
- * Agent Card (닉네임, 승률, 전적) + Wallet (연결/해제, 토큰 목록)
- * Achievements 컴포넌트 + WalletConnectButton + TokenBalanceList 연결
+ * DashboardPage + tierColors + mock data 모듈 사용
  */
 
 import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
-import { PageHeader } from '@/components/hub';
+import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, tierColors, grid } from '@/lib/sketch-ui';
+import { DashboardPage } from '@/components/hub';
+import { MOCK_PROFILE, MOCK_BALANCES, MOCK_ACHIEVEMENTS } from '@/lib/mock-data';
 import { User } from 'lucide-react';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
-import type { WalletState, TokenBalance } from '@/lib/crossx-config';
+import type { WalletState } from '@/lib/crossx-config';
 
-// Lazy load Achievements (대형 컴포넌트)
 const Achievements = dynamic(() => import('@/components/profile/Achievements'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
@@ -27,29 +26,12 @@ const Achievements = dynamic(() => import('@/components/profile/Achievements'), 
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
-// Mock 프로필 데이터
-const MOCK_PROFILE = {
-  name: 'xXDarkLord420Xx',
-  level: 42,
-  winRate: 42,
-  avgLevel: 7.3,
-  totalBattles: 156,
-  totalKills: 2847,
-  totalDeaths: 189,
-  playtime: '48h 23m',
-  faction: 'East Asia Coalition',
-  factionTag: 'EAC',
-  country: 'KOR',
-  rank: 'Commander',
+const TIER_COLOR_MAP: Record<string, string> = {
+  bronze: tierColors.bronze,
+  silver: tierColors.silver,
+  gold: tierColors.gold,
+  platinum: tierColors.platinum,
 };
-
-// Mock 토큰 잔고 (지갑 연결 시 표시)
-const MOCK_BALANCES: TokenBalance[] = [
-  { iso3: 'KOR', name: 'Korea Token', symbol: '$KOR', balance: '50000', stakedBalance: '12000', pendingReward: '340', tier: 'S', marketCap: 8500000, defenseMultiplier: 1.45, stakingAPR: 1200 },
-  { iso3: 'USA', name: 'USA Token', symbol: '$USA', balance: '25000', stakedBalance: '5000', pendingReward: '120', tier: 'S', marketCap: 12000000, defenseMultiplier: 1.55, stakingAPR: 980 },
-  { iso3: 'JPN', name: 'Japan Token', symbol: '$JPN', balance: '15000', stakedBalance: '0', pendingReward: '0', tier: 'A', marketCap: 6200000, defenseMultiplier: 1.30, stakingAPR: 1100 },
-  { iso3: 'GBR', name: 'UK Token', symbol: '$GBR', balance: '8000', stakedBalance: '2000', pendingReward: '45', tier: 'A', marketCap: 4800000, defenseMultiplier: 1.25, stakingAPR: 850 },
-];
 
 export default function ProfilePage() {
   const tProfile = useTranslations('profile');
@@ -64,14 +46,13 @@ export default function ProfilePage() {
   }, []);
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
-      <PageHeader
-        icon={User}
-        title={tProfile('title')}
-        description={`${MOCK_PROFILE.name} — ${MOCK_PROFILE.faction} [${MOCK_PROFILE.factionTag}]`}
-        accentColor={SK.blue}
-      />
-
+    <DashboardPage
+      icon={User}
+      title={tProfile('title')}
+      description={`${MOCK_PROFILE.name} — ${MOCK_PROFILE.faction} [${MOCK_PROFILE.factionTag}]`}
+      accentColor={SK.blue}
+      maxWidth={960}
+    >
       {/* Agent Card + Wallet 섹션 (2-column) — 반응형 */}
       <div
         className="profile-top-grid"
@@ -112,7 +93,6 @@ export default function ProfilePage() {
             position: 'relative',
             overflow: 'hidden',
           }}>
-            {/* 그리드 패턴 배경 */}
             <div style={{
               position: 'absolute',
               inset: 0,
@@ -128,7 +108,6 @@ export default function ProfilePage() {
               position: 'relative',
               zIndex: 1,
             }}>
-              {/* 캐릭터 플레이스홀더 이모지 */}
               {'\uD83E\uDDD1\u200D\uD83D\uDE80'}
             </div>
             <div style={{
@@ -225,7 +204,6 @@ export default function ProfilePage() {
             </h3>
           </div>
 
-          {/* Wallet Connect Button */}
           <div style={{ marginBottom: 16 }}>
             <WalletConnectButton
               onConnect={handleWalletConnect}
@@ -233,7 +211,6 @@ export default function ProfilePage() {
             />
           </div>
 
-          {/* 지갑 주소 표시 */}
           {wallet && (
             <div style={{
               fontFamily: bodyFont,
@@ -249,7 +226,6 @@ export default function ProfilePage() {
             </div>
           )}
 
-          {/* 토큰 잔고 목록 */}
           {wallet ? (
             <div style={{ flex: 1 }}>
               <div style={{
@@ -300,7 +276,6 @@ export default function ProfilePage() {
             userId="local-user"
           />
         ) : (
-          /* Mock 업적 (서버 미연결 시) */
           <div>
             <div style={{
               display: 'flex',
@@ -342,78 +317,79 @@ export default function ProfilePage() {
               }} />
             </div>
 
-            {/* Mock 업적 그리드 */}
+            {/* Mock 업적 그리드 — tierColors 적용 */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+              gridTemplateColumns: grid.card,
               gap: 10,
             }}>
-              {MOCK_ACHIEVEMENTS.map((ach) => (
-                <div
-                  key={ach.name}
-                  style={{
-                    background: ach.unlocked ? `${ach.tierColor}10` : SK.cardBg,
-                    border: sketchBorder(ach.unlocked ? `${ach.tierColor}40` : SK.border),
-                    borderRadius: radius.md,
-                    padding: '12px 14px',
-                    opacity: ach.unlocked ? 1 : 0.5,
-                    display: 'flex',
-                    gap: 12,
-                    alignItems: 'flex-start',
-                  }}
-                >
-                  <span style={{
-                    fontSize: 28,
-                    lineHeight: 1,
-                    flexShrink: 0,
-                    filter: ach.unlocked ? 'none' : 'grayscale(100%)',
-                  }}>
-                    {ach.icon}
-                  </span>
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{
+              {MOCK_ACHIEVEMENTS.map((ach) => {
+                const color = TIER_COLOR_MAP[ach.tier] ?? ach.tierColor;
+                return (
+                  <div
+                    key={ach.name}
+                    style={{
+                      background: ach.unlocked ? `${color}10` : SK.cardBg,
+                      border: sketchBorder(ach.unlocked ? `${color}40` : SK.border),
+                      borderRadius: radius.md,
+                      padding: '12px 14px',
+                      opacity: ach.unlocked ? 1 : 0.5,
                       display: 'flex',
-                      justifyContent: 'space-between',
-                      alignItems: 'center',
-                      marginBottom: 2,
+                      gap: 12,
+                      alignItems: 'flex-start',
+                    }}
+                  >
+                    <span style={{
+                      fontSize: 28,
+                      lineHeight: 1,
+                      flexShrink: 0,
+                      filter: ach.unlocked ? 'none' : 'grayscale(100%)',
                     }}>
-                      <span style={{
-                        fontFamily: headingFont,
-                        fontSize: SKFont.sm,
-                        color: ach.unlocked ? SK.textPrimary : SK.textMuted,
-                        fontWeight: 600,
+                      {ach.icon}
+                    </span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center',
+                        marginBottom: 2,
                       }}>
-                        {ach.name}
-                      </span>
-                      <span style={{
+                        <span style={{
+                          fontFamily: headingFont,
+                          fontSize: SKFont.sm,
+                          color: ach.unlocked ? SK.textPrimary : SK.textMuted,
+                          fontWeight: 600,
+                        }}>
+                          {ach.name}
+                        </span>
+                        <span style={{
+                          fontFamily: bodyFont,
+                          fontSize: SKFont.xs,
+                          color,
+                          textTransform: 'uppercase',
+                          fontWeight: 600,
+                        }}>
+                          {ach.tier}
+                        </span>
+                      </div>
+                      <div style={{
                         fontFamily: bodyFont,
                         fontSize: SKFont.xs,
-                        color: ach.tierColor,
-                        textTransform: 'uppercase',
-                        fontWeight: 600,
+                        color: SK.textSecondary,
                       }}>
-                        {ach.tier}
-                      </span>
-                    </div>
-                    <div style={{
-                      fontFamily: bodyFont,
-                      fontSize: SKFont.xs,
-                      color: SK.textSecondary,
-                    }}>
-                      {ach.description}
+                        {ach.description}
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         )}
       </div>
-    </div>
+    </DashboardPage>
   );
 }
-
-// --- Helper Components ---
 
 function StatItem({ label, value, color }: { label: string; value: string; color: string }) {
   return (
@@ -441,16 +417,3 @@ function StatItem({ label, value, color }: { label: string; value: string; color
     </div>
   );
 }
-
-// --- Mock Achievements ---
-
-const MOCK_ACHIEVEMENTS = [
-  { name: 'First Blood', icon: '\u2694\uFE0F', description: 'Get your first kill in battle', tier: 'bronze', tierColor: '#CD7F32', unlocked: true },
-  { name: 'Century Slayer', icon: '\uD83D\uDC80', description: 'Reach 100 total kills', tier: 'silver', tierColor: '#808080', unlocked: true },
-  { name: 'Explorer', icon: '\uD83C\uDF0D', description: 'Visit 10 different countries', tier: 'bronze', tierColor: '#CD7F32', unlocked: true },
-  { name: 'Iron Will', icon: '\uD83D\uDEE1\uFE0F', description: 'Survive 50 battles', tier: 'gold', tierColor: '#B8860B', unlocked: true },
-  { name: 'Season Champion', icon: '\uD83D\uDC51', description: 'Win a season as faction leader', tier: 'platinum', tierColor: '#3B82F6', unlocked: false },
-  { name: 'Whale', icon: '\uD83D\uDCB0', description: 'Stake over 1M tokens total', tier: 'gold', tierColor: '#B8860B', unlocked: false },
-  { name: 'Master Diplomat', icon: '\uD83E\uDD1D', description: 'Successfully negotiate 5 treaties', tier: 'silver', tierColor: '#808080', unlocked: false },
-  { name: 'Speed Demon', icon: '\u26A1', description: 'Reach Level 15 in under 5 minutes', tier: 'gold', tierColor: '#B8860B', unlocked: false },
-];

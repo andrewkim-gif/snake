@@ -2,15 +2,16 @@
 
 /**
  * /hall-of-fame — 명예의 전당
- * PageHeader + DashPanel + StatCard 통합 컴포넌트 사용
+ * DashboardPage + FilterBar(variant=tab) + mock data 모듈 사용
  */
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
-import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
-import { PageHeader, StatCard, DashPanel } from '@/components/hub';
-import { Trophy, Swords, Zap, Crown, Users, Calendar } from 'lucide-react';
+import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, grid } from '@/lib/sketch-ui';
+import { DashboardPage } from '@/components/hub';
+import { MOCK_RECORDS, MOCK_SEASONS } from '@/lib/mock-data';
+import { Trophy, Swords, Crown, Users, Calendar } from 'lucide-react';
 
 const HallOfFame = dynamic(() => import('@/components/hall-of-fame/HallOfFame'), {
   loading: () => (
@@ -21,42 +22,6 @@ const HallOfFame = dynamic(() => import('@/components/hall-of-fame/HallOfFame'),
 });
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
-
-interface MockSeasonRecord {
-  id: string;
-  season: number;
-  seasonName: string;
-  category: string;
-  categoryIcon: string;
-  winnerName: string;
-  winnerType: 'faction' | 'player';
-  recordLabel: string;
-  trophyType: 'gold' | 'silver' | 'bronze';
-}
-
-const MOCK_RECORDS: MockSeasonRecord[] = [
-  { id: '1', season: 1, seasonName: 'Dawn of Nations', category: 'Season Champion', categoryIcon: '\uD83C\uDFC6', winnerName: 'NATO Alliance', winnerType: 'faction', recordLabel: 'Dominated 42 territories at season end', trophyType: 'gold' },
-  { id: '2', season: 1, seasonName: 'Dawn of Nations', category: 'Top Warrior', categoryIcon: '\u2694\uFE0F', winnerName: 'xXDarkLord420Xx', winnerType: 'player', recordLabel: '2,847 kills across 156 battles', trophyType: 'gold' },
-  { id: '3', season: 1, seasonName: 'Dawn of Nations', category: 'Richest Faction', categoryIcon: '\uD83D\uDCB0', winnerName: 'East Asia Coalition', winnerType: 'faction', recordLabel: 'GDP: 85,000 at peak', trophyType: 'gold' },
-  { id: '4', season: 1, seasonName: 'Dawn of Nations', category: 'Master Diplomat', categoryIcon: '\uD83D\uDEE1\uFE0F', winnerName: 'Admiral Johansson', winnerType: 'player', recordLabel: '12 successful treaty negotiations', trophyType: 'silver' },
-  { id: '5', season: 1, seasonName: 'Dawn of Nations', category: 'Speed Runner', categoryIcon: '\u26A1', winnerName: 'GhostSnake_kr', winnerType: 'player', recordLabel: 'Reached Level 20 in 3m 42s', trophyType: 'gold' },
-  { id: '6', season: 1, seasonName: 'Dawn of Nations', category: 'Legendary Battle', categoryIcon: '\uD83D\uDC51', winnerName: 'Battle of Seoul', winnerType: 'faction', recordLabel: '64 players, 3 factions, 22 minutes', trophyType: 'gold' },
-];
-
-interface MockTimelineSeason {
-  number: number;
-  name: string;
-  startDate: string;
-  endDate: string;
-  champion: string;
-  totalBattles: number;
-  peakPlayers: number;
-}
-
-const MOCK_SEASONS: MockTimelineSeason[] = [
-  { number: 1, name: 'Dawn of Nations', startDate: '2026-01-15', endDate: '2026-02-12', champion: 'NATO Alliance', totalBattles: 4820, peakPlayers: 1240 },
-  { number: 2, name: 'Rising Empires', startDate: '2026-02-19', endDate: '2026-03-19', champion: 'TBD', totalBattles: 2100, peakPlayers: 890 },
-];
 
 export default function HallOfFamePage() {
   const tHof = useTranslations('hallOfFame');
@@ -70,7 +35,7 @@ export default function HallOfFamePage() {
     ? MOCK_RECORDS.filter(r => r.season === selectedSeason)
     : MOCK_RECORDS;
 
-  const recordsBySeason = new Map<number, MockSeasonRecord[]>();
+  const recordsBySeason = new Map<number, typeof MOCK_RECORDS>();
   for (const record of filteredRecords) {
     const list = recordsBySeason.get(record.season) || [];
     list.push(record);
@@ -79,30 +44,19 @@ export default function HallOfFamePage() {
   const sortedSeasons = Array.from(recordsBySeason.keys()).sort((a, b) => b - a);
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto' }}>
-      <PageHeader
-        icon={Trophy}
-        title={tHof('title')}
-        description={tHof('subtitle')}
-        accentColor={SK.gold}
-        heroImage="/images/hero-hall-of-fame.png"
-      />
-
-      {/* 통계 */}
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
-          gap: '12px',
-          marginBottom: '24px',
-        }}
-      >
-        <StatCard label="Total Seasons" value={String(MOCK_SEASONS.length)} color={SK.textPrimary} icon={Calendar} />
-        <StatCard label="Total Records" value={String(MOCK_RECORDS.length)} color={SK.gold} icon={Trophy} />
-        <StatCard label="Peak Players" value={String(MOCK_SEASONS[0]?.peakPlayers ?? 0)} color={SK.green} icon={Users} />
-        <StatCard label="Total Battles" value={String(MOCK_SEASONS.reduce((s, se) => s + se.totalBattles, 0))} color={SK.red} icon={Swords} />
-      </div>
-
+    <DashboardPage
+      icon={Trophy}
+      title={tHof('title')}
+      description={tHof('subtitle')}
+      accentColor={SK.gold}
+      heroImage="/images/hero-hall-of-fame.png"
+      stats={[
+        { label: 'Total Seasons', value: String(MOCK_SEASONS.length), color: SK.textPrimary, icon: Calendar },
+        { label: 'Total Records', value: String(MOCK_RECORDS.length), color: SK.gold, icon: Trophy },
+        { label: 'Peak Players', value: String(MOCK_SEASONS[0]?.peakPlayers ?? 0), color: SK.green, icon: Users },
+        { label: 'Total Battles', value: String(MOCK_SEASONS.reduce((s, se) => s + se.totalBattles, 0)), color: SK.red, icon: Swords },
+      ]}
+    >
       {/* 시즌 타임라인 */}
       <div style={{
         marginBottom: 24,
@@ -233,7 +187,7 @@ export default function HallOfFamePage() {
                 className="hof-record-grid"
                 style={{
                   display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gridTemplateColumns: grid.card,
                   gap: 12,
                 }}
               >
@@ -326,6 +280,6 @@ export default function HallOfFamePage() {
           );
         })
       )}
-    </div>
+    </DashboardPage>
   );
 }

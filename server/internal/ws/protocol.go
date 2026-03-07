@@ -19,6 +19,7 @@ const (
 	EventSelectNationality  = "select_nationality"
 	EventJoinCountryArena   = "join_country_arena"
 	EventSwitchArena        = "switch_arena"
+	EventDeclareWar         = "declare_war"
 
 	// Agent-specific events (client → server)
 	EventAgentAuth          = "agent_auth"
@@ -67,6 +68,9 @@ const (
 	EventRespawnCountdown   = "respawn_countdown"
 	EventRespawnComplete    = "respawn_complete"
 	EventNationScoreUpdate  = "nation_score_update"
+	EventWarDeclared        = "war_declared"
+	EventWarEnded           = "war_ended"
+	EventCapturePointUpdate = "capture_point_update"
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}

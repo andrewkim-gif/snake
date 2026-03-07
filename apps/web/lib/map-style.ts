@@ -42,7 +42,7 @@ export const continentColors: Record<string, string> = {
 };
 
 // 다크 맵 스타일 (MapLibre GL 용)
-export const darkMapStyle: maplibregl.StyleSpecification = {
+export const darkMapStyle: Record<string, unknown> = {
   version: 8 as const,
   name: 'AI World War Dark',
   sources: {
@@ -113,7 +113,7 @@ export const darkMapStyle: maplibregl.StyleSpecification = {
       },
     },
   ],
-} as unknown as maplibregl.StyleSpecification;
+};
 
 // 국가 속성에서 ISO3 코드 추출 (GeoJSON property name varies)
 // Natural Earth에서 France/Norway/Kosovo 등은 ISO_A3="-99"이므로 ADM0_A3로 fallback

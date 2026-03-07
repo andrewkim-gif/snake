@@ -58,6 +58,21 @@ export const SK = {
   glassBorder: 'rgba(255, 255, 255, 0.06)',
 } as const;
 
+/** 그리드 토큰 — 통합 대시보드 레이아웃 */
+export const grid = {
+  stat: 'repeat(auto-fit, minmax(160px, 1fr))',
+  panel: 'repeat(auto-fit, minmax(340px, 1fr))',
+  card: 'repeat(auto-fit, minmax(280px, 1fr))',
+} as const;
+
+/** 티어별 색상 (업적, 랭킹 등) */
+export const tierColors = {
+  bronze: '#CD7F32',
+  silver: '#808080',
+  gold: '#B8860B',
+  platinum: '#3B82F6',
+} as const;
+
 /** 폰트 사이즈 스케일 */
 export const SKFont = {
   h1: '32px',
