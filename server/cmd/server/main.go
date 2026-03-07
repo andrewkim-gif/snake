@@ -1296,6 +1296,33 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 		}
 	})
 
+	// v19: ar_input (C→S): Arena combat movement input
+	router.On(ws.EventARInput, func(client *ws.Client, data json.RawMessage) {
+		var payload ws.ARInputPayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+		wm.RouteARInput(client.ID, game.ARInput{
+			DirX:  payload.DirX,
+			DirZ:  payload.DirZ,
+			Jump:  payload.Jump,
+			Slide: payload.Slide,
+			AimY:  payload.AimY,
+		})
+	})
+
+	// v19: ar_choose (C→S): Arena tome/weapon selection during level-up
+	router.On(ws.EventARChoose, func(client *ws.Client, data json.RawMessage) {
+		var payload ws.ARChoosePayload
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+		wm.RouteARChoose(client.ID, game.ARChoice{
+			TomeID:   payload.TomeID,
+			WeaponID: payload.WeaponID,
+		})
+	})
+
 	// declare_war (C→S): Declare war on a target country
 	router.On(ws.EventDeclareWar, func(client *ws.Client, data json.RawMessage) {
 		var payload struct {
@@ -1553,6 +1580,30 @@ func createWorldEventHandler(hub *ws.Hub, v14Sys *V14Systems) world.WorldEventCa
 					wsEvent = ws.EventBattleComplete
 				case game.RoomEvtAbilityTriggered:
 					wsEvent = ws.EventAbilityTriggered
+
+				// v19: Arena combat events
+				case game.RoomEvtARState:
+					wsEvent = ws.EventARState
+				case game.RoomEvtARDamage:
+					wsEvent = ws.EventARDamage
+				case game.RoomEvtARLevelUp:
+					wsEvent = ws.EventARLevelUp
+				case game.RoomEvtARKill:
+					wsEvent = ws.EventARKill
+				case game.RoomEvtARPhaseChange:
+					wsEvent = ws.EventARPhaseChange
+				case game.RoomEvtARBattleEnd:
+					wsEvent = ws.EventARBattleEnd
+				case game.RoomEvtARMinibossDeath:
+					wsEvent = "ar_miniboss_death"
+				case game.RoomEvtAREliteExplosion:
+					wsEvent = "ar_elite_explosion"
+				case game.RoomEvtARPvPKill:
+					wsEvent = "ar_pvp_kill"
+				case game.RoomEvtARBossSpawn:
+					wsEvent = "ar_boss_spawn"
+				case game.RoomEvtARBossDefeated:
+					wsEvent = "ar_boss_defeated"
 				default:
 					continue
 				}

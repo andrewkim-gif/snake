@@ -112,7 +112,8 @@ type Room struct {
 	OnRotate func(roomID string)
 
 	// Arena cancel func (to stop arena loop)
-	arenaCancel context.CancelFunc
+	arenaCancel      context.CancelFunc
+	arenaTickCounter uint64 // v19: tick counter for arena combat mode
 }
 
 // NewRoom creates a new Room with the given configuration.
@@ -227,6 +228,12 @@ func (r *Room) tickCountdown() {
 func (r *Room) tickPlaying() {
 	r.stateTicksLeft--
 
+	// v19: Branch on CombatMode — arena combat vs classic combat
+	if r.IsArenaCombat() {
+		r.tickPlayingArena()
+		return
+	}
+
 	arenaTick := r.arena.GetTick()
 
 	// Check round end conditions:
@@ -259,6 +266,21 @@ func (r *Room) tickPlaying() {
 	if arenaTick > 0 && arenaTick%uint64(TickRate) == 0 {
 		r.broadcastCoachAdvice(arenaTick)
 	}
+}
+
+// tickPlayingArena handles one tick in arena combat mode (v19).
+func (r *Room) tickPlayingArena() {
+	r.arenaTickCounter++
+	delta := 1.0 / float64(TickRate) // ~0.05s at 20Hz
+
+	// Check round end: time expired
+	if r.stateTicksLeft <= 0 {
+		r.endRoundArena()
+		return
+	}
+
+	// Run arena combat tick (AI bots + combat + state broadcast)
+	r.TickArenaCombat(delta, r.arenaTickCounter)
 }
 
 func (r *Room) tickEnding() {
@@ -336,6 +358,13 @@ func (r *Room) transitionTo(newState domain.RoomState) {
 
 func (r *Room) startRound() {
 	r.round++
+
+	// v19: Branch on CombatMode — arena combat vs classic combat
+	if r.IsArenaCombat() {
+		r.startRoundArena()
+		return
+	}
+
 	r.arena.Reset()
 
 	// Apply terrain modifiers to arena
@@ -363,6 +392,77 @@ func (r *Room) startRound() {
 	r.roundStartTick = 0
 
 	slog.Info("round started", "roomId", r.ID, "round", r.round, "players", len(r.players))
+}
+
+// startRoundArena initializes a round in arena combat mode (v19).
+func (r *Room) startRoundArena() {
+	// Initialize ArenaCombat subsystem (creates combat instance + AI bots)
+	r.InitArenaCombat()
+
+	// Register existing human players into arena combat
+	for _, p := range r.players {
+		info := &PlayerInfo{
+			ID:        p.ID,
+			Name:      p.Name,
+			Character: string(ARCharStriker), // default character
+		}
+		r.AddARPlayer(info)
+	}
+
+	// Transition to playing
+	r.transitionTo(domain.RoomStatePlaying)
+	r.roundStartTick = 0
+
+	slog.Info("arena round started",
+		"roomId", r.ID,
+		"round", r.round,
+		"combatMode", "arena",
+		"tier", r.Config.CountryTier,
+		"players", len(r.players),
+	)
+}
+
+// endRoundArena handles round end in arena combat mode (v19).
+func (r *Room) endRoundArena() {
+	// Cleanup arena combat state
+	if r.arState != nil && r.arState.Combat != nil {
+		// Emit final ar_battle_end event
+		r.emitEvents([]RoomEvent{{
+			RoomID: r.ID,
+			Type:   RoomEvtARBattleEnd,
+			Data: map[string]interface{}{
+				"phase": "ended",
+				"round": r.round,
+			},
+		}})
+
+		// Build round-end events for each human player
+		var events []RoomEvent
+		for pid := range r.players {
+			p, ok := r.arState.Combat.players[pid]
+			if !ok {
+				continue
+			}
+			events = append(events, RoomEvent{
+				RoomID:   r.ID,
+				Type:     RoomEvtRoundEnd,
+				TargetID: pid,
+				Data: domain.RoundEndEvent{
+					YourRank:  0,
+					YourScore: p.Kills*10 + p.Level*5,
+				},
+			})
+		}
+		if len(events) > 0 {
+			r.emitEvents(events)
+		}
+	}
+
+	r.CleanupArenaCombat()
+	r.arenaTickCounter = 0
+	r.transitionTo(domain.RoomStateEnding)
+
+	slog.Info("arena round ended", "roomId", r.ID, "round", r.round)
 }
 
 func (r *Room) endRound() {
@@ -530,7 +630,12 @@ func (r *Room) AddPlayer(id, name string, skinID int, appearance string) error {
 
 	// If round is in progress, spawn the agent immediately
 	if r.state == domain.RoomStatePlaying {
-		r.spawnPlayerAgent(p)
+		if r.IsArenaCombat() {
+			// v19: Add to ArenaCombat in arena mode
+			r.AddARPlayer(p)
+		} else {
+			r.spawnPlayerAgent(p)
+		}
 	}
 
 	slog.Info("player added to room",
@@ -538,6 +643,7 @@ func (r *Room) AddPlayer(id, name string, skinID int, appearance string) error {
 		"playerId", id,
 		"name", name,
 		"state", r.state,
+		"combatMode", r.Config.CombatMode,
 	)
 
 	return nil
@@ -552,7 +658,12 @@ func (r *Room) RemovePlayer(id string) {
 
 	// Remove agent from arena if playing
 	if r.state == domain.RoomStatePlaying || r.state == domain.RoomStateCountdown {
-		r.arena.RemoveAgent(id)
+		if r.IsArenaCombat() {
+			// v19: Remove from ArenaCombat
+			r.RemoveARPlayer(id)
+		} else {
+			r.arena.RemoveAgent(id)
+		}
 	}
 
 	slog.Info("player removed from room", "roomId", r.ID, "playerId", id)

@@ -211,6 +211,16 @@ func (ca *CountryArena) HandleChooseUpgrade(agentID string, choiceIndex int) {
 	ca.room.HandleChooseUpgrade(agentID, choiceIndex)
 }
 
+// HandleARInput forwards arena combat input (v19).
+func (ca *CountryArena) HandleARInput(clientID string, input game.ARInput) {
+	ca.room.HandleARInput(clientID, input)
+}
+
+// HandleARChoose forwards arena tome/weapon choice (v19).
+func (ca *CountryArena) HandleARChoose(clientID string, choice game.ARChoice) {
+	ca.room.HandleARChoose(clientID, choice)
+}
+
 // --- Info getters ---
 
 // GetInfo returns room info for this country arena.

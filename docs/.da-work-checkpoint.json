@@ -1,1 +1,25 @@
-{"pipeline":"da:work","execution_mode":"plan","pipeline_mode":"turbo","plan_file":"docs/designs/v18-arena-plan.md","roadmap_file":null,"ref_docs":["minecraft-threejs/"],"project_type":"GAME","current_stage":3,"current_phase":5,"current_step":null,"total_phases":7,"phases":[{"name":"CombatMode + 코어 엔진","design_needed":true,"status":"done","tasks":["CombatMode 인터페이스","Arena 타입 정의","ArenaCombat 구현","3인칭 카메라","캐릭터 렌더링","적 렌더링","XP 시스템","Tome 선택 UI"],"verify":"CombatMode ClassicCombat 호환 + PvE 5분 생존 + 레벨업 3회"},{"name":"무기 + Tome + 아이템","design_needed":false,"status":"done","tasks":["무기 16종","투사체 시스템","Tome 16종","아이템 드롭","상태이상 6종","크리티컬 시스템","데미지 넘버"],"verify":"무기 16종 발사, Tome 누적, 크리티컬 단위테스트"},{"name":"캐릭터 + 시너지 + 난이도","design_needed":false,"status":"done","tasks":["캐릭터 8종","시너지 10종","무기 진화","Tier별 난이도","미니보스 5종","엘리트 시스템","국가 테마 맵"],"verify":"시너지 5종, 무기 진화 1종, Tier 난이도 차이"},{"name":"멀티플레이어 + AI","design_needed":true,"status":"done","tasks":["Room 통합","Tier별 멀티 동기화","NationalAI 전투 확장","빌드 프로필 5종","플레이어 보간","팩션 표시"],"verify":"10명 동시접속, AI 정상행동, Tier 인원 차이"},{"name":"PvP + 주권","design_needed":true,"status":"pending","tasks":["PvP Phase","팩션 PvP","국가 테마 아레나","PvP 밸런스","주권 판정 연동","최종 보스","PvP 오버레이"],"verify":"PvP 팩션 구분, 주권 판정, 5분 사이클"},{"name":"토큰 경제 + 메타","design_needed":true,"status":"pending","tasks":["토큰 보상","프로필 시스템","퀘스트 240개","시즌 패스","캐릭터 잠금해제","사망/관전","미니맵+사운드"],"verify":"토큰 지급, 퀘스트 3종, 시즌 패스"},{"name":"최적화 + 스트레스","design_needed":false,"status":"pending","tasks":["서버 최적화","클라이언트 최적화","Tier별 부하","모바일 최적화","재접속","195국 시뮬"],"verify":"50명 20Hz, 60FPS, 모바일 30FPS"}],"iterations":{"arch":0,"dev":0,"e2e":0},"last_skill":"turbo_phase4_done","last_update":"2026-03-07T16:00:00Z"}
+{
+  "pipeline": "da:work",
+  "execution_mode": "plan",
+  "pipeline_mode": "turbo",
+  "plan_file": "docs/designs/v19-arena-integration-plan.md",
+  "roadmap_file": null,
+  "ref_docs": ["docs/designs/v18-arena-report.md", "docs/designs/v19-arena-integration-architecture.md"],
+  "project_type": "GAME",
+  "current_stage": 3,
+  "current_phase": 2,
+  "current_step": null,
+  "total_phases": 6,
+  "total_steps": 0,
+  "phases": [
+    {"name": "MCTerrain을 GameCanvas3D에 적용", "design_needed": false, "status": "done", "tasks": ["MCTerrain에 아레나 모드 추가", "좌표 시스템 마이그레이션", "HeightmapTerrain을 MCTerrain으로 교체", "클라이언트 사이드 에이전트 높이 샘플링", "씬 조명/안개 업데이트", "ArenaBoundary 적응"]},
+    {"name": "v18 전투를 서버에 연결 (5개 통합 갭)", "design_needed": false, "status": "done", "tasks": ["갭1: JoinCountryArena CombatMode 설정", "갭2: startRound() CombatMode 분기", "갭3: tickPlaying() TickArenaCombat 호출", "갭4: ar_input/ar_choose 소켓 이벤트 등록", "갭5: main.go ar_room_integration 임포트", "전투 상태 WebSocket 브로드캐스트", "MC 좌표 웨이브 스폰", "서버 사이드 자동 공격"]},
+    {"name": "클라이언트 전투 렌더링", "design_needed": true, "status": "pending", "tasks": ["MC 지형 위 적 렌더링", "XP 크리스탈 렌더링", "BuildHUD를 서버 상태에 연결", "자동 공격 시각적 피드백", "레벨업 UI", "HUD 적응", "아레나 모드 클래식 전투 시각 비활성화"]},
+    {"name": "캐릭터 선택 + Tome + 시너지", "design_needed": true, "status": "pending", "tasks": ["아레나 진입 전 캐릭터 선택", "Tome 시스템 통합", "시너지 감지", "무기 진화"]},
+    {"name": "PvP 페이즈 + 지구본 진입 수정 + 기능 마이그레이션", "design_needed": false, "status": "pending", "tasks": ["에폭 시스템을 5페이즈 전투로 교체", "팩션 PvP", "MC 지형 아레나 수축", "지구본→아레나 진입 흐름 수정", "독립 /arena 페이지 삭제", "기능 중복 정리", "모바일 컨트롤 병합"]},
+    {"name": "폴리시 + 메타 시스템", "design_needed": false, "status": "pending", "tasks": ["토큰 보상", "퀘스트 시스템", "시즌패스", "사운드 이펙트", "모바일 컨트롤"]}
+  ],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
+  "last_skill": "turbo_phase2_done",
+  "last_update": "2026-03-08T00:22:00Z"
+}

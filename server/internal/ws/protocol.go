@@ -21,6 +21,10 @@ const (
 	EventSwitchArena        = "switch_arena"
 	EventDeclareWar         = "declare_war"
 
+	// v19: Arena combat events (client → server)
+	EventARInput  = "ar_input"  // arena combat movement input
+	EventARChoose = "ar_choose" // arena tome/weapon choice
+
 	// Agent-specific events (client → server)
 	EventAgentAuth          = "agent_auth"
 	EventAgentCommand       = "agent_command"
@@ -71,6 +75,14 @@ const (
 	EventWarDeclared        = "war_declared"
 	EventWarEnded           = "war_ended"
 	EventCapturePointUpdate = "capture_point_update"
+
+	// v19: Arena combat events (server → client)
+	EventARState         = "ar_state"           // 20Hz arena combat state
+	EventARDamage        = "ar_damage"          // damage number event
+	EventARLevelUp       = "ar_level_up"        // tome/weapon choice prompt
+	EventARKill          = "ar_kill"            // enemy kill notification
+	EventARPhaseChange   = "ar_phase_change"    // phase transition
+	EventARBattleEnd     = "ar_battle_end"      // arena battle ended
 
 	// v15: Globe effects events (server → client)
 	EventDominationUpdate = "domination_update"
@@ -237,6 +249,21 @@ type JoinCountryArenaPayload struct {
 	SkinID      int    `json:"skinId"`
 	Appearance  string `json:"appearance,omitempty"`
 	Nationality string `json:"nationality"`
+}
+
+// ARInputPayload is sent by the client with arena combat movement (v19).
+type ARInputPayload struct {
+	DirX  float64 `json:"dirX"`  // -1..1
+	DirZ  float64 `json:"dirZ"`  // -1..1
+	Jump  bool    `json:"jump"`
+	Slide bool    `json:"slide"`
+	AimY  float64 `json:"aimY"` // camera yaw radians
+}
+
+// ARChoosePayload is sent by the client to select a tome/weapon during level-up (v19).
+type ARChoosePayload struct {
+	TomeID   string `json:"tomeId,omitempty"`
+	WeaponID string `json:"weaponId,omitempty"`
 }
 
 // --- Server → Client payload types ---

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -53,6 +54,9 @@ type WorldManager struct {
 
 	// Battle scheduler timers (per country)
 	battleTimers map[string]*time.Timer
+
+	// v17: Countries with auto-battle enabled (always re-schedule after cooldown)
+	autoBattleCountries map[string]bool
 }
 
 // WorldConfig holds configuration for the WorldManager.
@@ -64,6 +68,7 @@ type WorldConfig struct {
 	EndingSec           int // Default: 5
 	TickRate            int // Default: 20 Hz
 	RedisSyncEnabled    bool
+	AutoBattleCount     int // v17: Number of countries to auto-start battles (0 = disabled)
 }
 
 // DefaultWorldConfig returns the default WorldManager configuration.
@@ -76,6 +81,7 @@ func DefaultWorldConfig() WorldConfig {
 		EndingSec:           5,
 		TickRate:            20,
 		RedisSyncEnabled:    false,
+		AutoBattleCount:     20, // v17: auto-start 20 country battles with bots
 	}
 }
 
@@ -148,9 +154,10 @@ func NewWorldManager(cfg WorldConfig, redisClient *cache.RedisClient) *WorldMana
 		playerCountry:    make(map[string]string),
 		spectatorCountry: make(map[string]string),
 		arenaPool:        make([]*CountryArena, 0, 10),
-		config:           cfg,
-		redis:            redisClient,
-		battleTimers:     make(map[string]*time.Timer),
+		config:              cfg,
+		redis:               redisClient,
+		battleTimers:        make(map[string]*time.Timer),
+		autoBattleCountries: make(map[string]bool),
 	}
 
 	// Initialize country states from seed data
@@ -202,8 +209,14 @@ func (wm *WorldManager) Start(ctx context.Context) {
 		go wm.redisSyncLoop(ctx)
 	}
 
+	// v17: Auto-start battles in random countries (bots only)
+	if wm.config.AutoBattleCount > 0 {
+		go wm.autoStartBattles(ctx)
+	}
+
 	slog.Info("world manager started",
 		"redisSyncEnabled", wm.config.RedisSyncEnabled,
+		"autoBattleCount", wm.config.AutoBattleCount,
 	)
 }
 
@@ -469,6 +482,40 @@ func (wm *WorldManager) RouteChooseUpgrade(clientID string, choiceIndex int) {
 	arena.HandleChooseUpgrade(clientID, choiceIndex)
 }
 
+// RouteARInput forwards arena combat input to the correct country arena (v19).
+func (wm *WorldManager) RouteARInput(clientID string, input game.ARInput) {
+	wm.mu.RLock()
+	iso, ok := wm.playerCountry[clientID]
+	if !ok {
+		wm.mu.RUnlock()
+		return
+	}
+	arena, exists := wm.activeArenas[iso]
+	wm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+	arena.HandleARInput(clientID, input)
+}
+
+// RouteARChoose forwards arena tome/weapon choice to the correct country arena (v19).
+func (wm *WorldManager) RouteARChoose(clientID string, choice game.ARChoice) {
+	wm.mu.RLock()
+	iso, ok := wm.playerCountry[clientID]
+	if !ok {
+		wm.mu.RUnlock()
+		return
+	}
+	arena, exists := wm.activeArenas[iso]
+	wm.mu.RUnlock()
+
+	if !exists {
+		return
+	}
+	arena.HandleARChoose(clientID, choice)
+}
+
 // --- Queries ---
 
 // GetPlayerCountry returns the country ISO code a player is in.
@@ -701,13 +748,15 @@ func (wm *WorldManager) onCooldownEnd(countryISO string) {
 
 	// Check if there are still agents that warrant another battle
 	hasAgents := state.ActiveAgents > 0
+	isAutoBattle := wm.autoBattleCountries[countryISO]
 	wm.mu.Unlock()
 
-	if hasAgents {
+	// v17: Auto-battle countries always re-schedule
+	if hasAgents || isAutoBattle {
 		wm.ScheduleBattle(countryISO)
 	}
 
-	slog.Info("battle cooldown ended", "country", countryISO, "hasAgents", hasAgents)
+	slog.Info("battle cooldown ended", "country", countryISO, "hasAgents", hasAgents, "autoBattle", isAutoBattle)
 }
 
 // --- Arena pooling ---
@@ -818,6 +867,11 @@ func (wm *WorldManager) buildRoomConfig(state *CountryState) game.RoomConfig {
 		CooldownSec:       wm.config.BattleCooldownSec,
 		MinPlayersToStart: 1,
 		TerrainTheme:      state.TerrainTheme,
+		// v19: Enable arena combat mode for all country arenas
+		CombatMode:  game.CombatModeArena,
+		CountryTier: string(state.Tier),
+		CountryISO3: state.ISO3,
+		CountryName: state.Name,
 	}
 }
 
@@ -865,6 +919,66 @@ func (wm *WorldManager) handleArenaEvents(events []game.RoomEvent) {
 func (wm *WorldManager) emitEvents(events []WorldEvent) {
 	if wm.OnEvents != nil && len(events) > 0 {
 		wm.OnEvents(events)
+	}
+}
+
+// --- Auto-Battle Scheduling (v17) ---
+
+// autoStartBattles selects random countries and starts bot-only battles.
+// Battles are staggered over the first 3 minutes so they don't all start at once.
+func (wm *WorldManager) autoStartBattles(ctx context.Context) {
+	// Wait a bit for all systems to initialize
+	select {
+	case <-ctx.Done():
+		return
+	case <-time.After(2 * time.Second):
+	}
+
+	wm.mu.RLock()
+	// Collect all country ISO codes
+	isos := make([]string, 0, len(wm.countries))
+	for iso := range wm.countries {
+		isos = append(isos, iso)
+	}
+	wm.mu.RUnlock()
+
+	// Shuffle and pick up to AutoBattleCount
+	rng := rand.New(rand.NewSource(time.Now().UnixNano()))
+	rng.Shuffle(len(isos), func(i, j int) { isos[i], isos[j] = isos[j], isos[i] })
+
+	count := wm.config.AutoBattleCount
+	if count > len(isos) {
+		count = len(isos)
+	}
+	if count > wm.config.MaxConcurrentArenas {
+		count = wm.config.MaxConcurrentArenas
+	}
+
+	// Register auto-battle countries
+	wm.mu.Lock()
+	for i := 0; i < count; i++ {
+		wm.autoBattleCountries[isos[i]] = true
+	}
+	wm.mu.Unlock()
+
+	slog.Info("v17 auto-battle scheduling", "count", count, "pool", len(isos))
+
+	for i := 0; i < count; i++ {
+		iso := isos[i]
+
+		// Stagger: random delay 0~180 seconds
+		delay := time.Duration(rng.Intn(180)) * time.Second
+
+		go func(countryISO string, d time.Duration) {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(d):
+			}
+
+			wm.ScheduleBattle(countryISO)
+			slog.Info("v17 auto-battle started", "country", countryISO, "delay", d)
+		}(iso, delay)
 	}
 }
 
