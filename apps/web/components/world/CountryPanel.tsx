@@ -18,11 +18,14 @@ import ProposalList from '@/components/governance/ProposalList';
 import VoteInterface from '@/components/governance/VoteInterface';
 import type { Proposal } from '@/components/governance/types';
 import type { TokenBalance, StakingInfo } from '@/lib/crossx-config';
+import { CivilizationPanel } from '@/components/civilization/CivilizationPanel';
+import type { NationStatsData } from '@/components/civilization/StatsChart';
+import type { CountryPoliciesData, PolicyCategory } from '@/components/civilization/PolicyManager';
 
 // ─── Types ───────────────────────────────────────────────
-type CountryTab = 'OVERVIEW' | 'TOKEN' | 'VOTE' | 'FACTION';
+type CountryTab = 'OVERVIEW' | 'TOKEN' | 'VOTE' | 'FACTION' | 'CIVILIZATION';
 
-const TABS: CountryTab[] = ['OVERVIEW', 'TOKEN', 'VOTE', 'FACTION'];
+const TABS: CountryTab[] = ['OVERVIEW', 'TOKEN', 'VOTE', 'FACTION', 'CIVILIZATION'];
 
 // 모바일 바텀시트 단계
 type SheetStage = 'closed' | 'peek' | 'half' | 'full';
@@ -120,6 +123,37 @@ function getMockProposals(iso3: string): Proposal[] {
       totalVoters: 72,
     },
   ];
+}
+
+// ─── Mock Civilization Data ─────────────────────────────
+function getMockNationStats(country: CountryClientState): NationStatsData {
+  const tierMult: Record<string, number> = { S: 1.5, A: 1.2, B: 1.0, C: 0.8, D: 0.6 };
+  const mult = tierMult[country.tier] || 1.0;
+  return {
+    happiness: Math.min(100, 50 * mult + Math.random() * 20),
+    birthRate: Math.min(4.0, Math.max(0.5, 2.0 * mult + (Math.random() - 0.5))),
+    gdp: Math.max(100, 1000 * mult + Math.random() * 500),
+    militaryPower: Math.min(100, 50 * mult + Math.random() * 20),
+    techLevel: Math.min(100, 50 * mult + Math.random() * 15),
+    loyalty: Math.min(100, 50 * mult + Math.random() * 20),
+    population: Math.max(10, 1000 * mult + Math.random() * 500),
+    internationalRep: (mult - 1.0) * 30 + (Math.random() - 0.5) * 20,
+  };
+}
+
+function getMockPolicies(country: CountryClientState): CountryPoliciesData {
+  const policies: Record<PolicyCategory, number> = {
+    religion: 1, language: 1, government: 0, tax_rate: 1,
+    military: 1, education: 1, trade: 1, environment: 1,
+    immigration: 1, culture: 1,
+  };
+  return {
+    countryCode: country.iso3,
+    policies,
+    lastChanged: 0,
+    changedBy: '',
+    graceEnd: 0,
+  };
 }
 
 interface MockFactionInfo {
@@ -901,6 +935,19 @@ export function CountryPanel({
         return <VoteTab country={country} />;
       case 'FACTION':
         return <FactionTab country={country} />;
+      case 'CIVILIZATION':
+        return (
+          <CivilizationPanel
+            countryCode={country.iso3}
+            countryName={country.name}
+            stats={getMockNationStats(country)}
+            policies={getMockPolicies(country)}
+            canChangePolicy={false}
+            dominantNation={country.sovereignFaction || undefined}
+            hasHegemony={false}
+            hasSovereignty={(country.sovereigntyLevel ?? 0) > 0}
+          />
+        );
       default:
         return null;
     }
