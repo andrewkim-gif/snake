@@ -24,12 +24,20 @@ const CountryPanel = dynamic(
   { ssr: false },
 );
 
+// v14: Globe domination + war effects types
+import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
+import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
+
 interface WorldViewProps {
   countryStates?: Map<string, CountryClientState>;
   onEnterArena?: (iso3: string) => void;
   onSpectate?: (iso3: string) => void;
   bottomOffset?: number;
   style?: React.CSSProperties;
+  /** v14: Domination state overlay for globe countries */
+  dominationStates?: Map<string, CountryDominationState>;
+  /** v14: Active war effects for globe */
+  wars?: WarEffectData[];
 }
 
 export function WorldView({
@@ -38,6 +46,8 @@ export function WorldView({
   onSpectate,
   bottomOffset = 0,
   style,
+  dominationStates,
+  wars,
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -89,6 +99,30 @@ export function WorldView({
     setTimeout(() => setSelectedCountry(null), 300);
   }, []);
 
+  // v14: Globe hover → GlobeHoverPanel data
+  const handleGlobeHover = useCallback((iso3: string | null, name: string | null) => {
+    if (!iso3 || !name) {
+      setHoverVisible(false);
+      return;
+    }
+    const cs = states.get(iso3);
+    const domState = dominationStates?.get(iso3);
+    setHoverData({
+      countryCode: iso3,
+      countryName: cs?.name ?? name,
+      happiness: 50,  // placeholder until civilization system sends data
+      gdp: cs?.gdp ?? 0,
+      militaryPower: 50,
+      population: 0,
+      atWar: false,
+      hasSovereignty: domState?.level === 'sovereignty' || domState?.level === 'hegemony',
+      hasHegemony: domState?.level === 'hegemony',
+      activeAgents: cs?.activeAgents ?? 0,
+      dominantNation: domState?.dominantNation,
+    });
+    setHoverVisible(true);
+  }, [states, dominationStates]);
+
   const selectedCountryData = selectedCountry
     ? states.get(selectedCountry) || null
     : null;
@@ -108,6 +142,9 @@ export function WorldView({
           countryStates={states}
           selectedCountry={selectedCountry}
           onCountryClick={handleCountryClick}
+          dominationStates={dominationStates}
+          wars={wars}
+          onHover={handleGlobeHover}
         />
       </div>
 

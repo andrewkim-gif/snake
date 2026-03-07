@@ -521,22 +521,20 @@ export function GameCanvas3D({
         <AbilityEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
 
         {/* 15. WeaponRenderer — v14 무기 파티클 VFX (10종 무기, LOD)
-            damageEvents are delivered via separate WS events (weapon_fired/damage_dealt),
-            stored in uiState or dataRef by SocketProvider. Pass empty array until wired. */}
+            damageEvents delivered via damage_dealt WS event → uiState.damageEvents */}
         <WeaponRenderer
-          damageEvents={[]}
+          damageEvents={uiState.damageEvents}
         />
 
         {/* 16. DamageNumbers — v14 플로팅 대미지 숫자 (128 풀) */}
         <DamageNumbers
-          damageEvents={[]}
+          damageEvents={uiState.damageEvents}
         />
 
         {/* 17. CapturePointRenderer — v14 거점 빔/영역/점령 프로그레스
-            capturePoints are delivered via capture_point_update WS event.
-            Pass empty array until wired. */}
+            capturePoints delivered via capture_point_update WS event → uiState.capturePoints */}
         <CapturePointRenderer
-          capturePoints={[]}
+          capturePoints={uiState.capturePoints}
         />
       </Canvas>
 
@@ -552,8 +550,13 @@ export function GameCanvas3D({
           pvpEnabled={uiState.epoch.pvpEnabled}
           nationScores={uiState.epoch.nationScores}
           kills={myAgent?.ks ?? 0}
-          deaths={0}
-          assists={0}
+          deaths={
+            // v14: epoch_scoreboard에서 사망 수 추출 (없으면 0)
+            uiState.epochScoreboard.find(e => e.id === dataRef.current.playerId)?.deaths ?? 0
+          }
+          assists={
+            uiState.epochScoreboard.find(e => e.id === dataRef.current.playerId)?.assists ?? 0
+          }
           playerNationality={uiState.nationality ?? undefined}
           playerNationScore={
             uiState.nationality
@@ -705,18 +708,25 @@ export function GameCanvas3D({
       <ScoreboardOverlay
         visible={scoreboardVisible}
         players={
-          (dataRef.current.leaderboard ?? []).map((e, idx) => ({
-            id: e.id,
-            name: e.name,
-            rank: idx + 1,
-            kills: e.kills ?? 0,
-            deaths: 0,
-            assists: 0,
-            level: 1,
-            score: e.score ?? 0,
-            nationality: '',
-            isBot: false,
-          }))
+          // v14: epoch_scoreboard 이벤트에서 전체 데이터 사용, 없으면 leaderboard + agent 상태에서 구성
+          uiState.epochScoreboard.length > 0
+            ? uiState.epochScoreboard
+            : (dataRef.current.leaderboard ?? []).map((e, idx) => {
+                // agent network data에서 추가 정보 추출
+                const agent = dataRef.current.latestState?.s?.find(a => a.i === e.id);
+                return {
+                  id: e.id,
+                  name: e.name,
+                  rank: idx + 1,
+                  kills: e.kills ?? 0,
+                  deaths: 0,
+                  assists: 0,
+                  level: agent?.lv ?? 1,
+                  score: e.score ?? 0,
+                  nationality: agent?.nat ?? '',
+                  isBot: agent?.bot ?? false,
+                };
+              })
         }
         nationScores={
           uiState.epoch

@@ -2,89 +2,32 @@
 
 /**
  * Economy Hub Layout — 서브 탭 네비게이션 (TOKENS / TRADE / POLICY)
- * 골드 underline 활성 스타일, 모바일 가로 스크롤
+ * 통합 SubTabNav 컴포넌트 사용
  */
 
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { SK, bodyFont } from '@/lib/sketch-ui';
-
-const ECONOMY_TABS = [
-  { key: 'tokens' as const, href: '/economy/tokens' },
-  { key: 'trade' as const, href: '/economy/trade' },
-  { key: 'policy' as const, href: '/economy/policy' },
-];
+import { SubTabNav } from '@/components/hub';
+import { Coins, ArrowLeftRight, ScrollText } from 'lucide-react';
 
 export default function EconomyLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
   const tEconomy = useTranslations('economy');
 
-  // 현재 활성 탭 판별
-  const activeTab = ECONOMY_TABS.find((tab) => pathname.startsWith(tab.href))?.key ?? 'tokens';
+  const tabs = [
+    { key: 'tokens', label: tEconomy('tokens'), href: '/economy/tokens', icon: Coins },
+    { key: 'trade', label: tEconomy('trade'), href: '/economy/trade', icon: ArrowLeftRight },
+    { key: 'policy', label: tEconomy('policy'), href: '/economy/policy', icon: ScrollText },
+  ];
 
   return (
     <div>
-      {/* 서브 탭 네비게이션 */}
-      <nav
-        style={{
-          display: 'flex',
-          gap: '0',
-          borderBottom: `1px solid ${SK.border}`,
-          marginBottom: '24px',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
-        }}
-      >
-        <style>{`
-          .economy-tabs::-webkit-scrollbar { display: none; }
-        `}</style>
-        <div
-          className="economy-tabs"
-          style={{
-            display: 'flex',
-            gap: '0',
-            minWidth: 'max-content',
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-          }}
-        >
-          {ECONOMY_TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <Link
-                key={tab.key}
-                href={tab.href}
-                style={{
-                  fontFamily: bodyFont,
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  letterSpacing: '2px',
-                  textTransform: 'uppercase',
-                  textDecoration: 'none',
-                  color: isActive ? SK.orange : SK.textSecondary,
-                  padding: '12px 20px',
-                  borderBottom: isActive
-                    ? `2px solid ${SK.orange}`
-                    : '2px solid transparent',
-                  transition: 'color 150ms ease, border-color 150ms ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {tEconomy(tab.key)}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-
-      {/* 콘텐츠 영역 */}
+      <SubTabNav
+        tabs={tabs}
+        isActive={(tab, pathname) => pathname.startsWith(tab.href)}
+      />
       {children}
     </div>
   );

@@ -2,8 +2,7 @@
 
 /**
  * /economy/tokens — 토큰 이코노미 대시보드
- * 기존 app/economy/tokens/ 에서 마이그레이션
- * Hub Layout (Economy sub-tabs) 적용
+ * PageHeader + StatCard + DashPanel 통합 컴포넌트 사용
  */
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
@@ -17,8 +16,10 @@ import {
   TokenRanking,
 } from '@/app/economy/tokens/components';
 import { SK, bodyFont } from '@/lib/sketch-ui';
+import { PageHeader, DashPanel, StatCard } from '@/components/hub';
+import { TrendingUp, BarChart3, Layers, Shield, Flame } from 'lucide-react';
 
-// --- Mock data generator (replaced by real API in production) ---
+// --- Mock data generator ---
 function generateMockData() {
   const tiers = [
     { tier: 'S', count: 8, supply: 50e6, baseCap: 500000 },
@@ -104,42 +105,6 @@ function generateMockData() {
   return { marketCapData, stakingData, buybacks, burns };
 }
 
-// Dashboard panel wrapper
-function DashPanel({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div
-      style={{
-        background: SK.cardBg,
-        border: `1px solid ${SK.border}`,
-        borderRadius: '12px',
-        padding: '16px',
-        overflow: 'hidden',
-      }}
-    >
-      <h3
-        style={{
-          color: SK.textPrimary,
-          fontWeight: 700,
-          fontSize: '14px',
-          margin: '0 0 12px 0',
-          textTransform: 'uppercase',
-          letterSpacing: '1.5px',
-          fontFamily: bodyFont,
-        }}
-      >
-        {title}
-      </h3>
-      {children}
-    </div>
-  );
-}
-
 function TokensPageInner() {
   const tEconomy = useTranslations('economy');
   const searchParams = useSearchParams();
@@ -155,7 +120,6 @@ function TokensPageInner() {
     return () => clearInterval(interval);
   }, []);
 
-  // Aggregate stats
   const stats = useMemo(() => {
     if (!data) return null;
     const totalMarketCap = data.marketCapData.reduce((s, e) => s + e.marketCap, 0);
@@ -185,58 +149,44 @@ function TokensPageInner() {
 
   return (
     <div style={{ fontFamily: bodyFont }}>
-      {/* Header */}
-      <div style={{ marginBottom: '24px' }}>
-        <h1
-          style={{
-            color: SK.textPrimary,
-            fontWeight: 800,
-            fontSize: '24px',
-            margin: '0 0 4px 0',
-            fontFamily: bodyFont,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-          }}
-        >
-          {tEconomy('tokenEconomy')}
-        </h1>
-        <p style={{ color: SK.textSecondary, fontSize: '14px', margin: 0 }}>
-          {tEconomy('tokenEconomyDesc')}
-        </p>
-      </div>
-
-      {/* 국가 필터 표시 (deep linking) */}
-      {countryParam && (
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            background: `${SK.orange}15`,
-            border: `1px solid ${SK.orange}30`,
-            marginBottom: '16px',
-            fontFamily: bodyFont,
-            fontSize: '12px',
-            color: SK.orange,
-            fontWeight: 600,
-          }}
-        >
-          {tEconomy('highlighted', { country: countryParam })}
-          <a
-            href="/economy/tokens"
+      <PageHeader
+        icon={TrendingUp}
+        title={tEconomy('tokenEconomy')}
+        description={tEconomy('tokenEconomyDesc')}
+        accentColor={SK.orange}
+        heroImage="/images/hero-economy.png"
+      >
+        {/* 국가 필터 (deep linking) */}
+        {countryParam && (
+          <div
             style={{
-              color: SK.textSecondary,
-              textDecoration: 'none',
-              fontSize: '11px',
-              marginLeft: '4px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: `${SK.orange}15`,
+              border: `1px solid ${SK.orange}30`,
+              fontSize: '12px',
+              color: SK.orange,
+              fontWeight: 600,
             }}
           >
-            {tEconomy('clear')}
-          </a>
-        </div>
-      )}
+            {tEconomy('highlighted', { country: countryParam })}
+            <a
+              href="/economy/tokens"
+              style={{
+                color: SK.textSecondary,
+                textDecoration: 'none',
+                fontSize: '11px',
+                marginLeft: '4px',
+              }}
+            >
+              {tEconomy('clear')}
+            </a>
+          </div>
+        )}
+      </PageHeader>
 
       {/* Stats summary */}
       <div
@@ -247,39 +197,33 @@ function TokensPageInner() {
           marginBottom: '24px',
         }}
       >
-        {[
-          { label: 'Total Market Cap', value: `$${(stats.totalMarketCap / 1e6).toFixed(2)}M`, color: SK.textPrimary },
-          { label: 'Total Staked', value: `${(stats.totalStaked / 1e6).toFixed(1)}M tokens`, color: SK.orange },
-          { label: 'Buyback Volume', value: `${(stats.totalBuybacks / 1e3).toFixed(1)}K tokens`, color: SK.green },
-          { label: 'Total Burned', value: `${(stats.totalBurned / 1e3).toFixed(1)}K tokens`, color: SK.red },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            style={{
-              background: SK.cardBg,
-              border: `1px solid ${SK.border}`,
-              borderRadius: '10px',
-              padding: '14px 16px',
-            }}
-          >
-            <div style={{
-              color: SK.textSecondary,
-              fontSize: '11px',
-              fontWeight: 600,
-              marginBottom: '4px',
-              textTransform: 'uppercase',
-              letterSpacing: '1px',
-            }}>
-              {stat.label}
-            </div>
-            <div style={{ color: stat.color, fontSize: '20px', fontWeight: 700 }}>
-              {stat.value}
-            </div>
-          </div>
-        ))}
+        <StatCard
+          label="Total Market Cap"
+          value={`$${(stats.totalMarketCap / 1e6).toFixed(2)}M`}
+          color={SK.textPrimary}
+          icon={BarChart3}
+        />
+        <StatCard
+          label="Total Staked"
+          value={`${(stats.totalStaked / 1e6).toFixed(1)}M tokens`}
+          color={SK.orange}
+          icon={Layers}
+        />
+        <StatCard
+          label="Buyback Volume"
+          value={`${(stats.totalBuybacks / 1e3).toFixed(1)}K tokens`}
+          color={SK.green}
+          icon={TrendingUp}
+        />
+        <StatCard
+          label="Total Burned"
+          value={`${(stats.totalBurned / 1e3).toFixed(1)}K tokens`}
+          color={SK.red}
+          icon={Flame}
+        />
       </div>
 
-      {/* Main grid — 반응형 */}
+      {/* Main grid */}
       <div
         className="economy-main-grid"
         style={{
@@ -302,32 +246,29 @@ function TokensPageInner() {
             }
           }
         `}</style>
-        <DashPanel title="Market Cap Ranking">
+        <DashPanel title="Market Cap Ranking" icon={BarChart3} accentColor={SK.orange}>
           <MarketCapChart data={data.marketCapData} maxDisplay={15} />
         </DashPanel>
 
-        <DashPanel title="Token Rankings">
+        <DashPanel title="Token Rankings" icon={TrendingUp} accentColor={SK.blue}>
           <TokenRanking data={data.marketCapData} />
         </DashPanel>
 
-        <DashPanel title="Defense Buff Map">
+        <DashPanel title="Defense Buff Map" icon={Shield} accentColor={SK.green}>
           <DefenseBuffVisualization data={data.marketCapData} maxDisplay={15} />
         </DashPanel>
 
-        <DashPanel title="Staking Overview">
+        <DashPanel title="Staking Overview" icon={Layers} accentColor={SK.orange}>
           <StakingOverview data={data.stakingData} maxDisplay={15} />
         </DashPanel>
 
-        {/* Buyback/Burn History — full width */}
-        <div style={{ gridColumn: '1 / -1' }}>
-          <DashPanel title="Buyback & Burn History">
-            <BuybackBurnHistory
-              buybacks={data.buybacks}
-              burns={data.burns}
-              maxDisplay={25}
-            />
-          </DashPanel>
-        </div>
+        <DashPanel title="Buyback & Burn History" icon={Flame} accentColor={SK.red} fullWidth>
+          <BuybackBurnHistory
+            buybacks={data.buybacks}
+            burns={data.burns}
+            maxDisplay={25}
+          />
+        </DashPanel>
       </div>
     </div>
   );
@@ -348,8 +289,7 @@ export default function TokensPage() {
             fontSize: '16px',
           }}
         >
-          {/* Static fallback — no hooks in Suspense fallback */}
-        Loading...
+          Loading...
         </div>
       }
     >

@@ -2,95 +2,35 @@
 
 /**
  * Governance Hub Layout — 서브 탭 네비게이션 (PROPOSALS / NEW / HISTORY)
- * 골드 underline 활성 스타일, 모바일 가로 스크롤
- * Economy layout.tsx 패턴 참조
+ * 통합 SubTabNav 컴포넌트 사용
  */
 
-import { usePathname } from 'next/navigation';
-import Link from 'next/link';
 import { useTranslations } from 'next-intl';
-import { SK, bodyFont } from '@/lib/sketch-ui';
-
-const GOVERNANCE_TABS = [
-  { key: 'proposals' as const, href: '/governance' },
-  { key: 'new' as const, href: '/governance/new' },
-  { key: 'history' as const, href: '/governance/history' },
-];
+import { SubTabNav } from '@/components/hub';
+import { Vote, Plus, History } from 'lucide-react';
 
 export default function GovernanceLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const pathname = usePathname();
   const tGov = useTranslations('governance');
 
-  // 현재 활성 탭 판별
-  const activeTab = (() => {
-    if (pathname === '/governance' || pathname === '/governance/') return 'proposals';
-    if (pathname.startsWith('/governance/new')) return 'new';
-    if (pathname.startsWith('/governance/history')) return 'history';
-    return 'proposals';
-  })();
+  const tabs = [
+    { key: 'proposals', label: tGov('proposals'), href: '/governance', icon: Vote },
+    { key: 'new', label: tGov('new'), href: '/governance/new', icon: Plus },
+    { key: 'history', label: tGov('history'), href: '/governance/history', icon: History },
+  ];
 
   return (
     <div>
-      {/* 서브 탭 네비게이션 */}
-      <nav
-        style={{
-          display: 'flex',
-          gap: '0',
-          borderBottom: `1px solid ${SK.border}`,
-          marginBottom: '24px',
-          overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch',
-          scrollbarWidth: 'none',
-          msOverflowStyle: 'none',
+      <SubTabNav
+        tabs={tabs}
+        isActive={(tab, pathname) => {
+          if (tab.key === 'proposals') return pathname === '/governance' || pathname === '/governance/';
+          return pathname.startsWith(tab.href);
         }}
-      >
-        <style>{`
-          .governance-tabs::-webkit-scrollbar { display: none; }
-        `}</style>
-        <div
-          className="governance-tabs"
-          style={{
-            display: 'flex',
-            gap: '0',
-            minWidth: 'max-content',
-            overflowX: 'auto',
-            scrollbarWidth: 'none',
-          }}
-        >
-          {GOVERNANCE_TABS.map((tab) => {
-            const isActive = activeTab === tab.key;
-            return (
-              <Link
-                key={tab.key}
-                href={tab.href}
-                style={{
-                  fontFamily: bodyFont,
-                  fontWeight: 700,
-                  fontSize: '13px',
-                  letterSpacing: '2px',
-                  textTransform: 'uppercase',
-                  textDecoration: 'none',
-                  color: isActive ? SK.orange : SK.textSecondary,
-                  padding: '12px 20px',
-                  borderBottom: isActive
-                    ? `2px solid ${SK.orange}`
-                    : '2px solid transparent',
-                  transition: 'color 150ms ease, border-color 150ms ease',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {tGov(tab.key)}
-              </Link>
-            );
-          })}
-        </div>
-      </nav>
-
-      {/* 콘텐츠 영역 */}
+      />
       {children}
     </div>
   );

@@ -1,6 +1,7 @@
 /**
  * Premium Dark UI — 세련된 다크 디자인 시스템
- * 딥 다크 + 인디고 액센트 + 글래스모피즘 (Inter 폰트)
+ * 딥 다크 + 인디고 액센트 + 글래스모피즘
+ * v15: Chakra Petch (heading) + Space Grotesk (body)
  */
 
 /** 프리미엄 다크 팔레트 */
@@ -68,11 +69,11 @@ export const SKFont = {
   button: '16px',
 } as const;
 
-/** 타이틀 폰트 — Inter Heavy */
-export const headingFont = '"Inter", -apple-system, BlinkMacSystemFont, sans-serif';
+/** 타이틀 폰트 — Chakra Petch (사이버펑크/전술) */
+export const headingFont = '"Chakra Petch", -apple-system, BlinkMacSystemFont, sans-serif';
 
-/** UI 폰트 — Inter */
-export const bodyFont = '"Inter", -apple-system, BlinkMacSystemFont, sans-serif';
+/** UI 폰트 — Space Grotesk (클린 테크) */
+export const bodyFont = '"Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif';
 
 /** 라운드 코너 */
 export function handDrawnRadius(base = 8) {

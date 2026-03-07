@@ -19,7 +19,15 @@ import type {
   WarPhaseStartPayload, WarPhaseEndPayload,
   RespawnCountdownPayload, RespawnCompletePayload,
   NationScoreUpdatePayload, EpochPhase,
+  WeaponDamageEvent,
+  WarDeclaredPayload, WarEndedPayload, WarScoreUpdatePayload,
+  WarSnapshotPayload, WarSirenPayload,
+  EpochScoreboardPayload, EpochScoreboardEntry,
 } from '@agent-survivor/shared';
+import type { CapturePointData } from '@/components/3d/CapturePointRenderer';
+import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
+import type { ServerDominationData } from '@/components/3d/GlobeDominationLayer';
+import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
 import type { CountryClientState } from '@/lib/globe-data';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
@@ -126,6 +134,17 @@ export interface UiState {
   respawnState: RespawnState | null;
   warCountdown: number | null;
   nationality: string | null;
+  // v14: Weapon VFX + Damage Numbers
+  damageEvents: WeaponDamageEvent[];
+  // v14: Capture Points
+  capturePoints: CapturePointData[];
+  // v14: Globe domination + war effects
+  dominationStates: Map<string, CountryDominationState>;
+  wars: WarEffectData[];
+  // v14: Global events (EventTicker)
+  globalEvents: Array<{ id: string; type: string; message: string; timestamp: number }>;
+  // v14: Epoch scoreboard (full player data)
+  epochScoreboard: EpochScoreboardEntry[];
 }
 
 export function useSocket() {
@@ -157,6 +176,12 @@ export function useSocket() {
     respawnState: null,
     warCountdown: null,
     nationality: null,
+    damageEvents: [],
+    capturePoints: [],
+    dominationStates: new Map(),
+    wars: [],
+    globalEvents: [],
+    epochScoreboard: [],
   });
 
   useEffect(() => {
@@ -353,6 +378,9 @@ export function useSocket() {
         epochResult: null,
         respawnState: null,
         warCountdown: null,
+        damageEvents: [],
+        capturePoints: [],
+        epochScoreboard: [],
       }));
     });
 
@@ -476,6 +504,144 @@ export function useSocket() {
       }));
     });
 
+    // ─── v14: Weapon VFX + Damage Numbers ───
+
+    socket.on('damage_dealt', (data: WeaponDamageEvent) => {
+      setUiState(prev => ({
+        ...prev,
+        damageEvents: [...prev.damageEvents, data].slice(-64), // 최근 64개만 유지
+      }));
+      // 3초 후 자동 제거 (렌더러 자체 만료와 이중 안전장치)
+      setTimeout(() => {
+        setUiState(prev => ({
+          ...prev,
+          damageEvents: prev.damageEvents.filter(e => e !== data),
+        }));
+      }, 3000);
+    });
+
+    // ─── v14: Capture Points ───
+
+    socket.on('capture_point_update', (data: { capturePoints: CapturePointData[] }) => {
+      setUiState(prev => ({ ...prev, capturePoints: data.capturePoints }));
+    });
+
+    // ─── v14: War countdown (전쟁 시작 3-2-1 카운트다운) ───
+
+    socket.on('war_siren', (data: WarSirenPayload) => {
+      setUiState(prev => ({ ...prev, warCountdown: data.sirenSeconds }));
+    });
+
+    // ─── v14: War system events (Globe 전쟁 이펙트) ───
+
+    socket.on('war_declared', (data: WarDeclaredPayload) => {
+      setUiState(prev => {
+        const newWar: WarEffectData = {
+          warId: data.warId,
+          state: data.state === 'preparation' ? 'preparation' : 'active',
+          attacker: data.attacker,
+          defender: data.defender,
+          attackerScore: 0,
+          defenderScore: 0,
+        };
+        return {
+          ...prev,
+          wars: [...prev.wars.filter(w => w.warId !== data.warId), newWar],
+        };
+      });
+    });
+
+    socket.on('war_score_update', (data: WarScoreUpdatePayload) => {
+      setUiState(prev => ({
+        ...prev,
+        wars: prev.wars.map(w =>
+          w.warId === data.warId
+            ? { ...w, state: 'active' as const, attackerScore: data.attackerScore, defenderScore: data.defenderScore }
+            : w,
+        ),
+      }));
+    });
+
+    socket.on('war_ended', (data: WarEndedPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        wars: prev.wars.map(w =>
+          w.warId === data.warId
+            ? {
+                ...w,
+                state: 'ended' as const,
+                attackerScore: data.attackerScore,
+                defenderScore: data.defenderScore,
+                outcome: data.outcome as WarEffectData['outcome'],
+                winner: data.winner,
+              }
+            : w,
+        ),
+      }));
+      // 전쟁 종료 이펙트 5초 후 제거
+      setTimeout(() => {
+        setUiState(prev => ({
+          ...prev,
+          wars: prev.wars.filter(w => w.warId !== data.warId),
+        }));
+      }, 5000);
+    });
+
+    socket.on('war_snapshot', (data: WarSnapshotPayload) => {
+      setUiState(prev => ({
+        ...prev,
+        wars: data.wars.map(w => ({
+          warId: w.warId,
+          state: w.state as WarEffectData['state'],
+          attacker: w.attacker,
+          defender: w.defender,
+          attackerScore: w.attackerScore,
+          defenderScore: w.defenderScore,
+        })),
+      }));
+    });
+
+    // ─── v14: Domination updates (Globe 지배 색상) ───
+
+    socket.on('domination_update', (data: { countries: ServerDominationData[] }) => {
+      setUiState(prev => {
+        const next = new Map(prev.dominationStates);
+        for (const d of data.countries) {
+          const existing = next.get(d.countryCode);
+          next.set(d.countryCode, {
+            iso3: d.countryCode,
+            dominantNation: d.dominantNation,
+            level: d.status,
+            color: '',  // GlobeDominationLayer의 getNationColor가 처리
+            transitionProgress: existing ? 0 : 1,
+            previousColor: existing?.color ?? '',
+          });
+        }
+        return { ...prev, dominationStates: next };
+      });
+    });
+
+    // ─── v14: Global events (EventTicker / NewsFeed) ───
+
+    socket.on('global_event', (data: { type: string; message: string }) => {
+      const event = {
+        id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
+        type: data.type,
+        message: data.message,
+        timestamp: Date.now(),
+      };
+      setUiState(prev => ({
+        ...prev,
+        globalEvents: [...prev.globalEvents, event].slice(-50), // 최근 50개만 유지
+      }));
+    });
+
+    // ─── v14: Epoch scoreboard (전체 플레이어 데이터) ───
+
+    socket.on('epoch_scoreboard', (data: EpochScoreboardPayload) => {
+      setUiState(prev => ({ ...prev, epochScoreboard: data.players }));
+    });
+
     // WebSocket 연결 시작 (ping은 GameSocket 내부에서 처리)
     socket.connect(SERVER_URL);
 
@@ -525,6 +691,9 @@ export function useSocket() {
       epochResult: null,
       respawnState: null,
       warCountdown: null,
+      damageEvents: [],
+      capturePoints: [],
+      epochScoreboard: [],
     }));
   }, []);
 
@@ -636,6 +805,9 @@ export function useSocket() {
       epochResult: null,
       respawnState: null,
       warCountdown: null,
+      damageEvents: [],
+      capturePoints: [],
+      epochScoreboard: [],
     }));
   }, []);
 

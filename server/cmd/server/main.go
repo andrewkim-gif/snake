@@ -135,8 +135,7 @@ func main() {
 		)
 	}
 
-	// Wire WorldManager events to Hub (replaces createRoomEventHandler)
-	worldManager.OnEvents = createWorldEventHandler(hub)
+	// NOTE: WorldManager.OnEvents is wired after v14 systems are created (see below)
 
 	slog.Info("v11 world initialized",
 		"countries", countryCount,
@@ -376,8 +375,22 @@ func main() {
 	// --- InactiveArenaReaper (memory release for idle arenas) ---
 	v14ArenaReaper := game.NewInactiveArenaReaper()
 
+	// --- CrossArenaManager (cross-arena invasion during wars) ---
+	v14CrossArenaMgr := game.NewCrossArenaManager(v14WarSystem, v14ArenaManager)
+	v14CrossArenaMgr.OnEvent = func(event game.CrossArenaEvent) {
+		frame, err := ws.EncodeFrame("cross_arena_event", event)
+		if err != nil {
+			slog.Error("failed to encode cross_arena_event", "error", err)
+			return
+		}
+		if event.CountryCode != "" {
+			hub.BroadcastToRoom(event.CountryCode, frame)
+		}
+		hub.BroadcastToLobby(frame)
+	}
+
 	slog.Info("v14 in-game systems initialized",
-		"modules", 10,
+		"modules", 11,
 		"countryArenaManager", "ready",
 		"tickProfiler", "ready",
 		"bandwidthMonitor", "ready",
@@ -388,7 +401,75 @@ func main() {
 		"warSystem", "ready",
 		"tokenRewards", "ready",
 		"arenaReaper", "ready",
+		"crossArena", "ready",
 	)
+
+	// ================================================================
+	// 7c-2. Wire WorldManager events → Hub + v14 modules
+	// ================================================================
+	// The v14Sys struct is created here so createWorldEventHandler can
+	// forward kill/death events to v14 modules (CrossArenaManager, etc.)
+	v14SysForEvents := &V14Systems{
+		ArenaManager:    v14ArenaManager,
+		AccountLevelMgr: v14AccountLevelMgr,
+		ChallengeMgr:    v14ChallengeMgr,
+		AchievementMgr:  v14AchievementMgr,
+		WarSystem:       v14WarSystem,
+		TokenRewardMgr:  v14TokenRewardMgr,
+		EventLog:        v14EventLog,
+		TickProfiler:    tickProfiler,
+		CrossArenaMgr:   v14CrossArenaMgr,
+	}
+	worldManager.OnEvents = createWorldEventHandler(hub, v14SysForEvents)
+
+	// ================================================================
+	// 7c-3. Wire v14 EpochManager events → WebSocket Hub
+	// ================================================================
+	// The CountryArenaManager's OnEvents callback handles RoomEvents
+	// (state, kill, death, etc.) but EpochManager events (epoch_start,
+	// epoch_end, war_phase_start, etc.) need separate wiring.
+	// Each arena's EpochManager.OnEvents is set when the arena is created.
+	// We set a factory callback so newly-created arenas get the wiring.
+	v14ArenaManager.OnEpochEvents = func(events []game.EpochEvent) {
+		for _, evt := range events {
+			var wsEvent string
+			switch evt.Type {
+			case game.EpochEvtEpochStart:
+				wsEvent = ws.EventEpochStart
+			case game.EpochEvtEpochEnd:
+				wsEvent = ws.EventEpochEnd
+
+				// On epoch end, process batch results for v14 account/challenge/achievement systems
+				if endData, ok := evt.Data.(game.EpochEndData); ok {
+					processEpochEndForV14(endData, v14SysForEvents)
+				}
+
+			case game.EpochEvtWarPhaseStart:
+				wsEvent = ws.EventWarPhaseStart
+			case game.EpochEvtWarPhaseEnd:
+				wsEvent = ws.EventWarPhaseEnd
+			case game.EpochEvtWarCountdown:
+				wsEvent = ws.EventRespawnCountdown
+			case game.EpochEvtShrinkUpdate:
+				wsEvent = ws.EventArenaShrink
+			case game.EpochEvtWarSiren:
+				wsEvent = "war_siren"
+			case game.EpochEvtPhaseChange:
+				wsEvent = "epoch_phase_change"
+			default:
+				continue
+			}
+
+			frame, err := ws.EncodeFrame(wsEvent, evt.Data)
+			if err != nil {
+				slog.Error("failed to encode epoch event", "event", wsEvent, "error", err)
+				continue
+			}
+			if evt.CountryCode != "" {
+				hub.BroadcastToRoom(evt.CountryCode, frame)
+			}
+		}
+	}
 
 	// ================================================================
 	// 7b. Auto-initialize Season 1 if no season active (S45)
@@ -432,6 +513,7 @@ func main() {
 		TokenRewardMgr:  v14TokenRewardMgr,
 		EventLog:        v14EventLog,
 		TickProfiler:    tickProfiler,
+		CrossArenaMgr:   v14CrossArenaMgr,
 	})
 
 	// ================================================================
@@ -543,6 +625,23 @@ func main() {
 		slog.Info("v11 AgentStreamHub starting")
 		agentStreamHub.Run()
 		return nil
+	})
+
+	// --- v14 Epoch ticker (20Hz = 50ms, ticks all active country arenas) ---
+	g.Go(func() error {
+		slog.Info("v14 Epoch ticker starting (20Hz)")
+		ticker := time.NewTicker(50 * time.Millisecond)
+		defer ticker.Stop()
+		var epochTick uint64
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				epochTick++
+				v14ArenaManager.TickActiveArenas(epochTick)
+			}
+		}
 	})
 
 	// --- v14 WarSystem ticker (every 5 seconds) ---
@@ -681,14 +780,15 @@ func main() {
 
 // V14Systems bundles all v14 in-game systems for event handler access.
 type V14Systems struct {
-	ArenaManager    *game.CountryArenaManager
-	AccountLevelMgr *game.AccountLevelManager
-	ChallengeMgr    *game.DailyChallengeManager
-	AchievementMgr  *game.AchievementManager
-	WarSystem       *game.WarSystem
-	TokenRewardMgr  *game.TokenRewardManager
-	EventLog        *game.EventLog
-	TickProfiler    *game.TickProfiler
+	ArenaManager     *game.CountryArenaManager
+	AccountLevelMgr  *game.AccountLevelManager
+	ChallengeMgr     *game.DailyChallengeManager
+	AchievementMgr   *game.AchievementManager
+	WarSystem        *game.WarSystem
+	TokenRewardMgr   *game.TokenRewardManager
+	EventLog         *game.EventLog
+	TickProfiler     *game.TickProfiler
+	CrossArenaMgr    *game.CrossArenaManager
 }
 
 // registerEventHandlers sets up all client→server event handlers.
@@ -1244,7 +1344,11 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 // Handles two types of events:
 // 1. WorldEvtCountryUpdate — wraps game.RoomEvent, forwarded to room/client
 // 2. WorldEvtCountriesState — 1Hz country state broadcast to lobby
-func createWorldEventHandler(hub *ws.Hub) world.WorldEventCallback {
+//
+// v14: Also feeds kill/death events to v14 modules for real-time tracking:
+//   - CrossArenaManager.OnWarKill() for war score tracking
+//   - EventLog for notable kill events in global news ticker
+func createWorldEventHandler(hub *ws.Hub, v14Sys *V14Systems) world.WorldEventCallback {
 	return func(events []world.WorldEvent) {
 		for _, wEvt := range events {
 			switch wEvt.Type {
@@ -1315,6 +1419,41 @@ func createWorldEventHandler(hub *ws.Hub) world.WorldEventCallback {
 					hub.BroadcastToRoom(roomEvt.RoomID, frame)
 				}
 
+				// ============================================================
+				// v14: Feed kill/death events to v14 modules
+				// ============================================================
+				if v14Sys != nil {
+					countryCode := roomEvt.RoomID
+
+					switch roomEvt.Type {
+					case game.RoomEvtKill:
+						killerID := roomEvt.TargetID // TargetID = killer for kill events
+
+						// Feed kill to CrossArenaManager for war score tracking
+						if v14Sys.CrossArenaMgr != nil && killerID != "" {
+							// Resolve killer/victim nationalities from the arena
+							arena := v14Sys.ArenaManager.GetArena(countryCode)
+							if arena != nil && arena.Room != nil {
+								killerAgent, killerOK := arena.Room.GetArena().GetAgent(killerID)
+								if killEvt, ok := roomEvt.Data.(domain.KillEvent); ok {
+									victimAgent, victimOK := arena.Room.GetArena().GetAgent(killEvt.Victim)
+									if killerOK && victimOK && killerAgent.Nationality != "" && victimAgent.Nationality != "" {
+										v14Sys.CrossArenaMgr.OnWarKill(countryCode, killerAgent.Nationality, victimAgent.Nationality)
+									}
+								}
+							}
+						}
+
+					case game.RoomEvtDeath:
+						// Death events: TargetID = victim
+						// The v14 AccountLevelMgr/ChallengeMgr/AchievementMgr process
+						// stats in batch at epoch end via ProcessEpochResult/ProcessEpochProgress/
+						// ProcessEpochData. Individual kills/deaths accumulate on Agent struct
+						// fields (agent.Kills, agent.Deaths) and are read at epoch finalization.
+						_ = countryCode // tracked by epoch system
+					}
+				}
+
 			case world.WorldEvtBattleStart, world.WorldEvtBattleEnd:
 				// Broadcast battle lifecycle events to the specific country room
 				frame, err := ws.EncodeFrame(string(wEvt.Type), wEvt.Data)
@@ -1340,4 +1479,91 @@ func createWorldEventHandler(hub *ws.Hub) world.WorldEventCallback {
 			}
 		}
 	}
+}
+
+// processEpochEndForV14 processes epoch-end data through v14 account/challenge/achievement systems.
+// Called when an epoch ends in any country arena. Iterates all agents in the arena
+// and builds batch results for ProcessEpochResult, ProcessEpochProgress, and ProcessEpochData.
+func processEpochEndForV14(endData game.EpochEndData, v14Sys *V14Systems) {
+	if v14Sys == nil || v14Sys.ArenaManager == nil {
+		return
+	}
+
+	arena := v14Sys.ArenaManager.GetArena(endData.CountryCode)
+	if arena == nil || arena.Room == nil {
+		return
+	}
+
+	// Get all agents from the arena to build epoch results
+	agents := arena.Room.GetArena().GetAgents()
+	if len(agents) == 0 {
+		return
+	}
+
+	totalPlayers := len(agents)
+	nowMs := time.Now().UnixMilli()
+
+	for _, agent := range agents {
+		if agent.IsBot {
+			continue
+		}
+
+		// Calculate survival minutes from JoinedAt timestamp
+		survivalMinutes := 0.0
+		if agent.JoinedAt > 0 {
+			survivalMinutes = float64(nowMs-agent.JoinedAt) / 60000.0
+		}
+
+		// --- AccountLevelManager: ProcessEpochResult ---
+		if v14Sys.AccountLevelMgr != nil {
+			epochResult := &game.EpochAccountResult{
+				PlayerID:        agent.ID,
+				PlayerName:      agent.Name,
+				EpochNumber:     endData.EpochNumber,
+				CountryCode:     endData.CountryCode,
+				Kills:           agent.Kills,
+				Deaths:          agent.Deaths,
+				Assists:         agent.Assists,
+				Level:           agent.Level,
+				SurvivalMinutes: survivalMinutes,
+				EpochScore:      agent.Score,
+				TotalPlayers:    totalPlayers,
+				IsBot:           false,
+			}
+			v14Sys.AccountLevelMgr.ProcessEpochResult(epochResult)
+		}
+
+		// --- DailyChallengeManager: ProcessEpochProgress ---
+		if v14Sys.ChallengeMgr != nil {
+			progress := &game.ChallengeEpochProgress{
+				PlayerID:       agent.ID,
+				Kills:          agent.Kills,
+				Assists:        agent.Assists,
+				EpochsSurvived: 1,
+				LevelReached:   agent.Level,
+				TotalPlayers:   totalPlayers,
+			}
+			v14Sys.ChallengeMgr.ProcessEpochProgress(progress)
+		}
+
+		// --- AchievementManager: ProcessEpochData ---
+		if v14Sys.AchievementMgr != nil {
+			epochData := &game.AchievementEpochData{
+				PlayerID:     agent.ID,
+				Kills:        agent.Kills,
+				Deaths:       agent.Deaths,
+				Assists:      agent.Assists,
+				Level:        agent.Level,
+				Rank:         0, // could be derived from leaderboard
+				TotalPlayers: totalPlayers,
+			}
+			v14Sys.AchievementMgr.ProcessEpochData(epochData)
+		}
+	}
+
+	slog.Info("v14 epoch end processed",
+		"country", endData.CountryCode,
+		"epoch", endData.EpochNumber,
+		"players", totalPlayers,
+	)
 }

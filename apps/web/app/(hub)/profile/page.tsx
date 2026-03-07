@@ -10,6 +10,8 @@ import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
+import { PageHeader } from '@/components/hub';
+import { User } from 'lucide-react';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
 import type { WalletState, TokenBalance } from '@/lib/crossx-config';
@@ -63,18 +65,12 @@ export default function ProfilePage() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
-      {/* 페이지 헤더 */}
-      <h1 style={{
-        fontFamily: headingFont,
-        fontWeight: 800,
-        fontSize: '24px',
-        color: SK.textPrimary,
-        letterSpacing: '2px',
-        textTransform: 'uppercase',
-        margin: '0 0 24px 0',
-      }}>
-        {tProfile('title')}
-      </h1>
+      <PageHeader
+        icon={User}
+        title={tProfile('title')}
+        description={`${MOCK_PROFILE.name} — ${MOCK_PROFILE.faction} [${MOCK_PROFILE.factionTag}]`}
+        accentColor={SK.blue}
+      />
 
       {/* Agent Card + Wallet 섹션 (2-column) — 반응형 */}
       <div

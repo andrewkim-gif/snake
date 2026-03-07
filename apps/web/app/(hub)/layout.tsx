@@ -106,10 +106,10 @@ export default function HubLayout({
         >
           {!imgError ? (
             <Image
-              src="/images/logo-ww-mc.png"
+              src="/images/logo-aww.png"
               alt="AI World War"
               width={160}
-              height={65}
+              height={160}
               priority
               onError={() => setImgError(true)}
               style={{

@@ -2,10 +2,12 @@
 
 /**
  * LobbyHeader — 프리미엄 다크 헤더 바
- * 다크 글래스모피즘 + GameLogo + TopNavBar 8항목 + LanguageSwitcher + 상태
- * v15: EventTicker/viewMode 제거, 심플 props, 인디고 에지 글로우
+ * v15: Gemini 생성 로고 + TopNavBar 3항목 + 햄버거 + LanguageSwitcher + 상태
+ * Chakra Petch + Space Grotesk 폰트, 인디고 에지 글로우
  */
 
+import { useState } from 'react';
+import Image from 'next/image';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { TopNavBar } from '@/components/navigation/TopNavBar';
 import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
@@ -19,6 +21,7 @@ interface LobbyHeaderProps {
 export function LobbyHeader({ connected }: LobbyHeaderProps) {
   const tCommon = useTranslations('common');
   const tLobby = useTranslations('lobby');
+  const [imgError, setImgError] = useState(false);
 
   return (
     <header style={{
@@ -46,7 +49,24 @@ export function LobbyHeader({ connected }: LobbyHeaderProps) {
         gap: '10px',
         pointerEvents: 'auto',
       }}>
-        <GameLogo variant="compact" />
+        {/* Gemini 생성 로고 (fallback: CSS GameLogo) */}
+        {!imgError ? (
+          <Image
+            src="/images/logo-aww.png"
+            alt="AI World War"
+            width={160}
+            height={160}
+            priority
+            onError={() => setImgError(true)}
+            style={{
+              height: '40px',
+              width: 'auto',
+              filter: 'drop-shadow(0 1px 4px rgba(0,0,0,0.5))',
+            }}
+          />
+        ) : (
+          <GameLogo variant="compact" />
+        )}
 
         <span style={{
           fontFamily: bodyFont,
@@ -63,7 +83,7 @@ export function LobbyHeader({ connected }: LobbyHeaderProps) {
         </span>
       </div>
 
-      {/* 중앙: TopNavBar 8 항목 (데스크탑) */}
+      {/* 중앙: TopNavBar 3항목 + 햄버거 (데스크탑) */}
       <div style={{ pointerEvents: 'auto', height: '100%' }}>
         <TopNavBar />
       </div>

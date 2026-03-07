@@ -2,8 +2,7 @@
 
 /**
  * /factions — 팩션 목록 + 대시보드
- * FactionList (목록) + FactionDashboard (선택된 팩션 관리) 연결
- * McPanel 기반 팩션 카드 그리드, Military/Economy 별점, VIEW DETAIL 링크
+ * PageHeader + DashPanel 통합 컴포넌트 사용
  */
 
 import { useState, useCallback } from 'react';
@@ -11,8 +10,9 @@ import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
+import { PageHeader, StatCard } from '@/components/hub';
+import { Swords, Users, MapPin, Award, DollarSign } from 'lucide-react';
 
-// Lazy load 대형 컴포넌트
 const FactionList = dynamic(() => import('@/components/faction/FactionList'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
@@ -31,7 +31,6 @@ const FactionDashboard = dynamic(() => import('@/components/faction/FactionDashb
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
-// Mock 팩션 데이터 (서버 미연결 시 표시)
 interface MockFaction {
   id: string;
   name: string;
@@ -54,7 +53,6 @@ const MOCK_FACTIONS: MockFaction[] = [
   { id: 'mercosur', name: 'Mercosur Alliance', tag: 'MER', color: '#06B6D4', member_count: 8, territory_count: 6, military: 2, economy: 3, prestige: 750, total_gdp: 9500 },
 ];
 
-// 별점 렌더링 헬퍼
 function StarRating({ value, max = 5, label }: { value: number; max?: number; label: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -78,61 +76,57 @@ export default function FactionsPage() {
   const [showDashboard, setShowDashboard] = useState(false);
   const [useServerData, setUseServerData] = useState(!!SERVER_URL);
 
-  // FactionList onSelect 핸들러
   const handleFactionSelect = useCallback((faction: { id: string }) => {
     setSelectedFactionId(faction.id);
   }, []);
 
+  // 집계 통계
+  const totalMembers = MOCK_FACTIONS.reduce((s, f) => s + f.member_count, 0);
+  const totalTerritories = MOCK_FACTIONS.reduce((s, f) => s + f.territory_count, 0);
+  const totalGdp = MOCK_FACTIONS.reduce((s, f) => s + f.total_gdp, 0);
+
   return (
     <div>
-      {/* 페이지 헤더 */}
-      <div style={{
-        display: 'flex',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-        marginBottom: 24,
-      }}>
-        <div>
-          <h1 style={{
-            fontFamily: headingFont,
-            fontWeight: 800,
-            fontSize: '24px',
-            color: SK.textPrimary,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            margin: 0,
-          }}>
-            {tFaction('title')}
-          </h1>
-          <p style={{
+      <PageHeader
+        icon={Swords}
+        title={tFaction('title')}
+        description={tFaction('subtitle')}
+        accentColor="#EF4444"
+        heroImage="/images/hero-factions.png"
+      >
+        <button
+          onClick={() => setUseServerData(!useServerData)}
+          style={{
+            padding: '4px 12px',
             fontFamily: bodyFont,
-            fontSize: '14px',
-            color: SK.textSecondary,
-            marginTop: 4,
-          }}>
-            {tFaction('subtitle')}
-          </p>
-        </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => setUseServerData(!useServerData)}
-            style={{
-              padding: '6px 14px',
-              fontFamily: bodyFont,
-              fontSize: SKFont.xs,
-              color: SK.textMuted,
-              background: 'transparent',
-              border: sketchBorder(SK.borderDark),
-              borderRadius: radius.md,
-              cursor: 'pointer',
-            }}
-          >
-            {useServerData ? tFaction('mockData') : tFaction('liveData')}
-          </button>
-        </div>
+            fontSize: SKFont.xs,
+            color: SK.textMuted,
+            background: 'transparent',
+            border: sketchBorder(SK.borderDark),
+            borderRadius: radius.md,
+            cursor: 'pointer',
+          }}
+        >
+          {useServerData ? tFaction('mockData') : tFaction('liveData')}
+        </button>
+      </PageHeader>
+
+      {/* 집계 통계 */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: '12px',
+          marginBottom: '24px',
+        }}
+      >
+        <StatCard label="Active Factions" value={String(MOCK_FACTIONS.length)} color={SK.textPrimary} icon={Swords} />
+        <StatCard label="Total Members" value={String(totalMembers)} color={SK.blue} icon={Users} />
+        <StatCard label="Territories" value={String(totalTerritories)} color={SK.green} icon={MapPin} />
+        <StatCard label="Combined GDP" value={`${(totalGdp / 1000).toFixed(0)}K`} color={SK.orange} icon={DollarSign} />
       </div>
 
-      {/* 서버 데이터 모드: FactionList 컴포넌트 사용 */}
+      {/* 서버 데이터 모드 */}
       {useServerData && SERVER_URL ? (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
           <FactionList
@@ -140,8 +134,6 @@ export default function FactionsPage() {
             selectedId={selectedFactionId ?? undefined}
             onSelect={handleFactionSelect}
           />
-
-          {/* 선택된 팩션 대시보드 */}
           {selectedFactionId && showDashboard && (
             <FactionDashboard
               serverUrl={SERVER_URL}
@@ -153,7 +145,7 @@ export default function FactionsPage() {
           )}
         </div>
       ) : (
-        /* Mock 데이터 모드: 팩션 카드 그리드 — 반응형 */
+        /* Mock 데이터 모드: 팩션 카드 그리드 */
         <div
           className="factions-card-grid"
           style={{
@@ -180,7 +172,7 @@ export default function FactionsPage() {
               key={faction.id}
               style={{
                 background: SK.cardBg,
-                border: sketchBorder(selectedFactionId === faction.id ? SK.orange : SK.border),
+                border: sketchBorder(selectedFactionId === faction.id ? SK.blue : SK.border),
                 borderRadius: radius.lg,
                 padding: 20,
                 boxShadow: sketchShadow('sm'),
@@ -190,7 +182,6 @@ export default function FactionsPage() {
               }}
               onClick={() => setSelectedFactionId(faction.id)}
             >
-              {/* 팩션 이름 + 태그 */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -226,7 +217,6 @@ export default function FactionsPage() {
                 </div>
               </div>
 
-              {/* 구성원 / 영토 */}
               <div style={{
                 display: 'flex',
                 gap: 16,
@@ -239,7 +229,6 @@ export default function FactionsPage() {
                 <span>{tFaction('territoriesCount', { count: faction.territory_count })}</span>
               </div>
 
-              {/* Military / Economy 별점 */}
               <div style={{
                 display: 'flex',
                 flexDirection: 'column',
@@ -250,7 +239,6 @@ export default function FactionsPage() {
                 <StarRating label={tFaction('economyRating')} value={faction.economy} />
               </div>
 
-              {/* VIEW DETAIL 링크 */}
               <Link
                 href={`/factions/${faction.id}`}
                 onClick={(e) => e.stopPropagation()}
@@ -258,11 +246,11 @@ export default function FactionsPage() {
                   display: 'inline-block',
                   fontFamily: headingFont,
                   fontSize: SKFont.xs,
-                  color: SK.orange,
+                  color: SK.blue,
                   textDecoration: 'none',
                   letterSpacing: '1px',
                   padding: '6px 14px',
-                  border: `1px solid ${SK.orange}40`,
+                  border: `1px solid ${SK.blue}40`,
                   borderRadius: radius.md,
                   transition: 'all 0.15s ease',
                 }}

@@ -18,7 +18,6 @@ import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { NationalitySelector, loadNationality, saveNationality } from '@/components/lobby/NationalitySelector';
 import { Tutorial } from '@/components/game/Tutorial';
-import { EventTicker } from '@/components/lobby/EventTicker';
 import { NewsFeed } from '@/components/lobby/NewsFeed';
 import { useSocketContext } from '@/providers/SocketProvider';
 import type { GameMode } from '@/providers/SocketProvider';
@@ -165,10 +164,6 @@ export default function Home() {
     }, 300);
   }, [switchArena, playerName, skinId, appearance, nationality]);
 
-  // v14 S35: 이벤트 클릭 시 해당 국가 아레나 입장
-  const handleEventClick = useCallback((countryCode: string) => {
-    handleEnterArena(countryCode);
-  }, [handleEnterArena]);
 
   // 전환: joined 이벤트 수신 시 playing으로 전환, 8초 타임아웃 시 lobby 복귀
   useEffect(() => {
@@ -256,23 +251,14 @@ export default function Home() {
         onEnterArena={handleQuickEnterArena}
         onSpectate={handleSpectate}
         bottomOffset={NEWS_FEED_HEIGHT}
+        dominationStates={uiState.dominationStates}
+        wars={uiState.wars}
       />
 
       {/* CIC 헤더 바 */}
       <LobbyHeader
         connected={uiState.connected}
       />
-
-      {/* v14 S35: EventTicker — 글로벌 이벤트 롤링 뉴스 */}
-      <div style={{
-        position: 'absolute',
-        top: 52,
-        left: 0,
-        right: 0,
-        zIndex: 59,
-      }}>
-        <EventTicker onEventClick={handleEventClick} />
-      </div>
 
       {/* v14 S36: 에포크 상태 요약 (로비 복귀 시) */}
       {epochSummary && (

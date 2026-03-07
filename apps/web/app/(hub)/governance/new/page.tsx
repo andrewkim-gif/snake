@@ -12,6 +12,8 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
+import { PageHeader } from '@/components/hub';
+import { Plus } from 'lucide-react';
 import type { ProposalType } from '@/components/governance/types';
 
 // Lazy load ProposalForm
@@ -118,32 +120,13 @@ function NewProposalPageInner() {
 
   return (
     <div style={{ maxWidth: '700px', margin: '0 auto' }}>
-      {/* 페이지 헤더 */}
-      <div style={{ marginBottom: '20px' }}>
-        <h1
-          style={{
-            fontFamily: bodyFont,
-            fontWeight: 800,
-            fontSize: '24px',
-            color: SK.textPrimary,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            marginBottom: '4px',
-          }}
-        >
-          {tGov('newProposal')}
-        </h1>
-        <p
-          style={{
-            fontFamily: bodyFont,
-            fontSize: '14px',
-            color: SK.textSecondary,
-            margin: 0,
-          }}
-        >
-          {tGov('createProposal')}
-        </p>
-      </div>
+      <PageHeader
+        icon={Plus}
+        title={tGov('newProposal')}
+        description={tGov('createProposal')}
+        accentColor={SK.green}
+        heroImage="/images/hero-governance.png"
+      />
 
       {/* 국가 선택 (ProposalForm 전에) */}
       {!selectedCountry && (

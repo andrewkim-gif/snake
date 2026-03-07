@@ -28,6 +28,9 @@ type CountryArenaManager struct {
 
 	// Event callback (bridges to ws layer)
 	OnEvents RoomEventCallback
+
+	// Epoch event callback (bridges epoch events to ws layer)
+	OnEpochEvents func(events []EpochEvent)
 }
 
 // QueueEntry represents a player waiting to join a full arena.
@@ -43,12 +46,15 @@ type QueueEntry struct {
 // This lives in the game package to allow direct Room access without
 // the world package dependency cycle.
 type CountryArenaWrapper struct {
-	CountryCode string
-	CountryName string
-	Room        *Room
-	Epoch       *EpochManager
-	Respawn     *RespawnManager
-	PlayerCount int
+	CountryCode    string
+	CountryName    string
+	Room           *Room
+	Epoch          *EpochManager
+	Respawn        *RespawnManager
+	CapturePoints  *CapturePointSystem
+	Domination     *DominationEngine
+	NationScore    *NationScoreTracker
+	PlayerCount    int
 }
 
 // NewCountryArenaManager creates a manager for 195 country arenas.
@@ -79,14 +85,22 @@ func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string
 	room.OnEvents = cam.forwardEvents
 
 	epoch := NewEpochManager(countryCode)
+	epoch.OnEvents = cam.forwardEpochEvents
 	respawn := NewRespawnManager()
 
+	capturePoints := NewCapturePointSystem(countryCode, ArenaRadius)
+	domination := NewDominationEngine(countryCode)
+	nationScore := NewNationScoreTracker(countryCode)
+
 	wrapper := &CountryArenaWrapper{
-		CountryCode: countryCode,
-		CountryName: countryName,
-		Room:        room,
-		Epoch:       epoch,
-		Respawn:     respawn,
+		CountryCode:   countryCode,
+		CountryName:   countryName,
+		Room:          room,
+		Epoch:         epoch,
+		Respawn:       respawn,
+		CapturePoints: capturePoints,
+		Domination:    domination,
+		NationScore:   nationScore,
 	}
 
 	cam.arenas[countryCode] = wrapper
@@ -124,14 +138,21 @@ func (cam *CountryArenaManager) JoinCountryArena(clientID, countryCode, countryN
 		room.OnEvents = cam.forwardEvents
 
 		epoch := NewEpochManager(countryCode)
+		epoch.OnEvents = cam.forwardEpochEvents
 		respawn := NewRespawnManager()
+		capturePoints := NewCapturePointSystem(countryCode, ArenaRadius)
+		domination := NewDominationEngine(countryCode)
+		nationScore := NewNationScoreTracker(countryCode)
 
 		arena = &CountryArenaWrapper{
-			CountryCode: countryCode,
-			CountryName: countryName,
-			Room:        room,
-			Epoch:       epoch,
-			Respawn:     respawn,
+			CountryCode:   countryCode,
+			CountryName:   countryName,
+			Room:          room,
+			Epoch:         epoch,
+			Respawn:       respawn,
+			CapturePoints: capturePoints,
+			Domination:    domination,
+			NationScore:   nationScore,
 		}
 		cam.arenas[countryCode] = arena
 	}
@@ -301,6 +322,13 @@ func (cam *CountryArenaManager) TotalPlayers() int {
 func (cam *CountryArenaManager) forwardEvents(events []RoomEvent) {
 	if cam.OnEvents != nil {
 		cam.OnEvents(events)
+	}
+}
+
+// forwardEpochEvents bridges epoch events to the external callback.
+func (cam *CountryArenaManager) forwardEpochEvents(events []EpochEvent) {
+	if cam.OnEpochEvents != nil {
+		cam.OnEpochEvents(events)
 	}
 }
 

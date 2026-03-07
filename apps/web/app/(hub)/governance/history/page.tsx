@@ -12,6 +12,8 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
+import { PageHeader, StatCard } from '@/components/hub';
+import { History, ThumbsUp, ThumbsDown, Coins } from 'lucide-react';
 import type { VoteHistoryEntry } from '@/components/governance/types';
 
 // Lazy load VoteHistory
@@ -121,65 +123,38 @@ function VoteHistoryPageInner() {
 
   return (
     <div>
-      {/* 페이지 헤더 */}
-      <div style={{ marginBottom: '20px' }}>
-        <h1
-          style={{
-            fontFamily: bodyFont,
-            fontWeight: 800,
-            fontSize: '24px',
-            color: SK.textPrimary,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            marginBottom: '4px',
-          }}
-        >
-          {tGov('voteHistory')}
-        </h1>
-        <p
-          style={{
-            fontFamily: bodyFont,
-            fontSize: '14px',
-            color: SK.textSecondary,
-            margin: 0,
-          }}
-        >
-          {tGov('voteHistorySubtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
-        </p>
-      </div>
-
-      {/* 국가 필터 표시 */}
-      {countryCode && (
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            padding: '6px 12px',
-            borderRadius: '8px',
-            background: `${SK.orange}15`,
-            border: `1px solid ${SK.orange}30`,
-            marginBottom: '16px',
-            fontFamily: bodyFont,
-            fontSize: '12px',
-            color: SK.orange,
-            fontWeight: 600,
-          }}
-        >
-          {tGov('filtered', { country: countryCode.toUpperCase() })}
-          <a
-            href="/governance/history"
+      <PageHeader
+        icon={History}
+        title={tGov('voteHistory')}
+        description={tGov('voteHistorySubtitle') + (countryCode ? ` — ${countryCode.toUpperCase()}` : '')}
+        accentColor={SK.orange}
+        heroImage="/images/hero-governance.png"
+      >
+        {countryCode && (
+          <div
             style={{
-              color: SK.textSecondary,
-              textDecoration: 'none',
-              fontSize: '11px',
-              marginLeft: '4px',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '6px 12px',
+              borderRadius: '8px',
+              background: `${SK.orange}15`,
+              border: `1px solid ${SK.orange}30`,
+              fontSize: '12px',
+              color: SK.orange,
+              fontWeight: 600,
             }}
           >
-            {tGov('all')}
-          </a>
-        </div>
-      )}
+            {tGov('filtered', { country: countryCode.toUpperCase() })}
+            <a
+              href="/governance/history"
+              style={{ color: SK.textSecondary, textDecoration: 'none', fontSize: '11px', marginLeft: '4px' }}
+            >
+              {tGov('all')}
+            </a>
+          </div>
+        )}
+      </PageHeader>
 
       {/* 통계 카드 */}
       <div
@@ -190,48 +165,10 @@ function VoteHistoryPageInner() {
           marginBottom: '20px',
         }}
       >
-        {[
-          { label: tGov('totalVotes'), value: stats.total, color: SK.textPrimary },
-          { label: tGov('votedFor'), value: stats.forCount, color: SK.green },
-          { label: tGov('votedAgainst'), value: stats.againstCount, color: SK.red },
-          { label: tGov('tokensUsed'), value: stats.totalTokens.toLocaleString(), color: SK.orange },
-        ].map((stat) => (
-          <div
-            key={stat.label}
-            style={{
-              background: SK.cardBg,
-              border: `1px solid ${SK.border}`,
-              borderRadius: '10px',
-              padding: '14px 16px',
-              textAlign: 'center',
-            }}
-          >
-            <div
-              style={{
-                fontFamily: bodyFont,
-                fontSize: '22px',
-                fontWeight: 800,
-                color: stat.color,
-                lineHeight: 1,
-                marginBottom: '4px',
-              }}
-            >
-              {stat.value}
-            </div>
-            <div
-              style={{
-                fontFamily: bodyFont,
-                fontSize: '10px',
-                fontWeight: 700,
-                color: SK.textMuted,
-                letterSpacing: '1px',
-                textTransform: 'uppercase',
-              }}
-            >
-              {stat.label}
-            </div>
-          </div>
-        ))}
+        <StatCard label={tGov('totalVotes')} value={String(stats.total)} color={SK.textPrimary} icon={History} />
+        <StatCard label={tGov('votedFor')} value={String(stats.forCount)} color={SK.green} icon={ThumbsUp} />
+        <StatCard label={tGov('votedAgainst')} value={String(stats.againstCount)} color={SK.red} icon={ThumbsDown} />
+        <StatCard label={tGov('tokensUsed')} value={stats.totalTokens.toLocaleString()} color={SK.orange} icon={Coins} />
       </div>
 
       {/* 결과 필터 */}
@@ -251,9 +188,9 @@ function VoteHistoryPageInner() {
               style={{
                 padding: '6px 16px',
                 borderRadius: '6px',
-                border: `1px solid ${isActive ? SK.orange + '40' : SK.border}`,
-                background: isActive ? `${SK.orange}15` : 'transparent',
-                color: isActive ? SK.orange : SK.textSecondary,
+                border: `1px solid ${isActive ? SK.blue + '40' : SK.border}`,
+                background: isActive ? `${SK.blue}15` : 'transparent',
+                color: isActive ? SK.blue : SK.textSecondary,
                 fontWeight: 700,
                 fontSize: '11px',
                 cursor: 'pointer',

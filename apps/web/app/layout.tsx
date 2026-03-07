@@ -62,14 +62,10 @@ export default async function RootLayout({
     <html lang={initialLocale} suppressHydrationWarning>
       <head>
         <link
-          href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
+          href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Space+Grotesk:wght@400;500;600;700&display=swap"
           rel="stylesheet"
         />
         <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-        <link
-          href="https://unpkg.com/maplibre-gl@5/dist/maplibre-gl.css"
-          rel="stylesheet"
-        />
       </head>
       <body
         suppressHydrationWarning
@@ -78,7 +74,7 @@ export default async function RootLayout({
           padding: 0,
           backgroundColor: '#09090B',
           color: '#ECECEF',
-          fontFamily: '"Inter", -apple-system, BlinkMacSystemFont, sans-serif',
+          fontFamily: '"Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale' as never,
           overscrollBehavior: 'none',

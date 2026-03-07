@@ -2,17 +2,16 @@
 
 /**
  * /hall-of-fame — 명예의 전당
- * HallOfFame + SeasonTimeline 컴포넌트 연결
- * 시즌별 챔피언, 전설적 전투, 기록 보유자
- * 가로 스크롤 타임라인 UI
+ * PageHeader + DashPanel + StatCard 통합 컴포넌트 사용
  */
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
+import { PageHeader, StatCard, DashPanel } from '@/components/hub';
+import { Trophy, Swords, Zap, Crown, Users, Calendar } from 'lucide-react';
 
-// Lazy load 대형 컴포넌트
 const HallOfFame = dynamic(() => import('@/components/hall-of-fame/HallOfFame'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 40, textAlign: 'center' }}>
@@ -23,7 +22,6 @@ const HallOfFame = dynamic(() => import('@/components/hall-of-fame/HallOfFame'),
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
-// Mock 시즌 데이터 (서버 미연결 시 표시)
 interface MockSeasonRecord {
   id: string;
   season: number;
@@ -45,7 +43,6 @@ const MOCK_RECORDS: MockSeasonRecord[] = [
   { id: '6', season: 1, seasonName: 'Dawn of Nations', category: 'Legendary Battle', categoryIcon: '\uD83D\uDC51', winnerName: 'Battle of Seoul', winnerType: 'faction', recordLabel: '64 players, 3 factions, 22 minutes', trophyType: 'gold' },
 ];
 
-// Mock 타임라인 시즌 데이터
 interface MockTimelineSeason {
   number: number;
   name: string;
@@ -65,17 +62,14 @@ export default function HallOfFamePage() {
   const tHof = useTranslations('hallOfFame');
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
 
-  // 서버 연결 시 HallOfFame 컴포넌트 사용
   if (SERVER_URL) {
     return <HallOfFame serverUrl={SERVER_URL} />;
   }
 
-  // Mock 데이터 모드: 인라인 표시
   const filteredRecords = selectedSeason !== null
     ? MOCK_RECORDS.filter(r => r.season === selectedSeason)
     : MOCK_RECORDS;
 
-  // 시즌별 그룹화
   const recordsBySeason = new Map<number, MockSeasonRecord[]>();
   for (const record of filteredRecords) {
     const list = recordsBySeason.get(record.season) || [];
@@ -86,32 +80,32 @@ export default function HallOfFamePage() {
 
   return (
     <div style={{ maxWidth: 960, margin: '0 auto' }}>
-      {/* 헤더 */}
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <h1 style={{
-          fontFamily: headingFont,
-          fontWeight: 800,
-          fontSize: '28px',
-          color: SK.textPrimary,
-          letterSpacing: '2px',
-          textTransform: 'uppercase',
-          margin: 0,
-        }}>
-          {tHof('title')}
-        </h1>
-        <p style={{
-          fontFamily: bodyFont,
-          fontSize: '14px',
-          color: SK.textSecondary,
-          marginTop: 8,
-        }}>
-          {tHof('subtitle')}
-        </p>
+      <PageHeader
+        icon={Trophy}
+        title={tHof('title')}
+        description={tHof('subtitle')}
+        accentColor={SK.gold}
+        heroImage="/images/hero-hall-of-fame.png"
+      />
+
+      {/* 통계 */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+          gap: '12px',
+          marginBottom: '24px',
+        }}
+      >
+        <StatCard label="Total Seasons" value={String(MOCK_SEASONS.length)} color={SK.textPrimary} icon={Calendar} />
+        <StatCard label="Total Records" value={String(MOCK_RECORDS.length)} color={SK.gold} icon={Trophy} />
+        <StatCard label="Peak Players" value={String(MOCK_SEASONS[0]?.peakPlayers ?? 0)} color={SK.green} icon={Users} />
+        <StatCard label="Total Battles" value={String(MOCK_SEASONS.reduce((s, se) => s + se.totalBattles, 0))} color={SK.red} icon={Swords} />
       </div>
 
-      {/* 가로 스크롤 시즌 타임라인 */}
+      {/* 시즌 타임라인 */}
       <div style={{
-        marginBottom: 32,
+        marginBottom: 24,
         overflowX: 'auto',
         WebkitOverflowScrolling: 'touch',
         scrollbarWidth: 'none',
@@ -125,16 +119,15 @@ export default function HallOfFamePage() {
           className="timeline-scroll"
           style={{
             display: 'flex',
-            gap: 16,
+            gap: 12,
             minWidth: 'max-content',
             padding: '0 4px',
           }}
         >
-          {/* All Seasons 버튼 */}
           <button
             onClick={() => setSelectedSeason(null)}
             style={{
-              padding: '12px 20px',
+              padding: '10px 18px',
               fontFamily: bodyFont,
               fontSize: SKFont.sm,
               fontWeight: selectedSeason === null ? 700 : 400,
@@ -145,13 +138,12 @@ export default function HallOfFamePage() {
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               transition: 'all 0.15s ease',
-              minWidth: 120,
+              minWidth: 110,
             }}
           >
             {tHof('allSeasons')}
           </button>
 
-          {/* 시즌 타임라인 카드 */}
           {MOCK_SEASONS.map((season) => {
             const isActive = selectedSeason === season.number;
             return (
@@ -159,12 +151,12 @@ export default function HallOfFamePage() {
                 key={season.number}
                 onClick={() => setSelectedSeason(season.number)}
                 style={{
-                  padding: '12px 20px',
+                  padding: '10px 18px',
                   fontFamily: bodyFont,
                   fontSize: SKFont.sm,
                   color: isActive ? SK.textWhite : SK.textPrimary,
                   background: isActive ? SK.cardBgHover : SK.cardBg,
-                  border: sketchBorder(isActive ? SK.orange : SK.border),
+                  border: sketchBorder(isActive ? SK.blue : SK.border),
                   borderRadius: radius.md,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
@@ -177,7 +169,7 @@ export default function HallOfFamePage() {
                   fontFamily: headingFont,
                   fontSize: SKFont.body,
                   marginBottom: 4,
-                  color: isActive ? SK.orange : SK.textPrimary,
+                  color: isActive ? SK.blue : SK.textPrimary,
                 }}>
                   S{season.number}: {season.name}
                 </div>
@@ -196,7 +188,7 @@ export default function HallOfFamePage() {
         </div>
       </div>
 
-      {/* 기록 카드 그리드 */}
+      {/* 기록 카드 */}
       {sortedSeasons.length === 0 ? (
         <div style={{
           textAlign: 'center',
@@ -214,7 +206,6 @@ export default function HallOfFamePage() {
 
           return (
             <div key={seasonNum} style={{ marginBottom: 32 }}>
-              {/* 시즌 헤더 */}
               <div style={{
                 display: 'flex',
                 justifyContent: 'space-between',
@@ -229,12 +220,15 @@ export default function HallOfFamePage() {
                   color: SK.textPrimary,
                   fontWeight: 700,
                   margin: 0,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '8px',
                 }}>
+                  <Crown size={16} color={SK.gold} />
                   Season {seasonNum}: {seasonName}
                 </h2>
               </div>
 
-              {/* 기록 카드 그리드 — 반응형 */}
               <div
                 className="hof-record-grid"
                 style={{
@@ -274,7 +268,6 @@ export default function HallOfFamePage() {
                         boxShadow: sketchShadow('sm'),
                       }}
                     >
-                      {/* 카테고리 + 트로피 */}
                       <div style={{
                         display: 'flex',
                         justifyContent: 'space-between',
@@ -295,7 +288,6 @@ export default function HallOfFamePage() {
                         </span>
                       </div>
 
-                      {/* 우승자 이름 */}
                       <div style={{
                         fontFamily: headingFont,
                         fontSize: SKFont.body,
@@ -306,7 +298,6 @@ export default function HallOfFamePage() {
                         {record.winnerName}
                       </div>
 
-                      {/* 기록 */}
                       <div style={{
                         fontFamily: bodyFont,
                         fontSize: SKFont.sm,
@@ -316,13 +307,12 @@ export default function HallOfFamePage() {
                         {record.recordLabel}
                       </div>
 
-                      {/* 타입 뱃지 */}
                       <span style={{
                         display: 'inline-block',
                         fontFamily: bodyFont,
                         fontSize: SKFont.xs,
                         color: record.winnerType === 'faction' ? SK.blue : SK.green,
-                        background: record.winnerType === 'faction' ? 'rgba(59,130,246,0.1)' : 'rgba(22,163,74,0.1)',
+                        background: record.winnerType === 'faction' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)',
                         padding: '2px 8px',
                         borderRadius: radius.pill,
                       }}>

@@ -6,7 +6,7 @@
  * compact: 헤더 인라인, full: 스플래시 스택
  */
 
-import { SK, bodyFont } from '@/lib/sketch-ui';
+import { SK, headingFont } from '@/lib/sketch-ui';
 
 interface GameLogoProps {
   variant?: 'compact' | 'full';
@@ -52,7 +52,7 @@ export function GameLogo({ variant = 'compact', style }: GameLogoProps) {
         <CrosshairIcon size={36} />
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '2px' }}>
           <span style={{
-            fontFamily: bodyFont,
+            fontFamily: headingFont,
             fontSize: '14px',
             fontWeight: 800,
             color: SK.gold,
@@ -62,7 +62,7 @@ export function GameLogo({ variant = 'compact', style }: GameLogoProps) {
             AI
           </span>
           <span style={{
-            fontFamily: bodyFont,
+            fontFamily: headingFont,
             fontSize: '22px',
             fontWeight: 800,
             color: SK.textPrimary,
@@ -87,7 +87,7 @@ export function GameLogo({ variant = 'compact', style }: GameLogoProps) {
       <CrosshairIcon size={20} />
       <div style={{ display: 'flex', alignItems: 'baseline', gap: '4px' }}>
         <span style={{
-          fontFamily: bodyFont,
+          fontFamily: headingFont,
           fontSize: '11px',
           fontWeight: 800,
           color: SK.gold,
@@ -96,7 +96,7 @@ export function GameLogo({ variant = 'compact', style }: GameLogoProps) {
           AI
         </span>
         <span style={{
-          fontFamily: bodyFont,
+          fontFamily: headingFont,
           fontSize: '16px',
           fontWeight: 800,
           color: SK.textPrimary,

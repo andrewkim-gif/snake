@@ -34,11 +34,13 @@ interface GlobeViewProps {
   wars?: WarEffectData[];
   /** v14: Country centroids for war arc rendering */
   countryCentroids?: Map<string, [number, number]>;
+  /** v14: Hover callback for GlobeHoverPanel (iso3, name, or null to clear) */
+  onHover?: (iso3: string | null, name: string | null) => void;
 }
 
 const BG = '#030305';
 const RADIUS = 100;
-const ALT = 2.0; // 폴리곤이 구체 표면 위로 떠있도록 (z-fighting 방지)
+const ALT = 0.15; // 구체 표면 밀착 (최소 z-fighting 방지 오프셋)
 
 // ─── 좌표 변환: (lon, lat) → 구면 (x, y, z) ───
 
@@ -349,9 +351,9 @@ function EarthSphere() {
     const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
     const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
     const ha = ((utcH - 12) / 24) * 2 * Math.PI;
-    const sx = Math.cos(decRad) * Math.sin(-ha);
+    const sx = Math.cos(decRad) * Math.cos(ha);
     const sy = Math.sin(decRad);
-    const sz = Math.cos(decRad) * Math.cos(-ha);
+    const sz = Math.cos(decRad) * Math.sin(ha);
     nightMat.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
   });
 
@@ -401,9 +403,9 @@ function SunLight() {
     // 시간각: UTC 12시 = 본초자오선(경도 0°) 정오
     const ha = ((utcH - 12) / 24) * 2 * Math.PI;
     const d = 500;
-    const x = d * Math.cos(decRad) * Math.sin(-ha);
+    const x = d * Math.cos(decRad) * Math.cos(ha);
     const y = d * Math.sin(decRad);
-    const z = d * Math.cos(decRad) * Math.cos(-ha);
+    const z = d * Math.cos(decRad) * Math.sin(ha);
     lightRef.current?.position.set(x, y, z);
     sunRef.current?.position.set(x, y, z);
   });
@@ -612,7 +614,7 @@ function CountryBorders() {
 
 const CLICK_DRAG_THRESHOLD = 25; // 5px² — 이 이상 움직이면 드래그로 판정
 
-function GlobeInteraction({ onCountryClick }: { onCountryClick?: (iso3: string, name: string) => void }) {
+function GlobeInteraction({ onCountryClick, onHover }: { onCountryClick?: (iso3: string, name: string) => void; onHover?: (iso3: string | null, name: string | null) => void }) {
   const featuresRef = useRef<any[]>([]);
   const hoveredRef = useRef<{ iso3: string; name: string } | null>(null);
   const pointerDownPos = useRef<{ x: number; y: number } | null>(null);
@@ -631,12 +633,14 @@ function GlobeInteraction({ onCountryClick }: { onCountryClick?: (iso3: string, 
       _hoveredIso3 = hit.iso3;
       hoveredRef.current = hit;
       document.body.style.cursor = 'pointer';
+      onHover?.(hit.iso3, hit.name);
     } else {
       _hoveredIso3 = null;
       hoveredRef.current = null;
       document.body.style.cursor = 'default';
+      onHover?.(null, null);
     }
-  }, []);
+  }, [onHover]);
 
   // 드래그 시작 지점 기록
   const handlePointerDown = useCallback((e: any) => {
@@ -663,7 +667,8 @@ function GlobeInteraction({ onCountryClick }: { onCountryClick?: (iso3: string, 
     _hoveredIso3 = null;
     hoveredRef.current = null;
     document.body.style.cursor = 'default';
-  }, []);
+    onHover?.(null, null);
+  }, [onHover]);
 
   return (
     <mesh
@@ -737,8 +742,158 @@ function CountryHoverHighlight({ countries }: { countries: CountryGeo[] }) {
         opacity={0}
         depthWrite={false}
         side={THREE.DoubleSide}
+        polygonOffset
+        polygonOffsetFactor={-1}
+        polygonOffsetUnits={-1}
       />
     </mesh>
+  );
+}
+
+// ─── R3F: 호버 경계선 빛 효과 (traveling light pulse) ───
+
+interface CountryBorderGeoData {
+  geometry: THREE.BufferGeometry;
+  totalLength: number;
+}
+
+function buildPerCountryBorders(geoData: { features: any[] }): Map<string, CountryBorderGeoData> {
+  const map = new Map<string, CountryBorderGeoData>();
+  const borderR = RADIUS + ALT + 0.05;
+  const tmp1 = new Float32Array(3);
+  const tmp2 = new Float32Array(3);
+
+  for (const feature of geoData.features) {
+    const geom = feature.geometry;
+    if (!geom) continue;
+    const props = feature.properties || {};
+    const iso3 = getCountryISO(props);
+    if (!iso3) continue;
+
+    const { type, coordinates } = geom;
+    const polygons: number[][][][] =
+      type === 'Polygon' ? [coordinates] :
+      type === 'MultiPolygon' ? coordinates : [];
+
+    const positions: number[] = [];
+    const dists: number[] = [];
+    let cumDist = 0;
+
+    for (const rings of polygons) {
+      const ring = subdivideRing(rings[0]);
+      for (let i = 0; i < ring.length - 1; i++) {
+        geoToXYZ(ring[i][0], ring[i][1], borderR, tmp1, 0);
+        geoToXYZ(ring[i + 1][0], ring[i + 1][1], borderR, tmp2, 0);
+        positions.push(tmp1[0], tmp1[1], tmp1[2]);
+        dists.push(cumDist);
+        const dx = tmp2[0] - tmp1[0], dy = tmp2[1] - tmp1[1], dz = tmp2[2] - tmp1[2];
+        cumDist += Math.sqrt(dx * dx + dy * dy + dz * dz);
+        positions.push(tmp2[0], tmp2[1], tmp2[2]);
+        dists.push(cumDist);
+      }
+    }
+
+    if (positions.length === 0) continue;
+
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+    geo.setAttribute('aDistance', new THREE.Float32BufferAttribute(dists, 1));
+    map.set(iso3, { geometry: geo, totalLength: cumDist });
+  }
+
+  return map;
+}
+
+function HoverBorderGlow() {
+  const borderDataRef = useRef<Map<string, CountryBorderGeoData>>(new Map());
+  const lineRef = useRef<THREE.LineSegments>(null);
+  const prevIso = useRef<string | null>(null);
+  const fadeRef = useRef(0);
+  const [loaded, setLoaded] = useState(false);
+
+  const shaderMat = useMemo(() => new THREE.ShaderMaterial({
+    uniforms: {
+      uTime: { value: 0 },
+      uTotalLength: { value: 1 },
+      uOpacity: { value: 0 },
+    },
+    vertexShader: `
+      attribute float aDistance;
+      varying float vDist;
+      void main() {
+        vDist = aDistance;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      uniform float uTotalLength;
+      uniform float uOpacity;
+      varying float vDist;
+      void main() {
+        // 움직이는 점선 — 월드 좌표 기반 일정 간격
+        float dashSize = 3.0;
+        float t = fract(vDist / dashSize - uTime * 1.5);
+        float dash = smoothstep(0.0, 0.08, t) * smoothstep(0.5, 0.42, t);
+        vec3 col = vec3(0.35, 0.75, 1.0);
+        gl_FragColor = vec4(col * dash * uOpacity, 1.0);
+      }
+    `,
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  }), []);
+
+  useEffect(() => {
+    loadGeoJSON().then((data) => {
+      borderDataRef.current = buildPerCountryBorders(data);
+      setLoaded(true);
+    }).catch(console.error);
+    return () => {
+      borderDataRef.current.forEach((d) => d.geometry.dispose());
+      borderDataRef.current.clear();
+    };
+  }, []);
+
+  useFrame(({ clock }) => {
+    const line = lineRef.current;
+    if (!line) return;
+
+    const hovIso = _hoveredIso3;
+    const target = hovIso ? 1 : 0;
+    fadeRef.current += (target - fadeRef.current) * 0.15;
+    if (fadeRef.current < 0.005) fadeRef.current = 0;
+    if (fadeRef.current > 0.995) fadeRef.current = 1;
+
+    if (hovIso !== prevIso.current) {
+      prevIso.current = hovIso;
+      if (hovIso) {
+        const data = borderDataRef.current.get(hovIso);
+        if (data) {
+          line.geometry = data.geometry;
+          line.visible = true;
+          shaderMat.uniforms.uTotalLength.value = data.totalLength;
+          fadeRef.current = 0.1;
+        } else {
+          line.visible = false;
+        }
+      }
+    }
+
+    if (!hovIso && fadeRef.current < 0.01) {
+      line.visible = false;
+    }
+
+    shaderMat.uniforms.uTime.value = clock.getElapsedTime();
+    shaderMat.uniforms.uOpacity.value = fadeRef.current;
+  });
+
+  if (!loaded) return null;
+
+  return (
+    <lineSegments ref={lineRef} visible={false} material={shaderMat} renderOrder={2}>
+      <bufferGeometry />
+    </lineSegments>
   );
 }
 
@@ -959,6 +1114,7 @@ export function GlobeView({
   dominationStates,
   wars,
   countryCentroids,
+  onHover,
 }: GlobeViewProps) {
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
@@ -984,7 +1140,8 @@ export function GlobeView({
           {/* 국가 경계선 + 라벨 + 인터랙션 */}
           <CountryBorders />
           <CountryPolygons />
-          <GlobeInteraction onCountryClick={onCountryClick} />
+          <HoverBorderGlow />
+          <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
           <AdaptiveOrbitControls />
 
           {/* v14: Domination color overlay (국가별 지배 색상) */}
