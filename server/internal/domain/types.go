@@ -398,6 +398,52 @@ type EffectCooldown struct {
 	TicksLeft   int         `json:"ticksLeft"`
 }
 
+// ============================================================
+// v14 Phase 3: Passive Types (10 passives)
+// ============================================================
+
+// PassiveType identifies one of the 10 v14 passive upgrades.
+type PassiveType string
+
+const (
+	PassiveVigor     PassiveType = "vigor"      // +15% max HP / stack (max 6)
+	PassiveSwift     PassiveType = "swift"      // +12% move speed / stack (max 5)
+	PassiveFury      PassiveType = "fury"       // +15% damage / stack (max 8)
+	PassiveIronSkin  PassiveType = "iron_skin"  // -12% damage taken / stack (max 6)
+	PassiveMagnet    PassiveType = "magnet"     // +25% pickup range / stack (max 5)
+	PassiveFortune   PassiveType = "fortune"    // +15% rare chance / stack (max 5)
+	PassiveVitality  PassiveType = "vitality"   // +2 HP/s regen / stack (max 5)
+	PassivePrecision PassiveType = "precision"  // +8% crit chance / stack (max 6)
+	PassiveBlast     PassiveType = "blast"      // +15% AOE size / stack (max 5)
+	PassiveHaste     PassiveType = "haste"      // -8% cooldown / stack (max 5)
+)
+
+// AllPassiveTypes lists all passive types.
+var AllPassiveTypes = []PassiveType{
+	PassiveVigor, PassiveSwift, PassiveFury, PassiveIronSkin, PassiveMagnet,
+	PassiveFortune, PassiveVitality, PassivePrecision, PassiveBlast, PassiveHaste,
+}
+
+// ============================================================
+// v14 Phase 3: Synergy Types (10 combos)
+// ============================================================
+
+// V14SynergyType identifies one of the 10 v14 synergy combos.
+type V14SynergyType string
+
+const (
+	SynergyThermalShock  V14SynergyType = "thermal_shock"   // FlameRing + FrostShards
+	SynergyAssassinsMark V14SynergyType = "assassins_mark"  // ShadowStrike + Precision×3
+	SynergyFortress      V14SynergyType = "fortress"        // CrystalShield + IronSkin×3
+	SynergyCorruption    V14SynergyType = "corruption"      // SoulDrain + VenomCloud
+	SynergyThunderGod    V14SynergyType = "thunder_god"     // ThunderClap + ChainBolt
+	SynergyGravityMaster V14SynergyType = "gravity_master"  // GravityBomb + Magnet×3
+	SynergyBerserker     V14SynergyType = "berserker_v14"   // Fury×5 + Swift×3
+	SynergyIronMaiden    V14SynergyType = "iron_maiden"     // IronSkin×4 + Vigor×3
+	SynergyGlassCannon   V14SynergyType = "glass_cannon_v14" // Fury×6 + Precision×4
+	SynergySpeedster     V14SynergyType = "speedster_v14"   // Swift×4 + Haste×3
+)
+
 // DamageSource classifies the cause of death.
 type DamageSource string
 
@@ -480,21 +526,35 @@ type Agent struct {
 	DashCooldownEnd uint64         `json:"dashCooldownEnd"` // tick when dash is available again
 	Deaths          int            `json:"deaths"`          // v14: death count (respawn deathmatch)
 	Assists         int            `json:"assists"`         // v14: assist count
+	// v14 Phase 3: Skill tree & progression
+	Passives        map[PassiveType]int  `json:"passives"`        // passive type → stack count
+	V14Synergies    []V14SynergyType     `json:"v14Synergies"`    // active v14 synergies
+	Gold            int                  `json:"gold"`            // in-match currency
 }
 
 // UpgradeChoice represents a single upgrade option presented at level-up.
 type UpgradeChoice struct {
 	ID          string `json:"id"`
-	Type        string `json:"type"` // "tome" or "ability"
+	Type        string `json:"type"` // "tome", "ability", "weapon", "passive", "synergy_hint"
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Tier        string `json:"tier"`
-	// For tomes:
-	TomeType    TomeType    `json:"tomeType,omitempty"`
-	CurrentStack int        `json:"currentStack,omitempty"`
-	// For abilities:
-	AbilityType AbilityType `json:"abilityType,omitempty"`
-	AbilityLevel int        `json:"abilityLevel,omitempty"`
+	// For tomes (legacy):
+	TomeType     TomeType    `json:"tomeType,omitempty"`
+	CurrentStack int         `json:"currentStack,omitempty"`
+	// For abilities (legacy):
+	AbilityType  AbilityType `json:"abilityType,omitempty"`
+	AbilityLevel int         `json:"abilityLevel,omitempty"`
+	// v14 Phase 3: Weapon choices
+	WeaponType    WeaponType    `json:"weaponType,omitempty"`
+	WeaponLevel   int           `json:"weaponLevel,omitempty"`   // current level (0 = new)
+	// v14 Phase 3: Passive choices
+	PassiveType   PassiveType   `json:"passiveType,omitempty"`
+	PassiveStacks int           `json:"passiveStacks,omitempty"` // current stacks
+	PassiveMax    int           `json:"passiveMax,omitempty"`    // max stacks
+	// v14 Phase 3: Synergy hint
+	SynergyType   V14SynergyType `json:"synergyType,omitempty"`
+	SynergyMissing string        `json:"synergyMissing,omitempty"` // what's needed to activate
 }
 
 // RoomState represents the current state of a game room.

@@ -43,14 +43,80 @@ export interface AbilitySlot {
 
 export interface UpgradeChoice {
   id: string;
-  type: 'tome' | 'ability';
+  type: 'tome' | 'ability' | 'weapon' | 'passive' | 'synergy_hint';
   tomeType?: TomeType;
   abilityType?: AbilityType;
   name: string;
   description: string;
   currentStacks?: number; // Tome: 현재 보유 스택
   currentLevel?: number;  // Ability: 현재 레벨 (이미 보유 시)
+  // v14 Phase 3: Weapon choices
+  weaponType?: import('./weapons').WeaponType;
+  weaponLevel?: number;       // current weapon level (0 = new)
+  // v14 Phase 3: Passive choices
+  passiveType?: PassiveType;
+  passiveStacks?: number;     // current stacks
+  passiveMax?: number;        // max stacks
+  // v14 Phase 3: Synergy hints
+  synergyType?: V14SynergyType;
+  synergyMissing?: string;    // what's needed to activate
 }
+
+// ─── v14 Phase 3: Passive & Synergy Types ───
+
+export type PassiveType =
+  | 'vigor' | 'swift' | 'fury' | 'iron_skin' | 'magnet'
+  | 'fortune' | 'vitality' | 'precision' | 'blast' | 'haste';
+
+export const ALL_PASSIVE_TYPES: PassiveType[] = [
+  'vigor', 'swift', 'fury', 'iron_skin', 'magnet',
+  'fortune', 'vitality', 'precision', 'blast', 'haste',
+];
+
+export type V14SynergyType =
+  | 'thermal_shock' | 'assassins_mark' | 'fortress' | 'corruption'
+  | 'thunder_god' | 'gravity_master' | 'berserker_v14' | 'iron_maiden'
+  | 'glass_cannon_v14' | 'speedster_v14';
+
+export interface PassiveDef {
+  type: PassiveType;
+  name: string;
+  description: string;
+  effectPerStack: number;
+  maxStack: number;
+}
+
+export const ALL_PASSIVES: PassiveDef[] = [
+  { type: 'vigor', name: 'Vigor', description: '+15% max HP per stack', effectPerStack: 0.15, maxStack: 6 },
+  { type: 'swift', name: 'Swift', description: '+12% move speed per stack', effectPerStack: 0.12, maxStack: 5 },
+  { type: 'fury', name: 'Fury', description: '+15% weapon damage per stack', effectPerStack: 0.15, maxStack: 8 },
+  { type: 'iron_skin', name: 'Iron Skin', description: '-12% damage taken per stack', effectPerStack: 0.12, maxStack: 6 },
+  { type: 'magnet', name: 'Magnet', description: '+25% pickup range per stack', effectPerStack: 0.25, maxStack: 5 },
+  { type: 'fortune', name: 'Fortune', description: '+15% rare chance per stack', effectPerStack: 0.15, maxStack: 5 },
+  { type: 'vitality', name: 'Vitality', description: '+2 HP/s regen per stack', effectPerStack: 2.0, maxStack: 5 },
+  { type: 'precision', name: 'Precision', description: '+8% crit chance per stack', effectPerStack: 0.08, maxStack: 6 },
+  { type: 'blast', name: 'Blast', description: '+15% AOE size per stack', effectPerStack: 0.15, maxStack: 5 },
+  { type: 'haste', name: 'Haste', description: '-8% cooldown per stack', effectPerStack: 0.08, maxStack: 5 },
+];
+
+export interface V14SynergyDef {
+  type: V14SynergyType;
+  name: string;
+  description: string;
+}
+
+export const ALL_V14_SYNERGIES: V14SynergyDef[] = [
+  { type: 'thermal_shock', name: 'Thermal Shock', description: 'Burn+Slow enemies take 2x damage' },
+  { type: 'assassins_mark', name: "Assassin's Mark", description: 'Backstab attacks are always critical' },
+  { type: 'fortress', name: 'Fortress', description: 'Reflect damage 300%, knockback immunity' },
+  { type: 'corruption', name: 'Corruption', description: 'DOT range 2x, lifesteal on DOT' },
+  { type: 'thunder_god', name: 'Thunder God', description: 'Stunned targets trigger chain lightning' },
+  { type: 'gravity_master', name: 'Gravity Master', description: 'Black hole range 2x, pulls orbs' },
+  { type: 'berserker_v14', name: 'Berserker', description: 'On kill: 3s double attack speed' },
+  { type: 'iron_maiden', name: 'Iron Maiden', description: 'Reflect 20% damage, 2x regen' },
+  { type: 'glass_cannon_v14', name: 'Glass Cannon', description: 'Crit 3x damage, +50% damage taken' },
+  { type: 'speedster_v14', name: 'Speedster', description: 'No dash cooldown, invincible during dash' },
+];
 
 // ─── v10 Agent Entity ───
 
