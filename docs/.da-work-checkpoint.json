@@ -5,7 +5,7 @@
   "plan_file": "docs/designs/v16-game-experience-plan.md",
   "project_type": "GAME",
   "current_stage": 3,
-  "current_phase": 6,
+  "current_phase": 7,
   "total_phases": 9,
   "phases": [
     {"name": "Phase 0", "status": "done"},
@@ -14,10 +14,10 @@
     {"name": "Phase 3", "status": "done"},
     {"name": "Phase 4", "status": "done"},
     {"name": "Phase 5: 바이옴 + 장애물", "status": "done"},
-    {"name": "Phase 6: 지형 반응 애니메이션", "status": "pending"},
+    {"name": "Phase 6: 지형 반응 애니메이션", "status": "done"},
     {"name": "Phase 7: 사운드 + 이펙트", "status": "pending"},
     {"name": "Phase 8: 날씨 + 미니맵 + 킬캠", "status": "pending"}
   ],
-  "last_skill": "phase6_fixes_done",
-  "last_update": "2026-03-07T12:30:00Z"
+  "last_skill": "phase6_git_done",
+  "last_update": "2026-03-07T13:00:00Z"
 }

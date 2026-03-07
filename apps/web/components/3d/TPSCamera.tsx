@@ -8,6 +8,8 @@
  * 대상(플레이어) 추적 with smooth lerp
  * 지형 클리핑 방지: 카메라 Y를 최소 지면+10 이상으로
  *
+ * v16 Phase 7: 카메라 셰이크 통합 (camera-shake.ts)
+ *
  * CRITICAL: useFrame priority 0 (기본값) 사용!
  * JSX에서 GameLoop 다음에 마운트하여 실행 순서 보장.
  */
@@ -19,6 +21,7 @@ import { Vector3 } from 'three';
 import type { AgentNetworkData } from '@agent-survivor/shared';
 import type { GameData } from '@/hooks/useSocket';
 import type { InputManagerReturn } from '@/hooks/useInputManager';
+import { getCameraShake } from '@/lib/3d/camera-shake';
 
 // ─── 상수 ───
 const MIN_POLAR = 0.17;      // ~10 deg (거의 탑다운)
@@ -142,10 +145,15 @@ export function TPSCamera({
       target.current.z += (playerWorldZ - target.current.z) * trackFactor;
     }
 
+    // ─── 카메라 셰이크 업데이트 (v16 Phase 7) ───
+    const shake = getCameraShake();
+    shake.update(delta);
+
     // ─── Spherical → Cartesian (카메라 오프셋) ───
     const az = azimuth.current;
     const pol = polar.current;
-    const dist = distance.current;
+    // 줌 펀치 적용: distance에 셰이크 줌 배수 곱하기
+    const dist = distance.current * shake.zoomMultiplier;
 
     _offset.set(
       dist * Math.sin(pol) * Math.sin(az),
@@ -154,6 +162,10 @@ export function TPSCamera({
     );
 
     _camPos.copy(target.current).add(_offset);
+
+    // ─── 셰이크 오프셋 적용 (XY 평면에서 흔들림) ───
+    _camPos.x += shake.offsetX;
+    _camPos.y += shake.offsetY;
 
     // ─── 지형 클리핑 방지 ───
     // 현재 heightmap이 없으므로 기본 지면 Y=0 기준

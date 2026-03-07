@@ -65,6 +65,9 @@ import { SpectatorMode } from './SpectatorMode';
 import type { SpectatorTarget } from './SpectatorMode';
 import { useAudio } from '@/hooks/useAudio';
 import type { AmbienceTheme } from '@/hooks/useAudio';
+import { useSoundEngine } from '@/hooks/useSoundEngine';
+import { PostProcessingEffects, CSSVignetteOverlay, CSSChromaticOverlay } from '@/components/3d/PostProcessingEffects';
+import type { FXQualityLevel } from '@/components/3d/PostProcessingEffects';
 
 // v14: Epoch HUD + overlays (HTML 오버레이)
 import { EpochHUD, WarCountdownOverlay, WarVignetteOverlay, RespawnOverlay } from './EpochHUD';
@@ -121,6 +124,11 @@ export function GameCanvas3D({
   const cameraRef = useRef<Camera | null>(null);
   const playerPosRef = useRef({ x: 0, z: 0 });
   const inputManager = useInputManager(containerRef, cameraRef, playerPosRef, !menuOpen);
+
+  // v16 Phase 7: SoundEngine + PostProcessing
+  const soundEngine = useSoundEngine();
+  const [chromaticIntensity, setChromaticIntensity] = useState(0);
+  const [vignetteIntensity, setVignetteIntensity] = useState(0.3);
 
   // v16: 입력 전송 루프 (30Hz) — InputManager 상태를 서버에 전송
   const lastSentRef = useRef({ ma: 0 as number | null, aa: 0, b: false, d: false, j: false });
@@ -221,6 +229,77 @@ export function GameCanvas3D({
       playSFX('death');
     }
   }, [uiState.isSpectating, uiState.deathInfo, playSFX]);
+
+  // v16 Phase 7: SoundEngine 기반 이벤트 연동
+
+  // 바이옴 앰비언스 (새 SoundEngine 연동)
+  useEffect(() => {
+    const biomeMap: Record<string, 'forest' | 'desert' | 'mountain' | 'urban' | 'arctic' | 'island'> = {
+      forest: 'forest', desert: 'desert', mountain: 'mountain',
+      urban: 'urban', arctic: 'arctic', island: 'island',
+    };
+    const biome = biomeMap[terrainTheme];
+    if (biome) {
+      soundEngine.startAmbience(biome);
+    }
+    return () => soundEngine.stopAmbience();
+  }, [terrainTheme, soundEngine]);
+
+  // 전쟁 페이즈 텐션 BGM
+  useEffect(() => {
+    if (uiState.epoch?.phase === 'war' || uiState.epoch?.phase === 'shrink') {
+      soundEngine.startTensionBGM();
+    } else {
+      soundEngine.stopTensionBGM();
+    }
+  }, [uiState.epoch?.phase, soundEngine]);
+
+  // 킬 이벤트 → 카메라 셰이크 + SFX (새 엔진)
+  // kill 이벤트는 플레이어의 킬을 알려주므로 모든 killFeed 추가가 내 킬임
+  const prevKillCountV16Ref = useRef(0);
+  useEffect(() => {
+    const feed = dataRef.current.killFeed;
+    if (feed.length > prevKillCountV16Ref.current) {
+      soundEngine.triggerKillShake();
+    }
+    prevKillCountV16Ref.current = feed.length;
+  });
+
+  // 사망 이벤트 → 카메라 셰이크
+  useEffect(() => {
+    if (uiState.deathInfo && uiState.isSpectating) {
+      soundEngine.triggerDeathShake();
+    }
+  }, [uiState.isSpectating, uiState.deathInfo, soundEngine]);
+
+  // 피격 감지 (damage_dealt 이벤트) → 크로매틱 수차 + 셰이크
+  const prevDamageCountRef = useRef(0);
+  useEffect(() => {
+    const events = uiState.damageEvents;
+    if (events.length <= prevDamageCountRef.current) {
+      prevDamageCountRef.current = events.length;
+      return;
+    }
+
+    const pid = dataRef.current.playerId;
+    if (!pid) {
+      prevDamageCountRef.current = events.length;
+      return;
+    }
+
+    // 새로 추가된 이벤트 중 나에게 온 대미지 감지
+    const newEvents = events.slice(prevDamageCountRef.current);
+    prevDamageCountRef.current = events.length;
+
+    for (const evt of newEvents) {
+      if (evt.targetId === pid) {
+        // 내가 피격당함 → 카메라 셰이크 + 크로매틱 수차
+        soundEngine.triggerHitShake(evt.damage);
+        setChromaticIntensity(Math.min(1, evt.damage / 50));
+        setTimeout(() => setChromaticIntensity(0), 300);
+      }
+    }
+  }, [uiState.damageEvents, dataRef, soundEngine]);
 
   // v12 S20: 배틀 결과 10초 카운트다운
   useEffect(() => {
@@ -470,7 +549,22 @@ export function GameCanvas3D({
         <CapturePointRenderer
           capturePoints={uiState.capturePoints}
         />
+
+        {/* 18. PostProcessingEffects — v16 Phase 7 (크로매틱 수차 + 비네팅) */}
+        <PostProcessingEffects
+          quality={soundEngine.fxQuality as FXQualityLevel}
+          chromaticIntensity={chromaticIntensity}
+          vignetteIntensity={vignetteIntensity}
+        />
       </Canvas>
+
+      {/* ─── v16 Phase 7: CSS Fallback Overlays (모바일/low 설정) ─── */}
+      {soundEngine.fxQuality === 'low' && (
+        <>
+          <CSSVignetteOverlay intensity={vignetteIntensity} />
+          <CSSChromaticOverlay intensity={chromaticIntensity} />
+        </>
+      )}
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
 
@@ -524,8 +618,8 @@ export function GameCanvas3D({
       {/* v12 S24: 킬피드 (좌측 상단) */}
       <KillFeedHUD dataRef={dataRef} />
 
-      {/* v12 S24: 음소거 토글 버튼 (우상단) */}
-      <MuteButton isMuted={isMuted} onToggle={toggleMute} />
+      {/* v12 S24: 음소거 토글 버튼 (우상단) — v16: 새 SoundEngine도 동기 */}
+      <MuteButton isMuted={isMuted} onToggle={() => { toggleMute(); soundEngine.toggleMute(); }} />
 
       {/* 전투 보너스 토스트 (입장 시 4초) */}
       {terrainToast && <TerrainBonusToast text={terrainToast} />}
