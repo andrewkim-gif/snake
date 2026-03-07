@@ -42,6 +42,10 @@ export interface SocketStableContextValue {
   chooseUpgrade: (choiceId: string) => void;
   dismissSynergyPopup: (synergyId: string) => void;
   setTrainingProfile: (agentId: string, profile: any) => void;
+  // v14: 국적 & 에포크
+  selectNationality: (nationality: string) => void;
+  joinCountryArena: (countryCode: string, name: string, nationality: string, skinId?: number, appearance?: string) => void;
+  dismissEpochResult: () => void;
 
   // 게임 모드 제어 (page.tsx에서 사용)
   setGameMode: (mode: GameMode) => void;
@@ -82,6 +86,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     chooseUpgrade,
     dismissSynergyPopup,
     setTrainingProfile,
+    selectNationality,
+    joinCountryArena,
+    dismissEpochResult,
   } = useSocket();
 
   // ─── 게임 모드 상태 (전역화) ───
@@ -127,6 +134,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       chooseUpgrade,
       dismissSynergyPopup,
       setTrainingProfile,
+      selectNationality,
+      joinCountryArena,
+      dismissEpochResult,
       setGameMode,
     }),
     [
@@ -140,6 +150,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       chooseUpgrade,
       dismissSynergyPopup,
       setTrainingProfile,
+      selectNationality,
+      joinCountryArena,
+      dismissEpochResult,
     ],
   );
 

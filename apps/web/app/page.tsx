@@ -8,11 +8,13 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import dynamic from 'next/dynamic';
+import { useTranslations } from 'next-intl';
 import type { CubelingAppearance } from '@agent-survivor/shared';
 import { createDefaultAppearance, packAppearance } from '@agent-survivor/shared';
 import { LobbyHeader } from '@/components/lobby/LobbyHeader';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
+import { NationalitySelector, loadNationality, saveNationality } from '@/components/lobby/NationalitySelector';
 import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
 import { NewsFeed } from '@/components/lobby/NewsFeed';
 import { useSocketContext } from '@/providers/SocketProvider';
@@ -31,10 +33,12 @@ const GameCanvas3D = dynamic(
 const NEWS_FEED_HEIGHT = 36;
 
 export default function Home() {
+  const tLobby = useTranslations('lobby');
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing'>('lobby');
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
   const [appearance, setAppearance] = useState<CubelingAppearance>(createDefaultAppearance);
+  const [nationality, setNationality] = useState('');
   const [fadeOut, setFadeOut] = useState(false);
   const [setupOpen, setSetupOpen] = useState(true);
   const [newsExpanded, setNewsExpanded] = useState(false);
@@ -42,7 +46,7 @@ export default function Home() {
 
   // v13: 전역 SocketContext에서 소켓 데이터 + 액션 가져오기
   const {
-    dataRef, uiState, joinRoom, leaveRoom, sendInput,
+    dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput,
     respawn, chooseUpgrade, dismissSynergyPopup, setGameMode,
   } = useSocketContext();
 
@@ -55,8 +59,10 @@ export default function Home() {
   useEffect(() => {
     const savedName = localStorage.getItem('agent-survivor-name');
     const savedSkin = localStorage.getItem('agent-survivor-skin');
+    const savedNat = loadNationality();
     if (savedName) setPlayerName(savedName);
     if (savedSkin) setSkinId(parseInt(savedSkin, 10) || 0);
+    if (savedNat) setNationality(savedNat);
   }, []);
 
   useEffect(() => {
@@ -71,29 +77,40 @@ export default function Home() {
     setViewMode(prev => prev === 'globe' ? 'map' : 'globe');
   }, []);
 
-  // 국가 아레나 진입
+  // 국가 아레나 진입 (v14: nationality 포함)
   const handleEnterArena = useCallback((iso3: string) => {
     const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
     const packedAp = packAppearance(appearance).toString();
+    const nat = nationality || iso3; // 국적 미선택 시 입장 국가를 국적으로 사용
     setFadeOut(true);
     setTimeout(() => {
-      joinRoom(iso3, name, skinId, packedAp);
+      // v14: joinCountryArena에 nationality 포함, fallback으로 joinRoom도 유지
+      if (nat) {
+        joinCountryArena(iso3, name, nat, skinId, packedAp);
+      } else {
+        joinRoom(iso3, name, skinId, packedAp);
+      }
       setMode('transitioning');
       setFadeOut(false);
     }, 300);
-  }, [joinRoom, playerName, skinId, appearance]);
+  }, [joinRoom, joinCountryArena, playerName, skinId, appearance, nationality]);
 
   // 관전
   const handleSpectate = useCallback((iso3: string) => {
     const name = playerName || `Spectator${Math.floor(Math.random() * 999)}`;
     const packedAp = packAppearance(appearance).toString();
+    const nat = nationality || iso3;
     setFadeOut(true);
     setTimeout(() => {
-      joinRoom(iso3, name, skinId, packedAp);
+      if (nat) {
+        joinCountryArena(iso3, name, nat, skinId, packedAp);
+      } else {
+        joinRoom(iso3, name, skinId, packedAp);
+      }
       setMode('transitioning');
       setFadeOut(false);
     }, 300);
-  }, [joinRoom, playerName, skinId, appearance]);
+  }, [joinRoom, joinCountryArena, playerName, skinId, appearance, nationality]);
 
   // 퇴장
   const handleExit = useCallback(() => {
@@ -139,7 +156,7 @@ export default function Home() {
         fontWeight: 700, fontSize: '20px', color: SK.textPrimary,
         letterSpacing: '3px',
       }}>
-        DEPLOYING TO ARENA...
+        {tLobby('deploying')}
       </div>
     );
   }
@@ -223,7 +240,7 @@ export default function Home() {
                 letterSpacing: '2px',
                 textTransform: 'uppercase',
               }}>
-                AGENT SETUP
+                {tLobby('agentSetup')}
               </span>
               <button
                 onClick={() => setSetupOpen(false)}
@@ -248,9 +265,31 @@ export default function Home() {
             <McInput
               value={playerName}
               onChange={(e) => setPlayerName(e.target.value)}
-              placeholder="Enter callsign..."
-              style={{ marginBottom: '12px' }}
+              placeholder={tLobby('enterCallsign')}
+              style={{ marginBottom: '8px' }}
             />
+
+            {/* v14: 국적 선택 */}
+            <div style={{ marginBottom: '12px' }}>
+              <div style={{
+                fontFamily: bodyFont,
+                fontSize: '9px',
+                fontWeight: 700,
+                color: SK.textMuted,
+                letterSpacing: '1.5px',
+                textTransform: 'uppercase' as const,
+                marginBottom: '4px',
+              }}>
+                NATIONALITY
+              </div>
+              <NationalitySelector
+                value={nationality}
+                onChange={(iso3) => {
+                  setNationality(iso3);
+                  saveNationality(iso3);
+                }}
+              />
+            </div>
 
             {/* 캐릭터 에디터 (Phase 7) */}
             <CharacterCreator
@@ -271,7 +310,7 @@ export default function Home() {
               letterSpacing: '1.5px',
               borderTop: `1px solid ${SK.borderDark}`,
             }}>
-              CLICK A COUNTRY TO DEPLOY
+              {tLobby('clickToDeploy')}
             </div>
           </div>
         ) : (
@@ -294,7 +333,7 @@ export default function Home() {
               transition: 'all 150ms ease',
             }}
           >
-            AGENT SETUP
+            {tLobby('agentSetup')}
           </button>
         )}
       </div>

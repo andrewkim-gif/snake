@@ -39,6 +39,7 @@ import type { MCParticlesHandle } from '@/components/3d/MCParticles';
 import { AuraRings } from '@/components/3d/AuraRings';
 import { BuildEffects } from '@/components/3d/BuildEffects';
 import { AbilityEffects } from '@/components/3d/AbilityEffects';
+import { FlagSprite } from '@/components/3d/FlagSprite';
 
 // 기존 HUD 오버레이 (Canvas 밖 HTML)
 import { DeathOverlay } from './DeathOverlay';
@@ -96,6 +97,8 @@ export function GameCanvas3D({
   // Phase 5: 상태 머신 + 인덱스 맵 ref (AgentInstances ↔ EquipmentInstances 공유)
   const stateMachineRef = useRef<AnimationStateMachine | null>(null);
   const agentIndexMapRef = useRef<Map<string, number>>(new Map());
+  // v14 S09: 플레이어 ID ref (FlagSprite용, rAF에서 동기화)
+  const playerIdRef = useRef<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const [terrainToast, setTerrainToast] = useState<string | null>(null);
   // v12 S20: Spectator mode + battle result
@@ -204,6 +207,8 @@ export function GameCanvas3D({
       const state = dataRef.current.latestState;
       // 오브 데이터를 서버 state에서 동기화
       orbsRef.current = state?.o ?? [];
+      // v14 S09: playerId ref 동기화
+      playerIdRef.current = dataRef.current.playerId;
       // appearance 캐시: state의 ap 필드에서 unpack하여 캐싱
       if (state?.s) {
         populateAppearanceCache(state.s);
@@ -459,6 +464,13 @@ export function GameCanvas3D({
           elapsedRef={elapsedRef}
           stateMachineRef={stateMachineRef}
           agentIndexMapRef={agentIndexMapRef}
+        />
+
+        {/* 5.1. FlagSprite — 에이전트 머리 위 국기 + 이름 Billboard (v14 S09) */}
+        <FlagSprite
+          agentsRef={agentsRef}
+          playerIdRef={playerIdRef}
+          playerNationality={uiState.nationality ?? ''}
         />
 
         {/* 5.5. EquipmentInstances — 장비(모자/무기/등) InstancedMesh 렌더링 (Phase 5) */}

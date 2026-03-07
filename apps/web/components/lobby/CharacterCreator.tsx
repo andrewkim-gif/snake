@@ -34,6 +34,8 @@ import {
   CHARACTER_PRESETS,
 } from '@agent-survivor/shared';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
+import { generateRandomAppearance, RANDOM_CATEGORIES } from '@/lib/character-generator';
+import type { RandomCategory } from '@/lib/character-generator';
 import { CharacterPreviewPanel } from './CharacterPreviewPanel';
 
 // ─── 상수 ───
@@ -95,128 +97,6 @@ function saveAppearance(a: CubelingAppearance): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(a));
   } catch { /* 무시 */ }
-}
-
-// ─── 랜덤 생성 ───
-
-/** 테마 카테고리 정의 */
-type RandomCategory = 'all' | 'military' | 'cyber' | 'nature' | 'fantasy';
-
-const RANDOM_CATEGORIES: { id: RandomCategory; label: string; icon: string }[] = [
-  { id: 'all',      label: 'ALL',  icon: '\u{1F3B2}' },
-  { id: 'military', label: 'MIL',  icon: '\u{1F396}' },
-  { id: 'cyber',    label: 'CYB',  icon: '\u{1F4BB}' },
-  { id: 'nature',   label: 'NAT',  icon: '\u{1F33F}' },
-  { id: 'fantasy',  label: 'FAN',  icon: '\u{2728}'  },
-];
-
-/** 카테고리별 제약된 색상 풀 (VIVID_PALETTE 인덱스) */
-const CATEGORY_COLOR_POOLS: Record<RandomCategory, { top: number[]; bottom: number[] }> = {
-  all: {
-    top: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-    bottom: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11],
-  },
-  military: {
-    top: [3, 7, 10],        // lime, charcoal, cocoa
-    bottom: [7, 10, 3],     // charcoal, cocoa, lime
-  },
-  cyber: {
-    top: [4, 5, 7, 9],      // sky blue, violet, charcoal, cyan
-    bottom: [7, 5, 9],      // charcoal, violet, cyan
-  },
-  nature: {
-    top: [3, 11, 10, 2],    // lime, mint, cocoa, sunshine
-    bottom: [10, 3, 11, 7], // cocoa, lime, mint, charcoal
-  },
-  fantasy: {
-    top: [0, 5, 2, 8, 4],   // red, violet, sunshine, bubblegum, sky blue
-    bottom: [7, 5, 2, 0],   // charcoal, violet, sunshine, red
-  },
-};
-
-/** 카테고리별 패턴 풀 */
-const CATEGORY_PATTERN_POOLS: Record<RandomCategory, number[]> = {
-  all: [0, 1, 2, 3, 4, 5, 6, 7],
-  military: [0, 5, 1],         // solid, camo, striped
-  cyber: [0, 4, 6],            // solid, checker, zigzag
-  nature: [0, 2, 3],           // solid, dotted, gradient
-  fantasy: [0, 1, 3, 7],       // solid, striped, gradient, heart
-};
-
-/** 카테고리별 장비 풀 */
-const CATEGORY_EQUIP_POOLS: Record<RandomCategory, { hat: number[]; weapon: number[]; back: number[]; foot: number[] }> = {
-  all: {
-    hat: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-    weapon: [0, 1, 2, 3, 4, 5, 6],
-    back: [0, 1, 2, 3, 4, 5],
-    foot: [0, 1, 2, 3, 4, 5, 6, 7, 8],
-  },
-  military: {
-    hat: [0, 1, 2],                     // none, iron helmet, gold helmet
-    weapon: [0, 1, 2, 6],               // none, sword, axe, bow
-    back: [0, 4, 5],                     // none, backpack, quiver
-    foot: [0, 1, 2],                     // none, iron boots, gold boots
-  },
-  cyber: {
-    hat: [0, 3],                         // none, diamond helmet (visor)
-    weapon: [0, 3, 4],                   // none, magic staff (tech), trident
-    back: [0, 4],                        // none, backpack
-    foot: [0, 4, 8],                     // none, speed shoes, frost boots
-  },
-  nature: {
-    hat: [0, 7, 6],                      // none, flower crown, pumpkin
-    weapon: [0, 5, 6],                   // none, torch, bow
-    back: [0, 2, 4],                     // none, angel wings, backpack
-    foot: [0, 5, 7],                     // none, sandals, leaf shoes
-  },
-  fantasy: {
-    hat: [0, 4, 5, 8],                   // none, wizard hat, crown, viking horns
-    weapon: [0, 1, 3, 4],               // none, diamond sword, magic staff, trident
-    back: [0, 1, 2, 3],                 // none, red cape, angel wings, ender wings
-    foot: [0, 2, 3, 6],                 // none, gold boots, diamond boots, lava boots
-  },
-};
-
-/** 카테고리별 바디 타입 풀 */
-const CATEGORY_BODY_POOLS: Record<RandomCategory, BodyType[]> = {
-  all: ['standard', 'slim', 'chunky', 'tall'],
-  military: ['standard', 'chunky'],
-  cyber: ['slim', 'standard'],
-  nature: ['standard', 'tall'],
-  fantasy: ['standard', 'slim', 'chunky', 'tall'],
-};
-
-function pick<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
-
-function randomAppearance(category: RandomCategory = 'all'): CubelingAppearance {
-  const colors = CATEGORY_COLOR_POOLS[category];
-  const patterns = CATEGORY_PATTERN_POOLS[category];
-  const equip = CATEGORY_EQUIP_POOLS[category];
-  const bodies = CATEGORY_BODY_POOLS[category];
-
-  return {
-    bodyType: pick(bodies),
-    bodySize: 'medium',
-    skinTone: Math.floor(Math.random() * 12),
-    eyeStyle: Math.floor(Math.random() * 12),
-    mouthStyle: Math.floor(Math.random() * 8),
-    marking: 0,
-    topColor: pick(colors.top),
-    bottomColor: pick(colors.bottom),
-    pattern: pick(patterns),
-    hairStyle: Math.floor(Math.random() * 16),
-    hairColor: Math.floor(Math.random() * 16),
-    hat: pick(equip.hat),
-    weapon: pick(equip.weapon),
-    backItem: pick(equip.back),
-    footwear: pick(equip.foot),
-    trailEffect: 0,
-    auraEffect: category === 'all' ? Math.floor(Math.random() * 6) : (Math.random() < 0.3 ? Math.floor(Math.random() * 6) : 0),
-    emote: 0,
-    spawnEffect: 0,
-  };
 }
 
 // ─── 공통 스타일 ───
@@ -291,7 +171,7 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
   }, []);
 
   const handleRandom = useCallback(() => {
-    const rnd = randomAppearance(randomCategory);
+    const rnd = generateRandomAppearance(randomCategory);
     if (!externalAppearance) setInternalAppearance(rnd);
     onAppearanceChange?.(rnd);
     saveAppearance(rnd);
