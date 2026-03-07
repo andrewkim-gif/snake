@@ -4,29 +4,43 @@
  * LobbyHeader — 프리미엄 다크 헤더 바
  * 다크 글래스모피즘 + 로고 + 네비게이션 + 상태 + 뷰 토글
  * v13: TopNavBar 중앙 삽입 + Wallet 자리 마련
+ * v14 Phase 8 S35: EventTicker 하단 롤링 뉴스 밴드 통합
  */
 
 import { useState } from 'react';
 import Image from 'next/image';
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 import { TopNavBar } from '@/components/navigation/TopNavBar';
+import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
+import { EventTicker } from '@/components/lobby/EventTicker';
+import type { GlobalEventItem } from '@/components/lobby/EventTicker';
 
 interface LobbyHeaderProps {
   connected: boolean;
   viewMode: 'globe' | 'map';
   onToggleView: () => void;
+  /** v14 S35: Global events for the ticker */
+  globalEvents?: GlobalEventItem[];
+  /** v14 S35: Callback when user clicks an event (focus country) */
+  onEventClick?: (countryCode: string) => void;
 }
 
-export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderProps) {
+export function LobbyHeader({ connected, viewMode, onToggleView, globalEvents, onEventClick }: LobbyHeaderProps) {
+  const tCommon = useTranslations('common');
+  const tLobby = useTranslations('lobby');
   const [imgError, setImgError] = useState(false);
 
   return (
-    <header style={{
+    <div style={{
       position: 'absolute',
       top: 0,
       left: 0,
       right: 0,
       zIndex: 70,
+      pointerEvents: 'none',
+    }}>
+    <header style={{
       height: '56px',
       display: 'flex',
       alignItems: 'center',
@@ -83,7 +97,7 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
           borderRadius: '4px',
           textTransform: 'uppercase',
         }}>
-          ALPHA
+          {tCommon('alpha')}
         </span>
       </div>
 
@@ -92,15 +106,15 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
         <TopNavBar />
       </div>
 
-      {/* 우측: Wallet 자리 + 상태 + 뷰 토글 */}
+      {/* 우측: Language + 상태 + 뷰 토글 */}
       <div style={{
         display: 'flex',
         alignItems: 'center',
-        gap: '16px',
+        gap: '12px',
         pointerEvents: 'auto',
       }}>
-        {/* Wallet Connect 버튼 자리 (Phase 3에서 WalletConnectButton import) */}
-        {/* <WalletConnectButton /> */}
+        {/* Language Switcher */}
+        <LanguageSwitcher />
 
         {/* 연결 상태 */}
         <div style={{
@@ -125,7 +139,7 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             letterSpacing: '1px',
             textTransform: 'uppercase',
           }}>
-            {connected ? 'Online' : 'Offline'}
+            {connected ? tLobby('online') : tLobby('offline')}
           </span>
         </div>
 
@@ -157,9 +171,16 @@ export function LobbyHeader({ connected, viewMode, onToggleView }: LobbyHeaderPr
             e.currentTarget.style.backgroundColor = 'rgba(255, 255, 255, 0.04)';
           }}
         >
-          {viewMode === 'globe' ? '2D MAP' : '3D GLOBE'}
+          {viewMode === 'globe' ? tLobby('map2d') : tLobby('globe3d')}
         </button>
       </div>
     </header>
+
+    {/* v14 S35: Event Ticker — rolling news band below header */}
+    <EventTicker
+      events={globalEvents}
+      onEventClick={onEventClick}
+    />
+    </div>
   );
 }

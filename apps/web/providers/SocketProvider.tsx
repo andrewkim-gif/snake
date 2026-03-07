@@ -46,6 +46,8 @@ export interface SocketStableContextValue {
   selectNationality: (nationality: string) => void;
   joinCountryArena: (countryCode: string, name: string, nationality: string, skinId?: number, appearance?: string) => void;
   dismissEpochResult: () => void;
+  // v14 S36: 아레나 전환 (소켓 유지)
+  switchArena: (newCountryCode: string, name: string, nationality: string, skinId?: number, appearance?: string) => void;
 
   // 게임 모드 제어 (page.tsx에서 사용)
   setGameMode: (mode: GameMode) => void;
@@ -89,6 +91,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     selectNationality,
     joinCountryArena,
     dismissEpochResult,
+    switchArena,
   } = useSocket();
 
   // ─── 게임 모드 상태 (전역화) ───
@@ -137,6 +140,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       selectNationality,
       joinCountryArena,
       dismissEpochResult,
+      switchArena,
       setGameMode,
     }),
     [
@@ -153,6 +157,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       selectNationality,
       joinCountryArena,
       dismissEpochResult,
+      switchArena,
     ],
   );
 

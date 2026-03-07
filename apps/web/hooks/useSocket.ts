@@ -589,6 +589,56 @@ export function useSocket() {
     setUiState(prev => ({ ...prev, epochResult: null }));
   }, []);
 
+  /** v14 S36: 아레나 전환 (소켓 유지, room만 변경) */
+  const switchArena = useCallback((
+    newCountryCode: string,
+    name: string,
+    nationality: string,
+    skinId?: number,
+    appearance?: string,
+  ) => {
+    // Leave current room first (server-side cleanup)
+    socketRef.current?.emit('leave_room', {});
+    // Clear local game state but keep connection
+    dataRef.current.currentRoomId = null;
+    dataRef.current.roomState = null;
+    dataRef.current.alive = false;
+    dataRef.current.latestState = null;
+    dataRef.current.prevState = null;
+    dataRef.current.deathInfo = null;
+    dataRef.current.killFeed = [];
+    dataRef.current.levelUp = null;
+    dataRef.current.arenaShrink = null;
+    dataRef.current.synergyPopups = [];
+    // Immediately join new arena (same socket)
+    socketRef.current?.emit('join_country_arena', {
+      countryCode: newCountryCode,
+      name,
+      skinId,
+      appearance,
+      nationality,
+    });
+    setUiState(prev => ({
+      ...prev,
+      currentRoomId: null,
+      roomState: null,
+      alive: false,
+      deathInfo: null,
+      roundEnd: null,
+      countdown: null,
+      levelUp: null,
+      arenaShrink: null,
+      synergyPopups: [],
+      coachMessage: null,
+      roundAnalysis: null,
+      isSpectating: false,
+      battleComplete: null,
+      epochResult: null,
+      respawnState: null,
+      warCountdown: null,
+    }));
+  }, []);
+
   return {
     dataRef,
     uiState,
@@ -603,5 +653,6 @@ export function useSocket() {
     selectNationality,
     joinCountryArena,
     dismissEpochResult,
+    switchArena,
   };
 }

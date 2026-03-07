@@ -1,9 +1,11 @@
 'use client';
 
 /**
- * AI World War — Main Page (v12)
+ * AI World War — Main Page (v14 Phase 8)
  * CIC (Combat Information Center) 디자인
  * LobbyHeader + WorldView + Agent Setup + NewsFeed 통합
+ * v14 S35: EventTicker 통합
+ * v14 S36: ESC 키 → 인게임→로비 복귀, 글로브 클릭 → 아레나 즉시 입장 (소켓 유지)
  */
 
 import { useState, useCallback, useEffect } from 'react';
@@ -43,11 +45,13 @@ export default function Home() {
   const [setupOpen, setSetupOpen] = useState(true);
   const [newsExpanded, setNewsExpanded] = useState(false);
   const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
+  // v14 S36: 에포크 상태 요약 (로비 복귀 시 표시)
+  const [epochSummary, setEpochSummary] = useState<string | null>(null);
 
   // v13: 전역 SocketContext에서 소켓 데이터 + 액션 가져오기
   const {
     dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput,
-    respawn, chooseUpgrade, dismissSynergyPopup, setGameMode,
+    respawn, chooseUpgrade, dismissSynergyPopup, setGameMode, switchArena,
   } = useSocketContext();
 
   // v13: 로컬 mode ↔ 전역 gameMode 동기화
@@ -82,6 +86,7 @@ export default function Home() {
     const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
     const packedAp = packAppearance(appearance).toString();
     const nat = nationality || iso3; // 국적 미선택 시 입장 국가를 국적으로 사용
+    setEpochSummary(null); // 에포크 요약 초기화
     setFadeOut(true);
     setTimeout(() => {
       // v14: joinCountryArena에 nationality 포함, fallback으로 joinRoom도 유지
@@ -100,6 +105,7 @@ export default function Home() {
     const name = playerName || `Spectator${Math.floor(Math.random() * 999)}`;
     const packedAp = packAppearance(appearance).toString();
     const nat = nationality || iso3;
+    setEpochSummary(null);
     setFadeOut(true);
     setTimeout(() => {
       if (nat) {
@@ -112,11 +118,63 @@ export default function Home() {
     }, 300);
   }, [joinRoom, joinCountryArena, playerName, skinId, appearance, nationality]);
 
-  // 퇴장
+  // v14 S36: ESC 키로 인게임 → 로비 복귀 (소켓 유지: leaveRoom만 호출)
+  const handleExitToLobby = useCallback(() => {
+    // Capture epoch summary before leaving
+    const epoch = uiState.epoch;
+    if (epoch) {
+      const phaseLabel = epoch.phase === 'peace' ? 'PEACE' : epoch.phase === 'war' ? 'WAR' : epoch.phase.toUpperCase();
+      setEpochSummary(`Epoch ${epoch.epochNumber} - ${phaseLabel} phase`);
+    }
+    leaveRoom();
+    setFadeOut(true);
+    setTimeout(() => {
+      setMode('lobby');
+      setFadeOut(false);
+    }, 300);
+  }, [leaveRoom, uiState.epoch]);
+
+  // 퇴장 (기존 — 완전 종료)
   const handleExit = useCallback(() => {
     leaveRoom();
     setMode('lobby');
   }, [leaveRoom]);
+
+  // v14 S36: ESC 키 핸들러 (인게임에서만 작동)
+  useEffect(() => {
+    if (mode !== 'playing') return;
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        handleExitToLobby();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [mode, handleExitToLobby]);
+
+  // v14 S36: 글로브에서 국가 클릭 시 아레나 즉시 입장 (소켓 유지 + 전환)
+  const handleQuickEnterArena = useCallback((iso3: string) => {
+    const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
+    const packedAp = packAppearance(appearance).toString();
+    const nat = nationality || iso3;
+    setEpochSummary(null);
+    setFadeOut(true);
+    setTimeout(() => {
+      // switchArena: 소켓 재연결 없이 room 변경
+      switchArena(iso3, name, nat, skinId, packedAp);
+      setMode('transitioning');
+      setFadeOut(false);
+    }, 300);
+  }, [switchArena, playerName, skinId, appearance, nationality]);
+
+  // v14 S35: 이벤트 클릭 시 글로브 포커스 (향후 카메라 이동 연동)
+  const handleEventClick = useCallback((countryCode: string) => {
+    // For now, enter the arena of the clicked country
+    handleEnterArena(countryCode);
+  }, [handleEnterArena]);
 
   // 전환: joined 이벤트 수신 시 playing으로 전환, 8초 타임아웃 시 lobby 복귀
   useEffect(() => {
@@ -146,6 +204,13 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [uiState.battleComplete, mode, handleExit]);
 
+  // v14 S36: 에포크 요약 자동 해제 (10초 후)
+  useEffect(() => {
+    if (!epochSummary) return;
+    const timer = setTimeout(() => setEpochSummary(null), 10_000);
+    return () => clearTimeout(timer);
+  }, [epochSummary]);
+
   // --- 전환 화면 ---
   if (mode === 'transitioning') {
     return (
@@ -171,7 +236,7 @@ export default function Home() {
         respawn={respawn}
         playerName={playerName}
         skinId={skinId}
-        onExit={handleExit}
+        onExit={handleExitToLobby}
         chooseUpgrade={chooseUpgrade}
         dismissSynergyPopup={dismissSynergyPopup}
       />
@@ -194,22 +259,72 @@ export default function Home() {
       <WorldView
         viewMode={viewMode}
         countryStates={uiState.countryStates}
-        onEnterArena={handleEnterArena}
+        onEnterArena={handleQuickEnterArena}
         onSpectate={handleSpectate}
         bottomOffset={NEWS_FEED_HEIGHT}
       />
 
-      {/* CIC 헤더 바 */}
+      {/* CIC 헤더 바 + EventTicker (v14 S35) */}
       <LobbyHeader
         connected={uiState.connected}
         viewMode={viewMode}
         onToggleView={handleToggleView}
+        onEventClick={handleEventClick}
       />
+
+      {/* v14 S36: 에포크 상태 요약 (로비 복귀 시) */}
+      {epochSummary && (
+        <div style={{
+          position: 'absolute',
+          top: 92,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 65,
+          pointerEvents: 'none',
+        }}>
+          <div style={{
+            backgroundColor: SK.glassBg,
+            backdropFilter: 'blur(12px)',
+            WebkitBackdropFilter: 'blur(12px)',
+            border: `1px solid ${SK.glassBorder}`,
+            borderRadius: '4px',
+            padding: '6px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}>
+            <div style={{
+              width: '6px',
+              height: '6px',
+              borderRadius: '50%',
+              backgroundColor: '#CC9933',
+              animation: 'pulse 1.5s infinite',
+            }} />
+            <span style={{
+              fontFamily: bodyFont,
+              fontSize: '11px',
+              fontWeight: 600,
+              color: SK.textSecondary,
+              letterSpacing: '1px',
+            }}>
+              {epochSummary}
+            </span>
+            <span style={{
+              fontFamily: bodyFont,
+              fontSize: '9px',
+              color: SK.textMuted,
+              letterSpacing: '1px',
+            }}>
+              ESC to return
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Agent Setup 패널 — 좌측 */}
       <div style={{
         position: 'absolute',
-        top: 68,
+        top: 92,
         left: 16,
         zIndex: 60,
         maxWidth: '280px',
