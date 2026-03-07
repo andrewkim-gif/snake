@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import {
   MarketCapChart,
@@ -140,6 +141,7 @@ function DashPanel({
 }
 
 function TokensPageInner() {
+  const tEconomy = useTranslations('economy');
   const searchParams = useSearchParams();
   const countryParam = searchParams.get('country')?.toUpperCase() ?? null;
 
@@ -176,7 +178,7 @@ function TokensPageInner() {
           fontSize: '16px',
         }}
       >
-        Loading token economy data...
+        {tEconomy('loadingTokens')}
       </div>
     );
   }
@@ -196,10 +198,10 @@ function TokensPageInner() {
             textTransform: 'uppercase',
           }}
         >
-          TOKEN ECONOMY
+          {tEconomy('tokenEconomy')}
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: '14px', margin: 0 }}>
-          195 National Tokens — Real-time market data, buybacks, staking, and defense buffs
+          {tEconomy('tokenEconomyDesc')}
         </p>
       </div>
 
@@ -221,7 +223,7 @@ function TokensPageInner() {
             fontWeight: 600,
           }}
         >
-          Highlighted: {countryParam}
+          {tEconomy('highlighted', { country: countryParam })}
           <a
             href="/economy/tokens"
             style={{
@@ -231,7 +233,7 @@ function TokensPageInner() {
               marginLeft: '4px',
             }}
           >
-            Clear
+            {tEconomy('clear')}
           </a>
         </div>
       )}
@@ -346,7 +348,8 @@ export default function TokensPage() {
             fontSize: '16px',
           }}
         >
-          Loading token economy data...
+          {/* Static fallback — no hooks in Suspense fallback */}
+        Loading...
         </div>
       }
     >

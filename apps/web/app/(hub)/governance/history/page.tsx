@@ -9,6 +9,7 @@
 
 import { useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import type { VoteHistoryEntry } from '@/components/governance/types';
@@ -79,13 +80,10 @@ const MOCK_VOTE_HISTORY: VoteHistoryEntry[] = [
 
 type VoteFilter = 'all' | 'for' | 'against';
 
-const VOTE_FILTERS: { key: VoteFilter; label: string }[] = [
-  { key: 'all', label: 'ALL' },
-  { key: 'for', label: 'FOR' },
-  { key: 'against', label: 'AGAINST' },
-];
+const VOTE_FILTER_KEYS: VoteFilter[] = ['all', 'for', 'against'];
 
 function VoteHistoryPageInner() {
+  const tGov = useTranslations('governance');
   const searchParams = useSearchParams();
   const countryCode = searchParams.get('country');
 
@@ -136,7 +134,7 @@ function VoteHistoryPageInner() {
             marginBottom: '4px',
           }}
         >
-          VOTE HISTORY
+          {tGov('voteHistory')}
         </h1>
         <p
           style={{
@@ -146,7 +144,7 @@ function VoteHistoryPageInner() {
             margin: 0,
           }}
         >
-          Your past voting activity archive{countryCode ? ` for ${countryCode.toUpperCase()}` : ''}
+          {tGov('voteHistorySubtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
         </p>
       </div>
 
@@ -168,7 +166,7 @@ function VoteHistoryPageInner() {
             fontWeight: 600,
           }}
         >
-          Filtered: {countryCode.toUpperCase()}
+          {tGov('filtered', { country: countryCode.toUpperCase() })}
           <a
             href="/governance/history"
             style={{
@@ -178,7 +176,7 @@ function VoteHistoryPageInner() {
               marginLeft: '4px',
             }}
           >
-            Clear
+            {tGov('all')}
           </a>
         </div>
       )}
@@ -193,10 +191,10 @@ function VoteHistoryPageInner() {
         }}
       >
         {[
-          { label: 'Total Votes', value: stats.total, color: SK.textPrimary },
-          { label: 'Voted For', value: stats.forCount, color: SK.green },
-          { label: 'Voted Against', value: stats.againstCount, color: SK.red },
-          { label: 'Tokens Used', value: stats.totalTokens.toLocaleString(), color: SK.orange },
+          { label: tGov('totalVotes'), value: stats.total, color: SK.textPrimary },
+          { label: tGov('votedFor'), value: stats.forCount, color: SK.green },
+          { label: tGov('votedAgainst'), value: stats.againstCount, color: SK.red },
+          { label: tGov('tokensUsed'), value: stats.totalTokens.toLocaleString(), color: SK.orange },
         ].map((stat) => (
           <div
             key={stat.label}
@@ -244,7 +242,7 @@ function VoteHistoryPageInner() {
           marginBottom: '16px',
         }}
       >
-        {VOTE_FILTERS.map(({ key, label }) => {
+        {VOTE_FILTER_KEYS.map((key) => {
           const isActive = voteFilter === key;
           return (
             <button
@@ -266,7 +264,7 @@ function VoteHistoryPageInner() {
                 transition: 'all 150ms ease',
               }}
             >
-              {label}
+              {tGov(key)}
             </button>
           );
         })}
@@ -299,7 +297,7 @@ export default function VoteHistoryPage() {
             fontFamily: bodyFont,
           }}
         >
-          Loading vote history...
+          Loading...
         </div>
       }
     >

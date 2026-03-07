@@ -17,7 +17,8 @@ import { LobbyHeader } from '@/components/lobby/LobbyHeader';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { NationalitySelector, loadNationality, saveNationality } from '@/components/lobby/NationalitySelector';
-import { WelcomeTutorial } from '@/components/lobby/WelcomeTutorial';
+import { Tutorial } from '@/components/game/Tutorial';
+import { EventTicker } from '@/components/lobby/EventTicker';
 import { NewsFeed } from '@/components/lobby/NewsFeed';
 import { useSocketContext } from '@/providers/SocketProvider';
 import type { GameMode } from '@/providers/SocketProvider';
@@ -44,7 +45,6 @@ export default function Home() {
   const [fadeOut, setFadeOut] = useState(false);
   const [setupOpen, setSetupOpen] = useState(true);
   const [newsExpanded, setNewsExpanded] = useState(false);
-  const [viewMode, setViewMode] = useState<'globe' | 'map'>('globe');
   // v14 S36: 에포크 상태 요약 (로비 복귀 시 표시)
   const [epochSummary, setEpochSummary] = useState<string | null>(null);
 
@@ -75,11 +75,6 @@ export default function Home() {
   useEffect(() => {
     localStorage.setItem('agent-survivor-skin', String(skinId));
   }, [skinId]);
-
-  // 뷰 전환 (fade)
-  const handleToggleView = useCallback(() => {
-    setViewMode(prev => prev === 'globe' ? 'map' : 'globe');
-  }, []);
 
   // 국가 아레나 진입 (v14: nationality 포함)
   const handleEnterArena = useCallback((iso3: string) => {
@@ -170,9 +165,8 @@ export default function Home() {
     }, 300);
   }, [switchArena, playerName, skinId, appearance, nationality]);
 
-  // v14 S35: 이벤트 클릭 시 글로브 포커스 (향후 카메라 이동 연동)
+  // v14 S35: 이벤트 클릭 시 해당 국가 아레나 입장
   const handleEventClick = useCallback((countryCode: string) => {
-    // For now, enter the arena of the clicked country
     handleEnterArena(countryCode);
   }, [handleEnterArena]);
 
@@ -253,24 +247,32 @@ export default function Home() {
       opacity: fadeOut ? 0 : 1,
       transition: 'opacity 300ms ease',
     }}>
-      <WelcomeTutorial />
+      {/* v14: 6-step onboarding tutorial (replaces WelcomeTutorial) */}
+      <Tutorial />
 
       {/* 전체 화면 지구본/맵 */}
       <WorldView
-        viewMode={viewMode}
         countryStates={uiState.countryStates}
         onEnterArena={handleQuickEnterArena}
         onSpectate={handleSpectate}
         bottomOffset={NEWS_FEED_HEIGHT}
       />
 
-      {/* CIC 헤더 바 + EventTicker (v14 S35) */}
+      {/* CIC 헤더 바 */}
       <LobbyHeader
         connected={uiState.connected}
-        viewMode={viewMode}
-        onToggleView={handleToggleView}
-        onEventClick={handleEventClick}
       />
+
+      {/* v14 S35: EventTicker — 글로벌 이벤트 롤링 뉴스 */}
+      <div style={{
+        position: 'absolute',
+        top: 52,
+        left: 0,
+        right: 0,
+        zIndex: 59,
+      }}>
+        <EventTicker onEventClick={handleEventClick} />
+      </div>
 
       {/* v14 S36: 에포크 상태 요약 (로비 복귀 시) */}
       {epochSummary && (

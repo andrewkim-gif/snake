@@ -8,13 +8,14 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 
 const GOVERNANCE_TABS = [
-  { key: 'proposals', label: 'PROPOSALS', href: '/governance' },
-  { key: 'new', label: 'NEW', href: '/governance/new' },
-  { key: 'history', label: 'HISTORY', href: '/governance/history' },
-] as const;
+  { key: 'proposals' as const, href: '/governance' },
+  { key: 'new' as const, href: '/governance/new' },
+  { key: 'history' as const, href: '/governance/history' },
+];
 
 export default function GovernanceLayout({
   children,
@@ -22,6 +23,7 @@ export default function GovernanceLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const tGov = useTranslations('governance');
 
   // 현재 활성 탭 판별
   const activeTab = (() => {
@@ -81,7 +83,7 @@ export default function GovernanceLayout({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {tab.label}
+                {tGov(tab.key)}
               </Link>
             );
           })}

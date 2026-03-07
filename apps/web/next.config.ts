@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 import path from "path";
 import { createRequire } from "module";
+import createNextIntlPlugin from "next-intl/plugin";
 
 const require = createRequire(import.meta.url);
+const withNextIntl = createNextIntlPlugin("./i18n/request.ts");
 
 const nextConfig: NextConfig = {
   // R3F Canvas가 StrictMode 이중 마운트로 WebGL context를 2개 생성→둘 다 lost 되는 문제 방지
@@ -36,11 +38,12 @@ const nextConfig: NextConfig = {
       ],
     },
     // S40: Long-term cache for static assets (JS/CSS/images)
+    // dev에서는 Next.js가 자체 캐시 관리하므로, 프로덕션 빌드에서만 적용됨
     {
       source: "/_next/static/(.*)",
-      headers: [
-        { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
-      ],
+      headers: process.env.NODE_ENV === "production"
+        ? [{ key: "Cache-Control", value: "public, max-age=31536000, immutable" }]
+        : [{ key: "Cache-Control", value: "no-cache, no-store, must-revalidate" }],
     },
     // S40: Cache GeoJSON data (changes infrequently)
     {
@@ -68,4 +71,4 @@ const nextConfig: NextConfig = {
   },
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import type { GameData } from '@/hooks/useSocket';
 
 interface KillFeedEntry {
@@ -105,6 +106,7 @@ export function KillFeedHUD({ dataRef }: KillFeedHUDProps) {
 }
 
 function KillFeedItem({ entry }: { entry: KillFeedEntry }) {
+  const tGame = useTranslations('game');
   const elapsed = Date.now() - entry.timestamp;
   const isFading = elapsed > ENTRY_LIFETIME;
 
@@ -140,7 +142,7 @@ function KillFeedItem({ entry }: { entry: KillFeedEntry }) {
           {entry.victimName}
         </span>
         <span style={{ color: '#888888', marginLeft: '4px' }}>
-          eliminated
+          {tGame('eliminatedVerb')}
         </span>
       </span>
     </div>

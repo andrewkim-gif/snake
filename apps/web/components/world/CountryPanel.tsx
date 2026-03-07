@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
+import { BarChart3, Coins, Vote, Shield, Building2, X, Play, Eye } from 'lucide-react';
 import { McButton } from '@/components/lobby/McButton';
 import { SK, SKFont, bodyFont, headingFont, sketchBorder, handDrawnRadius, radius } from '@/lib/sketch-ui';
 import { tierColors, resourceLabels, resourceIcons } from '@/lib/map-style';
@@ -272,7 +273,16 @@ function BattleStatusIndicator({ status }: { status: string }) {
   );
 }
 
-/** 탭 바 — 4탭, 골드 underline 활성 인디케이터 */
+/** 탭 아이콘 매핑 */
+const TAB_ICONS: Record<CountryTab, typeof BarChart3> = {
+  OVERVIEW: BarChart3,
+  TOKEN: Coins,
+  VOTE: Vote,
+  FACTION: Shield,
+  CIVILIZATION: Building2,
+};
+
+/** 탭 바 — 5탭, 골드 underline 활성 인디케이터 + lucide 아이콘 */
 function TabBar({ activeTab, onTabChange }: {
   activeTab: CountryTab;
   onTabChange: (tab: CountryTab) => void;
@@ -285,6 +295,7 @@ function TabBar({ activeTab, onTabChange }: {
     }}>
       {TABS.map((tab) => {
         const isActive = activeTab === tab;
+        const Icon = TAB_ICONS[tab];
         return (
           <button
             key={tab}
@@ -296,15 +307,20 @@ function TabBar({ activeTab, onTabChange }: {
               border: 'none',
               borderBottom: isActive ? '2px solid #F59E0B' : '2px solid transparent',
               cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '4px',
               fontFamily: bodyFont,
-              fontSize: '11px',
+              fontSize: '10px',
               fontWeight: 700,
-              letterSpacing: '1.5px',
+              letterSpacing: '1px',
               textTransform: 'uppercase',
               color: isActive ? '#F59E0B' : SK.textMuted,
               transition: 'color 150ms ease, border-color 150ms ease',
             }}
           >
+            <Icon size={13} strokeWidth={1.8} />
             {tab}
           </button>
         );
@@ -1002,16 +1018,25 @@ export function CountryPanel({
         style={{
           background: 'none',
           border: `1px solid ${SK.border}`,
-          borderRadius: '3px',
+          borderRadius: '4px',
           color: SK.textSecondary,
           cursor: 'pointer',
-          padding: '4px 8px',
-          fontFamily: bodyFont,
-          fontSize: SKFont.sm,
-          fontWeight: 700,
+          padding: '5px',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          transition: 'color 150ms ease, border-color 150ms ease',
+        }}
+        onMouseEnter={(e) => {
+          e.currentTarget.style.color = SK.textPrimary;
+          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+        }}
+        onMouseLeave={(e) => {
+          e.currentTarget.style.color = SK.textSecondary;
+          e.currentTarget.style.borderColor = SK.border;
         }}
       >
-        X
+        <X size={16} strokeWidth={2} />
       </button>
     </div>
   );
@@ -1028,17 +1053,17 @@ export function CountryPanel({
         variant="green"
         onClick={() => country?.iso3 && onEnterArena?.(country.iso3)}
         disabled={!country}
-        style={{ flex: 1, fontSize: SKFont.sm }}
+        style={{ flex: 1, fontSize: SKFont.sm, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
       >
-        ENTER ARENA
+        <Play size={14} strokeWidth={2} /> ENTER ARENA
       </McButton>
       <McButton
         variant="default"
         onClick={() => country?.iso3 && onSpectate?.(country.iso3)}
         disabled={!country}
-        style={{ flex: 1, fontSize: SKFont.sm }}
+        style={{ flex: 1, fontSize: SKFont.sm, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
       >
-        SPECTATE
+        <Eye size={14} strokeWidth={2} /> SPECTATE
       </McButton>
     </div>
   );
@@ -1148,7 +1173,7 @@ export function CountryPanel({
         onClick={onClose}
       />
 
-      {/* 슬라이드 패널 */}
+      {/* 슬라이드 패널 — 글래스모피즘 */}
       <div style={{
         position: 'fixed',
         top: 0,
@@ -1160,8 +1185,10 @@ export function CountryPanel({
         transition: 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)',
         display: 'flex',
         flexDirection: 'column',
-        background: SK.bg,
-        borderLeft: sketchBorder(),
+        background: 'rgba(9,9,11,0.85)',
+        backdropFilter: 'blur(20px)',
+        WebkitBackdropFilter: 'blur(20px)',
+        borderLeft: '1px solid rgba(255,255,255,0.06)',
         overflow: 'hidden',
       }}>
         {/* 헤더 (탭 위에 고정) */}

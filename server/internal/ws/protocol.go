@@ -18,6 +18,7 @@ const (
 	// v14: New client → server events
 	EventSelectNationality  = "select_nationality"
 	EventJoinCountryArena   = "join_country_arena"
+	EventSwitchArena        = "switch_arena"
 
 	// Agent-specific events (client → server)
 	EventAgentAuth          = "agent_auth"

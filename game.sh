@@ -88,27 +88,29 @@ start_web_bg() {
 
 # Stop the Go server
 stop_server() {
+    # PID 파일로 메인 프로세스 정리
     if [ -f "$GO_PID_FILE" ]; then
         PID=$(cat "$GO_PID_FILE")
         if kill -0 "$PID" 2>/dev/null; then
             echo -e "${YELLOW}Stopping Go server (PID: $PID)...${NC}"
-            kill "$PID"
-            rm -f "$GO_PID_FILE"
-            echo -e "${GREEN}Go server stopped.${NC}"
-        else
-            echo -e "${YELLOW}Go server process not running (stale PID file).${NC}"
-            rm -f "$GO_PID_FILE"
+            kill "$PID" 2>/dev/null || true
         fi
-    else
+        rm -f "$GO_PID_FILE"
+    fi
+    # 항상 모든 잔존 프로세스를 정리 (좀비 방지)
+    PIDS=$(pgrep -f "$BIN_DIR/server" 2>/dev/null || true)
+    if [ -n "$PIDS" ]; then
+        COUNT=$(echo "$PIDS" | wc -l | tr -d ' ')
+        echo -e "${YELLOW}Cleaning $COUNT Go server process(es)...${NC}"
+        echo "$PIDS" | xargs kill 2>/dev/null || true
+        sleep 0.3
+        # SIGKILL로 남은 좀비 강제 종료
         PIDS=$(pgrep -f "$BIN_DIR/server" 2>/dev/null || true)
         if [ -n "$PIDS" ]; then
-            echo -e "${YELLOW}Stopping Go server processes: $PIDS${NC}"
-            echo "$PIDS" | xargs kill 2>/dev/null || true
-            echo -e "${GREEN}Go server stopped.${NC}"
-        else
-            echo -e "${YELLOW}No Go server process found.${NC}"
+            echo "$PIDS" | xargs kill -9 2>/dev/null || true
         fi
     fi
+    echo -e "${GREEN}Go server stopped.${NC}"
 }
 
 # Stop the Next.js dev server

@@ -3,7 +3,6 @@
  *
  * Heavy components are loaded on-demand:
  *   - GlobeView (three-globe + R3F): ~400KB
- *   - WorldMap (MapLibre GL): ~350KB
  *   - BattleView (game canvas): ~200KB
  *   - Dashboard charts: ~150KB
  *
@@ -29,19 +28,7 @@ export const LazyGlobeView = dynamic(
 );
 
 // ============================================================
-// 2. World Map (MapLibre GL JS)
-// ============================================================
-
-export const LazyWorldMap = dynamic(
-  () => import('@/components/world/WorldMap').then((mod) => ({ default: mod.WorldMap })),
-  {
-    ssr: false, // MapLibre requires browser
-    loading: () => null,
-  },
-);
-
-// ============================================================
-// 3. World View (Globe + Map combined)
+// 2. World View (Globe)
 // ============================================================
 
 export const LazyWorldView = dynamic(

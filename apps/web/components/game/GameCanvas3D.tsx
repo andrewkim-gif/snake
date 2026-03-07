@@ -62,6 +62,15 @@ import type { SpectatorTarget } from './SpectatorMode';
 import { useAudio } from '@/hooks/useAudio';
 import type { AmbienceTheme } from '@/hooks/useAudio';
 
+// v14: Epoch HUD + overlays (HTML 오버레이)
+import { EpochHUD, WarCountdownOverlay, WarVignetteOverlay, RespawnOverlay } from './EpochHUD';
+import { ScoreboardOverlay, useScoreboardToggle } from './ScoreboardOverlay';
+
+// v14: 3D Weapon VFX + Damage Numbers + Capture Points (R3F Canvas 내부)
+import { WeaponRenderer } from '@/components/3d/WeaponRenderer';
+import { DamageNumbers } from '@/components/3d/DamageNumbers';
+import { CapturePointRenderer } from '@/components/3d/CapturePointRenderer';
+
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
@@ -104,6 +113,9 @@ export function GameCanvas3D({
   // v12 S20: Spectator mode + battle result
   const [spectatorTarget, setSpectatorTarget] = useState<string | null>(null);
   const [battleCountdown, setBattleCountdown] = useState(10);
+
+  // v14: Tab scoreboard toggle
+  const scoreboardVisible = useScoreboardToggle();
 
   // v12 S24: Audio system
   const { playSFX, startAmbience, stopAmbience, toggleMute, isMuted } = useAudio();
@@ -507,9 +519,70 @@ export function GameCanvas3D({
 
         {/* 14. AbilityEffects — 어빌리티 발동 이펙트 (6종) */}
         <AbilityEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
+
+        {/* 15. WeaponRenderer — v14 무기 파티클 VFX (10종 무기, LOD)
+            damageEvents are delivered via separate WS events (weapon_fired/damage_dealt),
+            stored in uiState or dataRef by SocketProvider. Pass empty array until wired. */}
+        <WeaponRenderer
+          damageEvents={[]}
+        />
+
+        {/* 16. DamageNumbers — v14 플로팅 대미지 숫자 (128 풀) */}
+        <DamageNumbers
+          damageEvents={[]}
+        />
+
+        {/* 17. CapturePointRenderer — v14 거점 빔/영역/점령 프로그레스
+            capturePoints are delivered via capture_point_update WS event.
+            Pass empty array until wired. */}
+        <CapturePointRenderer
+          capturePoints={[]}
+        />
       </Canvas>
 
       {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
+
+      {/* v14: EpochHUD — 에포크 타이머 + 페이즈 뱃지 + KDA (상단 중앙) */}
+      {uiState.epoch && (
+        <EpochHUD
+          epochNumber={uiState.epoch.epochNumber}
+          phase={uiState.epoch.phase}
+          timeRemaining={uiState.epoch.timeRemaining}
+          phaseTimeRemaining={uiState.epoch.phaseTimeRemaining}
+          pvpEnabled={uiState.epoch.pvpEnabled}
+          nationScores={uiState.epoch.nationScores}
+          kills={myAgent?.ks ?? 0}
+          deaths={0}
+          assists={0}
+          playerNationality={uiState.nationality ?? undefined}
+          playerNationScore={
+            uiState.nationality
+              ? uiState.epoch.nationScores[uiState.nationality] ?? 0
+              : undefined
+          }
+          arenaRadius={currentRadius}
+          maxArenaRadius={ARENA_CONFIG.radius}
+        />
+      )}
+
+      {/* v14: War Countdown Overlay (전쟁 카운트다운 3-2-1) */}
+      {uiState.warCountdown != null && uiState.warCountdown > 0 && (
+        <WarCountdownOverlay countdown={uiState.warCountdown} />
+      )}
+
+      {/* v14: War Vignette (전쟁/수축 페이즈 적색 비네트) */}
+      <WarVignetteOverlay
+        active={uiState.epoch?.phase === 'war' || uiState.epoch?.phase === 'shrink'}
+        intensity={uiState.epoch?.phase === 'shrink' ? 0.7 : 0.5}
+      />
+
+      {/* v14: Respawn Overlay (리스폰 카운트다운 + 부활 이펙트) */}
+      {uiState.respawnState && (
+        <RespawnOverlay
+          countdown={uiState.respawnState.countdown}
+          isRespawning={uiState.respawnState.isRespawning}
+        />
+      )}
 
       {/* v12 S24: 킬피드 (좌측 상단) */}
       <KillFeedHUD dataRef={dataRef} />
@@ -626,6 +699,40 @@ export function GameCanvas3D({
         dataRef={dataRef}
         arenaRadius={ARENA_CONFIG.radius}
         shrinkData={uiState.arenaShrink}
+      />
+
+      {/* v14: ScoreboardOverlay — Tab키 스코어보드 + 에포크/국가 순위 */}
+      <ScoreboardOverlay
+        visible={scoreboardVisible}
+        players={
+          (dataRef.current.leaderboard ?? []).map((e, idx) => ({
+            id: e.id,
+            name: e.name,
+            rank: idx + 1,
+            kills: e.kills ?? 0,
+            deaths: 0,
+            assists: 0,
+            level: 1,
+            score: e.score ?? 0,
+            nationality: '',
+            isBot: false,
+          }))
+        }
+        nationScores={
+          uiState.epoch
+            ? Object.entries(uiState.epoch.nationScores)
+                .sort(([, a], [, b]) => b - a)
+                .map(([nationality, totalScore]) => ({
+                  nationality,
+                  totalScore,
+                  playerCount: 0,
+                  totalKills: 0,
+                }))
+            : []
+        }
+        currentPlayerId={dataRef.current.playerId ?? undefined}
+        epochNumber={uiState.epoch?.epochNumber ?? 1}
+        phase={uiState.epoch?.phase ?? 'peace'}
       />
 
       {menuOpen && (

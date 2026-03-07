@@ -9,6 +9,7 @@
 
 import { useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
 
 // Lazy load 대형 컴포넌트
@@ -61,6 +62,7 @@ const MOCK_SEASONS: MockTimelineSeason[] = [
 ];
 
 export default function HallOfFamePage() {
+  const tHof = useTranslations('hallOfFame');
   const [selectedSeason, setSelectedSeason] = useState<number | null>(null);
 
   // 서버 연결 시 HallOfFame 컴포넌트 사용
@@ -95,7 +97,7 @@ export default function HallOfFamePage() {
           textTransform: 'uppercase',
           margin: 0,
         }}>
-          HALL OF FAME
+          {tHof('title')}
         </h1>
         <p style={{
           fontFamily: bodyFont,
@@ -103,7 +105,7 @@ export default function HallOfFamePage() {
           color: SK.textSecondary,
           marginTop: 8,
         }}>
-          Legends who shaped the world across seasons
+          {tHof('subtitle')}
         </p>
       </div>
 
@@ -146,7 +148,7 @@ export default function HallOfFamePage() {
               minWidth: 120,
             }}
           >
-            All Seasons
+            {tHof('allSeasons')}
           </button>
 
           {/* 시즌 타임라인 카드 */}
@@ -186,7 +188,7 @@ export default function HallOfFamePage() {
                   gap: 8,
                 }}>
                   <span>{season.champion}</span>
-                  <span>{season.totalBattles} battles</span>
+                  <span>{tHof('battles', { count: season.totalBattles })}</span>
                 </div>
               </button>
             );
@@ -203,7 +205,7 @@ export default function HallOfFamePage() {
           fontFamily: bodyFont,
           fontSize: SKFont.body,
         }}>
-          No Hall of Fame records yet. Complete a season to see winners here.
+          {tHof('noRecords')}
         </div>
       ) : (
         sortedSeasons.map((seasonNum) => {
@@ -324,7 +326,7 @@ export default function HallOfFamePage() {
                         padding: '2px 8px',
                         borderRadius: radius.pill,
                       }}>
-                        {record.winnerType === 'faction' ? 'Faction' : 'Player'}
+                        {record.winnerType === 'faction' ? tHof('factionBadge') : tHof('playerBadge')}
                       </span>
                     </div>
                   );

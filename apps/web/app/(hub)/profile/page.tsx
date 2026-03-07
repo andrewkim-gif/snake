@@ -8,6 +8,7 @@
 
 import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
@@ -49,6 +50,7 @@ const MOCK_BALANCES: TokenBalance[] = [
 ];
 
 export default function ProfilePage() {
+  const tProfile = useTranslations('profile');
   const [wallet, setWallet] = useState<WalletState | null>(null);
 
   const handleWalletConnect = useCallback((w: WalletState) => {
@@ -71,7 +73,7 @@ export default function ProfilePage() {
         textTransform: 'uppercase',
         margin: '0 0 24px 0',
       }}>
-        PROFILE
+        {tProfile('title')}
       </h1>
 
       {/* Agent Card + Wallet 섹션 (2-column) — 반응형 */}
@@ -141,7 +143,7 @@ export default function ProfilePage() {
               fontSize: SKFont.xs,
               color: SK.textMuted,
             }}>
-              3D Preview Coming Soon
+              {tProfile('previewComingSoon')}
             </div>
           </div>
 
@@ -191,12 +193,12 @@ export default function ProfilePage() {
             gridTemplateColumns: 'repeat(2, 1fr)',
             gap: 8,
           }}>
-            <StatItem label="Win Rate" value={`${MOCK_PROFILE.winRate}%`} color={SK.green} />
-            <StatItem label="Avg Level" value={String(MOCK_PROFILE.avgLevel)} color={SK.blue} />
-            <StatItem label="Total Battles" value={String(MOCK_PROFILE.totalBattles)} color={SK.textPrimary} />
-            <StatItem label="Total Kills" value={MOCK_PROFILE.totalKills.toLocaleString()} color={SK.red} />
-            <StatItem label="Deaths" value={String(MOCK_PROFILE.totalDeaths)} color={SK.textMuted} />
-            <StatItem label="Playtime" value={MOCK_PROFILE.playtime} color={SK.orange} />
+            <StatItem label={tProfile('winRate')} value={`${MOCK_PROFILE.winRate}%`} color={SK.green} />
+            <StatItem label={tProfile('avgLevel')} value={String(MOCK_PROFILE.avgLevel)} color={SK.blue} />
+            <StatItem label={tProfile('totalBattles')} value={String(MOCK_PROFILE.totalBattles)} color={SK.textPrimary} />
+            <StatItem label={tProfile('totalKills')} value={MOCK_PROFILE.totalKills.toLocaleString()} color={SK.red} />
+            <StatItem label={tProfile('deaths')} value={String(MOCK_PROFILE.totalDeaths)} color={SK.textMuted} />
+            <StatItem label={tProfile('playtime')} value={MOCK_PROFILE.playtime} color={SK.orange} />
           </div>
         </div>
 
@@ -223,7 +225,7 @@ export default function ProfilePage() {
               margin: 0,
               letterSpacing: '1px',
             }}>
-              WALLET
+              {tProfile('wallet')}
             </h3>
           </div>
 
@@ -261,7 +263,7 @@ export default function ProfilePage() {
                 letterSpacing: '1px',
                 marginBottom: 8,
               }}>
-                TOKEN HOLDINGS
+                {tProfile('tokenHoldings')}
               </div>
               <TokenBalanceList
                 balances={MOCK_BALANCES}
@@ -282,7 +284,7 @@ export default function ProfilePage() {
               textAlign: 'center',
               padding: 24,
             }}>
-              Connect your CROSSx wallet to view token holdings, staking rewards, and transaction history.
+              {tProfile('connectPrompt')}
             </div>
           )}
         </div>
@@ -317,7 +319,7 @@ export default function ProfilePage() {
                 margin: 0,
                 letterSpacing: '1px',
               }}>
-                ACHIEVEMENTS
+                {tProfile('achievements')}
               </h3>
               <span style={{
                 fontFamily: bodyFont,

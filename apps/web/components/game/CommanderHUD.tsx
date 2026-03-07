@@ -8,6 +8,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, bodyFont, headingFont } from "@/lib/sketch-ui";
 
 // --- Types ---
@@ -50,6 +51,7 @@ export default function CommanderHUD({
   onTakeCommand,
   onReleaseCommand,
 }: CommanderHUDProps) {
+  const tGame = useTranslations('game');
   const isManual = mode === "manual";
   const [pulseInvincible, setPulseInvincible] = useState(false);
 
@@ -108,7 +110,7 @@ export default function CommanderHUD({
             letterSpacing: 2,
           }}
         >
-          INVINCIBLE — {invincibleRemain.toFixed(1)}s
+          {tGame('invincible')} — {invincibleRemain.toFixed(1)}s
         </div>
       )}
 
@@ -154,7 +156,7 @@ export default function CommanderHUD({
               letterSpacing: 1,
             }}
           >
-            {isManual ? "MANUAL" : "AI"}
+            {isManual ? tGame('manual') : tGame('aiMode')}
           </span>
         </div>
 
@@ -162,8 +164,8 @@ export default function CommanderHUD({
         <div style={{ display: "flex", gap: 12, alignItems: "center" }}>
           <StatBadge label="HP" value={Math.round(agentHP)} color={agentHP < 30 ? SK.red : SK.green} />
           <StatBadge label="LV" value={agentLevel} color={SK.blue} />
-          <StatBadge label="KILLS" value={agentKills} color={SK.orangeLight} />
-          <StatBadge label="SCORE" value={agentScore} color={SK.textPrimary} />
+          <StatBadge label={tGame('kills')} value={agentKills} color={SK.orangeLight} />
+          <StatBadge label={tGame('score')} value={agentScore} color={SK.textPrimary} />
         </div>
 
         {/* Dash indicator */}
@@ -264,7 +266,7 @@ export default function CommanderHUD({
             (e.target as HTMLElement).style.opacity = "1";
           }}
         >
-          {isManual ? "RELEASE" : "COMMAND"}
+          {isManual ? tGame('release') : tGame('command')}
         </button>
 
         {/* Keyboard hint */}
@@ -278,7 +280,7 @@ export default function CommanderHUD({
             right: 0,
           }}
         >
-          TAB to toggle
+          {tGame('tabToToggle')}
         </span>
       </div>
 
@@ -294,13 +296,13 @@ export default function CommanderHUD({
           }}
         >
           <span>
-            <kbd style={kbdStyle}>Mouse</kbd> Move
+            <kbd style={kbdStyle}>Mouse</kbd> {tGame('move')}
           </span>
           <span>
-            <kbd style={kbdStyle}>Space</kbd> Dash
+            <kbd style={kbdStyle}>Space</kbd> {tGame('dashAction')}
           </span>
           <span>
-            <kbd style={kbdStyle}>1-3</kbd> Upgrade
+            <kbd style={kbdStyle}>1-3</kbd> {tGame('upgradeAction')}
           </span>
         </div>
       )}

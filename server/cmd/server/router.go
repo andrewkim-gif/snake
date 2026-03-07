@@ -88,6 +88,18 @@ type RouterDeps struct {
 
 	// Observability
 	Metrics *observability.Metrics
+
+	// v14 in-game systems
+	V14ArenaManager    *game.CountryArenaManager
+	V14AccountLevelMgr *game.AccountLevelManager
+	V14ChallengeMgr    *game.DailyChallengeManager
+	V14AchievementMgr  *game.AchievementManager
+	V14WarSystem       *game.WarSystem
+	V14TokenRewardMgr  *game.TokenRewardManager
+	V14EventLog        *game.EventLog
+	V14TickProfiler    *game.TickProfiler
+	V14BandwidthMon    *game.BandwidthMonitor
+	V14ArenaReaper     *game.InactiveArenaReaper
 }
 
 func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *world.WorldManager, deps ...*RouterDeps) http.Handler {
@@ -511,6 +523,105 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 				status := d.WorldManager.GetAllCountries()
 				w.Header().Set("Content-Type", "application/json")
 				json.NewEncoder(w).Encode(status)
+			})
+		}
+	})
+
+	// ==============================================================
+	// v14 In-Game REST API Routes
+	// ==============================================================
+	r.Route("/api/v14", func(r chi.Router) {
+		// --- Account Level (S39) ---
+		if d.V14AccountLevelMgr != nil {
+			r.Get("/account/{playerId}", func(w http.ResponseWriter, r *http.Request) {
+				playerID := chi.URLParam(r, "playerId")
+				snapshot := d.V14AccountLevelMgr.GetSnapshot(playerID)
+				w.Header().Set("Content-Type", "application/json")
+				if snapshot == nil {
+					w.WriteHeader(http.StatusNotFound)
+					json.NewEncoder(w).Encode(map[string]string{"error": "profile not found"})
+					return
+				}
+				json.NewEncoder(w).Encode(snapshot)
+			})
+
+			r.Get("/account-leaderboard", func(w http.ResponseWriter, r *http.Request) {
+				lb := d.V14AccountLevelMgr.GetLeaderboard(50)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(lb)
+			})
+		}
+
+		// --- Daily Challenges (S40) ---
+		if d.V14ChallengeMgr != nil {
+			r.Get("/challenges/{playerId}", func(w http.ResponseWriter, r *http.Request) {
+				playerID := chi.URLParam(r, "playerId")
+				snapshot := d.V14ChallengeMgr.GetSnapshot(playerID)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(snapshot)
+			})
+
+			r.Get("/challenges/today", func(w http.ResponseWriter, r *http.Request) {
+				defs := d.V14ChallengeMgr.GetTodayDefs()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(defs)
+			})
+		}
+
+		// --- Achievements (S40) ---
+		if d.V14AchievementMgr != nil {
+			r.Get("/achievements/{playerId}", func(w http.ResponseWriter, r *http.Request) {
+				playerID := chi.URLParam(r, "playerId")
+				snapshot := d.V14AchievementMgr.GetSnapshot(playerID)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(snapshot)
+			})
+		}
+
+		// --- Token Rewards (S41) ---
+		if d.V14TokenRewardMgr != nil {
+			r.Get("/rewards/{playerId}", func(w http.ResponseWriter, r *http.Request) {
+				playerID := chi.URLParam(r, "playerId")
+				rewards := d.V14TokenRewardMgr.GetPlayerRewardSnapshot(playerID, 50)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(rewards)
+			})
+
+			r.Get("/rewards/stats", func(w http.ResponseWriter, r *http.Request) {
+				stats := d.V14TokenRewardMgr.GetRewardStats()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(stats)
+			})
+		}
+
+		// --- Global Events / News (S35) ---
+		if d.V14EventLog != nil {
+			r.Get("/events", func(w http.ResponseWriter, r *http.Request) {
+				events := d.V14EventLog.GetRecentEvents(50)
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(events)
+			})
+		}
+
+		// --- Performance Stats (S43, admin) ---
+		if d.V14TickProfiler != nil {
+			r.Get("/perf", func(w http.ResponseWriter, r *http.Request) {
+				stats := d.V14TickProfiler.GetStats()
+				memStats := game.GetMemoryStats()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"tick":   stats,
+					"memory": memStats,
+				})
+			})
+		}
+
+		// --- War System Status ---
+		if d.V14WarSystem != nil {
+			r.Get("/wars", func(w http.ResponseWriter, r *http.Request) {
+				snapshot := d.V14WarSystem.GetWarSnapshot()
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(snapshot)
 			})
 		}
 	})

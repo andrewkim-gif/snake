@@ -10,9 +10,11 @@
 import { SK, bodyFont, sketchShadow } from '@/lib/sketch-ui';
 import { TopNavBar } from '@/components/navigation/TopNavBar';
 import { BottomTabBar } from '@/components/navigation/BottomTabBar';
+import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
 import Image from 'next/image';
+import { useTranslations } from 'next-intl';
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { WalletState, TokenBalance } from '@/lib/crossx-config';
 
@@ -21,6 +23,8 @@ export default function HubLayout({
 }: {
   children: React.ReactNode;
 }) {
+  const tCommon = useTranslations('common');
+  const tBlockchain = useTranslations('blockchain');
   const [imgError, setImgError] = useState(false);
   const [wallet, setWallet] = useState<WalletState | null>(null);
   const [showBalances, setShowBalances] = useState(false);
@@ -142,21 +146,21 @@ export default function HubLayout({
               textTransform: 'uppercase',
             }}
           >
-            ALPHA
+            {tCommon('alpha')}
           </span>
         </a>
 
         {/* 중앙: 네비게이션 (데스크탑) */}
         <TopNavBar />
 
-        {/* 우측: Wallet Connect + Balance Dropdown */}
+        {/* 우측: Language Switcher + Wallet Connect + Balance Dropdown */}
         <div
           ref={dropdownRef}
           style={{
             position: 'relative',
             display: 'none',
             alignItems: 'center',
-            gap: '16px',
+            gap: '12px',
           }}
           className="wallet-section"
         >
@@ -165,6 +169,9 @@ export default function HubLayout({
               .wallet-section { display: flex !important; }
             }
           `}</style>
+
+          {/* Language Switcher */}
+          <LanguageSwitcher />
 
           {/* Wallet Connect Button */}
           <div
@@ -229,7 +236,7 @@ export default function HubLayout({
                     textTransform: 'uppercase',
                   }}
                 >
-                  TOKEN HOLDINGS
+                  {tBlockchain('tokenHoldings')}
                 </span>
                 <span
                   style={{

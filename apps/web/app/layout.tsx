@@ -1,5 +1,20 @@
 import type { Metadata, Viewport } from 'next';
+import { cookies, headers } from 'next/headers';
 import { SocketProvider } from '@/providers/SocketProvider';
+import { I18nClientWrapper } from '@/providers/I18nClientWrapper';
+import {
+  SUPPORTED_LOCALES,
+  DEFAULT_LOCALE,
+  type SupportedLocale,
+} from '@/i18n/request';
+
+import enMessages from '@/messages/en.json';
+import koMessages from '@/messages/ko.json';
+
+const allMessages: Record<string, Record<string, unknown>> = {
+  en: enMessages as unknown as Record<string, unknown>,
+  ko: koMessages as unknown as Record<string, unknown>,
+};
 
 export const metadata: Metadata = {
   title: 'AI World War - Multiplayer Survival Roguelike',
@@ -23,13 +38,28 @@ export const viewport: Viewport = {
   themeColor: '#09090B',
 };
 
-export default function RootLayout({
+async function getInitialLocale(): Promise<SupportedLocale> {
+  const cookieStore = await cookies();
+  const cookieLocale = cookieStore.get('locale')?.value;
+  if (cookieLocale && SUPPORTED_LOCALES.includes(cookieLocale as SupportedLocale)) {
+    return cookieLocale as SupportedLocale;
+  }
+  const headerStore = await headers();
+  const acceptLang = headerStore.get('accept-language') ?? '';
+  if (acceptLang.includes('ko')) return 'ko';
+  if (acceptLang.includes('en')) return 'en';
+  return DEFAULT_LOCALE;
+}
+
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const initialLocale = await getInitialLocale();
+
   return (
-    <html lang="ko" suppressHydrationWarning>
+    <html lang={initialLocale} suppressHydrationWarning>
       <head>
         <link
           href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap"
@@ -54,9 +84,14 @@ export default function RootLayout({
           overscrollBehavior: 'none',
         }}
       >
-        <SocketProvider>
-          {children}
-        </SocketProvider>
+        <I18nClientWrapper
+          initialLocale={initialLocale}
+          allMessages={allMessages}
+        >
+          <SocketProvider>
+            {children}
+          </SocketProvider>
+        </I18nClientWrapper>
       </body>
     </html>
   );

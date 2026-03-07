@@ -7,6 +7,7 @@
  */
 
 import { useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import type { GameData } from '@/hooks/useSocket';
 import type { AgentNetworkData, LeaderboardEntry } from '@agent-survivor/shared';
 
@@ -104,6 +105,7 @@ function aggregateFactionScores(agents: AgentNetworkData[], leaderboard: Leaderb
 }
 
 export function FactionScoreboard({ dataRef }: FactionScoreboardProps) {
+  const tGame = useTranslations('game');
   const state = dataRef.current.latestState;
   const agents = state?.s ?? [];
   const leaderboard = dataRef.current.leaderboard ?? [];
@@ -141,7 +143,7 @@ export function FactionScoreboard({ dataRef }: FactionScoreboardProps) {
         borderBottom: '1px solid rgba(204, 153, 51, 0.3)',
         textTransform: 'uppercase',
       }}>
-        FACTION SCORES
+        {tGame('factionScores')}
       </div>
 
       {/* 팩션 행 */}

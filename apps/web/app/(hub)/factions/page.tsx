@@ -9,6 +9,7 @@
 import { useState, useCallback } from 'react';
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
 
 // Lazy load 대형 컴포넌트
@@ -72,6 +73,7 @@ function StarRating({ value, max = 5, label }: { value: number; max?: number; la
 }
 
 export default function FactionsPage() {
+  const tFaction = useTranslations('faction');
   const [selectedFactionId, setSelectedFactionId] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
   const [useServerData, setUseServerData] = useState(!!SERVER_URL);
@@ -100,7 +102,7 @@ export default function FactionsPage() {
             textTransform: 'uppercase',
             margin: 0,
           }}>
-            FACTIONS
+            {tFaction('title')}
           </h1>
           <p style={{
             fontFamily: bodyFont,
@@ -108,7 +110,7 @@ export default function FactionsPage() {
             color: SK.textSecondary,
             marginTop: 4,
           }}>
-            Join a faction, build alliances, and dominate the world
+            {tFaction('subtitle')}
           </p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
@@ -125,7 +127,7 @@ export default function FactionsPage() {
               cursor: 'pointer',
             }}
           >
-            {useServerData ? 'MOCK DATA' : 'LIVE DATA'}
+            {useServerData ? tFaction('mockData') : tFaction('liveData')}
           </button>
         </div>
       </div>
@@ -233,8 +235,8 @@ export default function FactionsPage() {
                 fontSize: SKFont.xs,
                 color: SK.textSecondary,
               }}>
-                <span>{faction.member_count} members</span>
-                <span>{faction.territory_count} territories</span>
+                <span>{tFaction('membersCount', { count: faction.member_count })}</span>
+                <span>{tFaction('territoriesCount', { count: faction.territory_count })}</span>
               </div>
 
               {/* Military / Economy 별점 */}
@@ -244,8 +246,8 @@ export default function FactionsPage() {
                 gap: 4,
                 marginBottom: 16,
               }}>
-                <StarRating label="Military" value={faction.military} />
-                <StarRating label="Economy" value={faction.economy} />
+                <StarRating label={tFaction('military')} value={faction.military} />
+                <StarRating label={tFaction('economyRating')} value={faction.economy} />
               </div>
 
               {/* VIEW DETAIL 링크 */}
@@ -265,7 +267,7 @@ export default function FactionsPage() {
                   transition: 'all 0.15s ease',
                 }}
               >
-                VIEW DETAIL →
+                {tFaction('viewDetail')}
               </Link>
             </div>
           ))}

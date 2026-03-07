@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import type {
   RoundEndPayload,
   DeathPayload,
@@ -86,6 +87,8 @@ export function BattleResultOverlay({
   onRedeploy,
   onExit,
 }: BattleResultOverlayProps) {
+  const tOverlay = useTranslations('overlay');
+  const tGame = useTranslations('game');
   const {
     winner,
     winnerFaction,
@@ -130,7 +133,7 @@ export function BattleResultOverlay({
         letterSpacing: '3px',
         textShadow: '0 2px 8px rgba(245, 158, 11, 0.3)',
       }}>
-        BATTLE COMPLETE
+        {tOverlay('battleComplete')}
       </h2>
 
       {/* 승리 팩션 */}
@@ -148,7 +151,7 @@ export function BattleResultOverlay({
             textTransform: 'uppercase',
             fontWeight: 600,
           }}>
-            VICTORIOUS FACTION
+            {tOverlay('victoriousFaction')}
           </span>
           <div style={{
             display: 'flex',
@@ -202,7 +205,7 @@ export function BattleResultOverlay({
           borderBottom: `1px solid ${SK.border}`,
           paddingBottom: '6px',
         }}>
-          YOUR RESULT — {playerAlive ? 'SURVIVED' : 'ELIMINATED'}
+          {tOverlay('yourResult')} — {playerAlive ? tGame('survived') : tGame('eliminated')}
         </div>
         <div style={{
           display: 'flex',
@@ -210,7 +213,7 @@ export function BattleResultOverlay({
           alignItems: 'center',
           marginBottom: '6px',
         }}>
-          <span style={{ fontSize: '13px', color: SK.textSecondary }}>Rank</span>
+          <span style={{ fontSize: '13px', color: SK.textSecondary }}>{tGame('rank')}</span>
           <span style={{
             fontSize: '16px',
             fontWeight: 700,
@@ -225,7 +228,7 @@ export function BattleResultOverlay({
           alignItems: 'center',
           marginBottom: '6px',
         }}>
-          <span style={{ fontSize: '13px', color: SK.textSecondary }}>Score</span>
+          <span style={{ fontSize: '13px', color: SK.textSecondary }}>{tGame('score')}</span>
           <span style={{
             fontSize: '16px',
             fontWeight: 700,
@@ -240,7 +243,7 @@ export function BattleResultOverlay({
           alignItems: 'center',
           marginBottom: '6px',
         }}>
-          <span style={{ fontSize: '13px', color: SK.textSecondary }}>Kills</span>
+          <span style={{ fontSize: '13px', color: SK.textSecondary }}>{tGame('kills')}</span>
           <span style={{ fontSize: '14px', fontWeight: 700, color: SK.red }}>
             {playerKills}
           </span>
@@ -251,7 +254,7 @@ export function BattleResultOverlay({
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
-          <span style={{ fontSize: '13px', color: SK.textSecondary }}>Survival</span>
+          <span style={{ fontSize: '13px', color: SK.textSecondary }}>{tOverlay('survival')}</span>
           <span style={{ fontSize: '14px', fontWeight: 700, color: SK.blue }}>
             {Math.floor(playerSurvival)}s
           </span>
@@ -282,7 +285,7 @@ export function BattleResultOverlay({
             fontWeight: 700,
             marginBottom: '6px',
           }}>
-            FINAL STANDINGS
+            {tOverlay('finalStandings')}
           </div>
           {finalLeaderboard.slice(0, 5).map((entry, i) => (
             <div key={entry.id} style={{
@@ -310,14 +313,14 @@ export function BattleResultOverlay({
       }}>
         {onReenter && (
           <ActionButton
-            label="SAME COUNTRY"
+            label={tOverlay('sameCountry')}
             color={SK.blue}
             onClick={onReenter}
           />
         )}
         {onRedeploy && (
           <ActionButton
-            label="REDEPLOY"
+            label={tOverlay('redeploy')}
             color={SK.green}
             onClick={onRedeploy}
           />
@@ -332,10 +335,7 @@ export function BattleResultOverlay({
         fontWeight: 600,
         marginTop: '4px',
       }}>
-        RETURNING TO LOBBY IN{' '}
-        <span style={{ color: SK.gold, fontSize: '13px' }}>
-          {countdownSec}s
-        </span>
+        {tOverlay('returningToLobby', { seconds: countdownSec })}
       </div>
     </div>
   );
@@ -344,6 +344,7 @@ export function BattleResultOverlay({
 // ─── 내부 컴포넌트 ───
 
 function SovereigntyChangeCard({ change }: { change: SovereigntyDelta }) {
+  const tOverlay = useTranslations('overlay');
   const oldColor = change.oldFaction ? getFactionDisplayColor(change.oldFaction) : SK.textMuted;
   const newColor = getFactionDisplayColor(change.newFaction);
 
@@ -365,7 +366,7 @@ function SovereigntyChangeCard({ change }: { change: SovereigntyDelta }) {
         fontWeight: 700,
         marginBottom: '8px',
       }}>
-        {change.isNewClaim ? 'TERRITORY CLAIMED' : 'SOVEREIGNTY CHANGED'}
+        {change.isNewClaim ? tOverlay('territoryClaimed') : tOverlay('sovereigntyChanged')}
       </div>
       <div style={{
         display: 'flex',
@@ -426,6 +427,8 @@ function SovereigntyChangeCard({ change }: { change: SovereigntyDelta }) {
 }
 
 function TopPlayersCard({ players }: { players: TopPlayerEntry[] }) {
+  const tOverlay = useTranslations('overlay');
+  const tGame = useTranslations('game');
   return (
     <div style={{
       backgroundColor: SK.cardBg,
@@ -444,7 +447,7 @@ function TopPlayersCard({ players }: { players: TopPlayerEntry[] }) {
         fontWeight: 700,
         marginBottom: '6px',
       }}>
-        TOP COMBATANTS
+        {tOverlay('topCombatants')}
       </div>
       {players.slice(0, 5).map((p, i) => (
         <div key={p.id} style={{
@@ -468,7 +471,7 @@ function TopPlayersCard({ players }: { players: TopPlayerEntry[] }) {
                 borderRadius: '2px',
                 letterSpacing: '0.5px',
               }}>
-                ALIVE
+                {tGame('alive')}
               </span>
             )}
           </div>

@@ -7,13 +7,14 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 
 const ECONOMY_TABS = [
-  { key: 'tokens', label: 'TOKENS', href: '/economy/tokens' },
-  { key: 'trade', label: 'TRADE', href: '/economy/trade' },
-  { key: 'policy', label: 'POLICY', href: '/economy/policy' },
-] as const;
+  { key: 'tokens' as const, href: '/economy/tokens' },
+  { key: 'trade' as const, href: '/economy/trade' },
+  { key: 'policy' as const, href: '/economy/policy' },
+];
 
 export default function EconomyLayout({
   children,
@@ -21,6 +22,7 @@ export default function EconomyLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const tEconomy = useTranslations('economy');
 
   // 현재 활성 탭 판별
   const activeTab = ECONOMY_TABS.find((tab) => pathname.startsWith(tab.href))?.key ?? 'tokens';
@@ -75,7 +77,7 @@ export default function EconomyLayout({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {tab.label}
+                {tEconomy(tab.key)}
               </Link>
             );
           })}

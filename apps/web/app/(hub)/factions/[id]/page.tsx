@@ -7,6 +7,7 @@
  */
 
 import { useParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
 
@@ -82,6 +83,7 @@ const MOCK_FACTIONS: Record<string, {
 };
 
 export default function FactionDetailPage() {
+  const tFaction = useTranslations('faction');
   const params = useParams();
   const router = useRouter();
   const factionId = params.id as string;
@@ -114,7 +116,7 @@ export default function FactionDetailPage() {
               marginBottom: 16,
             }}
           >
-            ← BACK TO FACTIONS
+            {tFaction('backToFactions')}
           </button>
 
           {mockFaction ? (
@@ -149,7 +151,7 @@ export default function FactionDetailPage() {
                       fontSize: SKFont.sm,
                       color: SK.textMuted,
                     }}>
-                      [{mockFaction.tag}] &mdash; Founded {new Date(mockFaction.founded).toLocaleDateString()}
+                      [{mockFaction.tag}] &mdash; {tFaction('founded')} {new Date(mockFaction.founded).toLocaleDateString()}
                     </span>
                     <p style={{
                       fontFamily: bodyFont,
@@ -169,10 +171,10 @@ export default function FactionDetailPage() {
                     flexShrink: 0,
                     marginLeft: 24,
                   }}>
-                    <div>Prestige: {mockFaction.prestige}</div>
+                    <div>{tFaction('prestige')}: {mockFaction.prestige}</div>
                     <div>GDP: {(mockFaction.total_gdp / 1000).toFixed(1)}K</div>
                     <div style={{ color: SK.textSecondary, marginTop: 4 }}>
-                      Leader: {mockFaction.leader}
+                      {tFaction('leader')}: {mockFaction.leader}
                     </div>
                   </div>
                 </div>
@@ -186,10 +188,10 @@ export default function FactionDetailPage() {
                 marginBottom: 24,
               }}>
                 {[
-                  { label: 'Members', value: String(mockFaction.member_count), color: SK.blue },
-                  { label: 'Territories', value: String(mockFaction.territory_count), color: SK.green },
-                  { label: 'Prestige', value: String(mockFaction.prestige), color: SK.gold },
-                  { label: 'Total GDP', value: `${(mockFaction.total_gdp / 1000).toFixed(1)}K`, color: SK.orange },
+                  { label: tFaction('members'), value: String(mockFaction.member_count), color: SK.blue },
+                  { label: tFaction('territory'), value: String(mockFaction.territory_count), color: SK.green },
+                  { label: tFaction('prestige'), value: String(mockFaction.prestige), color: SK.gold },
+                  { label: tFaction('totalGdp'), value: `${(mockFaction.total_gdp / 1000).toFixed(1)}K`, color: SK.orange },
                 ].map((stat) => (
                   <div
                     key={stat.label}
@@ -233,7 +235,7 @@ export default function FactionDetailPage() {
                   cursor: 'pointer',
                   letterSpacing: '1px',
                 }}>
-                  JOIN FACTION
+                  {tFaction('joinFaction')}
                 </button>
                 <button style={{
                   padding: '10px 20px',
@@ -246,7 +248,7 @@ export default function FactionDetailPage() {
                   cursor: 'pointer',
                   letterSpacing: '1px',
                 }}>
-                  VIEW DIPLOMACY
+                  {tFaction('viewDiplomacy')}
                 </button>
               </div>
             </>
@@ -258,7 +260,7 @@ export default function FactionDetailPage() {
               fontFamily: bodyFont,
               fontSize: SKFont.body,
             }}>
-              Faction &quot;{factionId}&quot; not found. Check the faction ID and try again.
+              {tFaction('factionNotFoundMsg', { id: factionId })}
             </div>
           )}
         </div>
@@ -273,7 +275,7 @@ export default function FactionDetailPage() {
           letterSpacing: '1px',
           marginBottom: 16,
         }}>
-          TECHNOLOGY RESEARCH
+          {tFaction('techResearch')}
         </h3>
         <TechTree
           factionId={factionId}

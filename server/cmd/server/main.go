@@ -12,6 +12,7 @@ import (
 
 	"github.com/andrewkim-gif/snake/server/config"
 	"github.com/andrewkim-gif/snake/server/internal/api"
+	"github.com/andrewkim-gif/snake/server/internal/blockchain"
 	"github.com/andrewkim-gif/snake/server/internal/cache"
 	"github.com/andrewkim-gif/snake/server/internal/domain"
 	"github.com/andrewkim-gif/snake/server/internal/game"
@@ -228,6 +229,168 @@ func main() {
 	)
 
 	// ================================================================
+	// 7c. v14 In-Game Total Overhaul — Core Systems
+	// ================================================================
+
+	// --- CountryArenaManager (v14 per-country arenas with epoch system) ---
+	v14ArenaManager := game.NewCountryArenaManager(game.DefaultRoomConfig())
+	v14ArenaManager.OnEvents = func(events []game.RoomEvent) {
+		// Forward v14 arena events to WS hub using same pattern as v11
+		for _, evt := range events {
+			var wsEvent string
+			switch evt.Type {
+			case game.RoomEvtDeath:
+				wsEvent = ws.EventDeath
+			case game.RoomEvtKill:
+				wsEvent = ws.EventKill
+			case game.RoomEvtLevelUp:
+				wsEvent = ws.EventLevelUp
+			case game.RoomEvtState:
+				wsEvent = ws.EventState
+			case game.RoomEvtMinimap:
+				wsEvent = ws.EventMinimap
+			default:
+				continue
+			}
+			frame, err := ws.EncodeFrame(wsEvent, evt.Data)
+			if err != nil {
+				continue
+			}
+			if evt.TargetID != "" {
+				hub.SendToClient(evt.TargetID, frame)
+			} else {
+				hub.BroadcastToRoom(evt.RoomID, frame)
+			}
+		}
+	}
+
+	// --- TickProfiler (performance monitoring, NFR-01: 50ms/tick budget) ---
+	tickProfiler := game.NewTickProfiler()
+
+	// --- BandwidthMonitor (NFR-02: 50KB/s per client) ---
+	bandwidthMonitor := game.NewBandwidthMonitor()
+
+	// --- EventLog (global news ticker for lobby clients) ---
+	v14EventLog := game.NewEventLog()
+	v14EventLog.OnBroadcast = func(event game.GlobalEvent) {
+		frame, err := ws.EncodeFrame("global_event", event)
+		if err != nil {
+			slog.Error("failed to encode global_event", "error", err)
+			return
+		}
+		hub.BroadcastToLobby(frame)
+	}
+
+	// --- AccountLevelManager (account XP + cosmetic coins + titles) ---
+	v14AccountLevelMgr := game.NewAccountLevelManager()
+
+	// --- DailyChallengeManager (3 daily challenges, needs AccountLevelManager) ---
+	v14ChallengeMgr := game.NewDailyChallengeManager(v14AccountLevelMgr)
+
+	// --- AchievementManager (30 permanent achievements) ---
+	v14AchievementMgr := game.NewAchievementManager(v14AccountLevelMgr)
+	v14AchievementMgr.OnUnlock = func(event game.AchievementUnlockEvent) {
+		frame, err := ws.EncodeFrame("achievements_update", event)
+		if err != nil {
+			slog.Error("failed to encode achievements_update", "error", err)
+			return
+		}
+		hub.SendToClient(event.PlayerID, frame)
+	}
+
+	// --- WarSystem (v14 war state machine: declaration → prep → active → ended) ---
+	// Dependencies: sovereignty tracker lookup, continent lookup, adjacency check
+	v14WarSystem := game.NewWarSystem(
+		func(countryCode string) *game.SovereigntyTracker {
+			// Placeholder: v14 sovereignty tracked per-arena
+			return nil
+		},
+		func(countryCode string) game.ContinentCode {
+			// Lookup continent from world seed data
+			for _, c := range world.AllCountries {
+				if c.ISO3 == countryCode {
+					return game.ContinentCode(c.Continent)
+				}
+			}
+			return ""
+		},
+		func(a, b string) bool {
+			// Adjacency check via world seed data
+			for _, c := range world.AllCountries {
+				if c.ISO3 == a {
+					for _, adj := range c.Adjacency {
+						if adj == b {
+							return true
+						}
+					}
+					break
+				}
+			}
+			return false
+		},
+	)
+	v14WarSystem.OnEvent = func(event game.WarEvent) {
+		// Broadcast war events to lobby
+		frame, err := ws.EncodeFrame("war_event", event)
+		if err != nil {
+			slog.Error("failed to encode war_event", "error", err)
+			return
+		}
+		hub.BroadcastToLobby(frame)
+
+		// Log war events to global event log
+		switch event.Type {
+		case game.WarEvtDeclared:
+			v14EventLog.LogWarDeclared(event.Attacker, event.Attacker, event.Defender, event.Defender)
+		case game.WarEvtEnded:
+			winner, loser := event.Attacker, event.Defender
+			if event.Outcome == game.WarOutcomeDefenderWin {
+				winner, loser = event.Defender, event.Attacker
+			}
+			v14EventLog.LogWarEnded(winner, winner, loser, loser, event.Outcome)
+		}
+	}
+
+	// --- TokenRewardManager (blockchain token distribution) ---
+	// Initialize blockchain infra (optional, no-op if RPC unavailable)
+	var buybackEngine *blockchain.BuybackEngine
+	var defenseOracle *blockchain.DefenseOracle
+	crossRPC := os.Getenv("CROSS_RPC_URL")
+	if crossRPC != "" {
+		buybackEngine = blockchain.NewBuybackEngine(crossRPC)
+		defenseOracle = blockchain.NewDefenseOracle(crossRPC)
+		slog.Info("v14 blockchain infra initialized", "rpcURL", crossRPC)
+	} else {
+		slog.Info("v14 blockchain infra disabled (no CROSS_RPC_URL)")
+	}
+	v14TokenRewardMgr := game.NewTokenRewardManager(buybackEngine, defenseOracle)
+	v14TokenRewardMgr.OnRewardDistributed = func(event game.TokenRewardEvent) {
+		frame, err := ws.EncodeFrame("token_reward", event)
+		if err != nil {
+			slog.Error("failed to encode token_reward", "error", err)
+			return
+		}
+		hub.SendToClient(event.PlayerID, frame)
+	}
+
+	// --- InactiveArenaReaper (memory release for idle arenas) ---
+	v14ArenaReaper := game.NewInactiveArenaReaper()
+
+	slog.Info("v14 in-game systems initialized",
+		"modules", 10,
+		"countryArenaManager", "ready",
+		"tickProfiler", "ready",
+		"bandwidthMonitor", "ready",
+		"eventLog", "ready",
+		"accountLevel", "ready",
+		"challenges", "ready",
+		"achievements", "ready",
+		"warSystem", "ready",
+		"tokenRewards", "ready",
+		"arenaReaper", "ready",
+	)
+
+	// ================================================================
 	// 7b. Auto-initialize Season 1 if no season active (S45)
 	// ================================================================
 	if seasonEngine.GetCurrentSeason() == nil {
@@ -260,7 +423,16 @@ func main() {
 	// 9. Event Router (client→server WebSocket events)
 	// ================================================================
 	eventRouter := ws.NewEventRouter()
-	registerEventHandlers(eventRouter, hub, worldManager, agentCmdRouter)
+	registerEventHandlers(eventRouter, hub, worldManager, agentCmdRouter, &V14Systems{
+		ArenaManager:    v14ArenaManager,
+		AccountLevelMgr: v14AccountLevelMgr,
+		ChallengeMgr:    v14ChallengeMgr,
+		AchievementMgr:  v14AchievementMgr,
+		WarSystem:       v14WarSystem,
+		TokenRewardMgr:  v14TokenRewardMgr,
+		EventLog:        v14EventLog,
+		TickProfiler:    tickProfiler,
+	})
 
 	// ================================================================
 	// 10. HTTP Router (all routes)
@@ -297,6 +469,17 @@ func main() {
 		SiegeManager:      siegeManager,
 		ContinentalEngine: continentalEngine,
 		Metrics:           metrics,
+		// v14 modules
+		V14ArenaManager:    v14ArenaManager,
+		V14AccountLevelMgr: v14AccountLevelMgr,
+		V14ChallengeMgr:    v14ChallengeMgr,
+		V14AchievementMgr:  v14AchievementMgr,
+		V14WarSystem:       v14WarSystem,
+		V14TokenRewardMgr:  v14TokenRewardMgr,
+		V14EventLog:        v14EventLog,
+		V14TickProfiler:    tickProfiler,
+		V14BandwidthMon:    bandwidthMonitor,
+		V14ArenaReaper:     v14ArenaReaper,
 	})
 
 	// ================================================================
@@ -362,6 +545,58 @@ func main() {
 		return nil
 	})
 
+	// --- v14 WarSystem ticker (every 5 seconds) ---
+	g.Go(func() error {
+		slog.Info("v14 WarSystem ticker starting")
+		ticker := time.NewTicker(5 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				v14WarSystem.Tick()
+			}
+		}
+	})
+
+	// --- v14 TokenReward distributor (every 30 seconds) ---
+	g.Go(func() error {
+		slog.Info("v14 TokenReward distributor starting")
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				count := v14TokenRewardMgr.DistributePendingRewards()
+				if count > 0 {
+					slog.Info("v14 token rewards distributed", "count", count)
+				}
+			}
+		}
+	})
+
+	// --- v14 InactiveArenaReaper (every 30 seconds, checks for idle arenas) ---
+	g.Go(func() error {
+		slog.Info("v14 InactiveArenaReaper starting")
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				idleArenas := v14ArenaReaper.GetIdleArenas()
+				for _, code := range idleArenas {
+					slog.Info("v14 idle arena detected (reaper)", "country", code)
+					v14ArenaReaper.RemoveTracking(code)
+				}
+			}
+		}
+	})
+
 	// --- Observability: metrics reporter (logs summary every 60s) ---
 	g.Go(func() error {
 		metrics.StartReporter(gCtx)
@@ -401,6 +636,11 @@ func main() {
 			return err
 		}
 
+		slog.Info("stopping v14 systems...")
+		v14WarSystem.Reset()
+		v14TokenRewardMgr.DistributePendingRewards() // flush pending rewards
+		bandwidthMonitor.Reset()
+
 		slog.Info("stopping v11 engines...")
 		economyEngine.Stop()
 		seasonEngine.Stop()
@@ -439,9 +679,22 @@ func main() {
 	slog.Info("server shutdown complete")
 }
 
+// V14Systems bundles all v14 in-game systems for event handler access.
+type V14Systems struct {
+	ArenaManager    *game.CountryArenaManager
+	AccountLevelMgr *game.AccountLevelManager
+	ChallengeMgr    *game.DailyChallengeManager
+	AchievementMgr  *game.AchievementManager
+	WarSystem       *game.WarSystem
+	TokenRewardMgr  *game.TokenRewardManager
+	EventLog        *game.EventLog
+	TickProfiler    *game.TickProfiler
+}
+
 // registerEventHandlers sets up all client→server event handlers.
 // v11: Routes through WorldManager (195 countries) instead of v10 RoomManager (5 rooms).
-func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldManager, agentCmdRouter *game.AgentCommandRouter) {
+// v14: Adds select_nationality, join_country_arena, switch_arena, daily challenges, achievements.
+func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldManager, agentCmdRouter *game.AgentCommandRouter, v14 *V14Systems) {
 	// Ping/Pong
 	router.On(ws.EventPing, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.PingPayload
@@ -704,6 +957,286 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 				client.Send(frame)
 			}
 		}
+	})
+
+	// ================================================================
+	// v14 Event Handlers
+	// ================================================================
+
+	// select_nationality (C→S): Set player's nationality (ISO3 code)
+	router.On(ws.EventSelectNationality, func(client *ws.Client, data json.RawMessage) {
+		var payload struct {
+			Nationality string `json:"nationality"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			slog.Warn("invalid select_nationality payload", "clientId", client.ID, "error", err)
+			return
+		}
+
+		if payload.Nationality == "" {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "invalid_nationality",
+				Message: "nationality ISO3 code required",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		slog.Info("select_nationality",
+			"clientId", client.ID,
+			"nationality", payload.Nationality,
+		)
+
+		// Store nationality on the player's agent if they're in a country arena
+		countryISO := wm.GetPlayerCountry(client.ID)
+		if countryISO != "" {
+			arena := wm.GetActiveArena(countryISO)
+			if arena != nil {
+				if agent, ok := arena.GetArena().GetAgent(client.ID); ok {
+					agent.Nationality = payload.Nationality
+				}
+			}
+		}
+
+		// Send confirmation
+		frame, _ := ws.EncodeFrame("nationality_confirmed", map[string]string{
+			"nationality": payload.Nationality,
+		})
+		client.Send(frame)
+	})
+
+	// join_country_arena (C→S): Join a v14 country arena (creates on-demand)
+	router.On(ws.EventJoinCountryArena, func(client *ws.Client, data json.RawMessage) {
+		var payload struct {
+			CountryCode string `json:"countryCode"`
+			Name        string `json:"name"`
+			SkinID      int    `json:"skinId"`
+			Nationality string `json:"nationality"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			slog.Warn("invalid join_country_arena payload", "clientId", client.ID, "error", err)
+			return
+		}
+
+		if payload.CountryCode == "" {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "invalid_country",
+				Message: "countryCode required for join_country_arena",
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		slog.Info("join_country_arena",
+			"clientId", client.ID,
+			"country", payload.CountryCode,
+			"name", payload.Name,
+			"nationality", payload.Nationality,
+		)
+
+		// Delegate to existing WorldManager join flow
+		if err := wm.JoinCountry(client.ID, payload.CountryCode, payload.Name, payload.SkinID, ""); err != nil {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "join_failed",
+				Message: err.Error(),
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		hub.MoveClientToRoom(client.ID, payload.CountryCode)
+
+		// Set nationality if provided
+		if payload.Nationality != "" {
+			arena := wm.GetActiveArena(payload.CountryCode)
+			if arena != nil {
+				if agent, ok := arena.GetArena().GetAgent(client.ID); ok {
+					agent.Nationality = payload.Nationality
+				}
+			}
+		}
+
+		// Send joined event
+		arena := wm.GetActiveArena(payload.CountryCode)
+		if arena != nil {
+			joinedEvt := arena.GetJoinedEvent(client.ID)
+			frame, err := ws.EncodeFrame(ws.EventJoined, joinedEvt)
+			if err == nil {
+				client.Send(frame)
+			}
+		}
+	})
+
+	// switch_arena (C→S): Leave current arena, join another country
+	router.On(ws.EventSwitchArena, func(client *ws.Client, data json.RawMessage) {
+		var payload struct {
+			CountryCode string `json:"countryCode"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			slog.Warn("invalid switch_arena payload", "clientId", client.ID, "error", err)
+			return
+		}
+
+		slog.Info("switch_arena",
+			"clientId", client.ID,
+			"newCountry", payload.CountryCode,
+		)
+
+		// Leave current arena
+		wm.LeaveCountry(client.ID)
+		hub.RegisterLobby(client)
+
+		// If new country specified, join it
+		if payload.CountryCode != "" {
+			if err := wm.JoinCountry(client.ID, payload.CountryCode, "", 0, ""); err != nil {
+				errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+					Code:    "switch_failed",
+					Message: err.Error(),
+				})
+				client.Send(errFrame)
+				return
+			}
+			hub.MoveClientToRoom(client.ID, payload.CountryCode)
+
+			arena := wm.GetActiveArena(payload.CountryCode)
+			if arena != nil {
+				joinedEvt := arena.GetJoinedEvent(client.ID)
+				frame, err := ws.EncodeFrame(ws.EventJoined, joinedEvt)
+				if err == nil {
+					client.Send(frame)
+				}
+			}
+		}
+	})
+
+	// get_account_level (C→S): Request account level snapshot
+	router.On("get_account_level", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.AccountLevelMgr == nil {
+			return
+		}
+		snapshot := v14.AccountLevelMgr.GetSnapshot(client.ID)
+		if snapshot != nil {
+			frame, err := ws.EncodeFrame("account_level_update", snapshot)
+			if err == nil {
+				client.Send(frame)
+			}
+		}
+	})
+
+	// get_daily_challenges (C→S): Request daily challenges
+	router.On("get_daily_challenges", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.ChallengeMgr == nil {
+			return
+		}
+		snapshot := v14.ChallengeMgr.GetSnapshot(client.ID)
+		if snapshot != nil {
+			frame, err := ws.EncodeFrame("daily_challenges_update", snapshot)
+			if err == nil {
+				client.Send(frame)
+			}
+		}
+	})
+
+	// claim_challenge_reward (C→S): Claim a completed daily challenge reward
+	router.On("claim_challenge_reward", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.ChallengeMgr == nil {
+			return
+		}
+		var payload struct {
+			ChallengeIndex int `json:"challengeIndex"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+
+		rewardMsg, err := v14.ChallengeMgr.ClaimReward(client.ID, payload.ChallengeIndex)
+		if err != nil {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "claim_failed",
+				Message: err.Error(),
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		// Send reward confirmation
+		frame, _ := ws.EncodeFrame("challenge_reward_claimed", map[string]interface{}{
+			"challengeIndex": payload.ChallengeIndex,
+			"rewardMessage":  rewardMsg,
+		})
+		client.Send(frame)
+
+		// Send updated challenges
+		snapshot := v14.ChallengeMgr.GetSnapshot(client.ID)
+		if snapshot != nil {
+			updFrame, _ := ws.EncodeFrame("daily_challenges_update", snapshot)
+			client.Send(updFrame)
+		}
+	})
+
+	// get_achievements (C→S): Request achievement state
+	router.On("get_achievements", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.AchievementMgr == nil {
+			return
+		}
+		snapshot := v14.AchievementMgr.GetSnapshot(client.ID)
+		if snapshot != nil {
+			frame, err := ws.EncodeFrame("achievements_update", snapshot)
+			if err == nil {
+				client.Send(frame)
+			}
+		}
+	})
+
+	// get_global_events (C→S): Request recent global events for news ticker
+	router.On("get_global_events", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.EventLog == nil {
+			return
+		}
+		events := v14.EventLog.GetRecentEvents(20)
+		frame, err := ws.EncodeFrame("global_events", events)
+		if err == nil {
+			client.Send(frame)
+		}
+	})
+
+	// get_token_rewards (C→S): Request player's token reward history
+	router.On("get_token_rewards", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.TokenRewardMgr == nil {
+			return
+		}
+		snapshots := v14.TokenRewardMgr.GetPlayerRewardSnapshot(client.ID, 20)
+		frame, err := ws.EncodeFrame("token_rewards_update", snapshots)
+		if err == nil {
+			client.Send(frame)
+		}
+	})
+
+	// select_title (C→S): Player selects a previously unlocked account title
+	router.On("select_title", func(client *ws.Client, data json.RawMessage) {
+		if v14 == nil || v14.AccountLevelMgr == nil {
+			return
+		}
+		var payload struct {
+			Title string `json:"title"`
+		}
+		if err := json.Unmarshal(data, &payload); err != nil {
+			return
+		}
+
+		if err := v14.AccountLevelMgr.SelectTitle(client.ID, payload.Title); err != nil {
+			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
+				Code:    "title_failed",
+				Message: err.Error(),
+			})
+			client.Send(errFrame)
+			return
+		}
+
+		frame, _ := ws.EncodeFrame("title_selected", map[string]string{
+			"title": payload.Title,
+		})
+		client.Send(frame)
 	})
 }
 

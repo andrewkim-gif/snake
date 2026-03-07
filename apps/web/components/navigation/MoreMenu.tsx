@@ -8,16 +8,17 @@
 import { useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { SK, bodyFont, sketchShadow } from '@/lib/sketch-ui';
 
-/** MORE 메뉴 아이템 */
+/** MORE 메뉴 아이템 — key는 nav 번역 네임스페이스의 키 */
 const MORE_ITEMS = [
-  { label: 'HALL OF FAME', href: '/hall-of-fame', icon: '🏆' },
-  { label: 'PROFILE', href: '/profile', icon: '👤' },
-  { label: 'DASHBOARD', href: '/dashboard', icon: '🤖' },
-] as const;
+  { key: 'hallOfFame' as const, href: '/hall-of-fame', icon: '🏆' },
+  { key: 'profile' as const, href: '/profile', icon: '👤' },
+  { key: 'dashboard' as const, href: '/dashboard', icon: '🤖' },
+];
 
-const SETTINGS_ITEM = { label: 'SETTINGS', href: '/settings', icon: '⚙️' };
+const SETTINGS_ITEM = { key: 'settings' as const, href: '/settings', icon: '⚙️' };
 
 interface MoreMenuProps {
   mode: 'dropdown' | 'bottomsheet';
@@ -27,6 +28,7 @@ interface MoreMenuProps {
 
 /** 데스크탑 드롭다운 메뉴 */
 function DropdownMenu({ onClose }: { onClose: () => void }) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -103,7 +105,7 @@ function DropdownMenu({ onClose }: { onClose: () => void }) {
             <span style={{ fontSize: '16px', width: '20px', textAlign: 'center' }}>
               {item.icon}
             </span>
-            {item.label}
+            {t(item.key)}
           </Link>
         );
       })}
@@ -147,7 +149,7 @@ function DropdownMenu({ onClose }: { onClose: () => void }) {
         <span style={{ fontSize: '16px', width: '20px', textAlign: 'center' }}>
           {SETTINGS_ITEM.icon}
         </span>
-        {SETTINGS_ITEM.label}
+        {t(SETTINGS_ITEM.key)}
       </Link>
     </div>
   );
@@ -155,6 +157,7 @@ function DropdownMenu({ onClose }: { onClose: () => void }) {
 
 /** 모바일 바텀시트 메뉴 */
 function BottomSheetMenu({ onClose }: { onClose: () => void }) {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const sheetRef = useRef<HTMLDivElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
@@ -270,7 +273,7 @@ function BottomSheetMenu({ onClose }: { onClose: () => void }) {
                 <span style={{ fontSize: '20px', width: '24px', textAlign: 'center' }}>
                   {item.icon}
                 </span>
-                {item.label}
+                {t(item.key)}
               </Link>
             </div>
           );

@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import type { SynergyActivatedPayload } from '@agent-survivor/shared';
 import { MC, pixelFont, bodyFont, mcPanelShadow } from '@/lib/minecraft-ui';
 
@@ -35,6 +36,7 @@ function SynergyToast({
   synergy: SynergyActivatedPayload;
   onDismiss: (synergyId: string) => void;
 }) {
+  const tGame = useTranslations('game');
   const [opacity, setOpacity] = useState(0);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -58,7 +60,7 @@ function SynergyToast({
           fontFamily: pixelFont, fontSize: '0.3rem', color: MC.textGold,
           backgroundColor: 'rgba(255,170,0,0.2)', padding: '1px 5px', letterSpacing: '0.06em',
         }}>
-          SYNERGY
+          {tGame('synergy')}
         </span>
         <span style={{
           fontFamily: pixelFont, fontSize: '0.35rem', color: MC.textGold,

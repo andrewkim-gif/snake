@@ -9,6 +9,7 @@
 
 import { useState, useMemo, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import type { Proposal, ProposalStatus } from '@/components/governance/types';
@@ -135,15 +136,10 @@ const FILTER_TO_STATUS: Record<FilterStatus, ProposalStatus | null> = {
   executed: 'executed',
 };
 
-const FILTER_LABELS: { key: FilterStatus; label: string }[] = [
-  { key: 'all', label: 'ALL' },
-  { key: 'voting', label: 'VOTING' },
-  { key: 'passed', label: 'PASSED' },
-  { key: 'rejected', label: 'REJECTED' },
-  { key: 'executed', label: 'EXECUTED' },
-];
+const FILTER_KEYS: FilterStatus[] = ['all', 'voting', 'passed', 'rejected', 'executed'];
 
 function GovernancePageInner() {
+  const tGov = useTranslations('governance');
   const searchParams = useSearchParams();
   const countryCode = searchParams.get('country');
 
@@ -199,7 +195,7 @@ function GovernancePageInner() {
             marginBottom: '4px',
           }}
         >
-          GOVERNANCE
+          {tGov('title')}
         </h1>
         <p
           style={{
@@ -209,7 +205,7 @@ function GovernancePageInner() {
             margin: 0,
           }}
         >
-          Vote on national policy proposals{countryCode ? ` for ${countryCode.toUpperCase()}` : ''}
+          {tGov('subtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
         </p>
       </div>
 
@@ -231,7 +227,7 @@ function GovernancePageInner() {
             fontWeight: 600,
           }}
         >
-          Filtered: {countryCode.toUpperCase()}
+          {tGov('filtered', { country: countryCode.toUpperCase() })}
           <a
             href="/governance"
             style={{
@@ -241,7 +237,7 @@ function GovernancePageInner() {
               marginLeft: '4px',
             }}
           >
-            Clear
+            {tGov('all')}
           </a>
         </div>
       )}
@@ -258,7 +254,7 @@ function GovernancePageInner() {
           paddingBottom: '4px',
         }}
       >
-        {FILTER_LABELS.map(({ key, label }) => {
+        {FILTER_KEYS.map((key) => {
           const isActive = statusFilter === key;
           return (
             <button
@@ -280,7 +276,7 @@ function GovernancePageInner() {
                 transition: 'all 150ms ease',
               }}
             >
-              {label}
+              {tGov(key)}
             </button>
           );
         })}
@@ -353,7 +349,7 @@ export default function GovernancePage() {
             fontFamily: bodyFont,
           }}
         >
-          Loading proposals...
+          Loading...
         </div>
       }
     >

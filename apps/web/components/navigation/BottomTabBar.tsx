@@ -10,19 +10,17 @@
 import { useState, useCallback } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { MoreMenu } from './MoreMenu';
 
-/** 탭 아이템 정의 */
+/** 탭 아이템 정의 — key는 nav 번역 네임스페이스의 키 */
 const TAB_ITEMS = [
-  { label: 'WORLD', href: '/', icon: '🌍' },
-  { label: 'ECONOMY', href: '/economy', icon: '💰' },
-  { label: 'GOVERN', href: '/governance', icon: '🏛️' },
-  { label: 'FACTIONS', href: '/factions', icon: '⚔️' },
-] as const;
-
-/** MORE 탭 아이콘 (3-dot) */
-const MORE_TAB = { label: 'MORE', icon: '•••' } as const;
+  { key: 'world' as const, href: '/', icon: '🌍' },
+  { key: 'economy' as const, href: '/economy', icon: '💰' },
+  { key: 'govern' as const, href: '/governance', icon: '🏛️' },
+  { key: 'factions' as const, href: '/factions', icon: '⚔️' },
+];
 
 /** 현재 pathname이 tab에 매칭되는지 확인 */
 function isActiveTab(pathname: string, href: string): boolean {
@@ -37,6 +35,7 @@ function isMoreTabActive(pathname: string): boolean {
 }
 
 export function BottomTabBar() {
+  const t = useTranslations('nav');
   const pathname = usePathname();
   const [moreOpen, setMoreOpen] = useState(false);
 
@@ -127,7 +126,7 @@ export function BottomTabBar() {
                   color: active ? SK.gold : SK.textMuted,
                 }}
               >
-                {item.label}
+                {t(item.key)}
               </span>
             </Link>
           );
@@ -175,7 +174,7 @@ export function BottomTabBar() {
               letterSpacing: '2px',
             }}
           >
-            {MORE_TAB.icon}
+            •••
           </span>
 
           {/* 라벨 */}
@@ -189,7 +188,7 @@ export function BottomTabBar() {
               color: isMoreTabActive(pathname) ? SK.gold : SK.textMuted,
             }}
           >
-            {MORE_TAB.label}
+            {t('more')}
           </span>
         </button>
       </nav>

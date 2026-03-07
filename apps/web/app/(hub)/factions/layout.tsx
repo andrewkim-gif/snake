@@ -8,13 +8,14 @@
 
 import { usePathname } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 
 const FACTIONS_TABS = [
-  { key: 'overview', label: 'OVERVIEW', href: '/factions' },
-  { key: 'tech-tree', label: 'TECH TREE', href: '/factions/market' },
-  { key: 'mercenary', label: 'MERCENARY', href: '/factions/market' },
-] as const;
+  { key: 'overview' as const, href: '/factions' },
+  { key: 'techTree' as const, href: '/factions/market' },
+  { key: 'mercenary' as const, href: '/factions/market' },
+];
 
 export default function FactionsLayout({
   children,
@@ -22,22 +23,23 @@ export default function FactionsLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const tFaction = useTranslations('faction');
 
   // 현재 활성 탭 판별
   const activeTab = (() => {
     if (pathname === '/factions' || pathname === '/factions/') return 'overview';
-    // 동적 팩션 상세 라우트 — tech-tree 탭으로 매핑
-    if (pathname.match(/^\/factions\/[^/]+$/) && pathname !== '/factions/market') return 'tech-tree';
+    // 동적 팩션 상세 라우트 — techTree 탭으로 매핑
+    if (pathname.match(/^\/factions\/[^/]+$/) && pathname !== '/factions/market') return 'techTree';
     if (pathname.startsWith('/factions/market')) return 'mercenary';
     return 'overview';
   })();
 
-  // 실제 탭 href (tech-tree는 현재 팩션 상세로 동적으로 매핑되므로 탭 정의 재구성)
+  // 실제 탭 href
   const tabs = [
-    { key: 'overview', label: 'OVERVIEW', href: '/factions' },
-    { key: 'tech-tree', label: 'TECH TREE', href: '/factions' },
-    { key: 'mercenary', label: 'MERCENARY', href: '/factions/market' },
-  ] as const;
+    { key: 'overview' as const, href: '/factions' },
+    { key: 'techTree' as const, href: '/factions' },
+    { key: 'mercenary' as const, href: '/factions/market' },
+  ];
 
   return (
     <div>
@@ -89,7 +91,7 @@ export default function FactionsLayout({
                   whiteSpace: 'nowrap',
                 }}
               >
-                {tab.label}
+                {tFaction(tab.key)}
               </Link>
             );
           })}

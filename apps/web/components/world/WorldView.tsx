@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * WorldView — Globe ↔ Map 전환 뷰
- * v12: viewMode를 외부에서 제어, 자체 HUD 제거 (LobbyHeader로 통합)
+ * WorldView — 글로브 뷰 (항상 GlobeView 렌더링)
+ * v15: viewMode 제거, 2D 맵 제거
  */
 
 import { useState, useCallback, useMemo, useEffect } from 'react';
@@ -10,12 +10,11 @@ import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import type { CountryClientState } from '@/lib/globe-data';
 import { loadGeoJSON, featureToCountryState } from '@/lib/globe-data';
-import { getCountryISO } from '@/lib/map-style';
 
-const WorldMap = dynamic(
-  () => import('@/components/world/WorldMap').then((m) => ({ default: m.WorldMap })),
-  { ssr: false },
-);
+// v14: Globe hover info panel
+import { GlobeHoverPanel } from '@/components/3d/GlobeHoverPanel';
+import type { GlobeHoverData } from '@/components/3d/GlobeHoverPanel';
+
 const GlobeView = dynamic(
   () => import('@/components/lobby/GlobeView').then((m) => ({ default: m.GlobeView })),
   { ssr: false },
@@ -27,7 +26,6 @@ const CountryPanel = dynamic(
 
 interface WorldViewProps {
   countryStates?: Map<string, CountryClientState>;
-  viewMode: 'globe' | 'map';
   onEnterArena?: (iso3: string) => void;
   onSpectate?: (iso3: string) => void;
   bottomOffset?: number;
@@ -36,7 +34,6 @@ interface WorldViewProps {
 
 export function WorldView({
   countryStates,
-  viewMode,
   onEnterArena,
   onSpectate,
   bottomOffset = 0,
@@ -44,8 +41,21 @@ export function WorldView({
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
-  const [transitioning, setTransitioning] = useState(false);
   const [fallbackStates, setFallbackStates] = useState<Map<string, CountryClientState>>(new Map());
+
+  // v14: Hover state for GlobeHoverPanel
+  const [hoverData, setHoverData] = useState<GlobeHoverData | null>(null);
+  const [hoverMouse, setHoverMouse] = useState({ x: 0, y: 0 });
+  const [hoverVisible, setHoverVisible] = useState(false);
+
+  // v14: Track mouse position for hover panel
+  useEffect(() => {
+    const handleMouseMove = (e: MouseEvent) => {
+      setHoverMouse({ x: e.clientX, y: e.clientY });
+    };
+    window.addEventListener('mousemove', handleMouseMove);
+    return () => window.removeEventListener('mousemove', handleMouseMove);
+  }, []);
 
   // 서버 데이터 없으면 GeoJSON에서 fallback 국가 데이터 생성
   useEffect(() => {
@@ -92,26 +102,13 @@ export function WorldView({
       overflow: 'hidden',
       ...style,
     }}>
-      {/* Globe/Map */}
-      <div style={{
-        position: 'absolute',
-        inset: 0,
-        opacity: transitioning ? 0 : 1,
-        transition: 'opacity 200ms ease',
-      }}>
-        {viewMode === 'globe' ? (
-          <GlobeView
-            countryStates={states}
-            selectedCountry={selectedCountry}
-            onCountryClick={handleCountryClick}
-          />
-        ) : (
-          <WorldMap
-            countryStates={states}
-            selectedCountry={selectedCountry}
-            onCountryClick={handleCountryClick}
-          />
-        )}
+      {/* Globe — always rendered */}
+      <div style={{ position: 'absolute', inset: 0 }}>
+        <GlobeView
+          countryStates={states}
+          selectedCountry={selectedCountry}
+          onCountryClick={handleCountryClick}
+        />
       </div>
 
       {/* 하단 범례 */}
@@ -162,6 +159,18 @@ export function WorldView({
           </div>
         ))}
       </div>
+
+      {/* v14: GlobeHoverPanel — 마우스 호버 시 국가 정보 패널 */}
+      <GlobeHoverPanel
+        data={hoverData}
+        mouseX={hoverMouse.x}
+        mouseY={hoverMouse.y}
+        visible={hoverVisible && !panelOpen}
+        onClickEnter={(iso3) => {
+          setHoverVisible(false);
+          onEnterArena?.(iso3);
+        }}
+      />
 
       {/* 국가 상세 패널 */}
       <CountryPanel

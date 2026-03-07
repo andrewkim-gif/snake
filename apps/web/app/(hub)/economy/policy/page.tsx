@@ -7,6 +7,7 @@
  */
 
 import { useState, Suspense } from 'react';
+import { useTranslations } from 'next-intl';
 import { useSearchParams } from 'next/navigation';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
@@ -117,6 +118,7 @@ function PolicyPanelSkeleton() {
 }
 
 function PolicyPageInner() {
+  const tEconomy = useTranslations('economy');
   const searchParams = useSearchParams();
   const countryParam = searchParams.get('country');
 
@@ -151,7 +153,7 @@ function PolicyPageInner() {
             marginBottom: '4px',
           }}
         >
-          ECONOMIC POLICY
+          {tEconomy('economicPolicy')}
         </h1>
         <p
           style={{
@@ -161,8 +163,7 @@ function PolicyPageInner() {
             margin: 0,
           }}
         >
-          Configure tax rates, trade openness, military spending, and tech
-          investment for your nation
+          {tEconomy('economicPolicyDesc')}
         </p>
       </div>
 
@@ -184,7 +185,7 @@ export default function PolicyPage() {
     <Suspense
       fallback={
         <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
-          Loading policy...
+          Loading...
         </div>
       }
     >

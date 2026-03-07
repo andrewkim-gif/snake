@@ -9,6 +9,7 @@
 
 import { Suspense, useCallback, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import type { ProposalType } from '@/components/governance/types';
@@ -32,6 +33,7 @@ const COUNTRIES = [
 ] as const;
 
 function NewProposalPageInner() {
+  const tGov = useTranslations('governance');
   const searchParams = useSearchParams();
   const router = useRouter();
   const countryParam = searchParams.get('country')?.toUpperCase() ?? '';
@@ -99,7 +101,7 @@ function NewProposalPageInner() {
             marginBottom: '8px',
           }}
         >
-          Proposal Submitted
+          {tGov('proposalSubmitted')}
         </h2>
         <p
           style={{
@@ -108,8 +110,7 @@ function NewProposalPageInner() {
             color: SK.textSecondary,
           }}
         >
-          Your proposal has been submitted to the governance system.
-          Redirecting to proposals...
+          {tGov('proposalSubmittedDesc')}
         </p>
       </div>
     );
@@ -130,7 +131,7 @@ function NewProposalPageInner() {
             marginBottom: '4px',
           }}
         >
-          NEW PROPOSAL
+          {tGov('newProposal')}
         </h1>
         <p
           style={{
@@ -140,7 +141,7 @@ function NewProposalPageInner() {
             margin: 0,
           }}
         >
-          Create a governance proposal for a country
+          {tGov('createProposal')}
         </p>
       </div>
 
@@ -167,7 +168,7 @@ function NewProposalPageInner() {
               marginBottom: '12px',
             }}
           >
-            SELECT TARGET COUNTRY
+            {tGov('selectCountry')}
           </label>
           <div
             style={{
@@ -280,7 +281,7 @@ export default function NewProposalPage() {
             fontFamily: bodyFont,
           }}
         >
-          Loading form...
+          Loading...
         </div>
       }
     >

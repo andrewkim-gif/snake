@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect, useMemo } from 'react';
+import { useTranslations } from 'next-intl';
 import type { ArenaShrinkPayload } from '@agent-survivor/shared';
 import { MC, pixelFont } from '@/lib/minecraft-ui';
 
@@ -27,6 +28,7 @@ interface ShrinkWarningProps {
 }
 
 export function ShrinkWarning({ shrinkData, playerDistance, currentRadius }: ShrinkWarningProps) {
+  const tGame = useTranslations('game');
   const [pulse, setPulse] = useState(0);
 
   // 펄스 애니메이션 (~15fps로 제한하여 불필요한 re-render 감소)
@@ -130,7 +132,7 @@ export function ShrinkWarning({ shrinkData, playerDistance, currentRadius }: Shr
           opacity: 0.6 + Math.sin(pulse * 2) * 0.4,
           letterSpacing: '0.15em', pointerEvents: 'none',
         }}>
-          DANGER ZONE
+          {tGame('dangerZone')}
         </div>
       )}
 
@@ -141,7 +143,7 @@ export function ShrinkWarning({ shrinkData, playerDistance, currentRadius }: Shr
           backgroundColor: 'rgba(0,0,0,0.5)', padding: '3px 10px',
           textShadow: '1px 1px 0 rgba(0,0,0,0.6)', pointerEvents: 'none', opacity: 0.8,
         }}>
-          ARENA SHRINKING
+          {tGame('arenaShrinking')}
         </div>
       )}
     </>

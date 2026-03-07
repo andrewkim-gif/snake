@@ -4,6 +4,7 @@
  * DeathOverlay — 사망 화면 UI (Crayon / Pencil Sketch 스타일)
  */
 
+import { useTranslations } from 'next-intl';
 import type { DeathPayload } from '@agent-survivor/shared';
 
 interface DeathOverlayProps {
@@ -12,6 +13,8 @@ interface DeathOverlayProps {
 }
 
 export function DeathOverlay({ deathInfo, onRespawn }: DeathOverlayProps) {
+  const tOverlay = useTranslations('overlay');
+  const tGame = useTranslations('game');
   return (
     <div
       style={{
@@ -39,7 +42,7 @@ export function DeathOverlay({ deathInfo, onRespawn }: DeathOverlayProps) {
           position: 'relative',
         }}
       >
-        Oh No!
+        {tOverlay('ohNo')}
         <span style={{
           position: 'absolute',
           bottom: '-4px',
@@ -54,8 +57,7 @@ export function DeathOverlay({ deathInfo, onRespawn }: DeathOverlayProps) {
 
       {deathInfo.killer && (
         <p style={{ margin: 0, color: '#6B5E52', fontSize: 'clamp(0.9rem, 3vw, 1.2rem)' }}>
-          Eaten by{' '}
-          <span style={{ color: '#D4914A', fontWeight: 800 }}>{deathInfo.killer}</span>
+          {tOverlay('eatenBy', { killer: deathInfo.killer })}
         </p>
       )}
 
@@ -76,15 +78,15 @@ export function DeathOverlay({ deathInfo, onRespawn }: DeathOverlayProps) {
         }}
       >
         <span>
-          Score:{' '}
+          {tGame('score')}:{' '}
           <span style={{ color: '#D4914A' }}>{deathInfo.score}</span>
         </span>
         <span>
-          Kills:{' '}
+          {tGame('kills')}:{' '}
           <span style={{ color: '#C75B5B' }}>{deathInfo.kills}</span>
         </span>
         <span>
-          Time:{' '}
+          {tGame('time')}:{' '}
           <span style={{ color: '#5B8DAD' }}>{deathInfo.duration}s</span>
         </span>
       </div>
@@ -122,7 +124,7 @@ export function DeathOverlay({ deathInfo, onRespawn }: DeathOverlayProps) {
           (e.target as HTMLElement).style.transform = 'translateY(0)';
         }}
       >
-        PLAY AGAIN
+        {tGame('playAgain')}
       </button>
     </div>
   );

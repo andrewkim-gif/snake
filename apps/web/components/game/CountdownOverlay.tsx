@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 
 interface CountdownOverlayProps {
   initialCount: number;
 }
 
 export function CountdownOverlay({ initialCount }: CountdownOverlayProps) {
+  const tGame = useTranslations('game');
   const [count, setCount] = useState(initialCount);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export function CountdownOverlay({ initialCount }: CountdownOverlayProps) {
         textTransform: 'uppercase',
         marginBottom: '0.5rem',
       }}>
-        GET READY!
+        {tGame('getReady')}
       </div>
       <div style={{
         fontSize: count <= 3 ? '6rem' : '4.5rem',
@@ -56,7 +58,7 @@ export function CountdownOverlay({ initialCount }: CountdownOverlayProps) {
         lineHeight: 1,
         transition: 'all 200ms',
       }}>
-        {count > 0 ? count : 'GO!'}
+        {count > 0 ? count : tGame('go')}
       </div>
     </div>
   );

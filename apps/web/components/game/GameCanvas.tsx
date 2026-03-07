@@ -8,6 +8,7 @@
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useGameLoop } from '@/hooks/useGameLoop';
 import { useInput } from '@/hooks/useInput';
 import type { GameData, UiState } from '@/hooks/useSocket';
@@ -47,6 +48,7 @@ interface GameCanvasProps {
 }
 
 export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, skinId, onExit, chooseUpgrade, dismissSynergyPopup }: GameCanvasProps) {
+  const tGame = useTranslations('game');
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const inputSeqRef = useRef(0);
   const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
@@ -229,8 +231,8 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
           analysisPanel={<AnalystPanel analysis={uiState.roundAnalysis ?? null} />}
         />
       )}
-      {showCooldown && <WaitingBanner text="Next round starting soon..." />}
-      {showWaiting && <WaitingBanner text="Waiting for players..." />}
+      {showCooldown && <WaitingBanner text={tGame('nextRoundSoon')} />}
+      {showWaiting && <WaitingBanner text={tGame('waitingForPlayers')} />}
       {showDeath && !showLevelUp && <DeathOverlay deathInfo={uiState.deathInfo!} onRespawn={handleRespawn} />}
 
       {/* Phase 5: Coach Overlay */}
@@ -267,6 +269,7 @@ function WaitingBanner({ text }: { text: string }) {
 }
 
 function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => void }) {
+  const tGame = useTranslations('game');
   return (
     <div style={{
       position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
@@ -282,26 +285,26 @@ function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => v
           fontFamily: '"Patrick Hand", "Inter", sans-serif',
           position: 'relative',
         }}>
-          PAUSED
+          {tGame('paused')}
           <span style={{
             position: 'absolute', bottom: -2, left: '15%', width: '70%', height: 2,
             backgroundColor: '#3A3028', opacity: 0.2,
           }} />
         </h2>
-        <p style={{ color: '#6B5E52', fontSize: 13, margin: 0, fontFamily: '"Patrick Hand", "Inter", sans-serif' }}>ESC to resume</p>
+        <p style={{ color: '#6B5E52', fontSize: 13, margin: 0, fontFamily: '"Patrick Hand", "Inter", sans-serif' }}>{tGame('escToResume')}</p>
         <button onClick={onResume} style={{
           width: 200, padding: '12px 0', fontSize: 17, fontWeight: 700,
           backgroundColor: '#D4914A', color: '#F5F0E8', border: '2px solid #3A3028',
           borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
-          RESUME
+          {tGame('resume')}
         </button>
         <button onClick={onExit} style={{
           width: 200, padding: '12px 0', fontSize: 17, fontWeight: 700,
           backgroundColor: 'transparent', color: '#C75B5B', border: '1.5px solid #C75B5B',
           borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
-          EXIT TO LOBBY
+          {tGame('exitToLobby')}
         </button>
       </div>
     </div>

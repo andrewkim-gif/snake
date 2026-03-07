@@ -7,6 +7,7 @@
  */
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 
@@ -155,6 +156,8 @@ function TradeMarketSkeleton() {
 }
 
 export default function TradePage() {
+  const tEconomy = useTranslations('economy');
+
   // Server URL from environment, fallback to current origin
   const serverUrl =
     typeof window !== 'undefined'
@@ -181,7 +184,7 @@ export default function TradePage() {
             marginBottom: '4px',
           }}
         >
-          TRADE MARKET
+          {tEconomy('tradeMarket')}
         </h1>
         <p
           style={{
@@ -191,8 +194,7 @@ export default function TradePage() {
             margin: 0,
           }}
         >
-          Global resource exchange — trade Oil, Minerals, Food, Tech, Manpower, and
-          Influence between factions
+          {tEconomy('tradeMarketDesc')}
         </p>
       </div>
 

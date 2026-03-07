@@ -7,6 +7,7 @@
  */
 
 import dynamic from 'next/dynamic';
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 
 // Lazy load MercenaryMarket 컴포넌트
@@ -19,6 +20,7 @@ const MercenaryMarket = dynamic(() => import('@/components/market/MercenaryMarke
 });
 
 export default function MercenaryMarketPage() {
+  const tFaction = useTranslations('faction');
   return (
     <div>
       {/* 페이지 헤더 */}
@@ -32,7 +34,7 @@ export default function MercenaryMarketPage() {
           textTransform: 'uppercase',
           margin: 0,
         }}>
-          MERCENARY MARKET
+          {tFaction('mercenaryMarket')}
         </h1>
         <p style={{
           fontFamily: bodyFont,
@@ -40,7 +42,7 @@ export default function MercenaryMarketPage() {
           color: SK.textSecondary,
           marginTop: 4,
         }}>
-          Hire elite warriors to fight for your faction. Deploy them to defend your territories.
+          {tFaction('mercenaryMarketDesc')}
         </p>
       </div>
 
