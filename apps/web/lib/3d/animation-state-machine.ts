@@ -8,6 +8,7 @@
  *
  * Phase 4A: IDLE, WALK, BOOST 3상태 + 블렌딩 전환
  * Phase 4B: ATTACK, HIT, DEATH, SPAWN, LEVELUP, VICTORY, COLLECT 7상태 추가
+ * Phase 3 (v16): 속도 비례 진폭 + 상/하체 분리 + 2차 모션 + 개성 + DODGE_ROLL
  */
 
 import { AnimState } from '@agent-survivor/shared';
@@ -19,6 +20,12 @@ const PI2 = Math.PI * 2;
 
 /** 속도 임계값: 이 이하이면 IDLE */
 const WALK_THRESHOLD = 5;
+
+/** 최대 속도 (부스트, px/s) — 속도 비례 진폭 계산에 사용 */
+const MAX_SPEED = 300;
+
+/** 상/하체 최대 비틀림 각도 (rad, ±60°) */
+const MAX_TWIST_ANGLE = PI / 3;
 
 // ─── 원샷/루프/영구 상태 duration 상수 ───
 
@@ -36,6 +43,8 @@ const LEVELUP_DURATION = 0.8;
 const COLLECT_DURATION = 0.25;
 /** VICTORY 루프 주기 (초) */
 const VICTORY_LOOP_PERIOD = 1.0;
+/** DODGE_ROLL 원샷 duration (초) */
+const DODGE_ROLL_DURATION = 0.4;
 
 // ─── 파트별 변환 출력 인터페이스 ───
 
@@ -55,6 +64,21 @@ export interface PartTransforms {
   armR: { rotX: number; rotZ: number; };
   legL: { rotX: number; };
   legR: { rotX: number; };
+  /**
+   * v16 Phase 3: 상/하체 분리 — 하체(legs) 기준 Y축 회전 오프셋 (rad)
+   * AgentInstances에서 legs에 이 값만큼 추가 Y 회전 적용
+   * 0이면 상체와 동일 방향 (기존 동작)
+   */
+  lowerBodyRotY: number;
+  /**
+   * v16 Phase 3: 상체(body, arms, head) 기준 Y축 회전 오프셋 (rad)
+   * 0이면 에이전트 heading과 동일 (기존 동작)
+   */
+  upperBodyRotY: number;
+  /**
+   * v16 Phase 3: DODGE_ROLL 시 전체 body X축 회전 (360° roll)
+   */
+  rollRotX: number;
 }
 
 /** 기본 변환 (모든 값 0, 스케일 1) */
@@ -66,6 +90,9 @@ function createDefaultTransforms(): PartTransforms {
     armR: { rotX: 0, rotZ: 0 },
     legL: { rotX: 0 },
     legR: { rotX: 0 },
+    lowerBodyRotY: 0,
+    upperBodyRotY: 0,
+    rollRotX: 0,
   };
 }
 
@@ -86,6 +113,7 @@ const STATE_PRIORITY: Record<number, number> = {
   [AnimState.BOOST]: 2,
   [AnimState.COLLECT]: 3,
   [AnimState.ATTACK]: 5,
+  [AnimState.DODGE_ROLL]: 6,
   [AnimState.HIT]: 8,
   [AnimState.DEATH]: 10,
   [AnimState.SPAWN]: 9,
@@ -144,6 +172,13 @@ const TRANSITION_DURATIONS: TransitionConfig[] = [
   { from: -1, to: AnimState.LEVELUP, blendDuration: 0.05, priority: 4 },
   // ANY → VICTORY: 부드러운 진입
   { from: -1, to: AnimState.VICTORY, blendDuration: 0.15, priority: 4 },
+
+  // ANY → DODGE_ROLL: 즉시 진입
+  { from: -1, to: AnimState.DODGE_ROLL, blendDuration: 0, priority: 6 },
+  // DODGE_ROLL → 이동 상태: 빠른 복귀
+  { from: AnimState.DODGE_ROLL, to: AnimState.IDLE, blendDuration: 0.08, priority: 0 },
+  { from: AnimState.DODGE_ROLL, to: AnimState.WALK, blendDuration: 0.08, priority: 1 },
+  { from: AnimState.DODGE_ROLL, to: AnimState.BOOST, blendDuration: 0.08, priority: 2 },
 ];
 
 /** 특정 전환의 블렌드 시간 조회 */
@@ -196,6 +231,8 @@ export interface BounceResult {
 /**
  * 걷기 바운스 물리 계산 — cos 기반 smooth 곡선
  * 큐블링의 핵심 개성: 뒤뚱뒤뚱 귀여운 움직임
+ *
+ * v16 Phase 3: 속도 비례 진폭 — 느리면 작은 동작, 빠르면 큰 동작
  */
 export function computeBounce(
   elapsed: number,
@@ -206,19 +243,19 @@ export function computeBounce(
     return { bounceY: 0, swayZ: 0, leanX: 0 };
   }
 
+  const speedRatio = clamp01(velocity / MAX_SPEED);
   const walkFreq = Math.min(velocity / 80, 3.5);
-  const boostMul = boosting ? 1.5 : 1.0;
 
-  // cos 기반 smooth 바운스 (발 딛을 때마다 올라감)
-  const amplitude = 1.2 * boostMul;
-  const bounceY = (1 - Math.cos(elapsed * walkFreq * PI2)) * 0.5 * amplitude;
+  // v16: 속도 비례 바운스 진폭 (기존 고정 1.2 → 0.6~2.0)
+  const bounceAmp = lerp(0.6, 2.0, speedRatio);
+  const bounceY = (1 - Math.cos(elapsed * walkFreq * PI2)) * 0.5 * bounceAmp;
 
-  // 힙스웨이: Z축 미세 회전 (좌우 흔들림)
-  const swayAmplitude = 0.04 * boostMul;
+  // 힙스웨이: Z축 미세 회전 (좌우 흔들림) — 속도 비례
+  const swayAmplitude = lerp(0.02, 0.06, speedRatio);
   const swayZ = Math.sin(elapsed * walkFreq * PI) * swayAmplitude;
 
-  // 전방 기울임: 부스트 시 더 강하게
-  const leanX = boosting ? -0.25 : -0.03;
+  // 전방 기울임: 속도 비례 (느리면 거의 없음, 부스트면 강하게)
+  const leanX = boosting ? -0.25 : lerp(-0.01, -0.12, speedRatio);
 
   return { bounceY, swayZ, leanX };
 }
@@ -266,7 +303,7 @@ function computeIdle(elapsed: number, out: PartTransforms): void {
 /**
  * WALK 상태 파트 변환 계산
  * - 교차 스윙: armL/legR 동위상, armR/legL 동위상 (자연스러운 걷기)
- * - 스윙 각도: ±0.44rad (≈25°), velocity 비례 주기
+ * - v16: 스윙 각도 속도 비례 (0.15~0.6 rad)
  * - Y 바운스: bounceY 적용 (cos 곡선)
  * - Z 힙스웨이: body에 swayZ 적용
  * - 머리: 진행 방향 미세 기울임 (head pitch -0.05rad)
@@ -277,8 +314,10 @@ function computeWalk(
   bounce: BounceResult,
   out: PartTransforms,
 ): void {
+  const speedRatio = clamp01(velocity / MAX_SPEED);
   const walkFreq = Math.min(velocity / 80, 3.5);
-  const walkAmp = 0.44; // ≈25°
+  // v16: 속도 비례 스윙 진폭 (기존 고정 0.44 → 0.15~0.6)
+  const walkAmp = lerp(0.15, 0.6, speedRatio);
 
   // 교차 스윙 위상
   const swingPhase = Math.sin(elapsed * walkFreq * PI2);
@@ -287,14 +326,15 @@ function computeWalk(
   out.armL.rotX = swingPhase * walkAmp;
   out.armR.rotX = -swingPhase * walkAmp;
 
-  // 다리: 팔과 반대 (교차)
-  out.legL.rotX = -swingPhase * walkAmp;
-  out.legR.rotX = swingPhase * walkAmp;
+  // 다리: 팔과 반대 (교차) — 보폭도 속도 비례
+  const strideAmp = lerp(0.15, 0.6, speedRatio);
+  out.legL.rotX = -swingPhase * strideAmp;
+  out.legR.rotX = swingPhase * strideAmp;
 
   // body: 바운스 + 힙스웨이
   out.body.posY = bounce.bounceY;
   out.body.rotZ = bounce.swayZ;
-  out.body.rotX = bounce.leanX; // 미세 전방 기울임
+  out.body.rotX = bounce.leanX; // 속도 비례 전방 기울임
 
   // head: body 바운스 따라감 + 진행 방향 미세 기울임
   out.head.posY = bounce.bounceY;
@@ -307,7 +347,7 @@ function computeWalk(
  * - 팔 잠금: 뒤로 벌림 (-1.05rad)
  * - 다리: 2배속 걷기 (walk freq × 2)
  * - 머리: -0.15rad pitch (전방 주시)
- * - bounce: 더 큰 amplitude (walk의 1.5배)
+ * - v16: 속도 비례 진폭
  */
 function computeBoost(
   elapsed: number,
@@ -315,11 +355,13 @@ function computeBoost(
   bounce: BounceResult,
   out: PartTransforms,
 ): void {
+  const speedRatio = clamp01(velocity / MAX_SPEED);
   const walkFreq = Math.min(velocity / 80, 3.5);
-  const walkAmp = 0.44;
+  // v16: 속도 비례 다리 진폭 (부스트는 큰 동작)
+  const legAmp = lerp(0.4, 0.75, speedRatio);
 
-  // 다리: 2배속 걷기, 진폭 1.3배
-  const legSwing = Math.sin(elapsed * walkFreq * 2 * PI2) * walkAmp * 1.3;
+  // 다리: 2배속 걷기, 속도 비례 진폭
+  const legSwing = Math.sin(elapsed * walkFreq * 2 * PI2) * legAmp;
   out.legL.rotX = legSwing;
   out.legR.rotX = -legSwing;
 
@@ -615,6 +657,12 @@ interface AgentAnimState {
   idleSeed: number;
   /** HIT 플래시 타이머 (AgentInstances.tsx에서 참조) */
   hitFlashRemaining: number;
+  /** v16: 2차 모션 상태 */
+  secondary: SecondaryMotionState;
+  /** v16: 개성 파라미터 */
+  variation: AgentVariation;
+  /** v16: 개성 생성용 agentId (캐시) */
+  variationId: string;
 }
 
 // ─── AnimInput: 외부에서 전달하는 에이전트 상태 ───
@@ -636,6 +684,14 @@ export interface AnimInput {
   isVictory?: boolean;
   /** true면 SPAWN 트리거 (첫 등장) */
   wasSpawn?: boolean;
+  /** v16: true면 DODGE_ROLL 트리거 (대시 E키) */
+  wasDash?: boolean;
+  /** v16: 이동 방향 heading (rad) — 하체 회전 기준 */
+  moveAngle?: number;
+  /** v16: 조준 방향 facing (rad) — 상체 회전 기준 */
+  aimAngle?: number;
+  /** v16: 에이전트 ID (per-agent variation 해시용) */
+  agentId?: string;
 }
 
 // ─── 원샷 상태인지 판단 ───
@@ -648,6 +704,7 @@ function getOneShotDuration(state: AnimState): number {
     case AnimState.SPAWN: return SPAWN_DURATION;
     case AnimState.LEVELUP: return LEVELUP_DURATION;
     case AnimState.COLLECT: return COLLECT_DURATION;
+    case AnimState.DODGE_ROLL: return DODGE_ROLL_DURATION;
     // DEATH는 영구 (자동 복귀 없음)
     // VICTORY는 루프 (명시적 종료)
     default: return -1;
@@ -672,6 +729,130 @@ function smoothstep(t: number): number {
 
 function clamp01(v: number): number {
   return v < 0 ? 0 : v > 1 ? 1 : v;
+}
+
+/** 각도 차이 계산 (-PI ~ PI 범위) */
+function angleDiff(a: number, b: number): number {
+  let d = a - b;
+  while (d > PI) d -= PI2;
+  while (d < -PI) d += PI2;
+  return d;
+}
+
+/** damped lerp: exponential decay toward target (frame-rate independent) */
+function damp(current: number, target: number, lambda: number, dt: number): number {
+  return lerp(current, target, 1 - Math.exp(-lambda * dt));
+}
+
+/** damped angle lerp: shortest-arc exponential decay */
+function dampAngle(current: number, target: number, lambda: number, dt: number): number {
+  const diff = angleDiff(target, current);
+  return current + diff * (1 - Math.exp(-lambda * dt));
+}
+
+/** 결정적 해시 (문자열 → 32비트 정수, FNV-1a) */
+function simpleHash(str: string): number {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < str.length; i++) {
+    hash ^= str.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
+  }
+  return hash >>> 0;
+}
+
+// ─── v16 Phase 3: 2차 모션 상태 (per-agent) ───
+
+interface SecondaryMotionState {
+  /** 상체 관성 지연 — 현재 torso 방향 (rad) */
+  torsoAngle: number;
+  /** 머리 추적 — 현재 head yaw (rad) */
+  headYaw: number;
+  /** 장비 흔들림 위상 */
+  equipPhase: number;
+  /** 이전 프레임 heading (급회전 감지용) */
+  prevHeading: number;
+  /** 부드러운 속도 (가속/감속 easing) */
+  smoothVelocity: number;
+  /** 초기화 여부 */
+  initialized: boolean;
+}
+
+function createSecondaryMotion(): SecondaryMotionState {
+  return {
+    torsoAngle: 0,
+    headYaw: 0,
+    equipPhase: 0,
+    prevHeading: 0,
+    smoothVelocity: 0,
+    initialized: false,
+  };
+}
+
+// ─── v16 Phase 3: 개성 파라미터 (per-agent, deterministic) ───
+
+interface AgentVariation {
+  /** 팔 진폭 배율 0.8~1.2 */
+  armSwingScale: number;
+  /** 보폭 배율 0.9~1.1 */
+  strideScale: number;
+  /** IDLE quirk 종류 0~4 */
+  idleQuirk: number;
+  /** IDLE quirk 간격 3~8초 */
+  idleQuirkInterval: number;
+  /** 바운스 주파수 미세 오프셋 0.95~1.05 */
+  bounceFreqScale: number;
+}
+
+/** 기본 개성 (variation 미적용 시) */
+const DEFAULT_VARIATION: AgentVariation = {
+  armSwingScale: 1.0,
+  strideScale: 1.0,
+  idleQuirk: 0,
+  idleQuirkInterval: 5,
+  bounceFreqScale: 1.0,
+};
+
+/** agent ID에서 결정적 개성 생성 */
+function generateVariation(agentId: string): AgentVariation {
+  const h = simpleHash(agentId);
+  return {
+    armSwingScale: 0.8 + (h % 40) / 100,                   // 0.80~1.19
+    strideScale: 0.9 + ((h >> 8) % 20) / 100,              // 0.90~1.09
+    idleQuirk: (h >> 16) % 5,                               // 0~4
+    idleQuirkInterval: 3 + ((h >> 20) % 50) / 10,           // 3.0~7.9
+    bounceFreqScale: 0.95 + ((h >> 24) % 10) / 100,        // 0.95~1.04
+  };
+}
+
+// ─── v16: DODGE_ROLL 애니메이션 ───
+
+/**
+ * DODGE_ROLL 상태 파트 변환 계산 (원샷 0.4초)
+ * - 이동 방향으로 구르기: 몸체 전체 360° X축 회전
+ * - 미세 Y 호프 (중간에 최대 3 units)
+ * - 스케일 유지 (무적 표현은 별도 이펙트)
+ */
+function computeDodgeRoll(elapsed: number, out: PartTransforms): void {
+  const t = clamp01(elapsed / DODGE_ROLL_DURATION);
+
+  // 360° X축 회전 (easeInOut)
+  const rollPhase = smoothstep(t);
+  out.rollRotX = rollPhase * PI2;
+
+  // Y 호프: sin 곡선 (0→3→0)
+  out.body.posY = Math.sin(t * PI) * 3;
+  out.head.posY = out.body.posY;
+
+  // 팔/다리 오므림 (구르기 느낌)
+  const tuck = Math.sin(t * PI); // 0→1→0
+  out.armL.rotX = -1.2 * tuck;
+  out.armR.rotX = -1.2 * tuck;
+  out.legL.rotX = 0.8 * tuck;
+  out.legR.rotX = -0.8 * tuck;
+
+  // body 약간 압축 (구르기 중 둥글게)
+  out.body.scaleY = 1.0 - 0.1 * tuck;
+  out.body.scaleX = 1.0 + 0.05 * tuck;
 }
 
 // ─── 메인 클래스 ───
@@ -708,6 +889,9 @@ export class AnimationStateMachine {
         // 에이전트별 위상 오프셋: IDLE 애니메이션이 동시에 움직이지 않도록
         idleSeed: Math.random() * 10,
         hitFlashRemaining: 0,
+        secondary: createSecondaryMotion(),
+        variation: { ...DEFAULT_VARIATION },
+        variationId: '',
       });
     }
 
@@ -763,11 +947,23 @@ export class AnimationStateMachine {
   /**
    * 외부 입력 기반 자동 상태 전환 + 시간 업데이트
    * 매 프레임 호출: velocity/boosting + Phase 4B 이벤트 플래그 처리
+   * v16 Phase 3: 2차 모션 + 개성 파라미터 업데이트
    */
   updateAgent(agentIndex: number, input: AnimInput, dt: number): void {
     if (agentIndex < 0 || agentIndex >= this.maxAgents) return;
     const state = this.states[agentIndex];
     if (!state.active) return;
+
+    // ─── v16: 개성 파라미터 lazy 초기화 (agentId 기반) ───
+    if (input.agentId && input.agentId !== state.variationId) {
+      state.variationId = input.agentId;
+      const v = generateVariation(input.agentId);
+      state.variation.armSwingScale = v.armSwingScale;
+      state.variation.strideScale = v.strideScale;
+      state.variation.idleQuirk = v.idleQuirk;
+      state.variation.idleQuirkInterval = v.idleQuirkInterval;
+      state.variation.bounceFreqScale = v.bounceFreqScale;
+    }
 
     // ─── Phase 4B: 이벤트 기반 상태 전환 (우선순위 높은 순서) ───
 
@@ -784,6 +980,12 @@ export class AnimationStateMachine {
     // HIT: 피격 시
     if (input.wasHit && state.current !== AnimState.DEATH) {
       this.requestTransition(agentIndex, AnimState.HIT);
+    }
+
+    // v16: DODGE_ROLL (대시 E키)
+    if (input.wasDash && state.current !== AnimState.DEATH && state.current !== AnimState.HIT
+        && state.current !== AnimState.DODGE_ROLL) {
+      this.requestTransition(agentIndex, AnimState.DODGE_ROLL);
     }
 
     // ATTACK: 전투 시
@@ -852,6 +1054,33 @@ export class AnimationStateMachine {
       // 원샷 완료: returnState로 복귀
       this.requestTransition(agentIndex, state.returnState);
     }
+
+    // ─── v16 Phase 3: 2차 모션 업데이트 ───
+    const sec = state.secondary;
+    if (!sec.initialized) {
+      sec.torsoAngle = input.aimAngle ?? input.moveAngle ?? 0;
+      sec.headYaw = sec.torsoAngle;
+      sec.prevHeading = input.moveAngle ?? 0;
+      sec.smoothVelocity = velocity;
+      sec.initialized = true;
+    }
+
+    // 부드러운 속도 (가속/감속 easing)
+    sec.smoothVelocity = damp(sec.smoothVelocity, velocity, 8, dt);
+
+    // 상체 관성 지연: aimAngle로 spring decay (0.1~0.2초 뒤따라옴)
+    const targetTorso = input.aimAngle ?? input.moveAngle ?? sec.torsoAngle;
+    sec.torsoAngle = dampAngle(sec.torsoAngle, targetTorso, 10, dt);
+
+    // 머리 추적: aimAngle 방향으로 약간 더 빠르게 (lookAhead)
+    const targetHead = input.aimAngle ?? input.moveAngle ?? sec.headYaw;
+    sec.headYaw = dampAngle(sec.headYaw, targetHead, 18, dt);
+
+    // 장비 흔들림 위상 (walkCycle에 연동)
+    const walkFreq = Math.min(velocity / 80, 3.5);
+    sec.equipPhase += walkFreq * dt * PI2;
+
+    sec.prevHeading = input.moveAngle ?? sec.prevHeading;
   }
 
   /**
@@ -888,59 +1117,135 @@ export class AnimationStateMachine {
   /**
    * 특정 에이전트의 최종 파트 변환 계산
    * 블렌딩 적용: previous → current 전환 중이면 lerp
+   * v16 Phase 3: 2차 모션 + 개성 파라미터 + 상/하체 분리 오버레이
    */
-  getTransforms(agentIndex: number, velocity: number, boosting: boolean): PartTransforms {
+  getTransforms(agentIndex: number, velocity: number, boosting: boolean, moveAngle?: number, aimAngle?: number): PartTransforms {
     const state = this.states[agentIndex];
     if (!state || !state.active) return createDefaultTransforms();
 
     // 에이전트별 위상 오프셋 적용된 경과 시간
     const seededElapsed = state.elapsed + state.idleSeed;
 
+    let result: PartTransforms;
+
     // 블렌드 완료: 현재 상태만 계산
     if (state.blendFactor >= 1) {
-      return this.computeStateTransforms(state.current, seededElapsed, velocity, boosting);
+      result = this.computeStateTransforms(state.current, seededElapsed, velocity, boosting);
+    } else {
+      // 블렌딩 중: 두 상태 계산 후 lerp
+      const prev = this._prevTransforms;
+      const curr = this._currTransforms;
+      this.fillStateTransforms(state.previous, seededElapsed, velocity, boosting, prev);
+      this.fillStateTransforms(state.current, seededElapsed, velocity, boosting, curr);
+
+      const t = smoothstep(state.blendFactor);
+
+      result = {
+        head: {
+          rotX: lerp(prev.head.rotX, curr.head.rotX, t),
+          rotY: lerp(prev.head.rotY, curr.head.rotY, t),
+          rotZ: lerp(prev.head.rotZ, curr.head.rotZ, t),
+          posX: lerp(prev.head.posX, curr.head.posX, t),
+          posY: lerp(prev.head.posY, curr.head.posY, t),
+          posZ: lerp(prev.head.posZ, curr.head.posZ, t),
+          scaleX: lerp(prev.head.scaleX, curr.head.scaleX, t),
+          scaleY: lerp(prev.head.scaleY, curr.head.scaleY, t),
+        },
+        body: {
+          rotX: lerp(prev.body.rotX, curr.body.rotX, t),
+          rotY: lerp(prev.body.rotY, curr.body.rotY, t),
+          rotZ: lerp(prev.body.rotZ, curr.body.rotZ, t),
+          posX: lerp(prev.body.posX, curr.body.posX, t),
+          posY: lerp(prev.body.posY, curr.body.posY, t),
+          posZ: lerp(prev.body.posZ, curr.body.posZ, t),
+          scaleX: lerp(prev.body.scaleX, curr.body.scaleX, t),
+          scaleY: lerp(prev.body.scaleY, curr.body.scaleY, t),
+        },
+        armL: {
+          rotX: lerp(prev.armL.rotX, curr.armL.rotX, t),
+          rotZ: lerp(prev.armL.rotZ, curr.armL.rotZ, t),
+        },
+        armR: {
+          rotX: lerp(prev.armR.rotX, curr.armR.rotX, t),
+          rotZ: lerp(prev.armR.rotZ, curr.armR.rotZ, t),
+        },
+        legL: { rotX: lerp(prev.legL.rotX, curr.legL.rotX, t) },
+        legR: { rotX: lerp(prev.legR.rotX, curr.legR.rotX, t) },
+        lowerBodyRotY: lerp(prev.lowerBodyRotY, curr.lowerBodyRotY, t),
+        upperBodyRotY: lerp(prev.upperBodyRotY, curr.upperBodyRotY, t),
+        rollRotX: lerp(prev.rollRotX, curr.rollRotX, t),
+      };
     }
 
-    // 블렌딩 중: 두 상태 계산 후 lerp
-    const prev = this._prevTransforms;
-    const curr = this._currTransforms;
-    this.fillStateTransforms(state.previous, seededElapsed, velocity, boosting, prev);
-    this.fillStateTransforms(state.current, seededElapsed, velocity, boosting, curr);
+    // ─── v16 Phase 3: 개성 파라미터 적용 ───
+    const v = state.variation;
+    result.armL.rotX *= v.armSwingScale;
+    result.armR.rotX *= v.armSwingScale;
+    result.legL.rotX *= v.strideScale;
+    result.legR.rotX *= v.strideScale;
 
-    const t = smoothstep(state.blendFactor);
+    // ─── v16 Phase 3: 개성 IDLE quirk (대기 중 고유 동작) ───
+    if (state.current === AnimState.IDLE && velocity < WALK_THRESHOLD) {
+      const quirkTime = seededElapsed % v.idleQuirkInterval;
+      // quirk가 발동하는 시간대 (1초간)
+      if (quirkTime < 1.0) {
+        const qt = quirkTime; // 0~1 범위
+        const quirkStrength = Math.sin(qt * PI); // 0→1→0
+        switch (v.idleQuirk) {
+          case 0: // 고개 갸우뚱 (Z축 tilt)
+            result.head.rotZ += quirkStrength * 0.15;
+            break;
+          case 1: // 발 구르기 (한쪽 다리 빠른 진동)
+            result.legR.rotX += Math.sin(qt * PI2 * 3) * 0.12 * quirkStrength;
+            break;
+          case 2: // 팔 스트레칭 (양팔 위로)
+            result.armL.rotX -= quirkStrength * 0.5;
+            result.armR.rotX -= quirkStrength * 0.5;
+            break;
+          case 3: // 주위 둘러보기 (머리 빠른 좌우)
+            result.head.rotY += Math.sin(qt * PI2 * 2) * 0.25 * quirkStrength;
+            break;
+          case 4: // 머리 긁기 (한쪽 팔만 올림)
+            result.armR.rotX -= quirkStrength * 1.2;
+            result.head.rotZ -= quirkStrength * 0.08;
+            break;
+        }
+      }
+    }
 
-    return {
-      head: {
-        rotX: lerp(prev.head.rotX, curr.head.rotX, t),
-        rotY: lerp(prev.head.rotY, curr.head.rotY, t),
-        rotZ: lerp(prev.head.rotZ, curr.head.rotZ, t),
-        posX: lerp(prev.head.posX, curr.head.posX, t),
-        posY: lerp(prev.head.posY, curr.head.posY, t),
-        posZ: lerp(prev.head.posZ, curr.head.posZ, t),
-        scaleX: lerp(prev.head.scaleX, curr.head.scaleX, t),
-        scaleY: lerp(prev.head.scaleY, curr.head.scaleY, t),
-      },
-      body: {
-        rotX: lerp(prev.body.rotX, curr.body.rotX, t),
-        rotY: lerp(prev.body.rotY, curr.body.rotY, t),
-        rotZ: lerp(prev.body.rotZ, curr.body.rotZ, t),
-        posX: lerp(prev.body.posX, curr.body.posX, t),
-        posY: lerp(prev.body.posY, curr.body.posY, t),
-        posZ: lerp(prev.body.posZ, curr.body.posZ, t),
-        scaleX: lerp(prev.body.scaleX, curr.body.scaleX, t),
-        scaleY: lerp(prev.body.scaleY, curr.body.scaleY, t),
-      },
-      armL: {
-        rotX: lerp(prev.armL.rotX, curr.armL.rotX, t),
-        rotZ: lerp(prev.armL.rotZ, curr.armL.rotZ, t),
-      },
-      armR: {
-        rotX: lerp(prev.armR.rotX, curr.armR.rotX, t),
-        rotZ: lerp(prev.armR.rotZ, curr.armR.rotZ, t),
-      },
-      legL: { rotX: lerp(prev.legL.rotX, curr.legL.rotX, t) },
-      legR: { rotX: lerp(prev.legR.rotX, curr.legR.rotX, t) },
-    };
+    // ─── v16 Phase 3: 2차 모션 오버레이 ───
+    const sec = state.secondary;
+    if (sec.initialized && velocity > WALK_THRESHOLD) {
+      // 상체 관성 지연: torso 방향과 aimAngle의 차이를 body.rotY에 추가
+      const torsoLag = angleDiff(sec.torsoAngle, aimAngle ?? moveAngle ?? 0);
+      // 작은 값만 추가 (최대 ±0.15 rad ≈ 8.6°)
+      result.body.rotY += clamp01(Math.abs(torsoLag) / PI) * torsoLag * 0.3;
+
+      // 머리 추적 (lookAhead): aimAngle 방향으로 머리가 약간 더 회전
+      const headLead = angleDiff(sec.headYaw, sec.torsoAngle);
+      result.head.rotY += headLead * 0.2;
+
+      // 장비 흔들림 (진자 운동): walk cycle에 연동된 미세 진동
+      const equipSway = Math.sin(sec.equipPhase * 1.3) * 0.04;
+      result.body.rotZ += equipSway;
+    }
+
+    // ─── v16 Phase 3: 상/하체 분리 ───
+    if (moveAngle !== undefined && aimAngle !== undefined) {
+      // heading(facing)은 AgentInstances에서 aimAngle 기준으로 전체 회전을 적용
+      // 하체는 moveAngle 방향, 상체는 aimAngle 방향
+      let twist = angleDiff(moveAngle, aimAngle);
+      // 최대 twist 각도 제한 (±60°)
+      if (twist > MAX_TWIST_ANGLE) twist = MAX_TWIST_ANGLE;
+      if (twist < -MAX_TWIST_ANGLE) twist = -MAX_TWIST_ANGLE;
+
+      // lowerBodyRotY: 하체를 moveAngle 방향으로 회전 (상체 기준으로 상대적)
+      result.lowerBodyRotY = twist;
+      // upperBodyRotY: 상체는 0 (에이전트의 facing = aimAngle이 이미 기본 방향)
+      result.upperBodyRotY = 0;
+    }
+
+    return result;
   }
 
   /**
@@ -985,6 +1290,8 @@ export class AnimationStateMachine {
     state.transitionElapsed = 0;
     state.hitFlashRemaining = 0;
     // idleSeed는 유지 (재접속 시 다른 위상)
+    // v16: 2차 모션 리셋
+    state.secondary = createSecondaryMotion();
   }
 
   /** 에이전트 비활성화 (leave) — DEATH 포함 모든 상태 리셋 */
@@ -996,6 +1303,8 @@ export class AnimationStateMachine {
     state.previous = AnimState.IDLE;
     state.returnState = AnimState.IDLE;
     state.hitFlashRemaining = 0;
+    // v16: 2차 모션 리셋
+    state.secondary = createSecondaryMotion();
   }
 
   /** 에이전트 활성 여부 */
@@ -1034,6 +1343,9 @@ export class AnimationStateMachine {
     out.armR.rotX = 0; out.armR.rotZ = 0;
     out.legL.rotX = 0;
     out.legR.rotX = 0;
+    out.lowerBodyRotY = 0;
+    out.upperBodyRotY = 0;
+    out.rollRotX = 0;
 
     switch (animState) {
       case AnimState.IDLE:
@@ -1078,6 +1390,10 @@ export class AnimationStateMachine {
 
       case AnimState.COLLECT:
         computeCollect(elapsed, out);
+        break;
+
+      case AnimState.DODGE_ROLL:
+        computeDodgeRoll(elapsed, out);
         break;
 
       default:

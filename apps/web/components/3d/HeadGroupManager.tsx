@@ -202,7 +202,8 @@ export function HeadGroupManager({
           const smIdx = indexMap.get(id);
           if (smIdx !== undefined && sm.isActive(smIdx)) {
             const transforms = sm.getTransforms(smIdx, 0, false);
-            headRotX = transforms.head.rotX;
+            // v16: DODGE_ROLL의 rollRotX를 head에도 적용
+            headRotX = transforms.head.rotX + (transforms.rollRotX || 0);
             headRotY = transforms.head.rotY;
             headRotZ = transforms.head.rotZ;
             headPosX = transforms.head.posX;

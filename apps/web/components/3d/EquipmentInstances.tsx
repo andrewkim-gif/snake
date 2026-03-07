@@ -320,19 +320,21 @@ export function EquipmentInstances({
 
       if (smIdx !== undefined && sm.isActive(smIdx)) {
         const transforms = sm.getTransforms(smIdx, vel.velocity, boosting);
-        headRotX = transforms.head.rotX;
+        // v16: DODGE_ROLL의 rollRotX를 body/head에 추가
+        const rollX = transforms.rollRotX || 0;
+        headRotX = transforms.head.rotX + rollX;
         headRotY = transforms.head.rotY;
         headRotZ = transforms.head.rotZ;
         headPosX = transforms.head.posX;
         headPosY = transforms.head.posY;
         headPosZ = transforms.head.posZ;
-        bodyRotX = transforms.body.rotX;
+        bodyRotX = transforms.body.rotX + rollX;
         bodyRotY = transforms.body.rotY;
         bodyRotZ = transforms.body.rotZ;
         bodyPosX = transforms.body.posX;
         bodyPosY = transforms.body.posY;
         bodyPosZ = transforms.body.posZ;
-        armRRotX = transforms.armR.rotX;
+        armRRotX = transforms.armR.rotX + rollX;
         armRRotZ = transforms.armR.rotZ;
       }
 

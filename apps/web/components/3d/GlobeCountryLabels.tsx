@@ -184,6 +184,7 @@ export function GlobeCountryLabels({
     c.height = LABEL_ATLAS_H;
     const context = c.getContext('2d')!;
     const tex = new THREE.CanvasTexture(c);
+    tex.flipY = false; // canvas row i → shader UV row i (기본 true면 역순 매핑되어 국기 뒤바뀜)
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
     return { labelCanvas: c, labelTexture: tex, labelCtx: context };

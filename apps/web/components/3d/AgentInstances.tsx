@@ -317,8 +317,15 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
 
       // ─── 상태 머신 업데이트: 입력 기반 전환 + 시간 진행 ───
       // 고부하(40+ 에이전트) 시: 2프레임 중 1프레임만 상태 머신 업데이트
+      // v16: moveAngle(h), aimAngle(f), agentId 전달
       if (!isHighLoad || (limbIdx % 2 === 0)) {
-        sm.updateAgent(smIdx, { velocity: motion.velocity, boosting }, isHighLoad ? delta * 2 : delta);
+        sm.updateAgent(smIdx, {
+          velocity: motion.velocity,
+          boosting,
+          moveAngle: h,
+          aimAngle: facing,
+          agentId: id,
+        }, isHighLoad ? delta * 2 : delta);
       }
 
       // ─── 월드 좌표 + 스케일 ───
@@ -328,10 +335,16 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       const scale = getAgentScale(m);
 
       // ─── 애니메이션 변환 가져오기 ───
-      const anim = sm.getTransforms(smIdx, motion.velocity, boosting);
+      // v16: moveAngle(h), aimAngle(facing) 전달 (상/하체 분리)
+      const anim = sm.getTransforms(smIdx, motion.velocity, boosting, h, facing);
 
       // ─── HIT 플래시: 흰색으로 일시 오버라이드 ───
       const isFlashing = sm.getHitFlashRemaining(smIdx) > 0;
+
+      // ─── v16: DODGE_ROLL X축 회전 (body/head에 추가) ───
+      const rollX = anim.rollRotX || 0;
+      // v16: 상/하체 분리 — 하체 Y 회전 오프셋
+      const lowerTwist = anim.lowerBodyRotY || 0;
 
       // ─── Body: 패턴별 IM에 할당 ───
       const patternGroup = appearance.pattern < BODY_PATTERN_COUNT ? appearance.pattern : 0;
@@ -340,7 +353,7 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
         const bodyIdx = bodyIndices[patternGroup];
         setPartMatrix(bodyMesh, bodyIdx, worldX, worldZ, rotY, scale,
           P.body.offset[0], P.body.offset[1], P.body.offset[2],
-          anim.body.rotX, anim.body.rotY, anim.body.rotZ,
+          anim.body.rotX + rollX, anim.body.rotY, anim.body.rotZ,
           anim.body.posX, anim.body.posY, anim.body.posZ,
           anim.body.scaleX, anim.body.scaleY);
 
@@ -360,28 +373,28 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       const topColorHex = VIVID_PALETTE[appearance.topColor % VIVID_PALETTE.length];
       const bottomColorHex = VIVID_PALETTE[appearance.bottomColor % VIVID_PALETTE.length];
 
-      // ─── ArmL ───
+      // ─── ArmL (상체: rotY = facing) ───
       setPartMatrix(armLMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armL.offset[0], P.armL.offset[1], P.armL.offset[2],
-        anim.armL.rotX, 0, anim.armL.rotZ);
+        anim.armL.rotX + rollX, 0, anim.armL.rotZ);
       armLMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(topColorHex));
 
-      // ─── ArmR ───
+      // ─── ArmR (상체: rotY = facing) ───
       setPartMatrix(armRMesh, limbIdx, worldX, worldZ, rotY, scale,
         P.armR.offset[0], P.armR.offset[1], P.armR.offset[2],
-        anim.armR.rotX, 0, anim.armR.rotZ);
+        anim.armR.rotX + rollX, 0, anim.armR.rotZ);
       armRMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(topColorHex));
 
-      // ─── LegL ───
-      setPartMatrix(legLMesh, limbIdx, worldX, worldZ, rotY, scale,
+      // ─── LegL (하체: rotY = facing + lowerTwist) ───
+      setPartMatrix(legLMesh, limbIdx, worldX, worldZ, rotY + lowerTwist, scale,
         P.legL.offset[0], P.legL.offset[1], P.legL.offset[2],
-        anim.legL.rotX);
+        anim.legL.rotX + rollX);
       legLMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(bottomColorHex));
 
-      // ─── LegR ───
-      setPartMatrix(legRMesh, limbIdx, worldX, worldZ, rotY, scale,
+      // ─── LegR (하체: rotY = facing + lowerTwist) ───
+      setPartMatrix(legRMesh, limbIdx, worldX, worldZ, rotY + lowerTwist, scale,
         P.legR.offset[0], P.legR.offset[1], P.legR.offset[2],
-        anim.legR.rotX);
+        anim.legR.rotX + rollX);
       legRMesh.setColorAt(limbIdx, isFlashing ? _whiteColor : _color.set(bottomColorHex));
 
       limbIdx++;

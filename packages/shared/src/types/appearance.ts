@@ -17,7 +17,7 @@ export type FaceKey = `${number}-${number}`;
 
 // ─── 애니메이션 상태 ───
 
-/** 큐블링 애니메이션 상태 열거 (10종) */
+/** 큐블링 애니메이션 상태 열거 (11종) */
 export enum AnimState {
   IDLE = 0,
   WALK = 1,
@@ -29,6 +29,7 @@ export enum AnimState {
   LEVELUP = 7,
   VICTORY = 8,
   COLLECT = 9,
+  DODGE_ROLL = 10,
 }
 
 // ─── 패턴 열거 ───
