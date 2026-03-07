@@ -22,7 +22,7 @@ export function LoadingSkeleton({ text, minHeight = '300px', lines = 6 }: Loadin
       style={{
         background: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '12px',
+        borderRadius: 0,
         overflow: 'hidden',
       }}
     >
@@ -55,7 +55,7 @@ export function LoadingSkeleton({ text, minHeight = '300px', lines = 6 }: Loadin
               style={{
                 flex: 1,
                 height: '16px',
-                borderRadius: '3px',
+                borderRadius: 0,
                 background: `linear-gradient(90deg, ${SK.border} 25%, ${SK.borderDark} 50%, ${SK.border} 75%)`,
                 backgroundSize: '200% 100%',
                 animation: 'shimmer 1.5s infinite',

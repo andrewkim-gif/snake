@@ -130,6 +130,9 @@ export function PopupTabNav({
             scrollbar-width: none;
           }
           .popup-main-tabs::-webkit-scrollbar { display: none; }
+          .popup-main-tabs button:hover {
+            background: rgba(239, 68, 68, 0.06) !important;
+          }
         `}</style>
 
         <div style={{
@@ -156,12 +159,12 @@ export function PopupTabNav({
                   fontSize: '11px',
                   letterSpacing: '1.5px',
                   textTransform: 'uppercase',
-                  color: active ? tab.accentColor : SK.textSecondary,
+                  color: active ? SK.accent : SK.textSecondary,
                   padding: '12px 14px',
                   background: 'none',
                   border: 'none',
                   borderBottom: active
-                    ? `2px solid ${tab.accentColor}`
+                    ? `2px solid ${SK.accent}`
                     : '2px solid transparent',
                   cursor: 'pointer',
                   transition: 'color 150ms ease, border-color 150ms ease',
@@ -185,7 +188,7 @@ export function PopupTabNav({
             justifyContent: 'center',
             width: '32px',
             height: '32px',
-            borderRadius: '6px',
+            borderRadius: '0',
             border: `1px solid ${SK.border}`,
             background: 'transparent',
             color: SK.textSecondary,
@@ -230,9 +233,10 @@ export function PopupTabNav({
                   textTransform: 'uppercase',
                   color: active ? SK.textPrimary : SK.textMuted,
                   padding: '6px 14px',
-                  background: active ? `${currentTab!.accentColor}15` : 'transparent',
-                  border: `1px solid ${active ? `${currentTab!.accentColor}30` : 'transparent'}`,
-                  borderRadius: '9999px',
+                  background: active ? SK.accentBg : 'transparent',
+                  border: 'none',
+                  borderBottom: active ? `2px solid ${SK.accent}` : '2px solid transparent',
+                  borderRadius: '0',
                   cursor: 'pointer',
                   transition: 'all 150ms ease',
                   whiteSpace: 'nowrap',

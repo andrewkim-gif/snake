@@ -418,7 +418,7 @@ func (a *Arena) processUpgradeTimeouts() {
 // --- Public API (thread-safe via mutex) ---
 
 // HandleInput processes a player input.
-func (a *Arena) HandleInput(agentID string, angle float64, boost bool) {
+func (a *Arena) HandleInput(agentID string, angle float64, boost bool, dash ...bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 
@@ -427,6 +427,11 @@ func (a *Arena) HandleInput(agentID string, angle float64, boost bool) {
 		return
 	}
 	ApplyInput(agent, angle, boost)
+
+	// v16: Dash input — trigger PerformDash if requested
+	if len(dash) > 0 && dash[0] {
+		PerformDash(agent, a.tick)
+	}
 }
 
 // ChooseUpgrade applies a chosen upgrade for an agent.

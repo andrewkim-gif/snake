@@ -14,7 +14,7 @@ function ShimmerBox({ width, height, style }: { width: string; height: string; s
       style={{
         width,
         height,
-        borderRadius: '6px',
+        borderRadius: 0,
         background: `linear-gradient(90deg, ${SK.border} 25%, ${SK.borderDark} 50%, ${SK.border} 75%)`,
         backgroundSize: '200% 100%',
         animation: 'shimmer 1.5s infinite',
@@ -67,7 +67,7 @@ export default function EconomyLoading() {
             style={{
               background: SK.cardBg,
               border: `1px solid ${SK.border}`,
-              borderRadius: '10px',
+              borderRadius: 0,
               padding: '14px 16px',
             }}
           >
@@ -89,13 +89,13 @@ export default function EconomyLoading() {
             style={{
               background: SK.cardBg,
               border: `1px solid ${SK.border}`,
-              borderRadius: '12px',
+              borderRadius: 0,
               padding: '16px',
               minHeight: '200px',
             }}
           >
             <ShimmerBox width="140px" height="14px" style={{ marginBottom: 16 }} />
-            <ShimmerBox width="100%" height="140px" style={{ borderRadius: '8px' }} />
+            <ShimmerBox width="100%" height="140px" style={{ borderRadius: 0 }} />
           </div>
         ))}
       </div>

@@ -214,7 +214,7 @@ func (rm *RoomManager) GetRoom(roomID string) *Room {
 }
 
 // RouteInput forwards a client's input to the correct room's arena.
-func (rm *RoomManager) RouteInput(clientID string, angle float64, boost bool) {
+func (rm *RoomManager) RouteInput(clientID string, angle float64, boost bool, dash bool) {
 	rm.mu.RLock()
 	roomID, ok := rm.playerRoom[clientID]
 	rm.mu.RUnlock()
@@ -231,7 +231,7 @@ func (rm *RoomManager) RouteInput(clientID string, angle float64, boost bool) {
 		return
 	}
 
-	room.HandleInput(clientID, angle, boost)
+	room.HandleInput(clientID, angle, boost, dash)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct room.

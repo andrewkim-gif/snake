@@ -25,7 +25,7 @@ export function PageHeader({
   icon: Icon,
   title,
   description,
-  accentColor = SK.blue,
+  accentColor = SK.accent,
   heroImage,
   children,
 }: PageHeaderProps) {
@@ -36,7 +36,7 @@ export function PageHeader({
     <div
       style={{
         position: 'relative',
-        borderRadius: '16px',
+        borderRadius: 0,
         overflow: 'hidden',
         marginBottom: '24px',
         minHeight: hasHero ? '200px' : undefined,
@@ -87,7 +87,7 @@ export function PageHeader({
           right: 0,
           height: '2px',
           zIndex: 2,
-          background: `linear-gradient(90deg, ${accentColor}, ${accentColor}40, transparent)`,
+          background: accentColor,
         }}
       />
 
@@ -104,7 +104,7 @@ export function PageHeader({
             style={{
               width: '36px',
               height: '36px',
-              borderRadius: '10px',
+              borderRadius: 0,
               background: `${accentColor}15`,
               border: `1px solid ${accentColor}25`,
               display: 'flex',

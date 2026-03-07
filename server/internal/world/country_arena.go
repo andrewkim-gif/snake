@@ -197,8 +197,8 @@ func (ca *CountryArena) PlayerCount() int {
 // --- Input handling (delegates to Room) ---
 
 // HandleInput forwards player input.
-func (ca *CountryArena) HandleInput(agentID string, angle float64, boost bool) {
-	ca.room.HandleInput(agentID, angle, boost)
+func (ca *CountryArena) HandleInput(agentID string, angle float64, boost bool, dash bool) {
+	ca.room.HandleInput(agentID, angle, boost, dash)
 }
 
 // HandleChooseUpgrade forwards upgrade choice.

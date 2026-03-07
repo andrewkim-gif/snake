@@ -9,20 +9,21 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { GameSocket } from './useWebSocket';
-import type {
-  StatePayload, JoinedPayload, DeathPayload,
-  KillPayload, MinimapPayload, RoomInfo, RecentWinner,
-  RoomStatus, RoundEndPayload, LeaderboardEntry,
-  LevelUpPayload, ArenaShrinkPayload, SynergyActivatedPayload,
-  AgentNetworkData, BattleCompletePayload,
-  EpochStartPayload, EpochEndPayload,
-  WarPhaseStartPayload, WarPhaseEndPayload,
-  RespawnCountdownPayload, RespawnCompletePayload,
-  NationScoreUpdatePayload, EpochPhase,
-  WeaponDamageEvent,
-  WarDeclaredPayload, WarEndedPayload, WarScoreUpdatePayload,
-  WarSnapshotPayload, WarSirenPayload,
-  EpochScoreboardPayload, EpochScoreboardEntry,
+import {
+  ARENA_CONFIG,
+  type StatePayload, type JoinedPayload, type DeathPayload,
+  type KillPayload, type MinimapPayload, type RoomInfo, type RecentWinner,
+  type RoomStatus, type RoundEndPayload, type LeaderboardEntry,
+  type LevelUpPayload, type ArenaShrinkPayload, type SynergyActivatedPayload,
+  type AgentNetworkData, type BattleCompletePayload,
+  type EpochStartPayload, type EpochEndPayload,
+  type WarPhaseStartPayload, type WarPhaseEndPayload,
+  type RespawnCountdownPayload, type RespawnCompletePayload,
+  type NationScoreUpdatePayload, type EpochPhase,
+  type WeaponDamageEvent,
+  type WarDeclaredPayload, type WarEndedPayload, type WarScoreUpdatePayload,
+  type WarSnapshotPayload, type WarSirenPayload,
+  type EpochScoreboardPayload, type EpochScoreboardEntry,
 } from '@agent-survivor/shared';
 import type { CapturePointData } from '@/components/3d/CapturePointRenderer';
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
@@ -138,6 +139,11 @@ export interface UiState {
   terrainTheme: string | null;
   isSpectating: boolean;
   battleComplete: BattleCompletePayload | null;
+  // v16: Dynamic arena settings from server (overrides ARENA_CONFIG defaults)
+  arenaSettings: {
+    radius: number;
+    turnRate: number;
+  } | null;
   // v14: Epoch & Respawn
   epoch: EpochState | null;
   epochResult: EpochEndPayload | null;
@@ -185,6 +191,7 @@ export function useSocket() {
     terrainTheme: null,
     isSpectating: false,
     battleComplete: null,
+    arenaSettings: null,
     epoch: null,
     epochResult: null,
     respawnState: null,
@@ -238,6 +245,11 @@ export function useSocket() {
         terrainTheme: data.terrainTheme ?? null,
         isSpectating: false,
         battleComplete: null,
+        // v16: Store dynamic arena settings from server
+        arenaSettings: {
+          radius: data.arenaRadius,
+          turnRate: data.turnRate ?? ARENA_CONFIG.turnRate,
+        },
       }));
     });
 
@@ -746,6 +758,7 @@ export function useSocket() {
       terrainTheme: null,
       isSpectating: false,
       battleComplete: null,
+      arenaSettings: null,
       epoch: null,
       epochResult: null,
       respawnState: null,
@@ -756,8 +769,13 @@ export function useSocket() {
     }));
   }, []);
 
-  const sendInput = useCallback((angle: number, boost: boolean, seq: number) => {
-    socketRef.current?.emit('input', { a: angle, b: boost ? 1 : 0, s: seq });
+  const sendInput = useCallback((angle: number, boost: boolean, seq: number, dash?: boolean) => {
+    socketRef.current?.emit('input', {
+      a: angle,
+      b: boost ? 1 : 0,
+      s: seq,
+      ...(dash ? { d: 1 } : {}),
+    });
   }, []);
 
   const respawn = useCallback((name?: string, skinId?: number, appearance?: string) => {

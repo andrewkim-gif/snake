@@ -950,7 +950,8 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 			return
 		}
 		boost := payload.Boost == 1
-		wm.RouteInput(client.ID, payload.Angle, boost)
+		dash := payload.Dash == 1
+		wm.RouteInput(client.ID, payload.Angle, boost, dash)
 	})
 
 	// Respawn — disabled in 1-life mode

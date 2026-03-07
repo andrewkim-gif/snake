@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * McPanel — 프리미엄 다크 카드 패널
- * 딥 다크 배경 + 서브틀 보더 + 섀도
+ * McPanel — Apex 스타일 패널
+ * 직각 + 상단 레드 악센트 라인 2px
  */
 
 import type { CSSProperties, ReactNode } from 'react';
@@ -12,20 +12,27 @@ interface McPanelProps {
   children: ReactNode;
   style?: CSSProperties;
   className?: string;
+  /** 상단 악센트 라인 색상 (기본: SK.accent) */
+  accentColor?: string;
+  /** 악센트 라인 비활성화 */
+  noAccent?: boolean;
 }
 
-export function McPanel({ children, style, className }: McPanelProps) {
+export function McPanel({ children, style, className, accentColor, noAccent }: McPanelProps) {
+  const lineColor = accentColor || SK.accent;
+
   return (
     <div
       className={className}
       style={{
         backgroundColor: SK.cardBg,
-        borderRadius: '12px',
+        borderRadius: 0,
         border: sketchBorder(),
+        borderTop: noAccent ? sketchBorder() : `2px solid ${lineColor}`,
         position: 'relative',
         overflow: 'hidden',
         padding: '1.25rem',
-        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4), 0 0 1px rgba(255, 255, 255, 0.04)',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.4)',
         ...style,
       }}
     >

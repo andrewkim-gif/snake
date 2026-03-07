@@ -28,7 +28,7 @@ export default function GovernanceError({
         padding: '24px',
         background: SK.cardBg,
         border: `1px solid ${SK.red}40`,
-        borderRadius: radius.lg,
+        borderRadius: 0,
         boxShadow: sketchShadow('md'),
         textAlign: 'center',
       }}
@@ -37,7 +37,7 @@ export default function GovernanceError({
         style={{
           width: '48px',
           height: '48px',
-          borderRadius: '50%',
+          borderRadius: 0,
           background: `${SK.red}15`,
           display: 'flex',
           alignItems: 'center',
@@ -99,7 +99,7 @@ export default function GovernanceError({
           color: SK.textWhite,
           background: SK.red,
           border: 'none',
-          borderRadius: radius.md,
+          borderRadius: 0,
           cursor: 'pointer',
           letterSpacing: '1px',
           textTransform: 'uppercase',

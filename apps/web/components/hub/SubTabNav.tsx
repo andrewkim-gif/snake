@@ -78,10 +78,10 @@ export function SubTabNav({ tabs, isActive, className }: SubTabNavProps) {
                 letterSpacing: '1.5px',
                 textTransform: 'uppercase',
                 textDecoration: 'none',
-                color: active ? SK.blue : SK.textSecondary,
+                color: active ? SK.accent : SK.textSecondary,
                 padding: '10px 16px',
                 borderBottom: active
-                  ? `2px solid ${SK.blue}`
+                  ? `2px solid ${SK.accent}`
                   : '2px solid transparent',
                 transition: 'color 150ms ease, border-color 150ms ease',
                 whiteSpace: 'nowrap',

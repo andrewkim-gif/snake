@@ -192,7 +192,7 @@ export function WorldView({
             <div style={{
               width: '8px',
               height: '8px',
-              borderRadius: '2px',
+              borderRadius: 0,
               backgroundColor: color,
               border: '1px solid rgba(255,255,255,0.08)',
             }} />

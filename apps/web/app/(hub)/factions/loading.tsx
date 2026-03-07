@@ -14,7 +14,7 @@ function ShimmerBox({ width, height, style }: { width: string; height: string; s
       style={{
         width,
         height,
-        borderRadius: '6px',
+        borderRadius: 0,
         background: `linear-gradient(90deg, ${SK.border} 25%, ${SK.borderDark} 50%, ${SK.border} 75%)`,
         backgroundSize: '200% 100%',
         animation: 'shimmer 1.5s infinite',
@@ -66,7 +66,7 @@ export default function FactionsLoading() {
             style={{
               background: SK.cardBg,
               border: `1px solid ${SK.border}`,
-              borderRadius: '12px',
+              borderRadius: 0,
               padding: 20,
               borderLeft: `4px solid ${SK.border}`,
             }}
@@ -96,7 +96,7 @@ export default function FactionsLoading() {
             </div>
 
             {/* VIEW DETAIL 버튼 */}
-            <ShimmerBox width="100px" height="28px" style={{ borderRadius: '8px' }} />
+            <ShimmerBox width="100px" height="28px" style={{ borderRadius: 0 }} />
           </div>
         ))}
       </div>

@@ -163,9 +163,10 @@ type JoinRoomPayload struct {
 
 // InputPayload is sent by the client at 30Hz with movement data.
 type InputPayload struct {
-	Angle float64 `json:"a"` // heading angle in radians
-	Boost int     `json:"b"` // 0 = no boost, 1 = boost
-	Seq   int     `json:"s"` // sequence number for reconciliation
+	Angle float64 `json:"a"`           // heading angle in radians
+	Boost int     `json:"b"`           // 0 = no boost, 1 = boost
+	Dash  int     `json:"d,omitempty"` // v16: 0 = no dash, 1 = dash (E key, triggers PerformDash)
+	Seq   int     `json:"s"`           // sequence number for reconciliation
 }
 
 // RespawnPayload is sent by the client to request respawn.

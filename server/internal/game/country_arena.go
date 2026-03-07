@@ -270,7 +270,7 @@ func (cam *CountryArenaManager) processQueueLocked(countryCode string) {
 }
 
 // RouteInput forwards player input to the correct country arena.
-func (cam *CountryArenaManager) RouteInput(clientID string, angle float64, boost bool) {
+func (cam *CountryArenaManager) RouteInput(clientID string, angle float64, boost bool, dash bool) {
 	cam.mu.RLock()
 	countryCode, ok := cam.playerCountry[clientID]
 	if !ok {
@@ -283,7 +283,7 @@ func (cam *CountryArenaManager) RouteInput(clientID string, angle float64, boost
 	if !exists {
 		return
 	}
-	arena.Room.HandleInput(clientID, angle, boost)
+	arena.Room.HandleInput(clientID, angle, boost, dash)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct arena.

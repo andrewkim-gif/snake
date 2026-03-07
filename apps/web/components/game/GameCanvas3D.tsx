@@ -74,7 +74,7 @@ import { CapturePointRenderer } from '@/components/3d/CapturePointRenderer';
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
-  sendInput: (angle: number, boost: boolean, seq: number) => void;
+  sendInput: (angle: number, boost: boolean, seq: number, dash?: boolean) => void;
   respawn: (name?: string, skinId?: number) => void;
   playerName: string;
   skinId: number;
@@ -349,6 +349,13 @@ export function GameCanvas3D({
         boostRef.current = true;
         inputSeqRef.current++;
         sendInput(angleRef.current, true, inputSeqRef.current);
+        return;
+      }
+      // v16: E key → Dash (one-shot, triggers server PerformDash)
+      if (e.code === 'KeyE') {
+        e.preventDefault();
+        inputSeqRef.current++;
+        sendInput(angleRef.current, boostRef.current, inputSeqRef.current, true);
         return;
       }
       const dir = directionKeys[e.code];
@@ -761,7 +768,7 @@ function WaitingBanner({ text }: { text: string }) {
       zIndex: 20, fontFamily: '"Patrick Hand", "Inter", sans-serif',
       fontSize: '1.1rem', fontWeight: 700, color: '#6B5E52',
       backgroundColor: 'rgba(245, 240, 232, 0.85)',
-      padding: '6px 20px', borderRadius: '4px',
+      padding: '6px 20px', borderRadius: 0,
       border: '1.5px solid #A89888', letterSpacing: '0.03em',
     }}>
       {text}
@@ -806,7 +813,7 @@ function TerrainBonusToast({ text }: { text: string }) {
       color: '#E8E0D4',
       backgroundColor: 'rgba(17, 17, 17, 0.85)',
       padding: '8px 20px',
-      borderRadius: '4px',
+      borderRadius: 0,
       border: '1.5px solid #CC9933',
       letterSpacing: '0.04em',
       textShadow: '0 1px 2px rgba(0,0,0,0.5)',
@@ -841,7 +848,7 @@ function MuteButton({ isMuted, onToggle }: { isMuted: boolean; onToggle: () => v
         height: '32px',
         backgroundColor: 'rgba(17, 17, 17, 0.7)',
         border: '1px solid rgba(255, 255, 255, 0.2)',
-        borderRadius: '4px',
+        borderRadius: 0,
         cursor: 'pointer',
         display: 'flex',
         alignItems: 'center',
@@ -880,7 +887,7 @@ function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => v
     }}>
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
-        padding: '40px 48px', borderRadius: 4,
+        padding: '40px 48px', borderRadius: 0,
         backgroundColor: 'rgba(245, 240, 232, 0.97)', border: '1.5px solid #6B5E52',
       }}>
         <h2 style={{
@@ -903,14 +910,14 @@ function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => v
         <button onClick={onResume} style={{
           width: 200, padding: '12px 0', minHeight: 48, fontSize: 17, fontWeight: 700,
           backgroundColor: '#D4914A', color: '#F5F0E8', border: '2px solid #3A3028',
-          borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
+          borderRadius: 0, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
           RESUME
         </button>
         <button onClick={onExit} style={{
           width: 200, padding: '12px 0', minHeight: 48, fontSize: 17, fontWeight: 700,
           backgroundColor: 'transparent', color: '#C75B5B', border: '1.5px solid #C75B5B',
-          borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
+          borderRadius: 0, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
           EXIT TO LOBBY
         </button>

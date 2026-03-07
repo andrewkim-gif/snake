@@ -71,7 +71,7 @@ export default function WalletConnectButton({
         alignItems: 'center',
         gap: '8px',
         padding: '8px 16px',
-        borderRadius: '8px',
+        borderRadius: 0,
         border: wallet ? '1px solid #4A9E4A' : '1px solid #CC9933',
         background: wallet
           ? 'rgba(74, 158, 74, 0.15)'

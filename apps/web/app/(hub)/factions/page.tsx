@@ -83,7 +83,7 @@ export default function FactionsPage() {
             color: SK.textMuted,
             background: 'transparent',
             border: sketchBorder(SK.borderDark),
-            borderRadius: radius.md,
+            borderRadius: 0,
             cursor: 'pointer',
           }}
         >
@@ -139,7 +139,7 @@ export default function FactionsPage() {
               style={{
                 background: SK.cardBg,
                 border: sketchBorder(selectedFaction?.id === faction.id ? SK.blue : SK.border),
-                borderRadius: radius.lg,
+                borderRadius: 0,
                 padding: 20,
                 boxShadow: sketchShadow('sm'),
                 cursor: 'pointer',
@@ -219,7 +219,7 @@ export default function FactionsPage() {
                   letterSpacing: '1px',
                   padding: '6px 14px',
                   border: `1px solid ${SK.blue}40`,
-                  borderRadius: radius.md,
+                  borderRadius: 0,
                   background: 'transparent',
                   cursor: 'pointer',
                   transition: 'all 0.15s ease',
@@ -279,7 +279,7 @@ export default function FactionsPage() {
                 color: SK.textWhite,
                 background: SK.green,
                 border: 'none',
-                borderRadius: radius.md,
+                borderRadius: 0,
                 cursor: 'pointer',
                 letterSpacing: '1px',
               }}>
@@ -295,7 +295,7 @@ export default function FactionsPage() {
                   color: SK.textSecondary,
                   background: 'transparent',
                   border: sketchBorder(),
-                  borderRadius: radius.md,
+                  borderRadius: 0,
                   textDecoration: 'none',
                   textAlign: 'center',
                   letterSpacing: '1px',
@@ -316,7 +316,7 @@ function StatItem({ label, value, color }: { label: string; value: string; color
     <div style={{
       padding: '10px 12px',
       background: SK.bgWarm,
-      borderRadius: radius.md,
+      borderRadius: 0,
       border: sketchBorder(SK.borderDark),
     }}>
       <div style={{

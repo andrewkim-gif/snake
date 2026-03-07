@@ -105,7 +105,7 @@ export function WelcomeTutorial() {
         backgroundColor: SK.glassBg,
         backdropFilter: 'blur(20px)',
         WebkitBackdropFilter: 'blur(20px)',
-        borderRadius: '10px',
+        borderRadius: 0,
         border: '1px solid rgba(255,255,255,0.06)',
         borderTop: `2px solid ${SK.gold}`,
         boxShadow: '0 12px 48px rgba(0, 0, 0, 0.5)',
@@ -132,7 +132,7 @@ export function WelcomeTutorial() {
             <div style={{
               width: '48px',
               height: '48px',
-              borderRadius: '12px',
+              borderRadius: 0,
               background: `${SK.gold}15`,
               border: `1px solid ${SK.gold}30`,
               display: 'flex',

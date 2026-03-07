@@ -22,7 +22,7 @@ export function StatCard({ label, value, color = SK.textPrimary, icon: Icon, sub
       style={{
         background: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '10px',
+        borderRadius: 0,
         padding: '14px 16px',
       }}
     >

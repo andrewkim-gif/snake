@@ -38,7 +38,7 @@ import { ARENA_CONFIG } from '@agent-survivor/shared';
 interface GameCanvasProps {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
-  sendInput: (angle: number, boost: boolean, seq: number) => void;
+  sendInput: (angle: number, boost: boolean, seq: number, dash?: boolean) => void;
   respawn: (name?: string, skinId?: number) => void;
   playerName: string;
   skinId: number;
@@ -61,7 +61,7 @@ export function GameCanvas({ dataRef, uiState, sendInput, respawn, playerName, s
   const { angleRef, boostRef } = useInput(canvasRef, (state) => {
     if (menuOpen) return;
     inputSeqRef.current++;
-    sendInput(state.angle, state.boost, inputSeqRef.current);
+    sendInput(state.angle, state.boost, inputSeqRef.current, state.dash);
   }, () => setMenuOpen(prev => !prev));
 
   // 캔버스 초기화 + 리사이즈
@@ -260,7 +260,7 @@ function WaitingBanner({ text }: { text: string }) {
       zIndex: 20, fontFamily: '"Patrick Hand", "Inter", sans-serif',
       fontSize: '1.1rem', fontWeight: 700, color: '#6B5E52',
       backgroundColor: 'rgba(245, 240, 232, 0.85)',
-      padding: '6px 20px', borderRadius: '4px',
+      padding: '6px 20px', borderRadius: 0,
       border: '1.5px solid #A89888', letterSpacing: '0.03em',
     }}>
       {text}
@@ -277,7 +277,7 @@ function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => v
     }}>
       <div style={{
         display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
-        padding: '40px 48px', borderRadius: 4,
+        padding: '40px 48px', borderRadius: 0,
         backgroundColor: 'rgba(245, 240, 232, 0.97)', border: '1.5px solid #6B5E52',
       }}>
         <h2 style={{
@@ -295,14 +295,14 @@ function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => v
         <button onClick={onResume} style={{
           width: 200, padding: '12px 0', fontSize: 17, fontWeight: 700,
           backgroundColor: '#D4914A', color: '#F5F0E8', border: '2px solid #3A3028',
-          borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
+          borderRadius: 0, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
           {tGame('resume')}
         </button>
         <button onClick={onExit} style={{
           width: 200, padding: '12px 0', fontSize: 17, fontWeight: 700,
           backgroundColor: 'transparent', color: '#C75B5B', border: '1.5px solid #C75B5B',
-          borderRadius: 4, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
+          borderRadius: 0, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
         }}>
           {tGame('exitToLobby')}
         </button>

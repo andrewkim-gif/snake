@@ -330,14 +330,14 @@ export default function TechTree({ factionId, token, readOnly = false }: TechTre
                     marginTop: '10px',
                     height: '6px',
                     background: SK.bgWarm,
-                    borderRadius: '3px',
+                    borderRadius: 0,
                     overflow: 'hidden',
                   }}>
                     <div style={{
                       width: `${progressRatio * 100}%`,
                       height: '100%',
                       background: cfg.color,
-                      borderRadius: '3px',
+                      borderRadius: 0,
                       transition: 'width 0.3s ease',
                     }} />
                   </div>

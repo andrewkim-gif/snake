@@ -162,7 +162,7 @@ export function BattleResultOverlay({
             <div style={{
               width: '14px',
               height: '14px',
-              borderRadius: '3px',
+              borderRadius: 0,
               backgroundColor: getFactionDisplayColor(winnerFaction),
               boxShadow: `0 0 12px ${getFactionDisplayColor(winnerFaction)}60`,
             }} />
@@ -188,7 +188,7 @@ export function BattleResultOverlay({
       <div style={{
         backgroundColor: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '6px',
+        borderRadius: 0,
         padding: '12px 20px',
         minWidth: '260px',
         maxWidth: '360px',
@@ -271,7 +271,7 @@ export function BattleResultOverlay({
         <div style={{
           backgroundColor: SK.cardBg,
           border: `1px solid ${SK.border}`,
-          borderRadius: '6px',
+          borderRadius: 0,
           padding: '10px 16px',
           minWidth: '220px',
           maxWidth: '320px',
@@ -352,7 +352,7 @@ function SovereigntyChangeCard({ change }: { change: SovereigntyDelta }) {
     <div style={{
       backgroundColor: SK.cardBg,
       border: `1px solid ${SK.border}`,
-      borderRadius: '6px',
+      borderRadius: 0,
       padding: '10px 16px',
       minWidth: '240px',
       maxWidth: '340px',
@@ -389,7 +389,7 @@ function SovereigntyChangeCard({ change }: { change: SovereigntyDelta }) {
               <span style={{
                 width: '10px',
                 height: '10px',
-                borderRadius: '2px',
+                borderRadius: 0,
                 backgroundColor: oldColor,
                 display: 'inline-block',
               }} />
@@ -407,7 +407,7 @@ function SovereigntyChangeCard({ change }: { change: SovereigntyDelta }) {
           <span style={{
             width: '10px',
             height: '10px',
-            borderRadius: '2px',
+            borderRadius: 0,
             backgroundColor: newColor,
             display: 'inline-block',
           }} />
@@ -433,7 +433,7 @@ function TopPlayersCard({ players }: { players: TopPlayerEntry[] }) {
     <div style={{
       backgroundColor: SK.cardBg,
       border: `1px solid ${SK.border}`,
-      borderRadius: '6px',
+      borderRadius: 0,
       padding: '10px 16px',
       minWidth: '260px',
       maxWidth: '360px',
@@ -468,7 +468,7 @@ function TopPlayersCard({ players }: { players: TopPlayerEntry[] }) {
                 color: SK.green,
                 backgroundColor: 'rgba(16, 185, 129, 0.15)',
                 padding: '1px 4px',
-                borderRadius: '2px',
+                borderRadius: 0,
                 letterSpacing: '0.5px',
               }}>
                 {tGame('alive')}
@@ -508,7 +508,7 @@ function ActionButton({
         color: SK.textPrimary,
         backgroundColor: 'transparent',
         border: `1px solid ${color}`,
-        borderRadius: '4px',
+        borderRadius: 0,
         cursor: 'pointer',
         transition: 'all 150ms ease',
         textTransform: 'uppercase' as const,

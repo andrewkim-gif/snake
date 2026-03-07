@@ -143,7 +143,7 @@ function TickerItem({ item }: { item: NewsItem }) {
         letterSpacing: '1px',
         padding: '1px 6px',
         border: `1px solid ${color}40`,
-        borderRadius: '2px',
+        borderRadius: 0,
       }}>
         {tag}
       </span>
@@ -255,7 +255,7 @@ export function NewsFeed({
             style={{
               background: 'none',
               border: `1px solid ${SK.border}`,
-              borderRadius: '3px',
+              borderRadius: 0,
               color: SK.textSecondary,
               cursor: 'pointer',
               padding: '2px 8px',
@@ -287,7 +287,7 @@ export function NewsFeed({
               letterSpacing: '1px',
               padding: '2px 6px',
               border: `1px solid ${newsTypeColors[item.type]}40`,
-              borderRadius: '2px',
+              borderRadius: 0,
               whiteSpace: 'nowrap',
               minWidth: '80px',
               textAlign: 'center',

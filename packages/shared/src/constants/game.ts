@@ -8,16 +8,16 @@ import type { ArenaConfig, SnakeSkin } from '../types/game';
 // ─── Arena Config (서버 기본값) ───
 
 export const ARENA_CONFIG: ArenaConfig = {
-  radius: 6000,
+  radius: 3000,          // synced with server ArenaRadius (constants.go)
   maxPlayers: 100,
   tickRate: 20,
   baseSpeed: 150,        // px/s
   boostSpeed: 300,       // px/s (2x)
-  turnRate: 0.25,        // rad/tick (5.0 rad/s @ 20Hz — 90도 전환 ~0.3s)
+  turnRate: 0.15,        // rad/tick — synced with server TurnRate (constants.go)
   segmentSpacing: 8,     // units (deprecated in v10)
-  initialMass: 10,
+  initialMass: 30,       // synced with server InitialMass (constants.go)
   minBoostMass: 15,
-  boostCostPerTick: 0.5,
+  boostCostPerTick: 0.15, // synced with server BoostCostPerTick (constants.go)
   collectRadius: 20,
   headRadius: 12,
   naturalOrbTarget: 2000,
@@ -36,7 +36,7 @@ export const ARENA_CONFIG: ArenaConfig = {
   // v10 아레나 수축
   shrinkEnabled: true,
   shrinkRatePerMin: 600,
-  shrinkMinRadius: 1200,
+  shrinkMinRadius: 500,  // synced with server ArenaMinRadius (constants.go)
   boundaryPenaltyPerTick: 0.0025,
 
   // v10 레벨업

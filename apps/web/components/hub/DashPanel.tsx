@@ -28,7 +28,8 @@ export function DashPanel({
       style={{
         background: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '12px',
+        borderRadius: 0,
+        borderLeft: `3px solid ${accentColor ?? SK.accent}`,
         padding: '16px',
         overflow: 'hidden',
         ...(fullWidth ? { gridColumn: '1 / -1' } : {}),

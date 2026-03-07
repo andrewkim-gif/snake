@@ -145,7 +145,7 @@ export function GameMinimap({ dataRef, arenaRadius, shrinkData }: GameMinimapPro
       height: MAP_SIZE,
       zIndex: 15,
       pointerEvents: 'none',
-      borderRadius: '4px',
+      borderRadius: 0,
       border: `1px solid rgba(255,255,255,0.2)`,
       overflow: 'hidden',
       backgroundColor: 'rgba(0,0,0,0.3)',

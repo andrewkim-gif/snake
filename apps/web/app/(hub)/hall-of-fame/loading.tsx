@@ -13,7 +13,7 @@ function ShimmerBox({ width, height, style }: { width: string; height: string; s
       style={{
         width,
         height,
-        borderRadius: '6px',
+        borderRadius: 0,
         background: `linear-gradient(90deg, ${SK.border} 25%, ${SK.borderDark} 50%, ${SK.border} 75%)`,
         backgroundSize: '200% 100%',
         animation: 'shimmer 1.5s infinite',
@@ -41,9 +41,9 @@ export default function HallOfFameLoading() {
 
       {/* 시즌 타임라인 스켈레톤 */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 32, overflowX: 'hidden' }}>
-        <ShimmerBox width="120px" height="44px" style={{ flexShrink: 0, borderRadius: '8px' }} />
-        <ShimmerBox width="200px" height="44px" style={{ flexShrink: 0, borderRadius: '8px' }} />
-        <ShimmerBox width="200px" height="44px" style={{ flexShrink: 0, borderRadius: '8px' }} />
+        <ShimmerBox width="120px" height="44px" style={{ flexShrink: 0, borderRadius: 0 }} />
+        <ShimmerBox width="200px" height="44px" style={{ flexShrink: 0, borderRadius: 0 }} />
+        <ShimmerBox width="200px" height="44px" style={{ flexShrink: 0, borderRadius: 0 }} />
       </div>
 
       {/* 기록 카드 그리드 스켈레톤 */}
@@ -61,7 +61,7 @@ export default function HallOfFameLoading() {
             style={{
               background: SK.cardBg,
               border: `1px solid ${SK.border}`,
-              borderRadius: '8px',
+              borderRadius: 0,
               padding: 16,
             }}
           >
@@ -71,7 +71,7 @@ export default function HallOfFameLoading() {
             </div>
             <ShimmerBox width="140px" height="15px" style={{ marginBottom: 6 }} />
             <ShimmerBox width="200px" height="13px" style={{ marginBottom: 8 }} />
-            <ShimmerBox width="50px" height="16px" style={{ borderRadius: '9999px' }} />
+            <ShimmerBox width="50px" height="16px" style={{ borderRadius: 0 }} />
           </div>
         ))}
       </div>

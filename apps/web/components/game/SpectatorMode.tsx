@@ -231,7 +231,7 @@ export function SpectatorMode({
             padding: '3px 10px',
             backgroundColor: `${reasonColor}20`,
             border: `1px solid ${reasonColor}40`,
-            borderRadius: '3px',
+            borderRadius: 0,
           }}>
             <span style={{
               fontFamily: bodyFont,
@@ -368,7 +368,7 @@ export function SpectatorMode({
           backdropFilter: 'blur(16px)',
           WebkitBackdropFilter: 'blur(16px)',
           border: `1px solid ${SK.glassBorder}`,
-          borderRadius: '6px',
+          borderRadius: 0,
           padding: '8px',
           maxHeight: '200px',
           overflowY: 'auto',
@@ -400,7 +400,7 @@ export function SpectatorMode({
                 padding: '6px 8px',
                 backgroundColor: followTarget === agent.id ? 'rgba(99, 102, 241, 0.15)' : 'transparent',
                 border: 'none',
-                borderRadius: '3px',
+                borderRadius: 0,
                 cursor: 'pointer',
                 fontFamily: bodyFont,
                 fontSize: '11px',
@@ -459,7 +459,7 @@ export function SpectatorMode({
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             border: `1px solid ${SK.border}`,
-            borderRadius: '4px',
+            borderRadius: 0,
             padding: '8px 12px',
           }}>
             <div style={{
@@ -503,7 +503,7 @@ export function SpectatorMode({
             backdropFilter: 'blur(8px)',
             WebkitBackdropFilter: 'blur(8px)',
             border: `1px solid ${SK.orange}40`,
-            borderRadius: '4px',
+            borderRadius: 0,
             padding: '8px 12px',
           }}>
             <div style={{
@@ -597,7 +597,7 @@ function SpecButton({
             ? SK.blue + '40'
             : SK.glassBorder
         }`,
-        borderRadius: '3px',
+        borderRadius: 0,
         cursor: 'pointer',
         transition: 'all 150ms ease',
         textTransform: 'uppercase' as const,

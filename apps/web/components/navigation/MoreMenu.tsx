@@ -60,7 +60,7 @@ function DropdownMenu({ onClose }: { onClose: () => void }) {
         minWidth: '200px',
         background: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '8px',
+        borderRadius: 0,
         boxShadow: sketchShadow('lg'),
         zIndex: 90,
         overflow: 'hidden',
@@ -214,7 +214,7 @@ function BottomSheetMenu({ onClose }: { onClose: () => void }) {
           left: 0,
           right: 0,
           background: SK.cardBg,
-          borderRadius: '16px 16px 0 0',
+          borderRadius: 0,
           paddingBottom: 'env(safe-area-inset-bottom, 20px)',
           animation: 'bottomSheetSlideUp 300ms cubic-bezier(0.32, 0.72, 0, 1)',
         }}
@@ -231,7 +231,7 @@ function BottomSheetMenu({ onClose }: { onClose: () => void }) {
             style={{
               width: '40px',
               height: '5px',
-              borderRadius: '3px',
+              borderRadius: 0,
               background: SK.textMuted,
             }}
           />

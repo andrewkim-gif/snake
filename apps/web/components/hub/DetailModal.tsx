@@ -25,7 +25,7 @@ export function DetailModal({
   open,
   onClose,
   title,
-  accentColor = SK.blue,
+  accentColor = SK.accent,
   maxWidth = 640,
   children,
 }: DetailModalProps) {
@@ -75,7 +75,7 @@ export function DetailModal({
           maxHeight: 'calc(100vh - 64px)',
           background: SK.cardBg,
           border: `1px solid ${SK.border}`,
-          borderRadius: '16px',
+          borderRadius: 0,
           overflow: 'hidden',
           zIndex: 201,
           display: 'flex',
@@ -91,7 +91,7 @@ export function DetailModal({
             left: 0,
             right: 0,
             height: '2px',
-            background: `linear-gradient(90deg, ${accentColor}, ${accentColor}40, transparent)`,
+            background: accentColor,
           }}
         />
 
@@ -131,7 +131,7 @@ export function DetailModal({
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                borderRadius: '6px',
+                borderRadius: 0,
                 transition: 'color 150ms ease',
               }}
               onMouseEnter={(e) => { e.currentTarget.style.color = SK.textPrimary; }}

@@ -6,10 +6,10 @@
  * URL ?panel=&tab= 동기화, ESC 닫기, backdrop 클릭 닫기
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import dynamic from 'next/dynamic';
-import { SK, bodyFont } from '@/lib/sketch-ui';
+import { SK, bodyFont, accentLine } from '@/lib/sketch-ui';
 import { PopupTabNav, MAIN_TABS, DEFAULT_SUB_TABS } from './PopupTabNav';
 import type { MainTabKey } from './PopupTabNav';
 
@@ -228,11 +228,6 @@ export function GameSystemPopup({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [open, handleClose]);
 
-  // 현재 탭의 accent color (스크롤바에 사용)
-  const accentColor = useMemo(() => {
-    return MAIN_TABS.find(t => t.key === activeMainTab)?.accentColor || SK.blue;
-  }, [activeMainTab]);
-
   if (!open) return null;
 
   return (
@@ -268,7 +263,7 @@ export function GameSystemPopup({
         }
         .popup-content-scroll::-webkit-scrollbar-thumb {
           background: ${SK.borderDark};
-          border-radius: 3px;
+          border-radius: 0;
         }
         /* 탭 콘텐츠 전환 애니메이션 */
         .popup-tab-content {
@@ -323,7 +318,7 @@ export function GameSystemPopup({
           maxHeight: 'calc(100vh - 32px)',
           background: SK.bg,
           border: `1px solid ${SK.border}`,
-          borderRadius: '12px',
+          borderRadius: '0',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -339,8 +334,7 @@ export function GameSystemPopup({
           right: 0,
           height: '2px',
           zIndex: 2,
-          background: `linear-gradient(90deg, ${accentColor}, ${accentColor}40, transparent)`,
-          borderRadius: '12px 12px 0 0',
+          borderTop: accentLine,
         }} />
 
         {/* 탭 네비게이션 */}

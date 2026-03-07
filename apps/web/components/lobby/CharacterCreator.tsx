@@ -115,7 +115,7 @@ const colorCircleBase: React.CSSProperties = {
 const gridItemBase: React.CSSProperties = {
   cursor: 'pointer',
   border: `1px solid ${SK.border}`,
-  borderRadius: '3px',
+  borderRadius: 0,
   backgroundColor: 'transparent',
   fontFamily: bodyFont,
   fontSize: '9px',
@@ -238,7 +238,7 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
         display: 'flex',
         gap: '2px',
         padding: '2px',
-        borderRadius: '4px',
+        borderRadius: 0,
         backgroundColor: `${SK.border}40`,
       }}>
         {RANDOM_CATEGORIES.map(cat => {
@@ -256,7 +256,7 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
                 backgroundColor: isActive ? `${SK.blue}20` : 'transparent',
                 color: isActive ? SK.blue : SK.textMuted,
                 border: isActive ? `1px solid ${SK.blue}40` : '1px solid transparent',
-                borderRadius: '3px',
+                borderRadius: 0,
                 cursor: 'pointer',
                 letterSpacing: '0.5px',
                 transition: 'all 120ms ease',
@@ -319,7 +319,7 @@ export function CharacterCreator({ skinId, onSelect, appearance: externalAppeara
       {/* 탭 콘텐츠 */}
       <div style={{
         padding: '6px 8px',
-        borderRadius: '8px',
+        borderRadius: 0,
         backgroundColor: SK.bgWarm,
         border: `1px solid ${SK.border}`,
         maxHeight: '200px',
@@ -369,7 +369,7 @@ function SmallButton({ onClick, children, color }: {
         backgroundColor: 'transparent',
         color,
         border: `1px solid ${color}40`,
-        borderRadius: '2px',
+        borderRadius: 0,
         cursor: 'pointer',
         letterSpacing: '1px',
         transition: 'all 120ms ease',
@@ -587,7 +587,7 @@ function FacePreview({ type, index, selected, onClick }: {
         aspectRatio: '1',
         padding: 0,
         border: selected ? `1.5px solid ${SK.gold}` : `1px solid ${SK.border}`,
-        borderRadius: '3px',
+        borderRadius: 0,
         backgroundColor: 'transparent',
         cursor: 'pointer',
         imageRendering: 'pixelated' as const,
@@ -864,7 +864,7 @@ function TabPresets({ onSelect }: { onSelect: (a: CubelingAppearance) => void })
               gap: '6px',
               padding: '6px 8px',
               border: `1px solid ${SK.border}`,
-              borderRadius: '3px',
+              borderRadius: 0,
               backgroundColor: 'transparent',
               cursor: 'pointer',
               transition: 'all 120ms ease',
@@ -875,7 +875,7 @@ function TabPresets({ onSelect }: { onSelect: (a: CubelingAppearance) => void })
             <div style={{
               width: '24px',
               height: '24px',
-              borderRadius: '4px',
+              borderRadius: 0,
               overflow: 'hidden',
               flexShrink: 0,
               border: `1px solid ${SK.border}`,

@@ -114,7 +114,7 @@ export function CharacterPreviewPanel({ appearance, skinId }: CharacterPreviewPa
       style={{
         width: '100%',
         height: '180px',
-        borderRadius: '8px',
+        borderRadius: 0,
         border: `1px solid ${SK.border}`,
         backgroundColor: SK.bgWarm,
         overflow: 'hidden',

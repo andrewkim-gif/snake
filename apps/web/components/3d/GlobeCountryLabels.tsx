@@ -27,14 +27,14 @@ import type { CountryDominationState } from '@/components/3d/GlobeDominationLaye
 // ─── Constants ───
 
 const MAX_COUNTRIES = 200; // 195 + buffer
-/** 라벨 아틀라스: 각 국가 = 1행 (LABEL_W x LABEL_H) */
-const LABEL_W = 320;
+/** 라벨 아틀라스: 각 국가 = 1행 (LABEL_W x LABEL_H) — 국기+에이전트 보조 정보 */
+const LABEL_W = 480;
 const LABEL_H = 48;
 const LABEL_ATLAS_W = LABEL_W;
 const LABEL_ATLAS_H = LABEL_H * MAX_COUNTRIES;
 
 /** 라벨 Billboard 월드 크기 */
-const LABEL_WORLD_W = 5.0;
+const LABEL_WORLD_W = 7.5;
 const LABEL_WORLD_H = LABEL_WORLD_W * (LABEL_H / LABEL_W);
 
 /** LOD 거리 임계값 (카메라 거리) */
@@ -46,13 +46,15 @@ const LOD_MID = 350;     // 200~350: 국기 + 숫자
 const BACKFACE_THRESHOLD = 0.05;
 /** 카메라 거리 최대 (라벨 숨김) */
 const CAM_HIDE_DIST = 500;
-const CAM_FADE_START = 400;
+const CAM_FADE_START = 320;
 
 /** 원거리에서 상위 N개국만 표시 */
 const FAR_TOP_N = 60;
 
 /** centroid 높이 오프셋 (구체 표면 위) */
 const LABEL_ALT = 3.5;
+/** 국가 이름(CountryLabels) 아래에 배치하기 위한 카메라-로컬 하향 오프셋 */
+const LABEL_DOWN_OFFSET = 2.8;
 
 /** 글로우 색상 */
 const GLOW_CYAN = '#00E5FF';
@@ -102,6 +104,8 @@ function latLngToXYZ(lat: number, lng: number, r: number): THREE.Vector3 {
 
 const _obj = new THREE.Object3D();
 const _camDir = new THREE.Vector3();
+const _projVec = new THREE.Vector3();
+const _downVec = new THREE.Vector3();
 // ─── Shader ───
 
 const vertexShader = /* glsl */ `
@@ -147,6 +151,7 @@ export function GlobeCountryLabels({
 }: GlobeCountryLabelsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const { camera } = useThree();
+  const prevLodRef = useRef(0);
 
   // 라벨 엔트리 빌드 (centroid가 변경될 때만)
   const entries = useMemo<LabelEntry[]>(() => {
@@ -219,88 +224,152 @@ export function GlobeCountryLabels({
     };
   }, [geometry, material, labelTexture]);
 
-  // ─── 라벨 행 렌더링 함수 ───
+  // ─── 국기 그리기 헬퍼 ───
+  const drawFlag = useCallback((
+    ctx: CanvasRenderingContext2D,
+    iso2: string,
+    x: number, y: number,
+    w: number, h: number,
+  ) => {
+    const uv = flagAtlas.getUV(iso2);
+    if (uv[2] <= 0 || uv[3] <= 0) return;
+    const flagCanvas = flagAtlas.texture.image as HTMLCanvasElement;
+    if (!flagCanvas) return;
+    const srcX = uv[0] * flagCanvas.width;
+    const srcY = (1 - uv[1] - uv[3]) * flagCanvas.height;
+    const srcW = uv[2] * flagCanvas.width;
+    const srcH = uv[3] * flagCanvas.height;
+    ctx.drawImage(flagCanvas, srcX, srcY, srcW, srcH, x, y, w, h);
+  }, [flagAtlas]);
+
+  // ─── 에이전트 비율 색상 ───
+  const agentColor = (active: number, max: number) => {
+    const r = max > 0 ? active / max : 0;
+    return r >= 1 ? '#FF4444' : r >= 0.6 ? GLOW_GOLD : GLOW_CYAN;
+  };
+
+  // ─── 라벨 행 렌더링 함수 (국가 이름은 CountryLabels가 담당, 여기는 보조 정보만) ───
   const drawLabelRow = useCallback((
     rowIdx: number,
     entry: LabelEntry,
     activeAgents: number,
     maxAgents: number,
     dominantNationIso2: string | null,
+    dominantNationName: string | null,
     lodLevel: number, // 0=close, 1=mid, 2=far
   ) => {
     const yStart = rowIdx * LABEL_H;
     const ctx = labelCtx;
-
-    // 행 클리어
     ctx.clearRect(0, yStart, LABEL_W, LABEL_H);
 
-    // 배경: 다크 반투명 + 글로우 보더
-    ctx.fillStyle = BG_COLOR;
-    const pad = 1;
-    const rx = 6;
-    ctx.beginPath();
-    ctx.roundRect(pad, yStart + pad, LABEL_W - pad * 2, LABEL_H - pad * 2, rx);
-    ctx.fill();
-
-    // 글로우 보더
-    ctx.strokeStyle = BORDER_COLOR;
-    ctx.lineWidth = 1;
-    ctx.stroke();
-
-    let textX = 6;
+    const FONT = '"ITC Avant Garde Gothic", "Century Gothic", "Avenir", sans-serif';
+    const hPad = 12;
     const centerY = yStart + LABEL_H / 2;
 
-    // LOD 0, 1: 국기 표시
-    if (lodLevel <= 1) {
-      const flagIso2 = dominantNationIso2 || entry.iso2;
-      const uv = flagAtlas.getUV(flagIso2);
+    // 에이전트 텍스트: maxAgents가 있으면 "12/50", 없으면 "12"
+    const countText = maxAgents > 0 ? `${activeAgents}/${maxAgents}` : `${activeAgents}`;
 
-      if (uv[2] > 0 && uv[3] > 0) {
-        // flagAtlas에서 해당 국기 영역을 잘라 그리기
-        const flagCanvas = flagAtlas.texture.image as HTMLCanvasElement;
-        if (flagCanvas) {
-          const srcX = uv[0] * flagCanvas.width;
-          // Three.js UV v는 하단 기준이므로 캔버스 좌표로 변환
-          const srcY = (1 - uv[1] - uv[3]) * flagCanvas.height;
-          const srcW = uv[2] * flagCanvas.width;
-          const srcH = uv[3] * flagCanvas.height;
+    if (lodLevel === 0) {
+      // ═══ LOD 0 (close): 자국 국기 + 에이전트 수 + 점령국 정보 ═══
+      const flagH = 26;
+      const flagW = Math.round(flagH * 1.33);
 
-          const flagSize = 28;
-          const flagY = centerY - flagSize / 2;
-          ctx.drawImage(flagCanvas, srcX, srcY, srcW, srcH, textX, flagY, flagSize * 1.33, flagSize);
-          textX += flagSize * 1.33 + 5;
-        }
+      // 측정: 전체 컨텐츠 너비
+      ctx.font = `bold 20px ${FONT}`;
+      let totalW = flagW + 8 + ctx.measureText(countText).width;
+
+      // 점령국 표시 너비
+      let domText = '';
+      if (dominantNationIso2 && dominantNationName) {
+        domText = dominantNationName.length > 8
+          ? dominantNationName.slice(0, 7) + '..'
+          : dominantNationName;
+        ctx.font = `11px ${FONT}`;
+        totalW += 10 + 18 + 4 + ctx.measureText(domText).width;
       }
-    }
 
-    // 에이전트 수 텍스트
-    const countText = `${activeAgents}/${maxAgents}`;
-    ctx.font = 'bold 16px "ITC Avant Garde Gothic", "Century Gothic", "Avenir", sans-serif';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
+      // 배경 (컨텐츠 너비에 맞춤, 중앙 정렬)
+      const bgW = totalW + hPad * 2;
+      const bgX = (LABEL_W - bgW) / 2;
+      ctx.fillStyle = BG_COLOR;
+      ctx.beginPath();
+      ctx.roundRect(bgX, yStart + 4, bgW, LABEL_H - 8, 6);
+      ctx.fill();
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
 
-    // 에이전트 수 색상: 가득 차면 레드, 반 이상이면 골드, 아니면 사이안
-    const ratio = maxAgents > 0 ? activeAgents / maxAgents : 0;
-    if (ratio >= 1) {
-      ctx.fillStyle = '#FF4444';
-    } else if (ratio >= 0.6) {
-      ctx.fillStyle = GLOW_GOLD;
+      // 그리기 시작점
+      let drawX = (LABEL_W - totalW) / 2;
+
+      // 자국 국기
+      drawFlag(ctx, entry.iso2, drawX, centerY - flagH / 2, flagW, flagH);
+      drawX += flagW + 8;
+
+      // 에이전트 수 (activeAgents/maxAgents)
+      ctx.font = `bold 20px ${FONT}`;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = agentColor(activeAgents, maxAgents);
+      ctx.fillText(countText, drawX, centerY);
+      drawX += ctx.measureText(countText).width;
+
+      // 점령국 표시 (국기 + 이름, 골드)
+      if (dominantNationIso2 && domText) {
+        drawX += 10;
+        drawFlag(ctx, dominantNationIso2, drawX, centerY - 8, 18, 13);
+        drawX += 22;
+        ctx.font = `11px ${FONT}`;
+        ctx.fillStyle = GLOW_GOLD;
+        ctx.fillText(domText, drawX, centerY);
+      }
+
+    } else if (lodLevel === 1) {
+      // ═══ LOD 1 (mid): 자국 국기 + 에이전트 수 ═══
+      const flagH = 20;
+      const flagW = Math.round(flagH * 1.33);
+      ctx.font = `bold 18px ${FONT}`;
+      const totalW = flagW + 6 + ctx.measureText(countText).width;
+      const bgW = totalW + hPad * 2;
+      const bgX = (LABEL_W - bgW) / 2;
+
+      ctx.fillStyle = BG_COLOR;
+      ctx.beginPath();
+      ctx.roundRect(bgX, yStart + 6, bgW, LABEL_H - 12, 5);
+      ctx.fill();
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      const drawX = (LABEL_W - totalW) / 2;
+      drawFlag(ctx, entry.iso2, drawX, centerY - flagH / 2, flagW, flagH);
+
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = agentColor(activeAgents, maxAgents);
+      ctx.fillText(countText, drawX + flagW + 6, centerY);
+
     } else {
-      ctx.fillStyle = GLOW_CYAN;
-    }
-    ctx.fillText(countText, textX, centerY + 1);
-    textX += ctx.measureText(countText).width + 6;
+      // ═══ LOD 2 (far): 에이전트 수만 ═══
+      ctx.font = `bold 16px ${FONT}`;
+      const totalW = ctx.measureText(countText).width;
+      const bgW = totalW + hPad * 2;
+      const bgX = (LABEL_W - bgW) / 2;
 
-    // LOD 0: 국명 추가
-    if (lodLevel === 0 && textX < LABEL_W - 20) {
-      const displayName = entry.name.length > 16 ? entry.name.slice(0, 15) + '..' : entry.name;
-      ctx.font = '12px "ITC Avant Garde Gothic", "Century Gothic", "Avenir", sans-serif';
-      ctx.fillStyle = TEXT_COLOR;
-      ctx.globalAlpha = 0.7;
-      ctx.fillText(displayName, textX, centerY + 1);
-      ctx.globalAlpha = 1.0;
+      ctx.fillStyle = BG_COLOR;
+      ctx.beginPath();
+      ctx.roundRect(bgX, yStart + 8, bgW, LABEL_H - 16, 4);
+      ctx.fill();
+      ctx.strokeStyle = BORDER_COLOR;
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillStyle = agentColor(activeAgents, maxAgents);
+      ctx.fillText(countText, LABEL_W / 2, centerY);
     }
-  }, [labelCtx, flagAtlas]);
+  }, [labelCtx, flagAtlas, drawFlag]);
 
   // ─── useFrame: 위치 + billboard + LOD + 텍스처 업데이트 ───
   useFrame(() => {
@@ -320,8 +389,18 @@ export function GlobeCountryLabels({
       (camDist - CAM_FADE_START) / (CAM_HIDE_DIST - CAM_FADE_START), 0, 1,
     );
 
-    // LOD 레벨 결정
-    const lodLevel = camDist < LOD_CLOSE ? 0 : camDist < LOD_MID ? 1 : 2;
+    // LOD 레벨 결정 (±20 히스테리시스 밴드로 전환 플리커 방지)
+    const HYST = 20;
+    const prev = prevLodRef.current;
+    let lodLevel: number;
+    if (prev === 0) {
+      lodLevel = camDist > LOD_CLOSE + HYST ? (camDist > LOD_MID + HYST ? 2 : 1) : 0;
+    } else if (prev === 1) {
+      lodLevel = camDist < LOD_CLOSE - HYST ? 0 : (camDist > LOD_MID + HYST ? 2 : 1);
+    } else {
+      lodLevel = camDist < LOD_MID - HYST ? (camDist < LOD_CLOSE - HYST ? 0 : 1) : 2;
+    }
+    prevLodRef.current = lodLevel;
 
     // lazy init: rowIndex + alpha 어트리뷰트
     if (!mesh.geometry.getAttribute('rowIndex')) {
@@ -363,43 +442,58 @@ export function GlobeCountryLabels({
       // 점유국 정보
       const domState = dominationStates.get(entry.iso3);
       let dominantIso2: string | null = null;
+      let dominantName: string | null = null;
       if (domState?.dominantNation) {
         const domCountry = getCountryByISO3(domState.dominantNation);
         dominantIso2 = domCountry?.iso2 ?? null;
+        dominantName = domCountry?.name ?? null;
       }
 
-      // 캐시 키: LOD + 에이전트수 + 점유국 변경 시에만 재렌더
-      const key = `${lodLevel}|${activeAgents}/${maxAgents}|${dominantIso2 ?? entry.iso2}`;
-      if (prevKeys[visibleIdx] !== key) {
-        drawLabelRow(visibleIdx, entry, activeAgents, maxAgents, dominantIso2, lodLevel);
-        prevKeys[visibleIdx] = key;
+      // 캐시 키: stable entry index i 사용 → 카메라 이동 시 국기 플리커 방지
+      const key = `${lodLevel}|${activeAgents}/${maxAgents}|${dominantIso2 ?? ''}|${dominantName ?? ''}`;
+      if (prevKeys[i] !== key) {
+        drawLabelRow(i, entry, activeAgents, maxAgents, dominantIso2, dominantName, lodLevel);
+        prevKeys[i] = key;
         needsTextureUpdate = true;
       }
 
-      // rowIndex 어트리뷰트
-      rowIndexBuf[visibleIdx] = visibleIdx;
+      // rowIndex 어트리뷰트 — stable entry index로 아틀라스 행 매핑
+      rowIndexBuf[visibleIdx] = i;
 
-      // Billboard 위치
+      // Billboard 위치 — CountryLabels(국가 이름) 아래에 배치
       _obj.position.copy(entry.centroidPos);
       _obj.quaternion.copy(camera.quaternion);
+      // 카메라-로컬 하향 오프셋 (국가 이름 텍스트 아래로)
+      _downVec.set(0, -LABEL_DOWN_OFFSET, 0).applyQuaternion(camera.quaternion);
+      _obj.position.add(_downVec);
 
-      // 스케일: 줌 + dot(정면 기반 페이드)
+      // 거리 기반 스케일: 가까울수록 크게 (150→2.8x, 500→1.2x) — 2배 크기 + 거리 감쇠
+      const distT = THREE.MathUtils.clamp((camDist - 150) / 350, 0, 1);
+      const distScale = THREE.MathUtils.lerp(2.8, 1.2, distT);
+
+      // 뒷면 오클루전 페이드
       const dotFade = THREE.MathUtils.clamp((dot - BACKFACE_THRESHOLD) / 0.3, 0, 1);
-      const scale = 0.8 * dotFade;
+
+      // 화면 중심 페이드: NDC 좌표 기반 smoothstep (중앙=1, 가장자리=0.3)
+      _projVec.copy(entry.centroidPos).project(camera);
+      const screenDist = Math.sqrt(_projVec.x * _projVec.x + _projVec.y * _projVec.y);
+      const centerRaw = 1 - THREE.MathUtils.clamp((screenDist - 0.3) / 0.8, 0, 1);
+      const centerFade = centerRaw * centerRaw * (3 - 2 * centerRaw);
+
+      // 최종 스케일: 거리 × 뒷면 페이드 × 중심 가중치 (0.7~1.0)
+      const scaleCenterMul = 0.7 + 0.3 * centerFade;
+      const scale = distScale * dotFade * scaleCenterMul;
       _obj.scale.set(scale, scale, 1);
       _obj.updateMatrix();
       mesh.setMatrixAt(visibleIdx, _obj.matrix);
 
-      // alpha
-      alphaBuf[visibleIdx] = dotFade * zoomFade;
+      // alpha: 뒷면 × 줌 × 중심 페이드 (가장자리 40% 최소)
+      alphaBuf[visibleIdx] = dotFade * zoomFade * (0.4 + 0.6 * centerFade);
 
       visibleIdx++;
     }
 
-    // 나머지 숨기기
-    for (let i = visibleIdx; i < MAX_COUNTRIES; i++) {
-      prevKeys[i] = '';
-    }
+    // stable index 사용: prevKeys는 entry index 기반이므로 별도 초기화 불필요
 
     mesh.count = visibleIdx;
     mesh.instanceMatrix.needsUpdate = true;

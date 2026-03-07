@@ -55,7 +55,7 @@ export default function ProposalForm({
   const inputStyle = {
     width: '100%',
     padding: '10px 12px',
-    borderRadius: '8px',
+    borderRadius: 0,
     border: '1px solid rgba(232, 224, 212, 0.15)',
     background: 'rgba(255,255,255,0.03)',
     color: '#E8E0D4',
@@ -70,7 +70,7 @@ export default function ProposalForm({
       style={{
         background: 'rgba(17, 17, 17, 0.95)',
         border: '1px solid rgba(232, 224, 212, 0.1)',
-        borderRadius: '12px',
+        borderRadius: 0,
         padding: '20px',
         fontFamily: '"Rajdhani", sans-serif',
       }}
@@ -115,7 +115,7 @@ export default function ProposalForm({
                 onClick={() => setProposalType(type)}
                 style={{
                   padding: '6px 12px',
-                  borderRadius: '6px',
+                  borderRadius: 0,
                   border: `1px solid ${proposalType === type ? '#CC9933' : 'rgba(232, 224, 212, 0.15)'}`,
                   background: proposalType === type ? 'rgba(204, 153, 51, 0.15)' : 'transparent',
                   color: proposalType === type ? '#CC9933' : '#8B8B8B',
@@ -170,7 +170,7 @@ export default function ProposalForm({
         <div
           style={{
             padding: '10px 12px',
-            borderRadius: '8px',
+            borderRadius: 0,
             background: 'rgba(204, 51, 51, 0.1)',
             border: '1px solid rgba(204, 51, 51, 0.2)',
             color: '#CC3333',
@@ -191,7 +191,7 @@ export default function ProposalForm({
             style={{
               flex: 1,
               padding: '10px',
-              borderRadius: '8px',
+              borderRadius: 0,
               border: '1px solid rgba(232, 224, 212, 0.15)',
               background: 'transparent',
               color: '#8B8B8B',
@@ -210,7 +210,7 @@ export default function ProposalForm({
           style={{
             flex: 2,
             padding: '10px',
-            borderRadius: '8px',
+            borderRadius: 0,
             border: 'none',
             background: 'linear-gradient(135deg, #CC9933, #B8862D)',
             color: '#111',

@@ -203,7 +203,7 @@ function APIKeysPanel() {
           style={{
             background: `${SK.green}15`,
             border: `1px solid ${SK.green}`,
-            borderRadius: 6,
+            borderRadius: 0,
             padding: 12,
             marginBottom: 16,
             fontSize: SKFont.sm,
@@ -216,7 +216,7 @@ function APIKeysPanel() {
               marginTop: 8,
               padding: 8,
               background: SK.bg,
-              borderRadius: 4,
+              borderRadius: 0,
               fontSize: SKFont.xs,
               wordBreak: "break-all",
               color: SK.gold,
@@ -316,7 +316,7 @@ function AgentsPanel() {
             style={{
               background: SK.cardBg,
               border: `1px solid ${SK.border}`,
-              borderRadius: 8,
+              borderRadius: 0,
               padding: 16,
             }}
           >
@@ -608,7 +608,7 @@ function LiveBattlePanel() {
           style={{
             width: 10,
             height: 10,
-            borderRadius: "50%",
+            borderRadius: 0,
             background: connected ? SK.green : SK.red,
             boxShadow: connected ? `0 0 8px ${SK.green}` : "none",
           }}
@@ -634,7 +634,7 @@ function LiveBattlePanel() {
         style={{
           background: SK.cardBg,
           border: `1px solid ${SK.border}`,
-          borderRadius: 8,
+          borderRadius: 0,
           padding: 12,
           maxHeight: 400,
           overflowY: "auto",
@@ -700,7 +700,7 @@ function StatusBadge({ status }: { status: string }) {
         fontSize: SKFont.xs,
         fontWeight: 700,
         padding: "2px 8px",
-        borderRadius: 4,
+        borderRadius: 0,
         background: `${colors[status] || SK.textMuted}22`,
         color: colors[status] || SK.textMuted,
         textTransform: "uppercase",
@@ -718,7 +718,7 @@ function InfoChip({ label, value, color }: { label: string; value: string; color
       style={{
         background: `${color || SK.textSecondary}11`,
         border: `1px solid ${color || SK.border}33`,
-        borderRadius: 4,
+        borderRadius: 0,
         padding: "2px 8px",
         fontSize: SKFont.xs,
       }}
@@ -750,7 +750,7 @@ const inputStyle: React.CSSProperties = {
   background: SK.bg,
   color: SK.textPrimary,
   border: `1px solid ${SK.border}`,
-  borderRadius: 4,
+  borderRadius: 0,
   padding: "8px 12px",
   flex: 1,
   outline: "none",
@@ -762,7 +762,7 @@ const btnStyle: React.CSSProperties = {
   fontWeight: 600,
   color: SK.textWhite,
   border: "none",
-  borderRadius: 4,
+  borderRadius: 0,
   padding: "8px 16px",
   cursor: "pointer",
   transition: "opacity 0.15s",
@@ -774,7 +774,7 @@ const selectStyle: React.CSSProperties = {
   background: SK.bg,
   color: SK.textPrimary,
   border: `1px solid ${SK.border}`,
-  borderRadius: 4,
+  borderRadius: 0,
   padding: "8px 12px",
   width: "100%",
   outline: "none",
@@ -801,7 +801,7 @@ const tdStyle: React.CSSProperties = {
 const cardStyle: React.CSSProperties = {
   background: SK.cardBg,
   border: `1px solid ${SK.border}`,
-  borderRadius: 8,
+  borderRadius: 0,
   padding: 20,
 };
 

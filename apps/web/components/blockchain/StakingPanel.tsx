@@ -87,7 +87,7 @@ export default function StakingPanel({
       style={{
         background: 'rgba(17, 17, 17, 0.95)',
         border: '1px solid rgba(232, 224, 212, 0.1)',
-        borderRadius: '12px',
+        borderRadius: 0,
         padding: '20px',
         fontFamily: '"Rajdhani", sans-serif',
       }}
@@ -112,7 +112,7 @@ export default function StakingPanel({
         <div
           style={{
             padding: '4px 10px',
-            borderRadius: '6px',
+            borderRadius: 0,
             background: 'rgba(74, 158, 74, 0.15)',
             border: '1px solid rgba(74, 158, 74, 0.3)',
             color: '#4A9E4A',
@@ -133,7 +133,7 @@ export default function StakingPanel({
           marginBottom: '16px',
           padding: '12px',
           background: 'rgba(255,255,255,0.02)',
-          borderRadius: '8px',
+          borderRadius: 0,
         }}
       >
         <div>
@@ -169,7 +169,7 @@ export default function StakingPanel({
           gap: '4px',
           marginBottom: '12px',
           background: 'rgba(255,255,255,0.03)',
-          borderRadius: '8px',
+          borderRadius: 0,
           padding: '3px',
         }}
       >
@@ -180,7 +180,7 @@ export default function StakingPanel({
             style={{
               flex: 1,
               padding: '8px',
-              borderRadius: '6px',
+              borderRadius: 0,
               border: 'none',
               background: tab === t ? 'rgba(204, 153, 51, 0.2)' : 'transparent',
               color: tab === t ? '#CC9933' : '#8B8B8B',
@@ -215,7 +215,7 @@ export default function StakingPanel({
             style={{
               width: '100%',
               padding: '10px 60px 10px 12px',
-              borderRadius: '8px',
+              borderRadius: 0,
               border: '1px solid rgba(232, 224, 212, 0.15)',
               background: 'rgba(255,255,255,0.03)',
               color: '#E8E0D4',
@@ -234,7 +234,7 @@ export default function StakingPanel({
               top: '50%',
               transform: 'translateY(-50%)',
               padding: '3px 8px',
-              borderRadius: '4px',
+              borderRadius: 0,
               border: '1px solid rgba(204, 153, 51, 0.3)',
               background: 'transparent',
               color: '#CC9933',
@@ -268,7 +268,7 @@ export default function StakingPanel({
         style={{
           width: '100%',
           padding: '12px',
-          borderRadius: '8px',
+          borderRadius: 0,
           border: 'none',
           background: tab === 'stake'
             ? 'linear-gradient(135deg, #CC9933, #B8862D)'
@@ -301,7 +301,7 @@ export default function StakingPanel({
             alignItems: 'center',
             padding: '10px 12px',
             background: 'rgba(74, 158, 74, 0.08)',
-            borderRadius: '8px',
+            borderRadius: 0,
             border: '1px solid rgba(74, 158, 74, 0.2)',
           }}
         >
@@ -317,7 +317,7 @@ export default function StakingPanel({
             onClick={onClaimRewards}
             style={{
               padding: '6px 14px',
-              borderRadius: '6px',
+              borderRadius: 0,
               border: '1px solid #4A9E4A',
               background: 'rgba(74, 158, 74, 0.2)',
               color: '#4A9E4A',

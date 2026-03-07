@@ -542,7 +542,7 @@ func (r *Room) spawnPlayerAgent(p *PlayerInfo) {
 // --- Input handling ---
 
 // HandleInput forwards player input to the arena. Only allowed in playing state.
-func (r *Room) HandleInput(agentID string, angle float64, boost bool) {
+func (r *Room) HandleInput(agentID string, angle float64, boost bool, dash bool) {
 	r.mu.RLock()
 	state := r.state
 	r.mu.RUnlock()
@@ -550,7 +550,7 @@ func (r *Room) HandleInput(agentID string, angle float64, boost bool) {
 	if state != domain.RoomStatePlaying {
 		return
 	}
-	r.arena.HandleInput(agentID, angle, boost)
+	r.arena.HandleInput(agentID, angle, boost, dash)
 }
 
 // HandleChooseUpgrade forwards upgrade choice to the arena.
@@ -820,6 +820,7 @@ func (r *Room) GetJoinedEvent(playerID string) domain.JoinedEvent {
 		RoomState:     r.state,
 		TimeRemaining: timeRemaining,
 		TerrainTheme:  r.Config.TerrainTheme,
+		TurnRate:      TurnRate,
 	}
 }
 

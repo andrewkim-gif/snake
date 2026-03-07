@@ -61,7 +61,7 @@ export default function VoteHistory({ entries, className = '' }: VoteHistoryProp
                 gap: '10px',
                 alignItems: 'center',
                 padding: '8px 10px',
-                borderRadius: '6px',
+                borderRadius: 0,
                 background: 'rgba(255,255,255,0.02)',
                 borderLeft: `3px solid ${entry.support ? '#4A9E4A' : '#CC3333'}`,
               }}
@@ -71,7 +71,7 @@ export default function VoteHistory({ entries, className = '' }: VoteHistoryProp
                 style={{
                   width: '20px',
                   height: '20px',
-                  borderRadius: '4px',
+                  borderRadius: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',

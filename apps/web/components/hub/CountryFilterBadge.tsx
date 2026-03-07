@@ -31,7 +31,7 @@ export function CountryFilterBadge({
         alignItems: 'center',
         gap: '8px',
         padding: '6px 12px',
-        borderRadius: '8px',
+        borderRadius: 0,
         background: `${accentColor}15`,
         border: `1px solid ${accentColor}30`,
         fontSize: '12px',

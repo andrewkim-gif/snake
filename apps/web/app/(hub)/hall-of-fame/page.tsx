@@ -88,7 +88,7 @@ export default function HallOfFamePage() {
               color: selectedSeason === null ? SK.textWhite : SK.textSecondary,
               background: selectedSeason === null ? SK.blue : SK.cardBg,
               border: sketchBorder(selectedSeason === null ? SK.blue : SK.border),
-              borderRadius: radius.md,
+              borderRadius: 0,
               cursor: 'pointer',
               whiteSpace: 'nowrap',
               transition: 'all 0.15s ease',
@@ -111,7 +111,7 @@ export default function HallOfFamePage() {
                   color: isActive ? SK.textWhite : SK.textPrimary,
                   background: isActive ? SK.cardBgHover : SK.cardBg,
                   border: sketchBorder(isActive ? SK.blue : SK.border),
-                  borderRadius: radius.md,
+                  borderRadius: 0,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   transition: 'all 0.15s ease',
@@ -217,7 +217,7 @@ export default function HallOfFamePage() {
                       style={{
                         background: SK.cardBg,
                         border: sketchBorder(SK.border),
-                        borderRadius: radius.md,
+                        borderRadius: 0,
                         padding: 16,
                         boxShadow: sketchShadow('sm'),
                       }}
@@ -268,7 +268,7 @@ export default function HallOfFamePage() {
                         color: record.winnerType === 'faction' ? SK.blue : SK.green,
                         background: record.winnerType === 'faction' ? 'rgba(99,102,241,0.1)' : 'rgba(16,185,129,0.1)',
                         padding: '2px 8px',
-                        borderRadius: radius.pill,
+                        borderRadius: 0,
                       }}>
                         {record.winnerType === 'faction' ? tHof('factionBadge') : tHof('playerBadge')}
                       </span>

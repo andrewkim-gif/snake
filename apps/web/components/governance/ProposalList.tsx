@@ -58,7 +58,7 @@ export default function ProposalList({
           marginBottom: '12px',
           padding: '3px',
           background: 'rgba(255,255,255,0.03)',
-          borderRadius: '8px',
+          borderRadius: 0,
           overflowX: 'auto',
         }}
       >
@@ -76,7 +76,7 @@ export default function ProposalList({
             onClick={() => setStatusFilter(status)}
             style={{
               padding: '6px 12px',
-              borderRadius: '6px',
+              borderRadius: 0,
               border: 'none',
               background: statusFilter === status ? `${color}20` : 'transparent',
               color: statusFilter === status ? color : '#8B8B8B',
@@ -127,7 +127,7 @@ export default function ProposalList({
                 onClick={() => onSelectProposal?.(proposal)}
                 style={{
                   padding: '12px 16px',
-                  borderRadius: '8px',
+                  borderRadius: 0,
                   border: '1px solid rgba(232, 224, 212, 0.05)',
                   background: 'rgba(255,255,255,0.02)',
                   cursor: 'pointer',
@@ -153,7 +153,7 @@ export default function ProposalList({
                     <span
                       style={{
                         padding: '1px 6px',
-                        borderRadius: '3px',
+                        borderRadius: 0,
                         background: `${typeColor}15`,
                         color: typeColor,
                         fontSize: '10px',
@@ -165,7 +165,7 @@ export default function ProposalList({
                     <span
                       style={{
                         padding: '1px 6px',
-                        borderRadius: '3px',
+                        borderRadius: 0,
                         background: `${statusColor}15`,
                         color: statusColor,
                         fontSize: '10px',
@@ -194,7 +194,7 @@ export default function ProposalList({
                 <div
                   style={{
                     height: '4px',
-                    borderRadius: '2px',
+                    borderRadius: 0,
                     background: 'rgba(204, 51, 51, 0.2)',
                     overflow: 'hidden',
                   }}
@@ -204,7 +204,7 @@ export default function ProposalList({
                       width: `${forPct}%`,
                       height: '100%',
                       background: '#4A9E4A',
-                      borderRadius: '2px',
+                      borderRadius: 0,
                     }}
                   />
                 </div>

@@ -129,7 +129,7 @@ export function EpochHUD({
         gap: '8px',
         backgroundColor: 'rgba(17, 17, 17, 0.85)',
         padding: '6px 16px',
-        borderRadius: '4px',
+        borderRadius: 0,
         border: `1.5px solid ${config.borderColor}`,
         fontFamily: '"Black Ops One", "Inter", sans-serif',
         transition: 'all 300ms',
@@ -146,7 +146,7 @@ export function EpochHUD({
         {/* Phase badge */}
         <div style={{
           padding: '2px 8px',
-          borderRadius: '2px',
+          borderRadius: 0,
           backgroundColor: config.bgColor,
           border: `1px solid ${config.borderColor}`,
           fontSize: '0.75rem',
@@ -191,7 +191,7 @@ export function EpochHUD({
         gap: '12px',
         backgroundColor: 'rgba(17, 17, 17, 0.75)',
         padding: '3px 12px',
-        borderRadius: '3px',
+        borderRadius: 0,
         fontFamily: '"Rajdhani", "Inter", sans-serif',
         fontSize: '0.75rem',
       }}>
@@ -574,14 +574,14 @@ export function ArenaShrinkIndicator({ currentRadius, maxRadius, visible }: Aren
         width: '120px',
         height: '4px',
         backgroundColor: 'rgba(204, 85, 0, 0.2)',
-        borderRadius: '2px',
+        borderRadius: 0,
         overflow: 'hidden',
       }}>
         <div style={{
           width: `${pct}%`,
           height: '100%',
           backgroundColor: pct > 50 ? '#CC9933' : pct > 25 ? '#CC5500' : '#CC3333',
-          borderRadius: '2px',
+          borderRadius: 0,
           transition: 'width 1s linear, background-color 1s',
         }} />
       </div>

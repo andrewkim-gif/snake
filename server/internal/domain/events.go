@@ -12,6 +12,8 @@ type JoinedEvent struct {
 	RoomState     RoomState `json:"roomState"`
 	TimeRemaining int       `json:"timeRemaining"`
 	TerrainTheme  string    `json:"terrainTheme,omitempty"` // v11: country terrain theme
+	// v16: Dynamic arena settings (server is master, client overrides defaults)
+	TurnRate      float64   `json:"turnRate,omitempty"`
 }
 
 // StateAgent is the per-tick serialized agent data sent to clients.

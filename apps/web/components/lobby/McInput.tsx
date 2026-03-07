@@ -1,12 +1,12 @@
 'use client';
 
 /**
- * McInput — 프리미엄 다크 입력 필드
- * 다크 배경 + 인디고 포커스 링
+ * McInput — Apex 스타일 입력 필드
+ * 직각 + 레드 포커스 링
  */
 
 import { useState, type InputHTMLAttributes } from 'react';
-import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
+import { SK, bodyFont } from '@/lib/sketch-ui';
 
 interface McInputProps extends InputHTMLAttributes<HTMLInputElement> {}
 
@@ -18,7 +18,8 @@ export function McInput({ style, ...rest }: McInputProps) {
       style={{
         backgroundColor: SK.bgWarm,
         border: `1px solid ${focused ? SK.borderFocus : 'rgba(255, 255, 255, 0.08)'}`,
-        borderRadius: '8px',
+        borderLeft: focused ? `2px solid ${SK.accent}` : '1px solid rgba(255, 255, 255, 0.08)',
+        borderRadius: 0,
         color: SK.textPrimary,
         fontFamily: bodyFont,
         fontWeight: 500,
@@ -31,7 +32,7 @@ export function McInput({ style, ...rest }: McInputProps) {
         textAlign: 'center',
         transition: 'all 150ms ease',
         boxShadow: focused
-          ? '0 0 0 3px rgba(99, 102, 241, 0.15)'
+          ? '0 0 0 3px rgba(239, 68, 68, 0.12)'
           : '0 2px 4px rgba(0, 0, 0, 0.3)',
         ...style,
       }}

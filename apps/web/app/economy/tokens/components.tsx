@@ -89,7 +89,7 @@ export function MarketCapChart({ data, maxDisplay = 20 }: MarketCapChartProps) {
                 style={{
                   width: '36px',
                   padding: '2px 4px',
-                  borderRadius: '3px',
+                  borderRadius: 0,
                   background: `${tierColor}15`,
                   color: tierColor,
                   fontSize: '11px',
@@ -105,7 +105,7 @@ export function MarketCapChart({ data, maxDisplay = 20 }: MarketCapChartProps) {
                     width: `${Math.max(pct, 2)}%`,
                     height: '100%',
                     background: `linear-gradient(90deg, ${tierColor}40, ${tierColor}15)`,
-                    borderRadius: '4px',
+                    borderRadius: 0,
                     transition: 'width 0.5s ease',
                   }}
                 />
@@ -230,7 +230,7 @@ export function BuybackBurnHistory({
               gap: '8px',
               alignItems: 'center',
               padding: '6px 10px',
-              borderRadius: '6px',
+              borderRadius: 0,
               background: 'rgba(255,255,255,0.02)',
               borderLeft: `3px solid ${isBuyback ? '#4A9E4A' : '#CC3333'}`,
             }}
@@ -239,7 +239,7 @@ export function BuybackBurnHistory({
             <span
               style={{
                 padding: '1px 4px',
-                borderRadius: '3px',
+                borderRadius: 0,
                 background: isBuyback ? 'rgba(74, 158, 74, 0.15)' : 'rgba(204, 51, 51, 0.15)',
                 color: isBuyback ? '#4A9E4A' : '#CC3333',
                 fontSize: '10px',
@@ -394,7 +394,7 @@ export function DefenseBuffVisualization({
                 flex: 1,
                 height: '16px',
                 background: 'rgba(255,255,255,0.03)',
-                borderRadius: '4px',
+                borderRadius: 0,
                 overflow: 'hidden',
                 position: 'relative',
               }}
@@ -404,7 +404,7 @@ export function DefenseBuffVisualization({
                   width: `${Math.max(buffPct, 1)}%`,
                   height: '100%',
                   background: `linear-gradient(90deg, #4A9E4A50, #4A9E4A)`,
-                  borderRadius: '4px',
+                  borderRadius: 0,
                   transition: 'width 0.5s ease',
                 }}
               />
@@ -435,7 +435,7 @@ export function DefenseBuffVisualization({
           marginTop: '12px',
           padding: '8px 10px',
           background: 'rgba(255,255,255,0.02)',
-          borderRadius: '6px',
+          borderRadius: 0,
           fontSize: '10px',
           color: '#8B8B8B',
           lineHeight: 1.6,
@@ -484,7 +484,7 @@ export function TokenRanking({ data }: TokenRankingProps) {
             alignItems: 'center',
             gap: '8px',
             padding: '4px 8px',
-            borderRadius: '4px',
+            borderRadius: 0,
             background: idx === 0 ? 'rgba(204, 153, 51, 0.08)' : 'transparent',
           }}
         >

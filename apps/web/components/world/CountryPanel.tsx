@@ -205,7 +205,7 @@ function ResourceBar({ label, icon, value, color }: {
         flex: 1,
         height: '8px',
         background: 'rgba(255,255,255,0.04)',
-        borderRadius: '2px',
+        borderRadius: 0,
         overflow: 'hidden',
       }}>
         <div
@@ -213,7 +213,7 @@ function ResourceBar({ label, icon, value, color }: {
             width: `${value}%`,
             height: '100%',
             background: color,
-            borderRadius: '2px',
+            borderRadius: 0,
             transition: 'width 300ms ease',
           }}
         />
@@ -819,14 +819,14 @@ function FactionTab({ country }: { country: CountryClientState }) {
               <div style={{
                 height: '4px',
                 background: 'rgba(255,255,255,0.04)',
-                borderRadius: '2px',
+                borderRadius: 0,
                 overflow: 'hidden',
               }}>
                 <div style={{
                   width: `${tech.progress * 100}%`,
                   height: '100%',
                   background: barColor,
-                  borderRadius: '2px',
+                  borderRadius: 0,
                   transition: 'width 300ms ease',
                 }} />
               </div>
@@ -1003,7 +1003,7 @@ export function CountryPanel({
             fontWeight: 700,
             padding: '1px 6px',
             border: `1px solid ${tierColor}40`,
-            borderRadius: '2px',
+            borderRadius: 0,
             fontSize: SKFont.xs,
           }}>
             TIER {country?.tier}
@@ -1018,7 +1018,7 @@ export function CountryPanel({
         style={{
           background: 'none',
           border: `1px solid ${SK.border}`,
-          borderRadius: '4px',
+          borderRadius: 0,
           color: SK.textSecondary,
           cursor: 'pointer',
           padding: '5px',
@@ -1098,7 +1098,7 @@ export function CountryPanel({
             zIndex: 101,
             background: SK.bg,
             borderTop: sketchBorder(),
-            borderRadius: '16px 16px 0 0',
+            borderRadius: 0,
             transition: 'height 300ms cubic-bezier(0.16, 1, 0.3, 1)',
             display: 'flex',
             flexDirection: 'column',
@@ -1121,7 +1121,7 @@ export function CountryPanel({
             <div style={{
               width: '40px',
               height: '5px',
-              borderRadius: '3px',
+              borderRadius: 0,
               background: SK.textMuted,
             }} />
           </div>

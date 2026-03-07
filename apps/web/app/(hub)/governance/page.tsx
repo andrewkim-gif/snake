@@ -108,7 +108,7 @@ function GovernancePageInner() {
         style={{
           background: SK.cardBg,
           border: `1px solid ${SK.border}`,
-          borderRadius: '12px',
+          borderRadius: 0,
           padding: '16px',
         }}
       >

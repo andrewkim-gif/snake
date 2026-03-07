@@ -73,7 +73,7 @@ export default function VoteInterface({
       style={{
         background: 'rgba(17, 17, 17, 0.95)',
         border: '1px solid rgba(232, 224, 212, 0.1)',
-        borderRadius: '12px',
+        borderRadius: 0,
         padding: '20px',
         fontFamily: '"Rajdhani", sans-serif',
       }}
@@ -84,7 +84,7 @@ export default function VoteInterface({
           <span
             style={{
               padding: '2px 8px',
-              borderRadius: '4px',
+              borderRadius: 0,
               background: `${typeColor}20`,
               color: typeColor,
               fontSize: '11px',
@@ -96,7 +96,7 @@ export default function VoteInterface({
           <span
             style={{
               padding: '2px 8px',
-              borderRadius: '4px',
+              borderRadius: 0,
               background: `${statusColor}20`,
               color: statusColor,
               fontSize: '11px',
@@ -151,7 +151,7 @@ export default function VoteInterface({
         <div
           style={{
             height: '8px',
-            borderRadius: '4px',
+            borderRadius: 0,
             background: 'rgba(204, 51, 51, 0.3)',
             overflow: 'hidden',
           }}
@@ -161,7 +161,7 @@ export default function VoteInterface({
               width: `${forPercent}%`,
               height: '100%',
               background: 'linear-gradient(90deg, #4A9E4A, #5CB85C)',
-              borderRadius: '4px',
+              borderRadius: 0,
               transition: 'width 0.3s ease',
             }}
           />
@@ -202,7 +202,7 @@ export default function VoteInterface({
                 style={{
                   flex: 1,
                   padding: '8px 12px',
-                  borderRadius: '8px',
+                  borderRadius: 0,
                   border: '1px solid rgba(232, 224, 212, 0.15)',
                   background: 'rgba(255,255,255,0.03)',
                   color: '#E8E0D4',
@@ -216,7 +216,7 @@ export default function VoteInterface({
                 onClick={() => setTokenAmount(String(userTokenBalance))}
                 style={{
                   padding: '6px 10px',
-                  borderRadius: '6px',
+                  borderRadius: 0,
                   border: '1px solid rgba(204, 153, 51, 0.3)',
                   background: 'transparent',
                   color: '#CC9933',
@@ -244,7 +244,7 @@ export default function VoteInterface({
               style={{
                 flex: 1,
                 padding: '10px',
-                borderRadius: '8px',
+                borderRadius: 0,
                 border: 'none',
                 background: 'linear-gradient(135deg, #4A9E4A, #3D8B3D)',
                 color: '#111',
@@ -264,7 +264,7 @@ export default function VoteInterface({
               style={{
                 flex: 1,
                 padding: '10px',
-                borderRadius: '8px',
+                borderRadius: 0,
                 border: 'none',
                 background: 'linear-gradient(135deg, #CC3333, #AA2222)',
                 color: '#111',
@@ -287,7 +287,7 @@ export default function VoteInterface({
         <div
           style={{
             padding: '10px 12px',
-            borderRadius: '8px',
+            borderRadius: 0,
             background: `${proposal.userVoteSupport ? 'rgba(74, 158, 74, 0.1)' : 'rgba(204, 51, 51, 0.1)'}`,
             border: `1px solid ${proposal.userVoteSupport ? 'rgba(74, 158, 74, 0.2)' : 'rgba(204, 51, 51, 0.2)'}`,
             color: proposal.userVoteSupport ? '#4A9E4A' : '#CC3333',
@@ -304,7 +304,7 @@ export default function VoteInterface({
                 display: 'block',
                 margin: '8px auto 0',
                 padding: '4px 12px',
-                borderRadius: '6px',
+                borderRadius: 0,
                 border: '1px solid rgba(232, 224, 212, 0.2)',
                 background: 'transparent',
                 color: '#E8E0D4',

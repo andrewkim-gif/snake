@@ -256,7 +256,7 @@ export function EpochEndResultOverlay({
         <div style={{
           backgroundColor: 'rgba(204, 153, 51, 0.08)',
           border: '1px solid rgba(204, 153, 51, 0.3)',
-          borderRadius: '4px',
+          borderRadius: 0,
           padding: '8px 20px',
           marginBottom: '16px',
           textAlign: 'center',

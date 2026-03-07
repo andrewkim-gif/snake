@@ -172,7 +172,7 @@ function TickerEventItem({
           letterSpacing: '1px',
           padding: '1px 5px',
           border: `1px solid ${config.color}40`,
-          borderRadius: '2px',
+          borderRadius: 0,
         }}
       >
         {config.tag}

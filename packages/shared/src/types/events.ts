@@ -71,6 +71,8 @@ export interface JoinedPayload {
   roomState: RoomStatus;
   timeRemaining: number;
   terrainTheme?: string; // v11: country terrain theme (urban, desert, tundra, etc.)
+  // v16: Dynamic arena settings (server is master, client overrides defaults)
+  turnRate?: number;
 }
 
 /** 압축된 뱀 네트워크 데이터 */

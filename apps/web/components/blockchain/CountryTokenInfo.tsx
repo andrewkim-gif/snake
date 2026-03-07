@@ -43,7 +43,7 @@ export default function CountryTokenInfo({
         style={{
           padding: '12px',
           background: 'rgba(255,255,255,0.02)',
-          borderRadius: '8px',
+          borderRadius: 0,
           border: '1px solid rgba(232, 224, 212, 0.05)',
           fontFamily: '"Rajdhani", sans-serif',
           color: '#8B8B8B',
@@ -67,7 +67,7 @@ export default function CountryTokenInfo({
       style={{
         padding: '12px',
         background: 'rgba(255,255,255,0.02)',
-        borderRadius: '8px',
+        borderRadius: 0,
         border: '1px solid rgba(232, 224, 212, 0.05)',
         fontFamily: '"Rajdhani", sans-serif',
       }}
@@ -85,7 +85,7 @@ export default function CountryTokenInfo({
           <span
             style={{
               padding: '2px 6px',
-              borderRadius: '4px',
+              borderRadius: 0,
               background: `${tierColor}20`,
               border: `1px solid ${tierColor}40`,
               color: tierColor,
@@ -115,7 +115,7 @@ export default function CountryTokenInfo({
           style={{
             padding: '8px',
             background: 'rgba(255,255,255,0.02)',
-            borderRadius: '6px',
+            borderRadius: 0,
           }}
         >
           <div style={{ color: '#8B8B8B', fontSize: '10px', marginBottom: '2px' }}>
@@ -131,7 +131,7 @@ export default function CountryTokenInfo({
           style={{
             padding: '8px',
             background: 'rgba(74, 158, 74, 0.05)',
-            borderRadius: '6px',
+            borderRadius: 0,
           }}
         >
           <div style={{ color: '#8B8B8B', fontSize: '10px', marginBottom: '2px' }}>
@@ -147,7 +147,7 @@ export default function CountryTokenInfo({
           style={{
             padding: '8px',
             background: 'rgba(204, 153, 51, 0.05)',
-            borderRadius: '6px',
+            borderRadius: 0,
           }}
         >
           <div style={{ color: '#8B8B8B', fontSize: '10px', marginBottom: '2px' }}>
@@ -163,7 +163,7 @@ export default function CountryTokenInfo({
           style={{
             padding: '8px',
             background: 'rgba(255,255,255,0.02)',
-            borderRadius: '6px',
+            borderRadius: 0,
           }}
         >
           <div style={{ color: '#8B8B8B', fontSize: '10px', marginBottom: '2px' }}>

@@ -1,7 +1,7 @@
 /**
- * Premium Dark UI — 세련된 다크 디자인 시스템
- * 딥 다크 + 인디고 액센트 + 글래스모피즘
- * v15: Chakra Petch (heading) + Space Grotesk (body)
+ * Apex Tactical UI — 플랫 다크 디자인 시스템
+ * 직각 + 레드 악센트 + 가로 라인 포인트 + 삼각 컷 버튼
+ * v16: Apex Legends 스타일 — radius 0, clip-path 삼각 컷
  */
 
 /** 프리미엄 다크 팔레트 */
@@ -32,10 +32,17 @@ export const SK = {
   gold: '#F59E0B',
   blue: '#6366F1',
 
+  // Apex 악센트 — 레드 포인트
+  accent: '#EF4444',
+  accentDark: '#DC2626',
+  accentLight: '#F87171',
+  accentBg: 'rgba(239, 68, 68, 0.08)',
+  accentBorder: 'rgba(239, 68, 68, 0.25)',
+
   // 보더 — 화이트 기반 극저 불투명도
   border: 'rgba(255, 255, 255, 0.06)',
   borderDark: 'rgba(255, 255, 255, 0.03)',
-  borderFocus: 'rgba(99, 102, 241, 0.5)',
+  borderFocus: 'rgba(239, 68, 68, 0.5)',
   shadow: 'rgba(0, 0, 0, 0.3)',
   shadowMd: 'rgba(0, 0, 0, 0.4)',
   shadowLg: 'rgba(0, 0, 0, 0.5)',
@@ -90,19 +97,29 @@ export const headingFont = '"Chakra Petch", -apple-system, BlinkMacSystemFont, s
 /** UI 폰트 — Space Grotesk (클린 테크) */
 export const bodyFont = '"Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif';
 
-/** 라운드 코너 */
-export function handDrawnRadius(base = 8) {
-  return `${base}px`;
+/** Apex: 직각 (radius 전부 0) */
+export function handDrawnRadius(_base = 0) {
+  return '0';
 }
 
-/** 라운드 코너 프리셋 */
+/** Apex: 직각 프리셋 — 모든 코너 0 */
 export const radius = {
-  sm: '4px',
-  md: '8px',
-  lg: '12px',
-  xl: '16px',
-  pill: '9999px',
+  sm: '0',
+  md: '0',
+  lg: '0',
+  xl: '0',
+  pill: '0',
 } as const;
+
+/** Apex: 삼각 컷 clip-path (우상단 대각선) */
+export const apexClip = {
+  sm: 'polygon(0 0, calc(100% - 8px) 0, 100% 8px, 100% 100%, 0 100%)',
+  md: 'polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%)',
+  lg: 'polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%)',
+} as const;
+
+/** Apex: 가로 악센트 라인 스타일 */
+export const accentLine = `1px solid #EF4444`;
 
 /** 박스 섀도 — 다크 테마 */
 export function sketchShadow(level: 'sm' | 'md' | 'lg' = 'md') {

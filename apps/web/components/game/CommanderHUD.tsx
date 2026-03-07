@@ -104,7 +104,7 @@ export default function CommanderHUD({
             fontFamily: headingFont,
             fontSize: SKFont.sm,
             padding: "4px 20px",
-            borderRadius: 4,
+            borderRadius: 0,
             animation: "pulse 0.5s infinite alternate",
             textTransform: "uppercase",
             letterSpacing: 2,
@@ -119,7 +119,7 @@ export default function CommanderHUD({
         style={{
           background: isManual ? SK.glassBg : "rgba(12, 18, 32, 0.6)",
           border: `1px solid ${isManual ? SK.gold : SK.glassBorder}`,
-          borderRadius: 8,
+          borderRadius: 0,
           padding: "10px 16px",
           display: "flex",
           alignItems: "center",
@@ -182,7 +182,7 @@ export default function CommanderHUD({
               style={{
                 width: 28,
                 height: 28,
-                borderRadius: 4,
+                borderRadius: 0,
                 border: `2px solid ${dashAvailable ? SK.gold : SK.textMuted}`,
                 background: dashAvailable ? `${SK.gold}33` : "transparent",
                 display: "flex",
@@ -248,7 +248,7 @@ export default function CommanderHUD({
             fontSize: SKFont.sm,
             fontWeight: 700,
             padding: "6px 14px",
-            borderRadius: 4,
+            borderRadius: 0,
             border: `1px solid ${isManual ? SK.red : SK.gold}`,
             background: isManual
               ? `linear-gradient(180deg, ${SK.redDark}, ${SK.red})`
@@ -369,7 +369,7 @@ const kbdStyle: React.CSSProperties = {
   fontSize: "10px",
   background: "rgba(255,255,255,0.08)",
   border: "1px solid rgba(255,255,255,0.15)",
-  borderRadius: 3,
+  borderRadius: 0,
   padding: "1px 5px",
   color: SK.textPrimary,
 };

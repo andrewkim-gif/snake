@@ -32,8 +32,8 @@ export function LobbyHeader({ connected }: LobbyHeaderProps) {
       background: 'linear-gradient(to bottom, rgba(9,9,11,0.95) 0%, rgba(9,9,11,0.7) 70%, transparent 100%)',
       backdropFilter: 'blur(14px)',
       WebkitBackdropFilter: 'blur(14px)',
-      borderBottom: '1px solid rgba(99,102,241,0.08)',
-      boxShadow: '0 1px 12px rgba(99,102,241,0.04)',
+      borderBottom: '1px solid rgba(239,68,68,0.3)',
+      boxShadow: '0 1px 12px rgba(239,68,68,0.04)',
       zIndex: 70,
       pointerEvents: 'none',
     }}>

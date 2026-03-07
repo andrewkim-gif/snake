@@ -332,7 +332,7 @@ export default function PolicyPanel({
                 style={{
                   width: '100%',
                   height: '6px',
-                  borderRadius: '3px',
+                  borderRadius: 0,
                   outline: 'none',
                   cursor: canEdit ? 'pointer' : 'not-allowed',
                   opacity: canEdit ? 1 : 0.6,

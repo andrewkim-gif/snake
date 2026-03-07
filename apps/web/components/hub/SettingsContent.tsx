@@ -48,7 +48,7 @@ export default function SettingsContent() {
       <div style={{
         background: SK.glassBg,
         border: `1px solid ${SK.glassBorder}`,
-        borderRadius: '12px',
+        borderRadius: 0,
         padding: '20px 24px',
       }}>
         <SettingRow label="Language">

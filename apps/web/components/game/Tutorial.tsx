@@ -57,7 +57,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     description:
       'Enter your name and select your nationality from 195 countries. ' +
       'Hit RANDOMIZE to generate a unique character, then CONFIRM to enter the battle.',
-    highlightArea: { top: '20%', left: '25%', width: '50%', height: '60%', borderRadius: '8px' },
+    highlightArea: { top: '20%', left: '25%', width: '50%', height: '60%', borderRadius: '0' },
     arrowDirection: 'down',
     autoAdvanceTrigger: 'character_confirmed',
   },
@@ -67,7 +67,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     description:
       'Use WASD or joystick to move your agent. Collect glowing orbs to gain XP during the Peace Phase. ' +
       'You have 5 minutes to farm before combat begins!',
-    highlightArea: { bottom: '10%', left: '35%', width: '30%', height: '15%', borderRadius: '8px' },
+    highlightArea: { bottom: '10%', left: '35%', width: '30%', height: '15%', borderRadius: '0' },
     arrowDirection: 'up',
     autoAdvanceTrigger: 'first_orb_collected',
   },
@@ -77,7 +77,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     description:
       'When you level up, choose 1 of 3 upgrades: Weapons (auto-fire!), Passives (stat boosts), ' +
       'or Synergy hints. Duplicate weapons evolve to higher levels. Build your combo!',
-    highlightArea: { top: '25%', left: '20%', width: '60%', height: '50%', borderRadius: '8px' },
+    highlightArea: { top: '25%', left: '20%', width: '60%', height: '50%', borderRadius: '0' },
     arrowDirection: 'down',
     autoAdvanceTrigger: 'first_levelup',
   },
@@ -87,7 +87,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     description:
       'After 5 minutes of peace, WAR PHASE begins! Your weapons fire automatically. ' +
       'Position wisely, dodge enemy attacks, and rack up kills. Death? You respawn in 3 seconds with your build intact.',
-    highlightArea: { top: '5%', left: '30%', width: '40%', height: '10%', borderRadius: '8px' },
+    highlightArea: { top: '5%', left: '30%', width: '40%', height: '10%', borderRadius: '0' },
     arrowDirection: 'down',
     autoAdvanceTrigger: 'first_war_phase',
   },
@@ -97,7 +97,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     description:
       'Every 10-minute epoch, your kills earn National Points. After 6 epochs (1 hour), ' +
       'the top-scoring nation dominates! Hold for 24h to gain Sovereignty, 7 days for Hegemony powers.',
-    highlightArea: { top: '5%', right: '5%', width: '25%', height: '20%', borderRadius: '8px' },
+    highlightArea: { top: '5%', right: '5%', width: '25%', height: '20%', borderRadius: '0' },
     arrowDirection: 'left',
     autoAdvanceTrigger: 'first_epoch_end',
   },
@@ -107,7 +107,7 @@ const TUTORIAL_STEPS: TutorialStepDef[] = [
     description:
       'Press ESC to return to the Globe view. Click any country to enter its arena. ' +
       'Watch domination colors change in real-time, and wage wars between nations!',
-    highlightArea: { top: '20%', left: '20%', width: '60%', height: '60%', borderRadius: '50%' },
+    highlightArea: { top: '20%', left: '20%', width: '60%', height: '60%', borderRadius: '0' },
     arrowDirection: 'down',
     autoAdvanceTrigger: 'first_globe_return',
   },

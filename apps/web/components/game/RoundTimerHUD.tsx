@@ -26,7 +26,7 @@ export function RoundTimerHUD({ timeRemaining }: RoundTimerHUDProps) {
       color: isLow ? '#C75B5B' : '#3A3028',
       backgroundColor: 'rgba(245, 240, 232, 0.85)',
       padding: '4px 16px',
-      borderRadius: '4px',
+      borderRadius: 0,
       border: `1.5px solid ${isLow ? '#C75B5B' : '#6B5E52'}`,
       letterSpacing: '0.05em',
       transition: 'all 300ms',

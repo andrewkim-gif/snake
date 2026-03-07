@@ -37,7 +37,7 @@ export interface SocketStableContextValue {
   // 액션 함수
   joinRoom: (roomId: string, name: string, skinId?: number, appearance?: string) => void;
   leaveRoom: () => void;
-  sendInput: (angle: number, boost: boolean, seq: number) => void;
+  sendInput: (angle: number, boost: boolean, seq: number, dash?: boolean) => void;
   respawn: (name?: string, skinId?: number, appearance?: string) => void;
   chooseUpgrade: (choiceId: string) => void;
   dismissSynergyPopup: (synergyId: string) => void;

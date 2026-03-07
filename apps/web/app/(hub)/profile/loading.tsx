@@ -13,7 +13,7 @@ function ShimmerBox({ width, height, style }: { width: string; height: string; s
       style={{
         width,
         height,
-        borderRadius: '6px',
+        borderRadius: 0,
         background: `linear-gradient(90deg, ${SK.border} 25%, ${SK.borderDark} 50%, ${SK.border} 75%)`,
         backgroundSize: '200% 100%',
         animation: 'shimmer 1.5s infinite',
@@ -47,18 +47,18 @@ export default function ProfileLoading() {
         <div style={{
           background: SK.cardBg,
           border: `1px solid ${SK.border}`,
-          borderRadius: '12px',
+          borderRadius: 0,
           padding: 24,
         }}>
-          <ShimmerBox width="100%" height="180px" style={{ borderRadius: '8px', marginBottom: 20 }} />
+          <ShimmerBox width="100%" height="180px" style={{ borderRadius: 0, marginBottom: 20 }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
             <ShimmerBox width="160px" height="20px" />
-            <ShimmerBox width="80px" height="20px" style={{ borderRadius: '9999px' }} />
+            <ShimmerBox width="80px" height="20px" style={{ borderRadius: 0 }} />
           </div>
           <ShimmerBox width="200px" height="13px" style={{ marginBottom: 16 }} />
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
             {Array.from({ length: 6 }).map((_, i) => (
-              <ShimmerBox key={i} width="100%" height="48px" style={{ borderRadius: '8px' }} />
+              <ShimmerBox key={i} width="100%" height="48px" style={{ borderRadius: 0 }} />
             ))}
           </div>
         </div>
@@ -67,14 +67,14 @@ export default function ProfileLoading() {
         <div style={{
           background: SK.cardBg,
           border: `1px solid ${SK.border}`,
-          borderRadius: '12px',
+          borderRadius: 0,
           padding: 24,
         }}>
           <ShimmerBox width="100px" height="16px" style={{ marginBottom: 16 }} />
-          <ShimmerBox width="100%" height="40px" style={{ borderRadius: '8px', marginBottom: 16 }} />
+          <ShimmerBox width="100%" height="40px" style={{ borderRadius: 0, marginBottom: 16 }} />
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {Array.from({ length: 4 }).map((_, i) => (
-              <ShimmerBox key={i} width="100%" height="48px" style={{ borderRadius: '8px' }} />
+              <ShimmerBox key={i} width="100%" height="48px" style={{ borderRadius: 0 }} />
             ))}
           </div>
         </div>
@@ -84,21 +84,21 @@ export default function ProfileLoading() {
       <div style={{
         background: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '12px',
+        borderRadius: 0,
         padding: 24,
       }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
           <ShimmerBox width="160px" height="18px" />
           <ShimmerBox width="80px" height="13px" />
         </div>
-        <ShimmerBox width="100%" height="6px" style={{ borderRadius: '9999px', marginBottom: 20 }} />
+        <ShimmerBox width="100%" height="6px" style={{ borderRadius: 0, marginBottom: 20 }} />
         <div style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
           gap: 10,
         }}>
           {Array.from({ length: 6 }).map((_, i) => (
-            <ShimmerBox key={i} width="100%" height="56px" style={{ borderRadius: '8px' }} />
+            <ShimmerBox key={i} width="100%" height="56px" style={{ borderRadius: 0 }} />
           ))}
         </div>
       </div>

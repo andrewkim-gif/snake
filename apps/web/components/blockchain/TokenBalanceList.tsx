@@ -96,7 +96,7 @@ export default function TokenBalanceList({
               onClick={() => setFilterTier(filterTier === tier ? '' : tier)}
               style={{
                 padding: '2px 8px',
-                borderRadius: '4px',
+                borderRadius: 0,
                 border: `1px solid ${TIER_COLORS[tier]}40`,
                 background: filterTier === tier ? `${TIER_COLORS[tier]}30` : 'transparent',
                 color: TIER_COLORS[tier],
@@ -116,7 +116,7 @@ export default function TokenBalanceList({
           style={{
             background: 'rgba(255,255,255,0.05)',
             border: '1px solid rgba(232, 224, 212, 0.15)',
-            borderRadius: '4px',
+            borderRadius: 0,
             color: '#E8E0D4',
             fontSize: '12px',
             padding: '2px 6px',
@@ -158,7 +158,7 @@ export default function TokenBalanceList({
               style={{
                 width: '32px',
                 height: '32px',
-                borderRadius: '6px',
+                borderRadius: 0,
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

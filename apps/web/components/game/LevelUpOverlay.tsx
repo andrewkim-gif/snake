@@ -138,12 +138,12 @@ export function LevelUpOverlay({ levelUp, onChoose }: LevelUpOverlayProps) {
       {/* 5-second timeout progress bar */}
       <div style={{
         width: '300px', maxWidth: '80vw', height: '6px',
-        backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: '3px', overflow: 'hidden', marginTop: '0.5rem',
+        backgroundColor: 'rgba(255,255,255,0.1)', borderRadius: 0, overflow: 'hidden', marginTop: '0.5rem',
       }}>
         <div style={{
           width: `${(1 - progress) * 100}%`, height: '100%',
           backgroundColor: progress > 0.7 ? MC.textRed : MC.textGold,
-          transition: 'background-color 300ms', borderRadius: '3px',
+          transition: 'background-color 300ms', borderRadius: 0,
         }} />
       </div>
       <div style={{

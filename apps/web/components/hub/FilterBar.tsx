@@ -26,7 +26,7 @@ export function FilterBar<T extends string = string>({
   value,
   onChange,
   variant = 'pill',
-  accentColor = SK.blue,
+  accentColor = SK.accent,
 }: FilterBarProps<T>) {
   const isTab = variant === 'tab';
 
@@ -78,7 +78,7 @@ export function FilterBar<T extends string = string>({
             onClick={() => onChange(opt.key)}
             style={{
               padding: '6px 16px',
-              borderRadius: '6px',
+              borderRadius: 0,
               border: `1px solid ${isActive ? accentColor + '40' : SK.border}`,
               background: isActive ? `${accentColor}15` : 'transparent',
               color: isActive ? accentColor : SK.textSecondary,

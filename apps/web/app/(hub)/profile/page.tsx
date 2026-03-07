@@ -75,7 +75,7 @@ export default function ProfilePage() {
         <div style={{
           background: SK.cardBg,
           border: sketchBorder(),
-          borderRadius: radius.lg,
+          borderRadius: 0,
           padding: 24,
           boxShadow: sketchShadow('md'),
         }}>
@@ -84,7 +84,7 @@ export default function ProfilePage() {
             width: '100%',
             height: 180,
             background: SK.bgWarm,
-            borderRadius: radius.md,
+            borderRadius: 0,
             border: sketchBorder(SK.borderDark),
             display: 'flex',
             alignItems: 'center',
@@ -145,7 +145,7 @@ export default function ProfilePage() {
               padding: '2px 10px',
               background: `${SK.gold}15`,
               border: `1px solid ${SK.gold}30`,
-              borderRadius: radius.pill,
+              borderRadius: 0,
               letterSpacing: '0.5px',
             }}>
               {MOCK_PROFILE.rank}
@@ -181,7 +181,7 @@ export default function ProfilePage() {
         <div style={{
           background: SK.cardBg,
           border: sketchBorder(),
-          borderRadius: radius.lg,
+          borderRadius: 0,
           padding: 24,
           boxShadow: sketchShadow('md'),
           display: 'flex',
@@ -219,7 +219,7 @@ export default function ProfilePage() {
               padding: '8px 12px',
               background: `${SK.green}10`,
               border: `1px solid ${SK.green}30`,
-              borderRadius: radius.md,
+              borderRadius: 0,
               marginBottom: 16,
             }}>
               Connected: {wallet.address.slice(0, 10)}...{wallet.address.slice(-6)}
@@ -266,7 +266,7 @@ export default function ProfilePage() {
       <div style={{
         background: SK.cardBg,
         border: sketchBorder(),
-        borderRadius: radius.lg,
+        borderRadius: 0,
         padding: 24,
         boxShadow: sketchShadow('md'),
       }}>
@@ -305,7 +305,7 @@ export default function ProfilePage() {
             <div style={{
               height: 6,
               background: SK.bgWarm,
-              borderRadius: radius.pill,
+              borderRadius: 0,
               overflow: 'hidden',
               marginBottom: 20,
             }}>
@@ -313,7 +313,7 @@ export default function ProfilePage() {
                 height: '100%',
                 width: '33%',
                 background: `linear-gradient(90deg, ${SK.blue}, ${SK.green})`,
-                borderRadius: radius.pill,
+                borderRadius: 0,
               }} />
             </div>
 
@@ -331,7 +331,7 @@ export default function ProfilePage() {
                     style={{
                       background: ach.unlocked ? `${color}10` : SK.cardBg,
                       border: sketchBorder(ach.unlocked ? `${color}40` : SK.border),
-                      borderRadius: radius.md,
+                      borderRadius: 0,
                       padding: '12px 14px',
                       opacity: ach.unlocked ? 1 : 0.5,
                       display: 'flex',
@@ -396,7 +396,7 @@ function StatItem({ label, value, color }: { label: string; value: string; color
     <div style={{
       padding: '10px 12px',
       background: SK.bgWarm,
-      borderRadius: radius.md,
+      borderRadius: 0,
       border: sketchBorder(SK.borderDark),
     }}>
       <div style={{

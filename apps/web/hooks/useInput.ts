@@ -5,6 +5,7 @@ import { useEffect, useRef, useCallback } from 'react';
 interface InputState {
   angle: number;
   boost: boolean;
+  dash?: boolean;  // v16: E key dash (one-shot)
 }
 
 type InputCallback = (state: InputState) => void;
@@ -87,6 +88,16 @@ export function useInput(
         e.preventDefault();
         boostRef.current = true;
         sendInput(true);
+        return;
+      }
+      // v16: E key → Dash (one-shot)
+      if (e.code === 'KeyE') {
+        e.preventDefault();
+        callbackRef.current({
+          angle: angleRef.current,
+          boost: boostRef.current,
+          dash: true,
+        });
         return;
       }
       const dir = directionKeys[e.code];

@@ -126,14 +126,14 @@ export function StatsChart({ stats, previousStats }: StatsChartProps) {
               flex: 1,
               height: '6px',
               background: 'rgba(255,255,255,0.04)',
-              borderRadius: '3px',
+              borderRadius: 0,
               overflow: 'hidden',
             }}>
               <div style={{
                 width: `${percentage}%`,
                 height: '100%',
                 background: `linear-gradient(90deg, ${cfg.color}80, ${cfg.color})`,
-                borderRadius: '3px',
+                borderRadius: 0,
                 transition: 'width 500ms ease',
               }} />
             </div>

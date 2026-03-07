@@ -115,7 +115,7 @@ export default function FactionDetailPage() {
             color: SK.textWhite,
             background: SK.green,
             border: 'none',
-            borderRadius: radius.md,
+            borderRadius: 0,
             cursor: 'pointer',
             letterSpacing: '1px',
           }}>
@@ -128,7 +128,7 @@ export default function FactionDetailPage() {
             color: SK.textSecondary,
             background: 'transparent',
             border: sketchBorder(),
-            borderRadius: radius.md,
+            borderRadius: 0,
             cursor: 'pointer',
             letterSpacing: '1px',
           }}>

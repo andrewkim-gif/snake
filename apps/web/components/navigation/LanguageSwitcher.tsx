@@ -28,7 +28,7 @@ export function LanguageSwitcher() {
         letterSpacing: '1px',
         padding: '4px 10px',
         border: `1px solid rgba(255, 255, 255, 0.1)`,
-        borderRadius: '4px',
+        borderRadius: 0,
         backgroundColor: 'rgba(255, 255, 255, 0.04)',
         cursor: 'pointer',
         transition: 'all 150ms ease',

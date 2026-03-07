@@ -65,7 +65,7 @@ function NewProposalPageInner() {
           style={{
             width: '64px',
             height: '64px',
-            borderRadius: '50%',
+            borderRadius: 0,
             background: `${SK.green}20`,
             display: 'flex',
             alignItems: 'center',
@@ -115,7 +115,7 @@ function NewProposalPageInner() {
           style={{
             background: SK.cardBg,
             border: `1px solid ${SK.border}`,
-            borderRadius: '12px',
+            borderRadius: 0,
             padding: '20px',
             marginBottom: '20px',
           }}
@@ -147,7 +147,7 @@ function NewProposalPageInner() {
                 onClick={() => setSelectedCountry(country)}
                 style={{
                   padding: '12px 16px',
-                  borderRadius: '8px',
+                  borderRadius: 0,
                   border: `1px solid ${SK.border}`,
                   background: 'rgba(255,255,255,0.02)',
                   color: SK.textPrimary,
@@ -192,7 +192,7 @@ function NewProposalPageInner() {
               alignItems: 'center',
               gap: '8px',
               padding: '6px 12px',
-              borderRadius: '8px',
+              borderRadius: 0,
               background: `${SK.orange}15`,
               border: `1px solid ${SK.orange}30`,
               marginBottom: '16px',

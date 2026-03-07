@@ -419,7 +419,7 @@ func (wm *WorldManager) GetSpectatorCount(countryISO string) int {
 // --- Input routing ---
 
 // RouteInput forwards player input to the correct country arena.
-func (wm *WorldManager) RouteInput(clientID string, angle float64, boost bool) {
+func (wm *WorldManager) RouteInput(clientID string, angle float64, boost bool, dash bool) {
 	wm.mu.RLock()
 	iso, ok := wm.playerCountry[clientID]
 	if !ok {
@@ -432,7 +432,7 @@ func (wm *WorldManager) RouteInput(clientID string, angle float64, boost bool) {
 	if !exists {
 		return
 	}
-	arena.HandleInput(clientID, angle, boost)
+	arena.HandleInput(clientID, angle, boost, dash)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct arena.

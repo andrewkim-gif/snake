@@ -14,7 +14,7 @@ function ShimmerBox({ width, height, style }: { width: string; height: string; s
       style={{
         width,
         height,
-        borderRadius: '6px',
+        borderRadius: 0,
         background: `linear-gradient(90deg, ${SK.border} 25%, ${SK.borderDark} 50%, ${SK.border} 75%)`,
         backgroundSize: '200% 100%',
         animation: 'shimmer 1.5s infinite',
@@ -57,7 +57,7 @@ export default function GovernanceLoading() {
       {/* 필터 탭 스켈레톤 */}
       <div style={{ display: 'flex', gap: 6, marginBottom: 20 }}>
         {Array.from({ length: 5 }).map((_, i) => (
-          <ShimmerBox key={i} width="70px" height="30px" style={{ borderRadius: '6px' }} />
+          <ShimmerBox key={i} width="70px" height="30px" style={{ borderRadius: 0 }} />
         ))}
       </div>
 
@@ -65,7 +65,7 @@ export default function GovernanceLoading() {
       <div style={{
         background: SK.cardBg,
         border: `1px solid ${SK.border}`,
-        borderRadius: '12px',
+        borderRadius: 0,
         padding: '16px',
       }}>
         {Array.from({ length: 3 }).map((_, i) => (
@@ -85,7 +85,7 @@ export default function GovernanceLoading() {
               <ShimmerBox width="100px" height="12px" />
             </div>
             {/* 찬반 바 */}
-            <ShimmerBox width="100%" height="8px" style={{ borderRadius: '4px' }} />
+            <ShimmerBox width="100%" height="8px" style={{ borderRadius: 0 }} />
           </div>
         ))}
       </div>
