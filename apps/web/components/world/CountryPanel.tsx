@@ -282,7 +282,7 @@ const TAB_ICONS: Record<CountryTab, typeof BarChart3> = {
   CIVILIZATION: Building2,
 };
 
-/** 탭 바 — 5탭, 골드 underline 활성 인디케이터 + lucide 아이콘 */
+/** 탭 바 — 5탭, 레드 underline 활성 인디케이터 + lucide 아이콘 */
 function TabBar({ activeTab, onTabChange }: {
   activeTab: CountryTab;
   onTabChange: (tab: CountryTab) => void;
@@ -303,9 +303,9 @@ function TabBar({ activeTab, onTabChange }: {
             style={{
               flex: 1,
               padding: '10px 0',
-              background: 'none',
+              background: isActive ? 'rgba(239, 68, 68, 0.06)' : 'none',
               border: 'none',
-              borderBottom: isActive ? '1px solid #F59E0B' : '1px solid transparent',
+              borderBottom: isActive ? '2px solid #EF4444' : '2px solid transparent',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
@@ -313,11 +313,11 @@ function TabBar({ activeTab, onTabChange }: {
               gap: '4px',
               fontFamily: bodyFont,
               fontSize: '10px',
-              fontWeight: 700,
-              letterSpacing: '1px',
+              fontWeight: 600,
+              letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              color: isActive ? '#F59E0B' : SK.textMuted,
-              transition: 'color 150ms ease, border-color 150ms ease',
+              color: isActive ? '#EF4444' : SK.textMuted,
+              transition: 'color 150ms ease, border-color 150ms ease, background 150ms ease',
             }}
           >
             <Icon size={13} strokeWidth={1.8} />
@@ -972,8 +972,8 @@ export function CountryPanel({
   // ─── 공통 헤더 (탭 위에 고정) ───
   const header = (
     <div style={{
-      padding: '20px 20px 16px',
-      borderBottom: `1px solid ${SK.border}`,
+      padding: '16px 20px 12px',
+      borderBottom: `1px solid rgba(239, 68, 68, 0.15)`,
       display: 'flex',
       alignItems: 'flex-start',
       justifyContent: 'space-between',
@@ -981,43 +981,44 @@ export function CountryPanel({
       <div>
         <div style={{
           fontFamily: bodyFont,
-          fontWeight: 800,
-          fontSize: SKFont.h2,
+          fontWeight: 700,
+          fontSize: '20px',
           color: SK.textPrimary,
-          letterSpacing: '1px',
+          letterSpacing: '0.3px',
           marginBottom: '4px',
         }}>
           {country?.name || 'Unknown'}
         </div>
         <div style={{
           fontFamily: bodyFont,
-          fontSize: SKFont.sm,
+          fontSize: '12px',
           color: SK.textSecondary,
           display: 'flex',
           alignItems: 'center',
           gap: '8px',
         }}>
-          <span>{country?.iso3}</span>
+          <span style={{ letterSpacing: '0.5px' }}>{country?.iso3}</span>
           <span style={{
             color: tierColor,
             fontWeight: 700,
             padding: '1px 6px',
             border: `1px solid ${tierColor}40`,
             borderRadius: 0,
-            fontSize: SKFont.xs,
+            fontSize: '10px',
+            letterSpacing: '0.5px',
           }}>
             TIER {country?.tier}
           </span>
-          <span style={{ opacity: 0.5 }}>{country?.continent}</span>
+          <span style={{ opacity: 0.5, letterSpacing: '0.3px' }}>{country?.continent}</span>
         </div>
       </div>
 
-      {/* 닫기 버튼 */}
+      {/* 닫기 버튼 — 붉은 악센트 */}
       <button
         onClick={onClose}
         style={{
           background: 'none',
-          border: `1px solid ${SK.border}`,
+          border: `1px solid rgba(239, 68, 68, 0.3)`,
           borderRadius: 0,
           color: SK.textSecondary,
           cursor: 'pointer',
@@ -1025,15 +1026,17 @@ export function CountryPanel({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          transition: 'color 150ms ease, border-color 150ms ease',
+          transition: 'color 150ms ease, border-color 150ms ease, background 150ms ease',
         }}
         onMouseEnter={(e) => {
-          e.currentTarget.style.color = SK.textPrimary;
-          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.2)';
+          e.currentTarget.style.color = '#EF4444';
+          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.6)';
+          e.currentTarget.style.background = 'rgba(239, 68, 68, 0.08)';
         }}
         onMouseLeave={(e) => {
           e.currentTarget.style.color = SK.textSecondary;
-          e.currentTarget.style.borderColor = SK.border;
+          e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.3)';
+          e.currentTarget.style.background = 'none';
         }}
       >
         <X size={16} strokeWidth={2} />
@@ -1044,8 +1047,8 @@ export function CountryPanel({
   // ─── 공통 하단 액션 ───
   const footer = (
     <div style={{
-      padding: '16px 20px 24px',
-      borderTop: `1px solid ${SK.border}`,
+      padding: '14px 20px 20px',
+      borderTop: `1px solid rgba(239, 68, 68, 0.15)`,
       display: 'flex',
       gap: '10px',
     }}>
@@ -1156,7 +1159,7 @@ export function CountryPanel({
     );
   }
 
-  // ━━━ 데스크탑: 우측 슬라이드 패널 ━━━
+  // ━━━ 데스크탑: 중앙 팝업 — Apex 스타일 ━━━
   return (
     <>
       {/* 배경 오버레이 */}
@@ -1164,7 +1167,7 @@ export function CountryPanel({
         style={{
           position: 'fixed',
           inset: 0,
-          background: 'rgba(0, 0, 0, 0.5)',
+          background: 'rgba(0, 0, 0, 0.6)',
           zIndex: 100,
           opacity: visible ? 1 : 0,
           transition: 'opacity 200ms ease',
@@ -1173,23 +1176,30 @@ export function CountryPanel({
         onClick={onClose}
       />
 
-      {/* 슬라이드 패널 — 글래스모피즘 */}
+      {/* 팝업 패널 — Apex 에이펙스 스타일 */}
       <div style={{
         position: 'fixed',
-        top: 0,
-        right: 0,
-        width: 'min(400px, 90vw)',
-        height: '100vh',
+        top: '50%',
+        left: '50%',
+        transform: visible
+          ? 'translate(-50%, -50%) scale(1)'
+          : 'translate(-50%, -48%) scale(0.96)',
+        opacity: visible ? 1 : 0,
+        width: 'min(520px, 92vw)',
+        maxHeight: '80vh',
         zIndex: 101,
-        transform: visible ? 'translateX(0)' : 'translateX(100%)',
-        transition: 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1)',
+        transition: 'transform 250ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease',
         display: 'flex',
         flexDirection: 'column',
-        background: 'rgba(9,9,11,0.85)',
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderLeft: '1px solid rgba(255,255,255,0.06)',
+        background: 'rgba(9, 9, 11, 0.94)',
+        backdropFilter: 'blur(24px)',
+        WebkitBackdropFilter: 'blur(24px)',
+        border: `1px solid ${SK.glassBorder}`,
+        borderTop: '1px solid rgba(239, 68, 68, 0.5)',
         overflow: 'hidden',
+        boxShadow: '0 24px 80px rgba(0, 0, 0, 0.7), 0 0 1px rgba(239, 68, 68, 0.3)',
+        clipPath: 'polygon(0 0, 100% 0, 100% 100%, 16px 100%, 0 calc(100% - 16px))',
+        pointerEvents: visible ? 'auto' : 'none',
       }}>
         {/* 헤더 (탭 위에 고정) */}
         {header}
@@ -1208,6 +1218,18 @@ export function CountryPanel({
 
         {/* 하단 액션 버튼 (탭 아래에 고정) */}
         {footer}
+
+        {/* 왼쪽 아래 붉은 삼각형 */}
+        <div style={{
+          position: 'absolute',
+          bottom: -1,
+          left: -1,
+          width: 0,
+          height: 0,
+          borderLeft: '16px solid #EF4444',
+          borderTop: '16px solid transparent',
+          pointerEvents: 'none',
+        }} />
       </div>
 
       {/* Pulse 애니메이션 CSS */}

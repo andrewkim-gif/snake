@@ -253,6 +253,10 @@ type ARPlayer struct {
 
 	// Active synergies (Phase 3)
 	ActiveSynergies []ARSynergyID `json:"synergies,omitempty"`
+
+	// PvP state (Phase 5)
+	PvPKills    int     `json:"pvpKills,omitempty"`   // PvP-specific kill count
+	PvPCCResist float64 `json:"-"`                     // CC resistance accumulation (0.0~0.9)
 }
 
 // ARTomeOffer is a single tome option presented during level-up.
@@ -507,16 +511,25 @@ type ARXPCrystal struct {
 
 // ARState is the full game state sent to clients at 20Hz.
 type ARState struct {
-	Phase        ARPhase           `json:"phase"`
-	Timer        float64           `json:"timer"` // seconds remaining in current phase
-	WaveNumber   int               `json:"wave"`
-	Terrain      ARTerrainTheme    `json:"terrain,omitempty"`
-	Tier         string            `json:"tier,omitempty"`
-	Players      []*ARPlayer       `json:"players"`
-	Enemies      []AREnemyNet      `json:"enemies"`
-	XPCrystals   []ARCrystalNet    `json:"xpCrystals"`
-	Projectiles  []ARProjectileNet `json:"projectiles"`
-	Items        []ARFieldItemNet  `json:"items"`
+	Phase         ARPhase                `json:"phase"`
+	Timer         float64                `json:"timer"` // seconds remaining in current phase
+	WaveNumber    int                    `json:"wave"`
+	Terrain       ARTerrainTheme         `json:"terrain,omitempty"`
+	Tier          string                 `json:"tier,omitempty"`
+	Players       []*ARPlayer            `json:"players"`
+	Enemies       []AREnemyNet           `json:"enemies"`
+	XPCrystals    []ARCrystalNet         `json:"xpCrystals"`
+	Projectiles   []ARProjectileNet      `json:"projectiles"`
+	Items         []ARFieldItemNet       `json:"items"`
+	PvPRadius     float64                `json:"pvpRadius,omitempty"`     // Phase 5: current shrunk PvP arena radius
+	FactionScores []ARFactionPvPScoreNet `json:"factionScores,omitempty"` // Phase 5: faction PvP scores
+}
+
+// ARFactionPvPScoreNet is the network representation of faction PvP scores.
+type ARFactionPvPScoreNet struct {
+	FactionID string `json:"factionId"`
+	PvPKills  int    `json:"pvpKills"`
+	Score     int    `json:"score"`
 }
 
 // ARDamageEvent is sent to clients for damage number rendering.

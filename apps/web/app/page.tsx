@@ -14,13 +14,15 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { CubelingAppearance } from '@agent-survivor/shared';
 import { createDefaultAppearance, packAppearance } from '@agent-survivor/shared';
-import { LobbyHeader } from '@/components/lobby/LobbyHeader';
+import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { NationalitySelector, loadNationality, saveNationality } from '@/components/lobby/NationalitySelector';
 import { Tutorial } from '@/components/game/Tutorial';
-import { NewsFeed } from '@/components/lobby/NewsFeed';
+import { NewsFeed, type NewsEventType } from '@/components/lobby/NewsFeed';
 import { GameSystemPopup } from '@/components/hub/GameSystemPopup';
+import { IntroSequence } from '@/components/lobby/IntroSequence';
+import type { IntroPhase } from '@/components/lobby/IntroSequence';
 import { useSocketContext } from '@/providers/SocketProvider';
 import type { GameMode } from '@/providers/SocketProvider';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
@@ -47,10 +49,43 @@ export default function Home() {
   const [appearance, setAppearance] = useState<CubelingAppearance>(createDefaultAppearance);
   const [nationality, setNationality] = useState('');
   const [fadeOut, setFadeOut] = useState(false);
-  const [setupOpen, setSetupOpen] = useState(true);
+  const [setupOpen, setSetupOpen] = useState(false);
   const [newsExpanded, setNewsExpanded] = useState(false);
   // v14 S36: 에포크 상태 요약 (로비 복귀 시 표시)
   const [epochSummary, setEpochSummary] = useState<string | null>(null);
+
+  // v17: 시네마틱 인트로 상태
+  const [introPhase, setIntroPhase] = useState<IntroPhase>('done');
+  const [introComplete, setIntroComplete] = useState(true);
+  const [introActive, setIntroActive] = useState(false);
+  const [clientReady, setClientReady] = useState(false);
+
+  // 클라이언트에서만 인트로 활성화 여부 결정 (SSR hydration 불일치 방지)
+  useEffect(() => {
+    const alreadyPlayed = sessionStorage.getItem('aww-intro-played');
+    if (!alreadyPlayed) {
+      setIntroPhase('black');
+      setIntroComplete(false);
+      setIntroActive(true);
+    }
+    setClientReady(true);
+  }, []);
+
+  // 인트로 중에는 UI 요소 숨김 (staggered reveal)
+  // clientReady 전에는 모두 false → SSR 깜빡임 방지
+  const showHeader = clientReady && (introPhase === 'ui-stagger' || introPhase === 'done' || !introActive);
+  const showLeftPanel = clientReady && (introPhase === 'ui-stagger' || introPhase === 'done' || !introActive);
+  const showNewsFeed = clientReady && (introPhase === 'done' || !introActive);
+
+  const handleIntroComplete = useCallback(() => {
+    setIntroComplete(true);
+    // 약간의 딜레이 후 인트로 카메라 비활성화 (OrbitControls 전환)
+    setTimeout(() => setIntroActive(false), 100);
+  }, []);
+
+  const handleIntroPhaseChange = useCallback((phase: IntroPhase) => {
+    setIntroPhase(phase);
+  }, []);
 
   // 게임 시스템 팝업 상태
   const [panelOpen, setPanelOpen] = useState(false);
@@ -273,8 +308,14 @@ export default function Home() {
       opacity: fadeOut ? 0 : 1,
       transition: 'opacity 300ms ease',
     }}>
+      {/* v17: 시네마틱 인트로 오버레이 */}
+      <IntroSequence
+        onIntroComplete={handleIntroComplete}
+        onPhaseChange={handleIntroPhaseChange}
+      />
+
       {/* v14: 6-step onboarding tutorial (replaces WelcomeTutorial) */}
-      <Tutorial />
+      {!introActive && <Tutorial />}
 
       {/* 전체 화면 지구본/맵 */}
       <WorldView
@@ -286,12 +327,44 @@ export default function Home() {
         wars={uiState.wars}
         tradeRoutes={uiState.tradeRoutes}
         globalEvents={uiState.globalEvents}
+        introActive={introActive}
+        onIntroComplete={() => {}} // 카메라 완료는 GlobeIntroCamera가 처리
+        activeConflictCountries={uiState.activeConflictCountries}
       />
 
-      {/* CIC 헤더 바 */}
-      <LobbyHeader
-        connected={uiState.connected}
-      />
+      {/* 온라인 상태 — 우상단 잔존 */}
+      <div style={{
+        position: 'absolute',
+        top: 12,
+        right: 16,
+        zIndex: 70,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        pointerEvents: 'none',
+        opacity: showHeader ? 1 : 0,
+        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+      }}>
+        <div style={{
+          width: '6px',
+          height: '6px',
+          borderRadius: '50%',
+          backgroundColor: uiState.connected ? SK.statusOnline : SK.statusOffline,
+          boxShadow: uiState.connected
+            ? `0 0 8px ${SK.green}80`
+            : `0 0 8px ${SK.red}60`,
+        }} />
+        <span style={{
+          fontFamily: bodyFont,
+          fontWeight: 600,
+          fontSize: '9px',
+          color: uiState.connected ? SK.green : SK.red,
+          letterSpacing: '1px',
+          textTransform: 'uppercase',
+        }}>
+          {uiState.connected ? tLobby('online') : tLobby('offline')}
+        </span>
+      </div>
 
       {/* v14 S36: 에포크 상태 요약 (로비 복귀 시) */}
       {epochSummary && (
@@ -342,32 +415,150 @@ export default function Home() {
         </div>
       )}
 
-      {/* 좌측 패널 — Agent Setup + GAME SYSTEM */}
+      {/* 좌하단 컨트롤 바 — 로고 + 버튼들 + 언어 한줄 */}
       <div style={{
         position: 'absolute',
-        top: 64,
+        bottom: NEWS_FEED_HEIGHT + 12,
         left: 16,
-        zIndex: 60,
-        maxWidth: '300px',
-        width: 'calc(100vw - 32px)',
+        zIndex: 65,
         display: 'flex',
         flexDirection: 'column',
-        gap: '6px',
+        alignItems: 'flex-start',
+        gap: '10px',
         pointerEvents: 'none',
+        opacity: showLeftPanel ? 1 : 0,
+        transform: showLeftPanel ? 'translateX(0)' : 'translateX(-20px)',
+        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
       }}>
-        {setupOpen ? (
-          <div style={{
+        {/* 로고 (작게) */}
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/assets/generated/logo-v2.png"
+          alt="AI WORLD WAR"
+          style={{
+            height: '22px',
+            width: 'auto',
+            objectFit: 'contain',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
             pointerEvents: 'auto',
-            backgroundColor: SK.glassBg,
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
+          }}
+        />
+
+        {/* 버튼 한 줄: Agent Setup + Game System + Language */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          pointerEvents: 'auto',
+        }}>
+          {/* Agent Setup 버튼 */}
+          <button
+            onClick={() => setSetupOpen(prev => !prev)}
+            style={{
+              position: 'relative',
+              fontFamily: bodyFont,
+              fontWeight: 600,
+              fontSize: '11px',
+              color: SK.textSecondary,
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              padding: '8px 14px',
+              border: `1px solid ${SK.glassBorder}`,
+              borderRadius: 0,
+              backgroundColor: 'rgba(9, 9, 11, 0.88)',
+              borderTop: '1px solid rgba(239, 68, 68, 0.4)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              cursor: 'pointer',
+              transition: 'all 200ms ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+            }}
+          >
+            <Settings size={11} color={SK.accent} strokeWidth={2} />
+            {tLobby('agentSetup')}
+            <div style={{
+              position: 'absolute',
+              bottom: -1,
+              left: -1,
+              width: 0,
+              height: 0,
+              borderLeft: '10px solid #EF4444',
+              borderTop: '10px solid transparent',
+              pointerEvents: 'none',
+            }} />
+          </button>
+
+          {/* GAME SYSTEM 버튼 */}
+          <button
+            onClick={() => handleOpenPanel()}
+            style={{
+              position: 'relative',
+              fontFamily: bodyFont,
+              fontWeight: 600,
+              fontSize: '11px',
+              color: SK.textSecondary,
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+              padding: '8px 14px',
+              border: `1px solid ${SK.glassBorder}`,
+              borderRadius: 0,
+              backgroundColor: 'rgba(9, 9, 11, 0.88)',
+              borderTop: '1px solid rgba(239, 68, 68, 0.4)',
+              backdropFilter: 'blur(20px)',
+              WebkitBackdropFilter: 'blur(20px)',
+              cursor: 'pointer',
+              transition: 'all 200ms ease',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+            }}
+          >
+            <span>GAME SYSTEM</span>
+            <ChevronRight size={11} strokeWidth={2} color={SK.accent} />
+            <div style={{
+              position: 'absolute',
+              bottom: -1,
+              left: -1,
+              width: 0,
+              height: 0,
+              borderLeft: '10px solid #EF4444',
+              borderTop: '10px solid transparent',
+              pointerEvents: 'none',
+            }} />
+          </button>
+
+          {/* 언어 설정 */}
+          <LanguageSwitcher />
+        </div>
+      </div>
+
+      {/* Agent Setup 팝업 (setupOpen 시) */}
+      {setupOpen && (
+        <div style={{
+          position: 'absolute',
+          bottom: NEWS_FEED_HEIGHT + 70,
+          left: 16,
+          zIndex: 66,
+          width: 'min(300px, calc(100vw - 32px))',
+          pointerEvents: 'auto',
+        }}>
+          <div style={{
+            position: 'relative',
+            backgroundColor: 'rgba(9, 9, 11, 0.94)',
+            backdropFilter: 'blur(24px)',
+            WebkitBackdropFilter: 'blur(24px)',
             border: `1px solid ${SK.glassBorder}`,
             borderRadius: 0,
-            borderTop: '1px solid #EF4444',
-            boxShadow: '0 4px 24px rgba(0, 0, 0, 0.5)',
-            overflow: 'hidden',
+            borderTop: '1px solid rgba(239, 68, 68, 0.5)',
+            boxShadow: '0 8px 40px rgba(0, 0, 0, 0.7)',
+            overflow: 'visible',
+            clipPath: 'polygon(0 0, 100% 0, 100% 100%, 14px 100%, 0 calc(100% - 14px))',
           }}>
-            {/* 헤더 바 */}
+            {/* 헤더 */}
             <div style={{
               display: 'flex',
               alignItems: 'center',
@@ -376,13 +567,13 @@ export default function Home() {
               borderBottom: `1px solid ${SK.borderDark}`,
             }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <Settings size={12} color={SK.accent} strokeWidth={2.5} />
+                <Settings size={12} color={SK.accent} strokeWidth={2} />
                 <span style={{
                   fontFamily: bodyFont,
-                  fontSize: '11px',
-                  fontWeight: 700,
+                  fontSize: '12px',
+                  fontWeight: 600,
                   color: SK.textPrimary,
-                  letterSpacing: '2px',
+                  letterSpacing: '0.5px',
                   textTransform: 'uppercase',
                 }}>
                   {tLobby('agentSetup')}
@@ -396,7 +587,7 @@ export default function Home() {
                   borderRadius: 0,
                   color: SK.textMuted,
                   cursor: 'pointer',
-                  padding: '2px',
+                  padding: '4px',
                   display: 'flex',
                   alignItems: 'center',
                   transition: 'color 150ms ease',
@@ -408,29 +599,26 @@ export default function Home() {
 
             {/* 콘텐츠 */}
             <div style={{ padding: '12px 14px' }}>
-              {/* 이름 입력 */}
               <McInput
                 value={playerName}
                 onChange={(e) => setPlayerName(e.target.value)}
                 placeholder={tLobby('enterCallsign')}
                 style={{ marginBottom: '10px' }}
               />
-
-              {/* 국적 선택 */}
               <div style={{ marginBottom: '10px' }}>
                 <div style={{
                   display: 'flex',
                   alignItems: 'center',
                   gap: '5px',
-                  marginBottom: '4px',
+                  marginBottom: '5px',
                 }}>
-                  <Globe size={9} color={SK.textMuted} strokeWidth={2} />
+                  <Globe size={10} color={SK.textMuted} strokeWidth={2} />
                   <span style={{
                     fontFamily: bodyFont,
-                    fontSize: '9px',
-                    fontWeight: 700,
+                    fontSize: '10px',
+                    fontWeight: 600,
                     color: SK.textMuted,
-                    letterSpacing: '1.5px',
+                    letterSpacing: '0.5px',
                     textTransform: 'uppercase' as const,
                   }}>
                     NATIONALITY
@@ -444,99 +632,58 @@ export default function Home() {
                   }}
                 />
               </div>
-
-              {/* 캐릭터 에디터 (Phase 7) */}
               <CharacterCreator
                 skinId={skinId}
                 onSelect={setSkinId}
                 appearance={appearance}
                 onAppearanceChange={setAppearance}
               />
-
-              {/* 안내 문구 */}
               <div style={{
                 marginTop: '12px',
                 padding: '8px 0 0',
                 textAlign: 'center',
                 fontFamily: bodyFont,
-                fontSize: '9px',
+                fontSize: '10px',
                 color: SK.textMuted,
-                letterSpacing: '1.5px',
+                letterSpacing: '0.5px',
                 borderTop: `1px solid ${SK.borderDark}`,
               }}>
                 {tLobby('clickToDeploy')}
               </div>
             </div>
+            {/* 왼쪽 아래 붉은 삼각형 */}
+            <div style={{
+              position: 'absolute',
+              bottom: -1,
+              left: -1,
+              width: 0,
+              height: 0,
+              borderLeft: '14px solid #EF4444',
+              borderTop: '14px solid transparent',
+              pointerEvents: 'none',
+            }} />
           </div>
-        ) : (
-          <button
-            onClick={() => setSetupOpen(true)}
-            style={{
-              pointerEvents: 'auto',
-              fontFamily: bodyFont,
-              fontWeight: 700,
-              fontSize: '10px',
-              color: SK.textSecondary,
-              letterSpacing: '2px',
-              textTransform: 'uppercase',
-              padding: '8px 16px',
-              border: `1px solid ${SK.border}`,
-              borderLeft: '1px solid #EF4444',
-              borderRadius: 0,
-              backgroundColor: SK.glassBg,
-              backdropFilter: 'blur(16px)',
-              WebkitBackdropFilter: 'blur(16px)',
-              cursor: 'pointer',
-              transition: 'all 150ms ease',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <Settings size={10} color={SK.accent} strokeWidth={2.5} />
-            {tLobby('agentSetup')}
-          </button>
-        )}
+        </div>
+      )}
 
-        {/* GAME SYSTEM 버튼 — 패널 아래 */}
-        <button
-          onClick={() => handleOpenPanel()}
-          style={{
-            pointerEvents: 'auto',
-            fontFamily: bodyFont,
-            fontWeight: 700,
-            fontSize: '10px',
-            color: SK.textMuted,
-            letterSpacing: '2px',
-            textTransform: 'uppercase',
-            padding: '8px 14px',
-            background: SK.glassBg,
-            backdropFilter: 'blur(16px)',
-            WebkitBackdropFilter: 'blur(16px)',
-            border: `1px solid ${SK.glassBorder}`,
-            borderRadius: 0,
-            cursor: 'pointer',
-            transition: 'all 150ms ease',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            width: '100%',
-          }}
-        >
-          <span>GAME SYSTEM</span>
-          <ChevronRight size={12} strokeWidth={2} />
-        </button>
-      </div>
-
-      {/* 뉴스 피드 — 하단 고정 */}
+      {/* 뉴스 피드 — 하단 고정 — v17: staggered reveal */}
       <div style={{
         position: 'absolute',
         bottom: 0,
         left: 0,
         right: 0,
         zIndex: 60,
+        opacity: showNewsFeed ? 1 : 0,
+        transform: showNewsFeed ? 'translateY(0)' : 'translateY(20px)',
+        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.3s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.3s',
       }}>
         <NewsFeed
+          news={uiState.globalEvents.map(evt => ({
+            id: evt.id,
+            type: (evt.type as NewsEventType) || 'global_event',
+            headline: evt.message,
+            timestamp: evt.timestamp,
+          }))}
           expanded={newsExpanded}
           onToggleExpand={() => setNewsExpanded(prev => !prev)}
         />

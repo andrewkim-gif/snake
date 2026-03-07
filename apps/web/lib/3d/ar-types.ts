@@ -196,6 +196,25 @@ export interface ARState {
   xpCrystals: ARCrystalNet[];
   projectiles: ARProjectileNet[];
   items: ARFieldItemNet[];
+  // Phase 5: PvP
+  pvpRadius?: number;
+  factionScores?: ARFactionPvPScoreNet[];
+}
+
+// Phase 5: Faction PvP score
+export interface ARFactionPvPScoreNet {
+  factionId: string;
+  pvpKills: number;
+  score: number;
+}
+
+// Phase 5: PvP kill event
+export interface ARPvPKillEvent {
+  killerId: string;
+  victimId: string;
+  xpStolen: number;
+  killerFac: string;
+  victimFac: string;
 }
 
 export interface ARInput {

@@ -19,7 +19,7 @@ import type { WalletState } from '@/lib/crossx-config';
 const Achievements = dynamic(() => import('@/components/profile/Achievements'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
-      Loading achievements...
+      …
     </div>
   ),
 });
@@ -222,7 +222,7 @@ export default function ProfilePage() {
               borderRadius: 0,
               marginBottom: 16,
             }}>
-              Connected: {wallet.address.slice(0, 10)}...{wallet.address.slice(-6)}
+              {tProfile('connected')} {wallet.address.slice(0, 10)}...{wallet.address.slice(-6)}
             </div>
           )}
 

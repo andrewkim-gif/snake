@@ -66,37 +66,63 @@ async function generateLogo(promptText: string, filename: string): Promise<void>
 async function main() {
   fs.mkdirSync(OUTPUT_DIR, { recursive: true });
 
-  // 로고 생성 — 3가지 변형
-  const basePrompt = `Create a wide horizontal game logo on a completely transparent background (PNG with alpha channel).
-
-The logo has two parts side by side, perfectly height-aligned:
-
-LEFT: A bold stylized letter "A" symbol — geometric, flat, modern military style. The "A" has angular edges, possibly with a small triangular notch or crossbar detail. It should look like an emblem or insignia mark. Monochrome warm off-white color (#E8E0D4).
-
-RIGHT: The text "AI WORLD WAR" in a weathered, distressed serif military typeface. Inspired by The Last of Us logo typography — slightly worn, with subtle texture/erosion on the letter edges, but still very legible and clean. Same warm off-white color (#E8E0D4).
-
-The overall style is:
-- Flat design (no 3D, no gradients, no shadows)
-- Distressed/weathered texture on the letterforms only
-- Military/tactical aesthetic
-- The A symbol and text are the SAME height
-- Wide aspect ratio (approximately 5:1)
-- Transparent background — NO background fill, NO background shape
-- Sophisticated and minimal — not cluttered
-
-Think of a premium war game title screen logo. Clean but with character.`;
+  // 로고 생성 — Last of Us 스타일, 순백색, A 심볼 높이 = 텍스트 높이
+  const tlou = `The Last of Us game logo style. The typography has a slightly rough, organic, hand-crafted quality — as if the letters were carved or etched into stone, with subtle cracks and nature reclaiming the edges. Tiny hints of moss, lichen, or vine tendrils growing in the crevices of some letters. But still very legible and elegant — not overly grunge. Think of the original The Last of Us Part I game cover title.`;
 
   const prompts = [
     {
-      prompt: basePrompt + '\n\nVariation: The A symbol has a clean triangular shape with a horizontal crossbar, slightly wider than the text height. Very geometric and precise.',
+      prompt: `Generate a wide horizontal game title logo on a solid black background (#000000).
+
+The text reads: A  AI WORLD WAR
+
+All letters are PURE WHITE (#FFFFFF) on solid black.
+
+${tlou}
+
+CRITICAL SIZE RULE: The "A" on the far left is the same cap-height as every other letter. It is NOT a big emblem or icon — it is a letter "A" rendered in a slightly more decorative style, like a drop cap or initial letter. Same height as "W" in WORLD. Same height as "I" in AI. All letters on the same baseline.
+
+The "A" mark on the left has these subtle differences from the other letters:
+- Slightly thicker strokes
+- A small nature element (tiny vine or crack detail) integrated into its form
+- But still clearly a letter A, not a symbol or icon
+
+The remaining text "AI WORLD WAR" uses elegant weathered serif capitals — like The Last of Us.
+
+Style:
+- All white (#FFFFFF), no color, no tints
+- Organic/nature-reclaimed texture on the letterforms
+- Wide aspect ratio (6:1 or wider)
+- Elegant and sophisticated — premium AAA game title quality
+- No 3D, no drop shadows — the beauty comes from the texture and typography alone`,
       file: 'logo-v1.png',
     },
     {
-      prompt: basePrompt + '\n\nVariation: The A symbol incorporates subtle crack/erosion details like ivy or roots growing on stone. More organic feel, matching The Last of Us aesthetic.',
+      prompt: `Create a wide game title logo on solid black (#000000) background.
+
+Text: A  AI WORLD WAR
+
+Style: The Last of Us Part I title aesthetic. Every letter is pure white (#FFFFFF). The typography looks slightly weathered, like carved stone with nature slowly growing over it — subtle cracks in the letterforms, tiny moss or organic textures in the serifs.
+
+THE A ON THE LEFT: It is a capital letter A, exactly the same height as every other capital letter. NOT an oversized symbol. Think of it as a stylized initial — same baseline, same cap height as "AI WORLD WAR" next to it. The A might have a slightly different serif treatment or a small artistic flourish, but it's the same scale. Like how "The Last of Us" has uniform letter heights with just texture variation.
+
+Layout: Single horizontal line, all letters same height, wide format (at minimum 5:1 width-to-height).
+
+No 3D. No gradients. No glow effects. Just beautiful white weathered typography on black.`,
       file: 'logo-v2.png',
     },
     {
-      prompt: basePrompt + '\n\nVariation: The A symbol is enclosed in a thin angular border (like a military unit patch outline). Very flat and tactical. The overall feel is austere and commanding.',
+      prompt: `Design a minimalist game title logo on pure black (#000000) background.
+
+Text reads:  A · AI WORLD WAR
+
+(The "A" is followed by a small centered dot "·" separator, then "AI WORLD WAR")
+
+Every character is pure white (#FFFFFF). The font is an elegant, slightly distressed serif — inspired by The Last of Us game title. Letters have organic weathering: thin hairline cracks, tiny bits of erosion at the edges. The beauty is in restraint.
+
+ABSOLUTE RULE: The "A" before the dot is the EXACT SAME HEIGHT as every other capital letter. It is simply a letter A with slightly bolder weight or a subtle stylistic flourish. It does not dominate. It does not tower. It is one letter among many, just slightly distinguished.
+
+Wide panoramic format. Clean. White on black. No effects, no 3D, no glow.
+Imagine this as a AAA PlayStation exclusive game title card.`,
       file: 'logo-v3.png',
     },
   ];

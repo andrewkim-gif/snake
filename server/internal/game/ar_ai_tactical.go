@@ -108,9 +108,20 @@ func TacticalUpdate(
 		tacticalSelectPvPTarget(player, tac, otherPlayers)
 		return
 
-	case ARPhaseDeploy, ARPhaseSettlement:
+	case ARPhaseDeploy:
 		// No combat — just idle
 		tac.Goal = ARGoalFarm
+		return
+
+	case ARPhaseSettlement:
+		// Settlement: fight the boss cooperatively
+		if hpRatio < 0.25 {
+			tac.Goal = ARGoalSurvive
+			tac.DesiredPos = tacticalFleeDirection(player, enemies)
+		} else {
+			tac.Goal = ARGoalAggro
+			tac.DesiredPos = tacticalAggroPosition(player, enemies)
+		}
 		return
 
 	default:

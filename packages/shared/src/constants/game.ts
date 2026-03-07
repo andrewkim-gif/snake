@@ -156,7 +156,7 @@ export const DEFAULT_SKINS: SnakeSkin[] = [
 // ─── Room Config ───
 
 export const ROOM_CONFIG = {
-  ROOM_COUNT: 5,
+  ROOM_COUNT: 50,
   MAX_PLAYERS_PER_ROOM: 50,   // 인간 플레이어 최대 (봇 별도)
   ROUND_DURATION: 300,         // 5분
   COUNTDOWN_DURATION: 10,      // 카운트다운 10초

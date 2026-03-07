@@ -106,7 +106,7 @@ export default function VoteHistoryPage() {
     <Suspense
       fallback={
         <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
-          Loading...
+          …
         </div>
       }
     >

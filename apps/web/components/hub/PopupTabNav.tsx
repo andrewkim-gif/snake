@@ -153,14 +153,14 @@ export function PopupTabNav({
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: '6px',
+                  gap: '8px',
                   fontFamily: bodyFont,
                   fontWeight: 600,
-                  fontSize: '11px',
-                  letterSpacing: '1.5px',
+                  fontSize: '13px',
+                  letterSpacing: '1.2px',
                   textTransform: 'uppercase',
                   color: active ? SK.accent : SK.textSecondary,
-                  padding: '12px 14px',
+                  padding: '14px 16px',
                   background: 'none',
                   border: 'none',
                   borderBottom: active
@@ -171,7 +171,7 @@ export function PopupTabNav({
                   whiteSpace: 'nowrap',
                 }}
               >
-                <Icon size={14} strokeWidth={1.8} />
+                <Icon size={16} strokeWidth={1.8} />
                 {label}
               </button>
             );
@@ -228,7 +228,7 @@ export function PopupTabNav({
                 style={{
                   fontFamily: bodyFont,
                   fontWeight: 600,
-                  fontSize: '11px',
+                  fontSize: '12px',
                   letterSpacing: '1px',
                   textTransform: 'uppercase',
                   color: active ? SK.textPrimary : SK.textMuted,

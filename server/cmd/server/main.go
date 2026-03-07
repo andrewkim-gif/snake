@@ -951,12 +951,13 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 		}
 		boost := payload.Boost == 1
 		dash := payload.Dash == 1
+		jump := payload.Jump == 1
 
 		// v16: If ma/aa fields present, use split input path
 		if payload.MoveAngle != nil || payload.AimAngle != nil {
 			moveAngle := payload.GetMoveAngle()
 			aimAngle := payload.GetAimAngle()
-			wm.RouteInputSplit(client.ID, moveAngle, aimAngle, boost, dash)
+			wm.RouteInputSplit(client.ID, moveAngle, aimAngle, boost, dash, jump)
 		} else {
 			// Legacy: single angle for both move and aim
 			wm.RouteInput(client.ID, payload.Angle, boost, dash)

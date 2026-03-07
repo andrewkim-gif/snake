@@ -174,6 +174,8 @@ export interface UiState {
   obstacleData: import('@/lib/biome-decoder').ObstacleGridData | null;
   // v16 Phase 8: Weather state (from state broadcast)
   weather: { type: string; intensity: number } | null;
+  // v17: ISO3 set of countries with active conflicts (playing/countdown rooms)
+  activeConflictCountries: Set<string>;
 }
 
 export function useSocket() {
@@ -218,6 +220,7 @@ export function useSocket() {
     biomeData: null,
     obstacleData: null,
     weather: null,
+    activeConflictCountries: new Set(),
   });
 
   useEffect(() => {
@@ -348,10 +351,19 @@ export function useSocket() {
     // ─── Room 이벤트 ───
 
     socket.on('rooms_update', (data: { rooms: RoomInfo[]; recentWinners: RecentWinner[] }) => {
+      // v17: Extract active conflict countries (playing/countdown/ending rooms with countryIso3)
+      const conflicts = new Set<string>();
+      for (const room of data.rooms) {
+        if (room.countryIso3 && (room.state === 'playing' || room.state === 'countdown' || room.state === 'ending')) {
+          conflicts.add(room.countryIso3);
+        }
+      }
+
       setUiState(prev => ({
         ...prev,
         rooms: data.rooms,
         recentWinners: data.recentWinners ?? [],
+        activeConflictCountries: conflicts,
       }));
       // 현재 룸의 timeRemaining 업데이트
       if (dataRef.current.currentRoomId) {

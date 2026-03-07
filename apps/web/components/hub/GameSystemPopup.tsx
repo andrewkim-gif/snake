@@ -8,6 +8,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont, accentLine } from '@/lib/sketch-ui';
 import { PopupTabNav, MAIN_TABS, DEFAULT_SUB_TABS } from './PopupTabNav';
@@ -61,6 +62,7 @@ const SettingsContent = dynamic(
 );
 
 function TabLoading() {
+  const tCommon = useTranslations('common');
   return (
     <div style={{
       display: 'flex',
@@ -72,7 +74,7 @@ function TabLoading() {
       color: SK.textMuted,
       letterSpacing: '2px',
     }}>
-      LOADING...
+      {tCommon('loadingText')}
     </div>
   );
 }
@@ -112,6 +114,8 @@ function TabContent({ mainTab, subTab }: { mainTab: MainTabKey; subTab: string }
 }
 
 function DashboardPlaceholder() {
+  const tNav = useTranslations('nav');
+  const tCommon = useTranslations('common');
   return (
     <div style={{
       display: 'flex',
@@ -128,7 +132,7 @@ function DashboardPlaceholder() {
         color: SK.textSecondary,
         letterSpacing: '2px',
       }}>
-        DASHBOARD
+        {tNav('dashboard').toUpperCase()}
       </span>
       <span style={{
         fontFamily: bodyFont,
@@ -136,7 +140,7 @@ function DashboardPlaceholder() {
         color: SK.textMuted,
         letterSpacing: '1px',
       }}>
-        Coming soon
+        {tCommon('comingSoon')}
       </span>
     </div>
   );
@@ -336,6 +340,9 @@ export function GameSystemPopup({
           zIndex: 2,
           borderTop: accentLine,
         }} />
+
+        {/* 탭 상단 여백 */}
+        <div style={{ height: '12px', flexShrink: 0, background: SK.bg }} />
 
         {/* 탭 네비게이션 */}
         <PopupTabNav

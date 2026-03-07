@@ -16,7 +16,7 @@ import { Trophy, Swords, Crown, Users, Calendar } from 'lucide-react';
 const HallOfFame = dynamic(() => import('@/components/hall-of-fame/HallOfFame'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 40, textAlign: 'center' }}>
-      Loading Hall of Fame...
+      …
     </div>
   ),
 });
@@ -51,10 +51,10 @@ export default function HallOfFamePage() {
       accentColor={SK.gold}
       heroImage="/images/hero-hall-of-fame.png"
       stats={[
-        { label: 'Total Seasons', value: String(MOCK_SEASONS.length), color: SK.textPrimary, icon: Calendar },
-        { label: 'Total Records', value: String(MOCK_RECORDS.length), color: SK.gold, icon: Trophy },
-        { label: 'Peak Players', value: String(MOCK_SEASONS[0]?.peakPlayers ?? 0), color: SK.green, icon: Users },
-        { label: 'Total Battles', value: String(MOCK_SEASONS.reduce((s, se) => s + se.totalBattles, 0)), color: SK.red, icon: Swords },
+        { label: tHof('totalSeasons'), value: String(MOCK_SEASONS.length), color: SK.textPrimary, icon: Calendar },
+        { label: tHof('totalRecords'), value: String(MOCK_RECORDS.length), color: SK.gold, icon: Trophy },
+        { label: tHof('peakPlayers'), value: String(MOCK_SEASONS[0]?.peakPlayers ?? 0), color: SK.green, icon: Users },
+        { label: tHof('totalBattles'), value: String(MOCK_SEASONS.reduce((s, se) => s + se.totalBattles, 0)), color: SK.red, icon: Swords },
       ]}
     >
       {/* 시즌 타임라인 */}
@@ -125,7 +125,7 @@ export default function HallOfFamePage() {
                   marginBottom: 4,
                   color: isActive ? SK.blue : SK.textPrimary,
                 }}>
-                  S{season.number}: {season.name}
+                  {tHof('seasonShort', { number: season.number })}: {season.name}
                 </div>
                 <div style={{
                   fontSize: SKFont.xs,
@@ -156,7 +156,7 @@ export default function HallOfFamePage() {
       ) : (
         sortedSeasons.map((seasonNum) => {
           const seasonRecords = recordsBySeason.get(seasonNum) || [];
-          const seasonName = seasonRecords[0]?.seasonName || `Season ${seasonNum}`;
+          const seasonName = seasonRecords[0]?.seasonName || tHof('season', { number: seasonNum });
 
           return (
             <div key={seasonNum} style={{ marginBottom: 32 }}>
@@ -179,7 +179,7 @@ export default function HallOfFamePage() {
                   gap: '8px',
                 }}>
                   <Crown size={16} color={SK.gold} />
-                  Season {seasonNum}: {seasonName}
+                  {tHof('season', { number: seasonNum })}: {seasonName}
                 </h2>
               </div>
 

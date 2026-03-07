@@ -225,6 +225,12 @@ func combatEventToRoomType(evtType string) RoomEventType {
 		return RoomEvtAREliteExplosion
 	case "battle_end":
 		return RoomEvtARBattleEnd
+	case "pvp_kill":
+		return RoomEvtARPvPKill
+	case "boss_spawn":
+		return RoomEvtARBossSpawn
+	case "boss_defeated":
+		return RoomEvtARBossDefeated
 	default:
 		return RoomEvtARState
 	}

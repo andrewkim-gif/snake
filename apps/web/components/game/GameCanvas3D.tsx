@@ -27,7 +27,7 @@ import { useInputManager } from '@/hooks/useInputManager';
 import { Scene } from '@/components/3d/Scene';
 import { SkyBox } from '@/components/3d/SkyBox';
 import { TPSCamera } from '@/components/3d/TPSCamera';
-import type { KillcamState } from '@/components/3d/TPSCamera';
+import type { KillcamState, ObserverState } from '@/components/3d/TPSCamera';
 import { GameLoop } from '@/components/3d/GameLoop';
 import { AgentInstances } from '@/components/3d/AgentInstances';
 import { EquipmentInstances } from '@/components/3d/EquipmentInstances';
@@ -140,6 +140,50 @@ export function GameCanvas3D({
   });
   const [killcamActive, setKillcamActive] = useState(false);
 
+  // 옵저버 모드 상태
+  const observerRef = useRef<ObserverState>({
+    active: false,
+    freeCam: true,
+    followTargetId: null,
+    moveInput: { x: 0, z: 0 },
+  });
+
+  // 옵저버 모드 활성화: isSpectating이 true가 되면 활성
+  useEffect(() => {
+    observerRef.current.active = uiState.isSpectating === true;
+  }, [uiState.isSpectating]);
+
+  // 옵저버 WASD 키 입력 리스너 (포인터락 없을 때 자유 카메라 이동)
+  useEffect(() => {
+    if (!uiState.isSpectating) return;
+    const keys = new Set<string>();
+    const updateMove = () => {
+      const mv = observerRef.current.moveInput;
+      mv.x = (keys.has('d') || keys.has('D') ? 1 : 0) - (keys.has('a') || keys.has('A') ? 1 : 0);
+      mv.z = (keys.has('w') || keys.has('W') ? 1 : 0) - (keys.has('s') || keys.has('S') ? 1 : 0);
+    };
+    const onDown = (e: KeyboardEvent) => {
+      if (['w','a','s','d','W','A','S','D'].includes(e.key)) {
+        keys.add(e.key);
+        updateMove();
+      }
+    };
+    const onUp = (e: KeyboardEvent) => {
+      keys.delete(e.key);
+      keys.delete(e.key.toLowerCase());
+      keys.delete(e.key.toUpperCase());
+      updateMove();
+    };
+    window.addEventListener('keydown', onDown);
+    window.addEventListener('keyup', onUp);
+    return () => {
+      window.removeEventListener('keydown', onDown);
+      window.removeEventListener('keyup', onUp);
+      observerRef.current.moveInput.x = 0;
+      observerRef.current.moveInput.z = 0;
+    };
+  }, [uiState.isSpectating]);
+
   // v16 Phase 7: SoundEngine + PostProcessing
   const soundEngine = useSoundEngine();
   const [chromaticIntensity, setChromaticIntensity] = useState(0);
@@ -187,6 +231,27 @@ export function GameCanvas3D({
   const [terrainToast, setTerrainToast] = useState<string | null>(null);
   // v12 S20: Spectator mode + battle result
   const [spectatorTarget, setSpectatorTarget] = useState<string | null>(null);
+  // 옵저버: 팔로우 대상 동기화
+  const handleFollowAgent = useCallback((agentId: string | null) => {
+    setSpectatorTarget(agentId);
+    if (agentId) {
+      observerRef.current.freeCam = false;
+      observerRef.current.followTargetId = agentId;
+    } else {
+      observerRef.current.freeCam = true;
+      observerRef.current.followTargetId = null;
+    }
+  }, []);
+  // 옵저버: 드래그 → cameraDelta로 라우팅 (SpectatorMode에서 사용)
+  const handleObserverDrag = useCallback((dx: number, dy: number) => {
+    inputManager.cameraDeltaRef.current.dx += dx * 0.005;
+    inputManager.cameraDeltaRef.current.dy += dy * 0.005;
+  }, [inputManager]);
+  // 옵저버: 줌
+  const handleObserverZoom = useCallback((delta: number) => {
+    const ref = inputManager.scrollDeltaRef;
+    ref.current += delta * 50; // SpectatorMode sends -1/+1
+  }, [inputManager]);
   const [battleCountdown, setBattleCountdown] = useState(10);
 
   // v14: Tab scoreboard toggle
@@ -502,6 +567,7 @@ export function GameCanvas3D({
           cameraRef={cameraRef}
           playerPosRef={playerPosRef}
           killcamRef={killcamRef}
+          observerRef={observerRef}
         />
 
         {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별) */}
@@ -726,7 +792,10 @@ export function GameCanvas3D({
           deathInfo={uiState.deathInfo}
           aliveAgents={aliveAgentsForSpectator}
           followTarget={spectatorTarget}
-          onFollowAgent={setSpectatorTarget}
+          onFollowAgent={handleFollowAgent}
+          onDragCamera={handleObserverDrag}
+          onZoomCamera={handleObserverZoom}
+          onExitToLobby={handleExitToLobby}
           timeRemaining={uiState.timeRemaining}
         />
       )}

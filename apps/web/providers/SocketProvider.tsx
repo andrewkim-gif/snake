@@ -120,8 +120,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, [uiState]);
 
   // ─── 게임 시작 리디렉트: joined 이벤트 감지 시 → '/'로 자동 이동 ───
+  // /debug 페이지는 자체적으로 게임 렌더링하므로 리디렉트 제외
   useEffect(() => {
-    if (uiState.currentRoomId && pathname !== '/') {
+    if (uiState.currentRoomId && pathname !== '/' && pathname !== '/debug') {
       router.push('/');
     }
   }, [uiState.currentRoomId, pathname, router]);

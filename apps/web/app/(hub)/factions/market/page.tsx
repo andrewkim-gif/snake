@@ -12,7 +12,7 @@ import { DashboardPage, LoadingSkeleton } from '@/components/hub';
 import { ShoppingCart } from 'lucide-react';
 
 const MercenaryMarket = dynamic(() => import('@/components/market/MercenaryMarket'), {
-  loading: () => <LoadingSkeleton text="Loading mercenary market..." />,
+  loading: () => <LoadingSkeleton text="" />,
 });
 
 export default function MercenaryMarketPage() {

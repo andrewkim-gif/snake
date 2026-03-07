@@ -406,15 +406,19 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	})
 
 	// ==============================================================
+	// Shared API Key Validator (Agent + Meta API DualAuth)
+	// ==============================================================
+	apiKeyValidator := func(_ context.Context, keyHash string) (string, error) {
+		if keyHash == "" {
+			return "", fmt.Errorf("empty key hash")
+		}
+		return "api_user_" + keyHash[:8], nil
+	}
+
+	// ==============================================================
 	// Agent REST API (S24, Phase 5) — DualAuth (JWT or API Key)
 	// ==============================================================
 	if d.AgentRouter != nil {
-		apiKeyValidator := func(_ context.Context, keyHash string) (string, error) {
-			if keyHash == "" {
-				return "", fmt.Errorf("empty key hash")
-			}
-			return "api_user_" + keyHash[:8], nil
-		}
 		r.Route("/api/agents", func(r chi.Router) {
 			r.Use(auth.DualAuth(apiKeyValidator))
 			r.Mount("/", d.AgentRouter.Routes())
@@ -432,6 +436,9 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// v11 Meta API Routes (Phase 3-8)
 	// ==============================================================
 	r.Route("/api/v11", func(r chi.Router) {
+		// DualAuth: JWT 또는 API Key 인증 (LLM 에이전트 시뮬레이션 지원)
+		r.Use(auth.DualAuth(apiKeyValidator))
+
 		// --- Factions (S16) ---
 		if d.FactionManager != nil {
 			r.Mount("/factions", d.FactionManager.FactionRoutes())

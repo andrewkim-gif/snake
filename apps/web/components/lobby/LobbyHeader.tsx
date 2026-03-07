@@ -46,13 +46,13 @@ export function LobbyHeader({ connected }: LobbyHeaderProps) {
       }}>
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
-          src="/assets/generated/logo-header.png"
+          src="/assets/generated/logo-v2.png"
           alt="AI WORLD WAR"
           style={{
-            height: '22px',
+            height: '30px',
             width: 'auto',
             objectFit: 'contain',
-            filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.6))',
+            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
           }}
         />
       </div>

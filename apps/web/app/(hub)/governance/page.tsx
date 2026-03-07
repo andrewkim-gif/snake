@@ -91,10 +91,10 @@ function GovernancePageInner() {
         ) : undefined
       }
       stats={[
-        { label: 'Total Proposals', value: String(MOCK_PROPOSALS.length), color: SK.textPrimary, icon: Vote },
-        { label: 'Active Voting', value: String(activeCount), color: SK.orange, icon: Clock },
-        { label: 'Passed', value: String(passedCount), color: SK.green, icon: CheckCircle },
-        { label: 'Rejected', value: String(rejectedCount), color: SK.red, icon: XCircle },
+        { label: tGov('totalProposals'), value: String(MOCK_PROPOSALS.length), color: SK.textPrimary, icon: Vote },
+        { label: tGov('activeVoting'), value: String(activeCount), color: SK.orange, icon: Clock },
+        { label: tGov('passed'), value: String(passedCount), color: SK.green, icon: CheckCircle },
+        { label: tGov('rejected'), value: String(rejectedCount), color: SK.red, icon: XCircle },
       ]}
     >
       <FilterBar
@@ -144,7 +144,7 @@ export default function GovernancePage() {
     <Suspense
       fallback={
         <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
-          Loading...
+          …
         </div>
       }
     >

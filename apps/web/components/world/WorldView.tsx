@@ -46,6 +46,12 @@ interface WorldViewProps {
   tradeRoutes?: TradeRouteData[];
   /** v15 Phase 5: Global events for pulse effects */
   globalEvents?: GlobalEventData[];
+  /** v17: 인트로 카메라 애니메이션 활성화 */
+  introActive?: boolean;
+  /** v17: 인트로 카메라 완료 콜백 */
+  onIntroComplete?: () => void;
+  /** v17: ISO3 set of countries with active conflicts */
+  activeConflictCountries?: Set<string>;
 }
 
 export function WorldView({
@@ -58,6 +64,9 @@ export function WorldView({
   wars,
   tradeRoutes,
   globalEvents,
+  introActive,
+  onIntroComplete,
+  activeConflictCountries,
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -157,57 +166,13 @@ export function WorldView({
           onHover={handleGlobeHover}
           tradeRoutes={tradeRoutes}
           globalEvents={globalEvents}
+          introActive={introActive}
+          onIntroComplete={onIntroComplete}
+          activeConflictCountries={activeConflictCountries}
         />
       </div>
 
-      {/* 하단 범례 */}
-      <div style={{
-        position: 'absolute',
-        bottom: bottomOffset,
-        left: 0,
-        right: 0,
-        padding: '12px 20px',
-        display: 'flex',
-        justifyContent: 'center',
-        gap: '16px',
-        zIndex: 50,
-        background: 'linear-gradient(to top, rgba(9,9,11,0.8) 0%, transparent 100%)',
-        pointerEvents: 'none',
-      }}>
-        {[
-          { color: '#22C55E', label: 'MY FACTION' },
-          { color: '#3B82F6', label: 'ALLY' },
-          { color: '#F59E0B', label: 'NEUTRAL' },
-          { color: '#EF4444', label: 'ENEMY' },
-          { color: '#3D7A9E', label: 'UNCLAIMED' },
-        ].map(({ color, label }) => (
-          <div
-            key={label}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <div style={{
-              width: '8px',
-              height: '8px',
-              borderRadius: 0,
-              backgroundColor: color,
-              border: '1px solid rgba(255,255,255,0.08)',
-            }} />
-            <span style={{
-              fontFamily: bodyFont,
-              fontSize: '9px',
-              color: SK.textMuted,
-              letterSpacing: '1px',
-              fontWeight: 600,
-            }}>
-              {label}
-            </span>
-          </div>
-        ))}
-      </div>
+      {/* 하단 범례 — 삭제됨 (v17) */}
 
       {/* v14: GlobeHoverPanel — 마우스 호버 시 국가 정보 패널 */}
       <GlobeHoverPanel

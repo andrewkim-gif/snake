@@ -16,7 +16,7 @@ import { ScrollText } from 'lucide-react';
 const PolicyPanel = dynamic(
   () => import('@/components/economy/PolicyPanel'),
   {
-    loading: () => <LoadingSkeleton text="Loading policy panel..." />,
+    loading: () => <LoadingSkeleton text="" />,
     ssr: false,
   },
 );
@@ -28,8 +28,8 @@ function PolicyPageInner() {
 
   const countryISO = countryParam || 'KOR';
   const countryName = countryParam
-    ? `${countryParam} Nation`
-    : 'Republic of Korea';
+    ? `${countryParam}`
+    : 'KOR';
 
   const serverUrl =
     typeof window !== 'undefined'
@@ -60,11 +60,12 @@ function PolicyPageInner() {
 }
 
 export default function PolicyPage() {
+  const t = useTranslations('common');
   return (
     <Suspense
       fallback={
         <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
-          Loading...
+          {t('loading')}
         </div>
       }
     >

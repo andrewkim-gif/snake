@@ -591,6 +591,7 @@ type RoomInfo struct {
 	MaxPlayers    int       `json:"maxPlayers"`
 	TimeRemaining int       `json:"timeRemaining"` // seconds
 	Round         int       `json:"round"`
+	CountryISO3   string    `json:"countryIso3,omitempty"` // v17: ISO3 code of the country arena
 }
 
 // WinnerInfo holds information about a round winner.

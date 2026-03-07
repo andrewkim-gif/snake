@@ -22,7 +22,7 @@ func Load() (*Config, error) {
 		Port:        8000,
 		CORSOrigins: []string{"http://localhost:3000", "http://localhost:9001"},
 		TickRate:    20,
-		MaxRooms:    5,
+		MaxRooms:    50,
 		Environment: "development",
 	}
 

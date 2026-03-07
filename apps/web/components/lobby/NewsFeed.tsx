@@ -3,10 +3,15 @@
 /**
  * NewsFeed — 글로벌 뉴스 피드 티커
  * S10: 하단 스크롤 뉴스 티커, 실시간 WebSocket 푸시, 24시간 아카이브
+ * i18n: next-intl 기반 다국어 지원
  */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
+
+// next-intl Translator 함수 타입
+type TFunc = ReturnType<typeof useTranslations<'news'>>;
 
 // 뉴스 이벤트 타입
 export type NewsEventType =
@@ -41,16 +46,16 @@ const newsTypeColors: Record<NewsEventType, string> = {
   global_event: '#EC4899',
 };
 
-// 뉴스 타입별 태그 텍스트
-const newsTypeTags: Record<NewsEventType, string> = {
-  sovereignty_change: 'SOVEREIGNTY',
-  battle_start: 'BATTLE',
-  battle_end: 'VICTORY',
-  war_declared: 'WAR',
-  treaty_signed: 'DIPLOMACY',
-  economy_event: 'ECONOMY',
-  season_event: 'SEASON',
-  global_event: 'GLOBAL',
+// 뉴스 타입 → i18n 태그 키 매핑
+const newsTypeTagKeys: Record<NewsEventType, string> = {
+  sovereignty_change: 'tagSovereignty',
+  battle_start: 'tagBattle',
+  battle_end: 'tagVictory',
+  war_declared: 'tagWar',
+  treaty_signed: 'tagDiplomacy',
+  economy_event: 'tagEconomy',
+  season_event: 'tagSeason',
+  global_event: 'tagGlobal',
 };
 
 interface NewsFeedProps {
@@ -60,71 +65,21 @@ interface NewsFeedProps {
   onToggleExpand?: () => void;
 }
 
-// 기본 데모 뉴스 (서버 연결 전)
-function generateDemoNews(): NewsItem[] {
-  const now = Date.now();
-  return [
-    {
-      id: 'demo-1',
-      type: 'sovereignty_change',
-      headline: 'Phoenix Coalition claims sovereignty over South Korea',
-      countryISO: 'KOR',
-      factionName: 'Phoenix Coalition',
-      timestamp: now - 120000,
-    },
-    {
-      id: 'demo-2',
-      type: 'battle_start',
-      headline: 'Battle erupting in Germany — 23 agents deployed',
-      countryISO: 'DEU',
-      timestamp: now - 240000,
-    },
-    {
-      id: 'demo-3',
-      type: 'war_declared',
-      headline: 'Iron Wolves declares war on Shadow Syndicate',
-      factionName: 'Iron Wolves',
-      timestamp: now - 480000,
-    },
-    {
-      id: 'demo-4',
-      type: 'economy_event',
-      headline: 'Oil prices surge — Saudi Arabia GDP +15%',
-      countryISO: 'SAU',
-      timestamp: now - 600000,
-    },
-    {
-      id: 'demo-5',
-      type: 'treaty_signed',
-      headline: 'Trade agreement signed between Red Dragon and Blue Storm',
-      timestamp: now - 900000,
-    },
-    {
-      id: 'demo-6',
-      type: 'battle_end',
-      headline: 'Phoenix Coalition wins decisive battle in Japan',
-      countryISO: 'JPN',
-      factionName: 'Phoenix Coalition',
-      timestamp: now - 1200000,
-    },
-  ];
-}
-
-// 시간 포맷 (상대 시간)
-function formatTimeAgo(ts: number): string {
+// 시간 포맷 (상대 시간) — tNews를 파라미터로 받아 i18n 지원
+function formatTimeAgo(ts: number, tNews: TFunc): string {
   const diff = Date.now() - ts;
   const mins = Math.floor(diff / 60000);
-  if (mins < 1) return 'JUST NOW';
-  if (mins < 60) return `${mins}M AGO`;
+  if (mins < 1) return tNews('timeJustNow');
+  if (mins < 60) return tNews('timeMinutesAgo', { count: mins });
   const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}H AGO`;
-  return `${Math.floor(hours / 24)}D AGO`;
+  if (hours < 24) return tNews('timeHoursAgo', { count: hours });
+  return tNews('timeDaysAgo', { count: Math.floor(hours / 24) });
 }
 
 // 티커 아이템 컴포넌트
-function TickerItem({ item }: { item: NewsItem }) {
+function TickerItem({ item, tNews }: { item: NewsItem; tNews: TFunc }) {
   const color = newsTypeColors[item.type];
-  const tag = newsTypeTags[item.type];
+  const tag = tNews(newsTypeTagKeys[item.type]);
 
   return (
     <span style={{
@@ -166,7 +121,7 @@ function TickerItem({ item }: { item: NewsItem }) {
         fontWeight: 600,
         letterSpacing: '1px',
       }}>
-        {formatTimeAgo(item.timestamp)}
+        {formatTimeAgo(item.timestamp, tNews)}
       </span>
 
       {/* 구분선 */}
@@ -187,18 +142,64 @@ export function NewsFeed({
   expanded = false,
   onToggleExpand,
 }: NewsFeedProps) {
+  const tNews = useTranslations('news');
   const [internalNews, setInternalNews] = useState<NewsItem[]>([]);
   const tickerRef = useRef<HTMLDivElement>(null);
 
   // 뉴스 소스 결정 (외부 또는 데모)
   const allNews = externalNews && externalNews.length > 0 ? externalNews : internalNews;
 
-  // 데모 뉴스 초기화
+  // 데모 뉴스 초기화 (i18n 적용)
   useEffect(() => {
     if (!externalNews || externalNews.length === 0) {
-      setInternalNews(generateDemoNews());
+      const now = Date.now();
+      setInternalNews([
+        {
+          id: 'demo-1',
+          type: 'sovereignty_change',
+          headline: tNews('demoSovereignty'),
+          countryISO: 'KOR',
+          factionName: 'Phoenix Coalition',
+          timestamp: now - 120000,
+        },
+        {
+          id: 'demo-2',
+          type: 'battle_start',
+          headline: tNews('demoBattleStart'),
+          countryISO: 'DEU',
+          timestamp: now - 240000,
+        },
+        {
+          id: 'demo-3',
+          type: 'war_declared',
+          headline: tNews('demoWarDeclared'),
+          factionName: 'Iron Wolves',
+          timestamp: now - 480000,
+        },
+        {
+          id: 'demo-4',
+          type: 'economy_event',
+          headline: tNews('demoEconomySurge'),
+          countryISO: 'SAU',
+          timestamp: now - 600000,
+        },
+        {
+          id: 'demo-5',
+          type: 'treaty_signed',
+          headline: tNews('demoTreatySigned'),
+          timestamp: now - 900000,
+        },
+        {
+          id: 'demo-6',
+          type: 'battle_end',
+          headline: tNews('demoBattleWon'),
+          countryISO: 'JPN',
+          factionName: 'Phoenix Coalition',
+          timestamp: now - 1200000,
+        },
+      ]);
     }
-  }, [externalNews]);
+  }, [externalNews, tNews]);
 
   // 티커 스크롤 애니메이션
   useEffect(() => {
@@ -248,7 +249,7 @@ export function NewsFeed({
             color: SK.textPrimary,
             letterSpacing: '2px',
           }}>
-            NEWS ARCHIVE
+            {tNews('archive')}
           </span>
           <button
             onClick={onToggleExpand}
@@ -264,7 +265,7 @@ export function NewsFeed({
               fontWeight: 700,
             }}
           >
-            CLOSE
+            {tNews('close')}
           </button>
         </div>
 
@@ -292,7 +293,7 @@ export function NewsFeed({
               minWidth: '80px',
               textAlign: 'center',
             }}>
-              {newsTypeTags[item.type]}
+              {tNews(newsTypeTagKeys[item.type])}
             </span>
             <div style={{ flex: 1 }}>
               <div style={{
@@ -322,7 +323,7 @@ export function NewsFeed({
               letterSpacing: '1px',
               whiteSpace: 'nowrap',
             }}>
-              {formatTimeAgo(item.timestamp)}
+              {formatTimeAgo(item.timestamp, tNews)}
             </span>
           </div>
         ))}
@@ -371,7 +372,7 @@ export function NewsFeed({
           fontWeight: 700,
           letterSpacing: '2px',
         }}>
-          LIVE
+          {tNews('live')}
         </span>
       </div>
 
@@ -380,7 +381,7 @@ export function NewsFeed({
         <div ref={tickerRef} style={{ display: 'inline-block' }}>
           {/* 뉴스 2벌 (무한 스크롤용) */}
           {[...allNews, ...allNews].map((item, i) => (
-            <TickerItem key={`${item.id}-${i}`} item={item} />
+            <TickerItem key={`${item.id}-${i}`} item={item} tNews={tNews} />
           ))}
         </div>
       </div>

@@ -15,7 +15,7 @@ import { ArrowLeftRight } from 'lucide-react';
 const TradeMarket = dynamic(
   () => import('@/components/economy/TradeMarket'),
   {
-    loading: () => <LoadingSkeleton text="Loading trade market..." />,
+    loading: () => <LoadingSkeleton text="" />,
     ssr: false,
   },
 );

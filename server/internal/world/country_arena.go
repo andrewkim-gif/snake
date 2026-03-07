@@ -202,8 +202,8 @@ func (ca *CountryArena) HandleInput(agentID string, angle float64, boost bool, d
 }
 
 // HandleInputSplit forwards split move/aim input (v16).
-func (ca *CountryArena) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
-	ca.room.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash)
+func (ca *CountryArena) HandleInputSplit(agentID string, moveAngle float64, aimAngle float64, boost bool, dash bool, jump bool) {
+	ca.room.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash, jump)
 }
 
 // HandleChooseUpgrade forwards upgrade choice.
@@ -410,6 +410,77 @@ func (ca *CountryArena) GetMaxAgents() int {
 	return cfg.MaxAgents
 }
 
+// --- PvP Battle Result Integration (Phase 5) ---
+
+// IntegrateArenaPvPResults merges ArenaCombat PvP/boss results into
+// the country arena faction scores for sovereignty determination.
+// Called when the ArenaCombat battle ends (settlement phase complete).
+func (ca *CountryArena) IntegrateArenaPvPResults(pvpScores map[string]int, bossScores map[string]int) {
+	ca.mu.Lock()
+	defer ca.mu.Unlock()
+
+	for fid, score := range pvpScores {
+		fs, ok := ca.factionScores[fid]
+		if !ok {
+			fs = &FactionBattleScore{FactionID: fid}
+			ca.factionScores[fid] = fs
+		}
+		fs.TotalScore += score
+	}
+
+	// Boss contribution adds extra weight
+	for fid, score := range bossScores {
+		fs, ok := ca.factionScores[fid]
+		if !ok {
+			fs = &FactionBattleScore{FactionID: fid}
+			ca.factionScores[fid] = fs
+		}
+		fs.TotalScore += score
+		fs.Objectives += score // Track as objectives
+	}
+}
+
+// BuildBattleResult creates a BattleResult from the current faction scores
+// for submission to the SovereigntyEngine.
+func (ca *CountryArena) BuildBattleResult() BattleResult {
+	ca.mu.RLock()
+	defer ca.mu.RUnlock()
+
+	winnerFaction, topScore := ca.DetermineWinningFactionLocked()
+
+	factionScores := make(map[string]int, len(ca.factionScores))
+	factionAgentCounts := make(map[string]int, len(ca.factionScores))
+	for fid, fs := range ca.factionScores {
+		factionScores[fid] = fs.TotalScore
+		factionAgentCounts[fid] = fs.AgentCount
+	}
+
+	return BattleResult{
+		CountryISO:         ca.CountryISO,
+		WinnerFaction:      winnerFaction,
+		WinnerScore:        topScore,
+		FactionScores:      factionScores,
+		FactionAgentCounts: factionAgentCounts,
+		BattledAt:          time.Now(),
+	}
+}
+
+// DetermineWinningFactionLocked is the lock-free version for internal use.
+// Caller must hold ca.mu.RLock() or ca.mu.Lock().
+func (ca *CountryArena) DetermineWinningFactionLocked() (factionID string, topScore int) {
+	for fid, fs := range ca.factionScores {
+		adjustedScore := fs.TotalScore
+		if fid == ca.SovereignFaction {
+			adjustedScore = int(float64(fs.TotalScore) * 1.20)
+		}
+		if adjustedScore > topScore {
+			topScore = adjustedScore
+			factionID = fid
+		}
+	}
+	return
+}
+
 // --- Event forwarding with score tracking ---
 
 func (ca *CountryArena) handleRoomEvents(events []game.RoomEvent) {
@@ -425,6 +496,12 @@ func (ca *CountryArena) handleRoomEvents(events []game.RoomEvent) {
 		case game.RoomEvtDeath:
 			// evt.TargetID is the victim
 			// Score tracking happens through the arena's event system
+
+		case game.RoomEvtARBattleEnd:
+			// Arena battle ended — integrate PvP results into sovereignty
+			if ca.room != nil && ca.room.IsArenaCombat() {
+				ca.integrateArenaBattleEnd(evt)
+			}
 		}
 	}
 
@@ -432,4 +509,24 @@ func (ca *CountryArena) handleRoomEvents(events []game.RoomEvent) {
 	if ca.OnEvents != nil {
 		ca.OnEvents(events)
 	}
+}
+
+// integrateArenaBattleEnd processes the end of an arena battle
+// and integrates PvP/boss scores into faction tracking.
+func (ca *CountryArena) integrateArenaBattleEnd(evt game.RoomEvent) {
+	// The battle_end event data may contain sovereignty scores
+	if data, ok := evt.Data.(map[string]interface{}); ok {
+		if pvpScores, ok := data["factionScores"].(map[string]int); ok {
+			bossScores := make(map[string]int)
+			if bs, ok := data["bossContrib"].(map[string]int); ok {
+				bossScores = bs
+			}
+			ca.IntegrateArenaPvPResults(pvpScores, bossScores)
+		}
+	}
+
+	slog.Info("arena battle ended, PvP results integrated",
+		"country", ca.CountryISO,
+		"factionScores", ca.GetBattleResults(),
+	)
 }

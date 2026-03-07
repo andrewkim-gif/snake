@@ -44,6 +44,11 @@ import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 import { CameraAutoFocus } from '@/components/3d/CameraAutoFocus';
 import { useGlobeLOD } from '@/hooks/useGlobeLOD';
 
+// v17: Intro camera animation
+import { GlobeIntroCamera } from '@/components/3d/GlobeIntroCamera';
+// v17: Conflict indicators on globe
+import { GlobeConflictIndicators } from '@/components/3d/GlobeConflictIndicators';
+
 interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
   selectedCountry?: string | null;
@@ -61,6 +66,12 @@ interface GlobeViewProps {
   tradeRoutes?: TradeRouteData[];
   /** v15 Phase 5: Global events for pulse effects */
   globalEvents?: GlobalEventData[];
+  /** v17: 인트로 카메라 애니메이션 활성화 */
+  introActive?: boolean;
+  /** v17: 인트로 카메라 완료 콜백 */
+  onIntroComplete?: () => void;
+  /** v17: ISO3 set of countries with active conflicts */
+  activeConflictCountries?: Set<string>;
 }
 
 const BG = '#030305';
@@ -1161,17 +1172,26 @@ function GlobeScene({
   countryStates,
   tradeRoutes,
   globalEvents,
+  introActive,
+  onIntroComplete,
+  activeConflictCountries,
 }: {
   onCountryClick?: (iso3: string, name: string) => void;
   onHover?: (iso3: string | null, name: string | null) => void;
   dominationStates: Map<string, CountryDominationState>;
   wars: WarEffectData[];
   countryStates: Map<string, CountryClientState>;
+  activeConflictCountries: Set<string>;
   tradeRoutes: TradeRouteData[];
   globalEvents: GlobalEventData[];
+  introActive?: boolean;
+  onIntroComplete?: () => void;
 }) {
   const [countries, setCountries] = useState<CountryGeo[]>([]);
   const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
+
+  // v17: Globe group ref for intro tilt animation
+  const globeGroupRef = useRef<THREE.Group>(null);
 
   // v15 Phase 4: Shockwave ref for missile impact callback
   const shockwaveRef = useRef<GlobeShockwaveHandle>(null);
@@ -1233,22 +1253,35 @@ function GlobeScene({
 
   return (
     <>
+      {/* v17: 인트로 카메라 시네마틱 (활성화 시 OrbitControls보다 먼저 실행) */}
+      {introActive && (
+        <GlobeIntroCamera
+          active={introActive}
+          onComplete={onIntroComplete}
+          globeGroupRef={globeGroupRef}
+        />
+      )}
+
       {/* 우주: 최소 ambient + 반구 필 + 실시간 태양 + 별 */}
       <ambientLight intensity={0.35} color="#1a2a4a" />
       <hemisphereLight args={['#334466', '#0a0e18', 0.25]} />
       <SunLight />
       <Starfield />
-      {/* 지구 텍스처 구체 + 대기 글로우 */}
-      <EarthSphere />
-      <AtmosphereGlow />
-      {/* 글로브 위 3D 타이틀 */}
-      <GlobeTitle />
-      {/* 국가 경계선 + 라벨 + 인터랙션 */}
-      <CountryBorders />
-      <CountryPolygons countries={countries} />
-      <HoverBorderGlow />
-      <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
-      <AdaptiveOrbitControls />
+      {/* v17: 지구본 그룹 (인트로 기울기 애니메이션용) */}
+      <group ref={globeGroupRef}>
+        {/* 지구 텍스처 구체 + 대기 글로우 */}
+        <EarthSphere />
+        <AtmosphereGlow />
+        {/* 글로브 위 3D 타이틀 */}
+        <GlobeTitle />
+        {/* 국가 경계선 + 라벨 + 인터랙션 */}
+        <CountryBorders />
+        <CountryPolygons countries={countries} />
+        <HoverBorderGlow />
+        <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
+      </group>
+      {/* v17: 인트로 중에는 OrbitControls 비활성화 */}
+      {!introActive && <AdaptiveOrbitControls />}
 
       {/* v15 Phase 6: Camera auto-focus on major events (war declaration, hegemony, epoch) */}
       <CameraAutoFocus targetRef={cameraTargetRef} globeRadius={RADIUS} />
@@ -1304,6 +1337,15 @@ function GlobeScene({
         />
       )}
 
+      {/* v17: Conflict indicators — "분쟁중" badges on active country arenas */}
+      {centroidsMap.size > 0 && activeConflictCountries.size > 0 && (
+        <GlobeConflictIndicators
+          countryCentroids={centroidsMap}
+          activeConflictCountries={activeConflictCountries}
+          globeRadius={RADIUS}
+        />
+      )}
+
       {/* v15 Phase 5: Trade route bezier lines (해상=파란 점선, 육상=초록 실선) */}
       {/* 모바일에서는 비활성화 (lodConfig.enableTradeRoutes) */}
       {lodConfig.enableTradeRoutes && tradeRoutes.length > 0 && centroidsMap.size > 0 && (
@@ -1340,6 +1382,9 @@ export function GlobeView({
   onHover,
   tradeRoutes,
   globalEvents,
+  introActive,
+  onIntroComplete,
+  activeConflictCountries,
 }: GlobeViewProps) {
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
@@ -1348,11 +1393,17 @@ export function GlobeView({
   // v15 Phase 5: fallback empty arrays
   const tradeList = tradeRoutes ?? [];
   const eventList = globalEvents ?? [];
+  const conflictSet = activeConflictCountries ?? new Set<string>();
+
+  // v17: 인트로 시 카메라 시작 위치 (멀리서 로고 정면)
+  const cameraStartPos: [number, number, number] = introActive
+    ? [0, 120, 480]    // 멀리서 로고(y=138) 정면 바라봄
+    : [0, 0, 300];     // 기본 위치
 
   return (
     <div style={{ width: '100%', height: '100%', background: BG, position: 'relative', ...style }}>
       <Canvas
-        camera={{ position: [0, 0, 300], fov: 50, near: 1, far: 1000 }}
+        camera={{ position: cameraStartPos, fov: 50, near: 1, far: 1000 }}
         gl={{ antialias: true, alpha: false }}
         onCreated={({ gl }) => { gl.setClearColor(BG); }}
       >
@@ -1365,6 +1416,9 @@ export function GlobeView({
             countryStates={cStates}
             tradeRoutes={tradeList}
             globalEvents={eventList}
+            introActive={introActive}
+            onIntroComplete={onIntroComplete}
+            activeConflictCountries={conflictSet}
           />
         </SizeGate>
       </Canvas>

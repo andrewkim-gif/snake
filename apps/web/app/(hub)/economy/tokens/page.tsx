@@ -81,10 +81,10 @@ function TokensPageInner() {
         ) : undefined
       }
       stats={[
-        { label: 'Total Market Cap', value: `$${(stats.totalMarketCap / 1e6).toFixed(2)}M`, color: SK.textPrimary, icon: BarChart3 },
-        { label: 'Total Staked', value: `${(stats.totalStaked / 1e6).toFixed(1)}M tokens`, color: SK.orange, icon: Layers },
-        { label: 'Buyback Volume', value: `${(stats.totalBuybacks / 1e3).toFixed(1)}K tokens`, color: SK.green, icon: TrendingUp },
-        { label: 'Total Burned', value: `${(stats.totalBurned / 1e3).toFixed(1)}K tokens`, color: SK.red, icon: Flame },
+        { label: tEconomy('totalMarketCap'), value: `$${(stats.totalMarketCap / 1e6).toFixed(2)}M`, color: SK.textPrimary, icon: BarChart3 },
+        { label: tEconomy('totalStaked'), value: `${(stats.totalStaked / 1e6).toFixed(1)}M ${tEconomy('tokenUnit')}`, color: SK.orange, icon: Layers },
+        { label: tEconomy('buybackVolume'), value: `${(stats.totalBuybacks / 1e3).toFixed(1)}K ${tEconomy('tokenUnit')}`, color: SK.green, icon: TrendingUp },
+        { label: tEconomy('totalBurned'), value: `${(stats.totalBurned / 1e3).toFixed(1)}K ${tEconomy('tokenUnit')}`, color: SK.red, icon: Flame },
       ]}
     >
       {/* Main grid */}
@@ -104,23 +104,23 @@ function TokensPageInner() {
             }
           }
         `}</style>
-        <DashPanel title="Market Cap Ranking" icon={BarChart3} accentColor={SK.orange}>
+        <DashPanel title={tEconomy('marketCapRanking')} icon={BarChart3} accentColor={SK.orange}>
           <MarketCapChart data={data.marketCapData} maxDisplay={15} />
         </DashPanel>
 
-        <DashPanel title="Token Rankings" icon={TrendingUp} accentColor={SK.blue}>
+        <DashPanel title={tEconomy('tokenRankings')} icon={TrendingUp} accentColor={SK.blue}>
           <TokenRanking data={data.marketCapData} />
         </DashPanel>
 
-        <DashPanel title="Defense Buff Map" icon={Shield} accentColor={SK.green}>
+        <DashPanel title={tEconomy('defenseBuffMap')} icon={Shield} accentColor={SK.green}>
           <DefenseBuffVisualization data={data.marketCapData} maxDisplay={15} />
         </DashPanel>
 
-        <DashPanel title="Staking Overview" icon={Layers} accentColor={SK.orange}>
+        <DashPanel title={tEconomy('stakingOverview')} icon={Layers} accentColor={SK.orange}>
           <StakingOverview data={data.stakingData} maxDisplay={15} />
         </DashPanel>
 
-        <DashPanel title="Buyback & Burn History" icon={Flame} accentColor={SK.red} fullWidth>
+        <DashPanel title={tEconomy('buybackBurnHistory')} icon={Flame} accentColor={SK.red} fullWidth>
           <BuybackBurnHistory
             buybacks={data.buybacks}
             burns={data.burns}
@@ -133,6 +133,7 @@ function TokensPageInner() {
 }
 
 export default function TokensPage() {
+  const t = useTranslations('economy');
   return (
     <Suspense
       fallback={
@@ -147,7 +148,7 @@ export default function TokensPage() {
             fontSize: '16px',
           }}
         >
-          Loading...
+          {t('loadingTokens')}
         </div>
       }
     >

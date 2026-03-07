@@ -17,7 +17,14 @@
     "timeJustNow": "JUST NOW",
     "timeMinutesAgo": "{count}M AGO",
     "timeHoursAgo": "{count}H AGO",
-    "timeDaysAgo": "{count}D AGO"
+    "timeDaysAgo": "{count}D AGO",
+    "comingSoon": "Coming soon",
+    "loadingText": "LOADING...",
+    "configurePreferences": "Configure your game preferences",
+    "language": "Language",
+    "sound": "Sound",
+    "controls": "Controls",
+    "mouseTouch": "Mouse / Touch"
   },
   "nav": {
     "world": "WORLD",
@@ -192,7 +199,18 @@
     "loadingTokens": "Loading token economy data...",
     "loadingPolicy": "Loading policy...",
     "highlighted": "Highlighted: {country}",
-    "clear": "Clear"
+    "clear": "Clear",
+    "totalMarketCap": "Total Market Cap",
+    "totalStaked": "Total Staked",
+    "buybackVolume": "Buyback Volume",
+    "totalBurned": "Total Burned",
+    "marketCapRanking": "Market Cap Ranking",
+    "tokenRankings": "Token Rankings",
+    "defenseBuffMap": "Defense Buff Map",
+    "stakingOverview": "Staking Overview",
+    "buybackBurnHistory": "Buyback & Burn History",
+    "loadingTrade": "Loading trade market...",
+    "tokenUnit": "tokens"
   },
   "governance": {
     "title": "GOVERNANCE",
@@ -230,7 +248,9 @@
     "proposals": "PROPOSALS",
     "new": "NEW",
     "history": "HISTORY",
-    "filtered": "Filtered: {country}"
+    "filtered": "Filtered: {country}",
+    "totalProposals": "Total Proposals",
+    "activeVoting": "Active Voting"
   },
   "faction": {
     "title": "FACTIONS",
@@ -285,7 +305,12 @@
     "mercenaryMarketDesc": "Hire elite warriors to fight for your faction. Deploy them to defend your territories.",
     "factionNotFoundMsg": "Faction \"{id}\" not found. Check the faction ID and try again.",
     "membersCount": "{count} members",
-    "territoriesCount": "{count} territories"
+    "territoriesCount": "{count} territories",
+    "activeFactions": "Active Factions",
+    "totalMembers": "Total Members",
+    "territories": "Territories",
+    "combinedGdp": "Combined GDP",
+    "loadingFactionList": "Loading faction list..."
   },
   "blockchain": {
     "connectWallet": "Connect CROSSx",
@@ -319,7 +344,9 @@
     "totalBattles": "Total Battles",
     "totalKills": "Total Kills",
     "deaths": "Deaths",
-    "playtime": "Playtime"
+    "playtime": "Playtime",
+    "connected": "Connected:",
+    "loadingAchievements": "Loading achievements..."
   },
   "hallOfFame": {
     "title": "Hall of Fame",
@@ -327,12 +354,17 @@
     "loading": "Loading Hall of Fame...",
     "allSeasons": "All Seasons",
     "season": "Season {number}",
+    "seasonShort": "S{number}",
     "allCategories": "All Categories",
     "noRecords": "No Hall of Fame records yet. Complete a season to see winners here.",
     "viewTimeline": "View Timeline Replay",
     "factionBadge": "Faction",
     "playerBadge": "Player",
-    "battles": "{count} battles"
+    "battles": "{count} battles",
+    "totalSeasons": "Total Seasons",
+    "totalRecords": "Total Records",
+    "peakPlayers": "Peak Players",
+    "totalBattles": "Total Battles"
   },
   "dashboard": {
     "title": "Agent API Dashboard",
@@ -374,6 +406,29 @@
     "deployFailed": "Deploy failed",
     "dismissFailed": "Dismiss failed",
     "networkError": "Network error"
+  },
+  "news": {
+    "live": "LIVE",
+    "archive": "NEWS ARCHIVE",
+    "close": "CLOSE",
+    "timeJustNow": "JUST NOW",
+    "timeMinutesAgo": "{count}M AGO",
+    "timeHoursAgo": "{count}H AGO",
+    "timeDaysAgo": "{count}D AGO",
+    "tagSovereignty": "SOVEREIGNTY",
+    "tagBattle": "BATTLE",
+    "tagVictory": "VICTORY",
+    "tagWar": "WAR",
+    "tagDiplomacy": "DIPLOMACY",
+    "tagEconomy": "ECONOMY",
+    "tagSeason": "SEASON",
+    "tagGlobal": "GLOBAL",
+    "demoSovereignty": "Phoenix Coalition claims sovereignty over South Korea",
+    "demoBattleStart": "Battle erupting in Germany — 23 agents deployed",
+    "demoWarDeclared": "Iron Wolves declares war on Shadow Syndicate",
+    "demoEconomySurge": "Oil prices surge — Saudi Arabia GDP +15%",
+    "demoTreatySigned": "Trade agreement signed between Red Dragon and Blue Storm",
+    "demoBattleWon": "Phoenix Coalition wins decisive battle in Japan"
   },
   "errors": {
     "economyModule": "ECONOMY MODULE ERROR",

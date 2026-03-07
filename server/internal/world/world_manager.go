@@ -436,7 +436,7 @@ func (wm *WorldManager) RouteInput(clientID string, angle float64, boost bool, d
 }
 
 // RouteInputSplit forwards split move/aim input to the correct country arena (v16).
-func (wm *WorldManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool) {
+func (wm *WorldManager) RouteInputSplit(clientID string, moveAngle float64, aimAngle float64, boost bool, dash bool, jump bool) {
 	wm.mu.RLock()
 	iso, ok := wm.playerCountry[clientID]
 	if !ok {
@@ -449,7 +449,7 @@ func (wm *WorldManager) RouteInputSplit(clientID string, moveAngle float64, aimA
 	if !exists {
 		return
 	}
-	arena.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash)
+	arena.HandleInputSplit(clientID, moveAngle, aimAngle, boost, dash, jump)
 }
 
 // RouteChooseUpgrade forwards upgrade choice to the correct arena.

@@ -244,7 +244,7 @@ export default function NewProposalPage() {
             fontFamily: bodyFont,
           }}
         >
-          Loading...
+          …
         </div>
       }
     >

@@ -41,6 +41,11 @@ const (
 	RoomEvtARMinibossDeath  RoomEventType = "ar_miniboss_death"  // miniboss killed
 	RoomEvtAREliteExplosion RoomEventType = "ar_elite_explosion" // explosive elite death
 	RoomEvtARBattleEnd      RoomEventType = "ar_battle_end"      // battle ended
+
+	// v18 Phase 5: PvP combat events
+	RoomEvtARPvPKill        RoomEventType = "ar_pvp_kill"        // PvP player kill
+	RoomEvtARBossSpawn      RoomEventType = "ar_boss_spawn"      // final boss spawned
+	RoomEvtARBossDefeated   RoomEventType = "ar_boss_defeated"   // final boss defeated
 )
 
 // RoomEvent is a lifecycle event emitted by a Room.

@@ -17,7 +17,14 @@
     "timeJustNow": "방금",
     "timeMinutesAgo": "{count}분 전",
     "timeHoursAgo": "{count}시간 전",
-    "timeDaysAgo": "{count}일 전"
+    "timeDaysAgo": "{count}일 전",
+    "comingSoon": "곧 출시",
+    "loadingText": "로딩 중...",
+    "configurePreferences": "게임 환경설정",
+    "language": "언어",
+    "sound": "사운드",
+    "controls": "조작",
+    "mouseTouch": "마우스 / 터치"
   },
   "nav": {
     "world": "월드",
@@ -192,7 +199,18 @@
     "loadingTokens": "토큰 이코노미 데이터 로딩 중...",
     "loadingPolicy": "정책 로딩 중...",
     "highlighted": "하이라이트: {country}",
-    "clear": "해제"
+    "clear": "해제",
+    "totalMarketCap": "총 시가총액",
+    "totalStaked": "총 스테이킹",
+    "buybackVolume": "바이백 볼륨",
+    "totalBurned": "총 소각",
+    "marketCapRanking": "시가총액 순위",
+    "tokenRankings": "토큰 랭킹",
+    "defenseBuffMap": "방어 버프 맵",
+    "stakingOverview": "스테이킹 현황",
+    "buybackBurnHistory": "바이백 & 소각 내역",
+    "loadingTrade": "트레이드 마켓 로딩 중...",
+    "tokenUnit": "토큰"
   },
   "governance": {
     "title": "거버넌스",
@@ -230,7 +248,9 @@
     "proposals": "제안",
     "new": "신규",
     "history": "이력",
-    "filtered": "필터: {country}"
+    "filtered": "필터: {country}",
+    "totalProposals": "총 제안",
+    "activeVoting": "투표 진행 중"
   },
   "faction": {
     "title": "팩션",
@@ -285,7 +305,12 @@
     "mercenaryMarketDesc": "엘리트 전사를 고용하여 팩션을 위해 싸우세요. 영토 방어에 배치하세요.",
     "factionNotFoundMsg": "팩션 \"{id}\"을(를) 찾을 수 없습니다. 팩션 ID를 확인하고 다시 시도하세요.",
     "membersCount": "{count}명 멤버",
-    "territoriesCount": "{count}개 영토"
+    "territoriesCount": "{count}개 영토",
+    "activeFactions": "활성 팩션",
+    "totalMembers": "총 멤버",
+    "territories": "영토",
+    "combinedGdp": "합산 GDP",
+    "loadingFactionList": "팩션 목록 로딩 중..."
   },
   "blockchain": {
     "connectWallet": "CROSSx 연결",
@@ -319,7 +344,9 @@
     "totalBattles": "총 전투",
     "totalKills": "총 처치",
     "deaths": "사망",
-    "playtime": "플레이 시간"
+    "playtime": "플레이 시간",
+    "connected": "연결됨:",
+    "loadingAchievements": "업적 로딩 중..."
   },
   "hallOfFame": {
     "title": "명예의 전당",
@@ -327,12 +354,17 @@
     "loading": "명예의 전당 로딩 중...",
     "allSeasons": "전체 시즌",
     "season": "시즌 {number}",
+    "seasonShort": "S{number}",
     "allCategories": "전체 카테고리",
     "noRecords": "명예의 전당 기록이 없습니다. 시즌을 완료하면 우승자가 여기에 표시됩니다.",
     "viewTimeline": "타임라인 다시보기",
     "factionBadge": "팩션",
     "playerBadge": "플레이어",
-    "battles": "{count}회 전투"
+    "battles": "{count}회 전투",
+    "totalSeasons": "총 시즌",
+    "totalRecords": "총 기록",
+    "peakPlayers": "최고 동시접속",
+    "totalBattles": "총 전투"
   },
   "dashboard": {
     "title": "에이전트 API 대시보드",
@@ -374,6 +406,29 @@
     "deployFailed": "배치 실패",
     "dismissFailed": "해고 실패",
     "networkError": "네트워크 오류"
+  },
+  "news": {
+    "live": "실시간",
+    "archive": "뉴스 아카이브",
+    "close": "닫기",
+    "timeJustNow": "방금",
+    "timeMinutesAgo": "{count}분 전",
+    "timeHoursAgo": "{count}시간 전",
+    "timeDaysAgo": "{count}일 전",
+    "tagSovereignty": "주권",
+    "tagBattle": "전투",
+    "tagVictory": "승리",
+    "tagWar": "전쟁",
+    "tagDiplomacy": "외교",
+    "tagEconomy": "경제",
+    "tagSeason": "시즌",
+    "tagGlobal": "글로벌",
+    "demoSovereignty": "피닉스 연합이 대한민국 주권을 선언",
+    "demoBattleStart": "독일에서 전투 발발 — 에이전트 23명 배치",
+    "demoWarDeclared": "아이언 울프가 섀도우 신디케이트에 선전포고",
+    "demoEconomySurge": "유가 급등 — 사우디아라비아 GDP +15%",
+    "demoTreatySigned": "레드 드래곤과 블루 스톰 간 무역 협정 체결",
+    "demoBattleWon": "피닉스 연합이 일본에서 결정적 승리"
   },
   "errors": {
     "economyModule": "경제 모듈 오류",

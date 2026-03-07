@@ -1,18 +1,21 @@
 'use client';
 
 /**
- * TPSCamera — v16 Phase 2 TPS 오비탈 카메라
+ * TPSCamera — FPS-style Third Person Camera (완전 재작성)
  *
- * Spherical 좌표 기반: azimuth(수평), polar(수직), distance(거리)
- * 우클릭 드래그 → 회전, 스크롤 → 줌
- * 대상(플레이어) 추적 with smooth lerp
- * 지형 클리핑 방지: 카메라 Y를 최소 지면+10 이상으로
+ * 포트나이트/PUBG 스타일:
+ *   - 마우스 → 카메라 yaw/pitch 직접 조작 (Pointer Lock)
+ *   - 카메라는 캐릭터 뒤+위에 위치
+ *   - WASD는 카메라가 바라보는 방향 기준으로 이동
+ *   - aimAngle = 카메라가 바라보는 수평 방향
+ *   - 캐릭터는 카메라 방향을 바라봄
  *
- * v16 Phase 7: 카메라 셰이크 통합 (camera-shake.ts)
- * v16 Phase 8: 킬캠 모드 — 사망 → 킬러 줌인 0.5s → 공전 2s → DeathOverlay
+ * 모드:
+ *   - 일반 모드: 플레이어 추적 TPS
+ *   - 킬캠 모드: 사망 → 킬러 줌인 → 공전
+ *   - 옵저버 모드: 사망 후 자유 비행 / 에이전트 팔로우
  *
  * CRITICAL: useFrame priority 0 (기본값) 사용!
- * JSX에서 GameLoop 다음에 마운트하여 실행 순서 보장.
  */
 
 import { useRef, useEffect } from 'react';
@@ -24,66 +27,65 @@ import type { GameData } from '@/hooks/useSocket';
 import type { InputManagerReturn } from '@/hooks/useInputManager';
 import { getCameraShake } from '@/lib/3d/camera-shake';
 
-// ─── 상수 ───
-const MIN_POLAR = 0.17;      // ~10 deg (거의 탑다운)
-const MAX_POLAR = 1.31;      // ~75 deg (거의 수평)
-const MIN_DISTANCE = 10;
-const MAX_DISTANCE = 60;
-const DEFAULT_AZIMUTH = 0;   // 북쪽 (Three.js +Z 방향)
-const DEFAULT_POLAR = 0.79;  // ~45 deg
-const DEFAULT_DISTANCE = 25;
+// ─── TPS 카메라 상수 ───
+const CAM_HEIGHT = 12;         // 캐릭터 위 높이 오프셋
+const CAM_DISTANCE = 30;       // 캐릭터 뒤 거리
+const MIN_PITCH = -0.3;        // 약간 위를 볼 수 있음 (rad)
+const MAX_PITCH = 1.2;         // 거의 수직 탑다운 (rad)
+const DEFAULT_PITCH = 0.5;     // ~29도 — 살짝 위에서 내려다봄
+const TRACK_SMOOTH = 12;       // 타겟 추적 lerp 속도
+const MIN_CAM_Y = 5;           // 최소 카메라 높이 (지면 클리핑 방지)
 
-// 드래그 감도
-const YAW_SENSITIVITY = 0.005;
-const PITCH_SENSITIVITY = 0.005;
-// 줌 감도
-const ZOOM_SENSITIVITY = 0.05;
-// 추적 lerp 속도
-const TRACK_SMOOTH = 10;     // 높을수록 빠름
-// 최소 지면 높이 오프셋
-const MIN_HEIGHT_OFFSET = 10;
+// 줌 (스크롤)
+const MIN_DISTANCE = 15;
+const MAX_DISTANCE = 80;
+const ZOOM_SENSITIVITY = 0.08;
 
-// 킬캠 타이밍 (초)
-const KILLCAM_ZOOM_DURATION = 0.5;  // 킬러로 줌인
-const KILLCAM_ORBIT_DURATION = 2.0; // 공전
-const KILLCAM_ORBIT_DISTANCE = 15;  // 공전 거리
-const KILLCAM_ORBIT_POLAR = 0.6;    // 공전 고도각
-const KILLCAM_ORBIT_SPEED = 1.5;    // 공전 속도 (rad/s)
+// ─── 옵저버 자유 카메라 상수 ───
+const OBSERVER_MOVE_SPEED = 600;
+const OBSERVER_DEFAULT_HEIGHT = 150;
+const OBSERVER_MIN_HEIGHT = 30;
+const OBSERVER_MAX_HEIGHT = 500;
+
+// ─── 킬캠 상수 ───
+const KILLCAM_ZOOM_DURATION = 0.5;
+const KILLCAM_ORBIT_DURATION = 2.0;
+const KILLCAM_ORBIT_DISTANCE = 15;
+const KILLCAM_ORBIT_POLAR = 0.6;
+const KILLCAM_ORBIT_SPEED = 1.5;
 
 /** 킬캠 상태 */
 export interface KillcamState {
-  /** 킬캠 활성 여부 */
   active: boolean;
-  /** 킬러 에이전트 ID */
   killerId: string | null;
-  /** 킬러 월드 좌표 (서버 좌표계: x, y) */
   killerX: number;
   killerY: number;
-  /** 킬캠 시작 시간 (performance.now()) */
   startTime: number;
-  /** 킬캠 종료 콜백 */
   onComplete: (() => void) | null;
 }
 
+/** 옵저버 모드 상태 */
+export interface ObserverState {
+  active: boolean;
+  freeCam: boolean;
+  followTargetId: string | null;
+  moveInput: { x: number; z: number };
+}
+
 interface TPSCameraProps {
-  /** 보간된 Agent 배열 ref */
   agentsRef: React.MutableRefObject<AgentNetworkData[]>;
-  /** 서버 데이터 ref — playerId를 매 프레임 읽기 위함 */
   dataRef: React.MutableRefObject<GameData>;
-  /** InputManager refs — 카메라 delta, scroll delta, azimuth/pitch/zoom 동기화 */
   inputManager: InputManagerReturn;
-  /** 외부에서 카메라 ref를 받아 설정 (raycasting용) */
   cameraRef: React.MutableRefObject<Camera | null>;
-  /** 플레이어 위치 ref (InputManager의 aimAngle 계산용) */
   playerPosRef: React.MutableRefObject<{ x: number; z: number }>;
-  /** v16 Phase 8: 킬캠 상태 */
   killcamRef?: React.MutableRefObject<KillcamState>;
+  observerRef?: React.MutableRefObject<ObserverState>;
 }
 
 // 임시 벡터 (GC 방지)
 const _offset = new Vector3();
 const _camPos = new Vector3();
-const _killcamTarget = new Vector3();
+const _target = new Vector3();
 
 export function TPSCamera({
   agentsRef,
@@ -92,135 +94,206 @@ export function TPSCamera({
   cameraRef,
   playerPosRef,
   killcamRef,
+  observerRef,
 }: TPSCameraProps) {
   const { camera } = useThree();
 
-  // 카메라 상태 (ref로 관리 — React 리렌더 불필요)
-  const azimuth = useRef(DEFAULT_AZIMUTH);
-  const polar = useRef(DEFAULT_POLAR);
-  const distance = useRef(DEFAULT_DISTANCE);
-  const target = useRef(new Vector3(0, 0, 0));
+  // 카메라 상태 (ref — 리렌더 불필요)
+  const yaw = useRef(0);           // 수평 회전 (rad, 0 = +Z 방향)
+  const pitch = useRef(DEFAULT_PITCH); // 수직 각도 (0 = 수평, PI/2 = 탑다운)
+  const dist = useRef(CAM_DISTANCE);   // 카메라 거리
+  const smoothTarget = useRef(new Vector3(0, 0, 0));
   const initialized = useRef(false);
 
-  // 킬캠용 보존 상태 (킬캠 전 카메라 위치)
-  const killcamSavedPos = useRef(new Vector3());
-  const killcamSavedTarget = useRef(new Vector3());
+  // 옵저버 자유 카메라 위치
+  const observerPos = useRef(new Vector3(0, OBSERVER_DEFAULT_HEIGHT, 0));
+  const observerInitialized = useRef(false);
 
-  // 카메라 ref를 외부에 노출 (raycasting용)
+  // 카메라 ref 외부 노출
   useEffect(() => {
     cameraRef.current = camera;
     return () => { cameraRef.current = null; };
   }, [camera, cameraRef]);
 
-  // priority 0 — auto-render 유지!
-  // GameLoop 다음에 마운트 → GameLoop이 먼저 실행
   useFrame((_, delta) => {
-    // ─── 킬캠 모드 체크 ───
+    // ─── 킬캠 ───
     if (killcamRef?.current?.active) {
       const kc = killcamRef.current;
-      const elapsed = (performance.now() - kc.startTime) / 1000; // 초
+      const elapsed = (performance.now() - kc.startTime) / 1000;
       const totalDuration = KILLCAM_ZOOM_DURATION + KILLCAM_ORBIT_DURATION;
 
-      // 킬러 월드 위치 (실시간 추적: 킬러가 아직 보이면 업데이트)
-      let killerWorldX = kc.killerX;
-      let killerWorldZ = kc.killerY;
+      // 킬러 위치 실시간 추적
+      let kx = kc.killerX;
+      let kz = kc.killerY;
+      let ky = 0;
       if (kc.killerId) {
-        const killerAgent = agentsRef.current.find(a => a.i === kc.killerId);
-        if (killerAgent) {
-          killerWorldX = killerAgent.x;
-          killerWorldZ = killerAgent.y;
-          kc.killerX = killerWorldX;
-          kc.killerY = killerWorldZ;
-        }
+        const killer = agentsRef.current.find(a => a.i === kc.killerId);
+        if (killer) { kx = killer.x; kz = killer.y; ky = killer.z ?? 0; kc.killerX = kx; kc.killerY = kz; }
       }
-      _killcamTarget.set(killerWorldX, 0, killerWorldZ);
+      _target.set(kx, ky, kz);
 
       if (elapsed >= totalDuration) {
-        // 킬캠 종료
         kc.active = false;
         if (kc.onComplete) kc.onComplete();
         return;
       }
 
       if (elapsed < KILLCAM_ZOOM_DURATION) {
-        // Phase 1: 줌인 (슬로모 느낌 — 카메라가 킬러에게 부드럽게 이동)
+        // 줌인
         const t = elapsed / KILLCAM_ZOOM_DURATION;
-        const easeT = t * t * (3 - 2 * t); // smoothstep
-
-        // 현재 카메라 → 킬러 위치로 보간
-        const targetDistance = KILLCAM_ORBIT_DISTANCE;
-        const az = azimuth.current;
-        const pol = KILLCAM_ORBIT_POLAR;
-
+        const e = t * t * (3 - 2 * t); // smoothstep
+        const d = KILLCAM_ORBIT_DISTANCE;
+        const p = KILLCAM_ORBIT_POLAR;
+        const a = yaw.current;
         _offset.set(
-          targetDistance * Math.sin(pol) * Math.sin(az),
-          targetDistance * Math.cos(pol),
-          targetDistance * Math.sin(pol) * Math.cos(az),
+          d * Math.sin(p) * Math.sin(a),
+          d * Math.cos(p),
+          d * Math.sin(p) * Math.cos(a),
         );
-
-        const finalCamX = killerWorldX + _offset.x;
-        const finalCamY = _offset.y;
-        const finalCamZ = killerWorldZ + _offset.z;
-
+        const fx = kx + _offset.x;
+        const fy = _offset.y;
+        const fz = kz + _offset.z;
         camera.position.set(
-          camera.position.x + (finalCamX - camera.position.x) * easeT,
-          camera.position.y + (finalCamY - camera.position.y) * easeT,
-          camera.position.z + (finalCamZ - camera.position.z) * easeT,
+          camera.position.x + (fx - camera.position.x) * e,
+          camera.position.y + (fy - camera.position.y) * e,
+          camera.position.z + (fz - camera.position.z) * e,
         );
-        camera.lookAt(_killcamTarget);
+        camera.lookAt(_target);
       } else {
-        // Phase 2: 공전 (킬러 주위를 회전)
-        const orbitElapsed = elapsed - KILLCAM_ZOOM_DURATION;
-        const orbitAngle = azimuth.current + orbitElapsed * KILLCAM_ORBIT_SPEED;
-        const pol = KILLCAM_ORBIT_POLAR;
-        const dist = KILLCAM_ORBIT_DISTANCE;
-
+        // 공전
+        const oe = elapsed - KILLCAM_ZOOM_DURATION;
+        const oa = yaw.current + oe * KILLCAM_ORBIT_SPEED;
+        const p = KILLCAM_ORBIT_POLAR;
+        const d = KILLCAM_ORBIT_DISTANCE;
         _offset.set(
-          dist * Math.sin(pol) * Math.sin(orbitAngle),
-          dist * Math.cos(pol),
-          dist * Math.sin(pol) * Math.cos(orbitAngle),
+          d * Math.sin(p) * Math.sin(oa),
+          d * Math.cos(p),
+          d * Math.sin(p) * Math.cos(oa),
         );
-
-        _camPos.copy(_killcamTarget).add(_offset);
-        if (_camPos.y < MIN_HEIGHT_OFFSET) _camPos.y = MIN_HEIGHT_OFFSET;
-
+        _camPos.copy(_target).add(_offset);
+        if (_camPos.y < MIN_CAM_Y) _camPos.y = MIN_CAM_Y;
         camera.position.copy(_camPos);
-        camera.lookAt(_killcamTarget);
+        camera.lookAt(_target);
       }
       return;
     }
 
-    // ─── 일반 TPS 카메라 모드 ───
+    // ─── 옵저버 모드 ───
+    const observer = observerRef?.current;
+    if (observer?.active) {
+      // 마우스 delta 소비 → yaw/pitch
+      const md = inputManager.cameraDeltaRef.current;
+      if (md.dx !== 0 || md.dy !== 0) {
+        yaw.current -= md.dx;
+        pitch.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch.current + md.dy));
+        md.dx = 0;
+        md.dy = 0;
+      }
+      // 스크롤 → 줌
+      const sd = inputManager.scrollDeltaRef.current;
+      if (sd !== 0) {
+        dist.current = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE,
+          dist.current * (1 + sd * ZOOM_SENSITIVITY * 0.01)));
+        inputManager.scrollDeltaRef.current = 0;
+      }
+
+      if (observer.freeCam) {
+        // 자유 비행 카메라
+        if (!observerInitialized.current) {
+          observerPos.current.copy(smoothTarget.current);
+          observerPos.current.y = OBSERVER_DEFAULT_HEIGHT;
+          observerInitialized.current = true;
+        }
+        // WASD 이동 (yaw 기준)
+        const mv = observer.moveInput;
+        if (mv.x !== 0 || mv.z !== 0) {
+          const sy = Math.sin(yaw.current);
+          const cy = Math.cos(yaw.current);
+          const speed = OBSERVER_MOVE_SPEED * delta;
+          // forward = -sin(yaw), -cos(yaw)
+          observerPos.current.x += (-sy * mv.z + cy * mv.x) * speed;
+          observerPos.current.z += (-cy * mv.z - sy * mv.x) * speed;
+        }
+        observerPos.current.y = Math.max(OBSERVER_MIN_HEIGHT,
+          Math.min(OBSERVER_MAX_HEIGHT, observerPos.current.y));
+
+        // 오비탈 뷰
+        const d = dist.current;
+        const p = pitch.current;
+        const a = yaw.current;
+        _offset.set(
+          d * Math.sin(p) * Math.sin(a),
+          d * Math.cos(p),
+          d * Math.sin(p) * Math.cos(a),
+        );
+        _camPos.copy(observerPos.current).add(_offset);
+        if (_camPos.y < MIN_CAM_Y) _camPos.y = MIN_CAM_Y;
+        camera.position.copy(_camPos);
+        camera.lookAt(observerPos.current);
+        return;
+      } else if (observer.followTargetId) {
+        // 팔로우 모드
+        const fa = agentsRef.current.find(a => a.i === observer.followTargetId);
+        if (fa) {
+          const trackFactor = 1 - Math.pow(0.001, delta * TRACK_SMOOTH);
+          smoothTarget.current.x += (fa.x - smoothTarget.current.x) * trackFactor;
+          smoothTarget.current.y += ((fa.z ?? 0) - smoothTarget.current.y) * trackFactor;
+          smoothTarget.current.z += (fa.y - smoothTarget.current.z) * trackFactor;
+
+          const shake = getCameraShake();
+          shake.update(delta);
+          const d = dist.current * shake.zoomMultiplier;
+          const p = pitch.current;
+          const a = yaw.current;
+          _offset.set(
+            d * Math.sin(p) * Math.sin(a),
+            d * Math.cos(p),
+            d * Math.sin(p) * Math.cos(a),
+          );
+          _camPos.copy(smoothTarget.current).add(_offset);
+          _camPos.x += shake.offsetX;
+          _camPos.y += shake.offsetY;
+          if (_camPos.y < MIN_CAM_Y) _camPos.y = MIN_CAM_Y;
+          camera.position.copy(_camPos);
+          camera.lookAt(smoothTarget.current);
+          return;
+        }
+        // 팔로우 대상 사망 → 자유 카메라
+        observer.freeCam = true;
+        observer.followTargetId = null;
+      }
+      return;
+    }
+
+    // ─── 일반 FPS-style TPS 카메라 ───
     const playerId = dataRef.current.playerId;
     const agents = agentsRef.current;
 
-    // ─── 카메라 입력 소비 (드래그 delta + 스크롤) ───
-    const camDelta = inputManager.cameraDeltaRef.current;
-    if (camDelta.dx !== 0 || camDelta.dy !== 0) {
-      azimuth.current -= camDelta.dx * YAW_SENSITIVITY;
-      polar.current = Math.max(MIN_POLAR,
-        Math.min(MAX_POLAR, polar.current + camDelta.dy * PITCH_SENSITIVITY));
-      // delta 소비 (리셋)
-      camDelta.dx = 0;
-      camDelta.dy = 0;
+    // 마우스 delta 소비 → yaw/pitch (InputManager에서 포인터 락 처리)
+    const md = inputManager.cameraDeltaRef.current;
+    if (md.dx !== 0 || md.dy !== 0) {
+      yaw.current -= md.dx;
+      pitch.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch.current + md.dy));
+      md.dx = 0;
+      md.dy = 0;
     }
 
-    const scrollD = inputManager.scrollDeltaRef.current;
-    if (scrollD !== 0) {
-      distance.current = Math.max(MIN_DISTANCE,
-        Math.min(MAX_DISTANCE, distance.current * (1 + scrollD * ZOOM_SENSITIVITY * 0.01)));
+    // 스크롤 → 줌
+    const sd = inputManager.scrollDeltaRef.current;
+    if (sd !== 0) {
+      dist.current = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE,
+        dist.current * (1 + sd * ZOOM_SENSITIVITY * 0.01)));
       inputManager.scrollDeltaRef.current = 0;
     }
 
-    // azimuth/pitch/zoom을 InputManager에 동기화 (WASD 방향 계산에 사용)
-    inputManager.azimuthRef.current = azimuth.current;
-    inputManager.pitchRef.current = polar.current;
-    inputManager.zoomRef.current = distance.current;
+    // InputManager에 카메라 상태 동기화
+    inputManager.azimuthRef.current = yaw.current;
+    inputManager.pitchRef.current = pitch.current;
+    inputManager.zoomRef.current = dist.current;
 
-    // ─── 타겟(플레이어) 추적 ───
+    // 플레이어 없으면 기본 위치
     if (!playerId) {
-      // 플레이어 없으면 원점 오버뷰
-      camera.position.set(0, 500, 400);
+      camera.position.set(0, 300, 300);
       camera.lookAt(0, 0, 0);
       return;
     }
@@ -228,62 +301,75 @@ export function TPSCamera({
     const myAgent = agents.find(a => a.i === playerId);
     if (!myAgent) {
       if (!initialized.current) {
-        camera.position.set(0, 500, 400);
+        camera.position.set(0, 300, 300);
         camera.lookAt(0, 0, 0);
       }
       return;
     }
 
-    // Agent 월드 위치 (서버 좌표계: x, y → Three.js: x, 0, y)
-    const playerWorldX = myAgent.x;
-    const playerWorldZ = myAgent.y; // 서버 y → Three.js z
+    // 플레이어 월드 좌표 (서버 x,y → Three.js x,height,z)
+    const px = myAgent.x;
+    const pz = myAgent.y;
+    const py = myAgent.z ?? 0; // 서버 ZPos → Three.js Y (하이트맵 높이)
 
-    // 플레이어 위치를 InputManager에 동기화 (aimAngle 계산용)
-    playerPosRef.current.x = playerWorldX;
-    playerPosRef.current.z = playerWorldZ;
+    // InputManager에 플레이어 위치 동기화
+    playerPosRef.current.x = px;
+    playerPosRef.current.z = pz;
 
-    // Smooth target tracking (dt-independent damping)
+    // Smooth target tracking
     const trackFactor = 1 - Math.pow(0.001, delta * TRACK_SMOOTH);
     if (!initialized.current) {
-      target.current.set(playerWorldX, 0, playerWorldZ);
+      smoothTarget.current.set(px, py, pz);
       initialized.current = true;
+      // 초기 yaw를 캐릭터 heading에 맞춤
+      if (myAgent.h !== undefined) {
+        // 서버 heading: 0 = +X, CCW positive
+        // 카메라 yaw에서 캐릭터 뒤에 위치하려면:
+        // 캐릭터가 heading 방향을 바라봄 → 카메라는 반대편
+        // yaw = heading 방향의 "뒤"를 의미하는 각도
+        // Three.js: yaw=0 → 카메라 +Z 위. heading=0 → +X 바라봄
+        // 카메라가 캐릭터 뒤에 오려면 yaw = heading - PI/2
+        yaw.current = (myAgent.h ?? 0) - Math.PI / 2;
+      }
     } else {
-      target.current.x += (playerWorldX - target.current.x) * trackFactor;
-      target.current.z += (playerWorldZ - target.current.z) * trackFactor;
+      smoothTarget.current.x += (px - smoothTarget.current.x) * trackFactor;
+      smoothTarget.current.y += (py - smoothTarget.current.y) * trackFactor;
+      smoothTarget.current.z += (pz - smoothTarget.current.z) * trackFactor;
     }
 
-    // ─── 카메라 셰이크 업데이트 (v16 Phase 7) ───
+    // 카메라 셰이크
     const shake = getCameraShake();
     shake.update(delta);
 
-    // ─── Spherical → Cartesian (카메라 오프셋) ───
-    const az = azimuth.current;
-    const pol = polar.current;
-    // 줌 펀치 적용: distance에 셰이크 줌 배수 곱하기
-    const dist = distance.current * shake.zoomMultiplier;
+    // 카메라 위치 계산: 캐릭터 뒤+위
+    // yaw = 수평 회전, pitch = 수직 각도
+    // 카메라는 캐릭터로부터 (dist) 만큼 떨어져서 뒤에 위치
+    const d = dist.current * shake.zoomMultiplier;
+    const p = Math.max(0.05, pitch.current); // 최소 약간 위
+    const a = yaw.current;
 
+    // Spherical to Cartesian (캐릭터 중심 오프셋)
     _offset.set(
-      dist * Math.sin(pol) * Math.sin(az),
-      dist * Math.cos(pol),
-      dist * Math.sin(pol) * Math.cos(az),
+      d * Math.sin(p) * Math.sin(a),
+      d * Math.cos(p) + CAM_HEIGHT,
+      d * Math.sin(p) * Math.cos(a),
     );
 
-    _camPos.copy(target.current).add(_offset);
+    _camPos.copy(smoothTarget.current).add(_offset);
 
-    // ─── 셰이크 오프셋 적용 (XY 평면에서 흔들림) ───
+    // 셰이크 오프셋
     _camPos.x += shake.offsetX;
     _camPos.y += shake.offsetY;
 
-    // ─── 지형 클리핑 방지 ───
-    // 현재 heightmap이 없으므로 기본 지면 Y=0 기준
-    const minY = 0 + MIN_HEIGHT_OFFSET;
-    if (_camPos.y < minY) {
-      _camPos.y = minY;
-    }
+    // 지면 클리핑 방지
+    if (_camPos.y < MIN_CAM_Y) _camPos.y = MIN_CAM_Y;
 
-    // ─── 카메라 적용 ───
+    // 카메라 적용
     camera.position.copy(_camPos);
-    camera.lookAt(target.current);
+    // lookAt: 캐릭터 위치 + 약간 위 (머리 높이)
+    _target.copy(smoothTarget.current);
+    _target.y += 5; // 캐릭터 머리 높이
+    camera.lookAt(_target);
   });
 
   return null;

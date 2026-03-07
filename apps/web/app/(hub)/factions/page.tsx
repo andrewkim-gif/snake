@@ -17,7 +17,7 @@ import { Swords, Users, MapPin, DollarSign } from 'lucide-react';
 const FactionList = dynamic(() => import('@/components/faction/FactionList'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
-      Loading faction list...
+      …
     </div>
   ),
 });
@@ -25,7 +25,7 @@ const FactionList = dynamic(() => import('@/components/faction/FactionList'), {
 const FactionDashboard = dynamic(() => import('@/components/faction/FactionDashboard'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
-      Loading dashboard...
+      …
     </div>
   ),
 });
@@ -91,10 +91,10 @@ export default function FactionsPage() {
         </button>
       }
       stats={[
-        { label: 'Active Factions', value: String(MOCK_FACTIONS.length), color: SK.textPrimary, icon: Swords },
-        { label: 'Total Members', value: String(totalMembers), color: SK.blue, icon: Users },
-        { label: 'Territories', value: String(totalTerritories), color: SK.green, icon: MapPin },
-        { label: 'Combined GDP', value: `${(totalGdp / 1000).toFixed(0)}K`, color: SK.orange, icon: DollarSign },
+        { label: tFaction('activeFactions'), value: String(MOCK_FACTIONS.length), color: SK.textPrimary, icon: Swords },
+        { label: tFaction('totalMembers'), value: String(totalMembers), color: SK.blue, icon: Users },
+        { label: tFaction('territories'), value: String(totalTerritories), color: SK.green, icon: MapPin },
+        { label: tFaction('combinedGdp'), value: `${(totalGdp / 1000).toFixed(0)}K`, color: SK.orange, icon: DollarSign },
       ]}
     >
       {/* 서버 데이터 모드 */}
@@ -178,8 +178,8 @@ export default function FactionsPage() {
                   color: SK.gold,
                   textAlign: 'right',
                 }}>
-                  <div>P: {faction.prestige}</div>
-                  <div>GDP {(faction.total_gdp / 1000).toFixed(1)}K</div>
+                  <div>{tFaction('prestige')}: {faction.prestige}</div>
+                  <div>{tFaction('totalGdp')} {(faction.total_gdp / 1000).toFixed(1)}K</div>
                 </div>
               </div>
 

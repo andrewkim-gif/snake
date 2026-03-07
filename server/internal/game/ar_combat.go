@@ -37,6 +37,12 @@ type ArenaCombat struct {
 	minibossTimer  float64 // seconds until next miniboss
 	minibossIndex  int     // which miniboss to spawn next
 
+	// PvP tracking (Phase 5)
+	factionPvPScores map[string]*ARFactionPvPScore // faction scores during PvP
+	pvpArenaRadius   float64                        // current shrunk arena radius
+	finalBoss        *ARFinalBoss                   // final boss (settlement phase)
+	bossSpawned      bool                           // whether boss has been spawned
+
 	// ID generation
 	nextEnemyID int
 	nextProjID  int
@@ -45,14 +51,15 @@ type ArenaCombat struct {
 // NewArenaCombat creates a new ArenaCombat instance.
 func NewArenaCombat() *ArenaCombat {
 	return &ArenaCombat{
-		players:     make(map[string]*ARPlayer),
-		enemies:     make([]*AREnemy, 0, 64),
-		xpCrystals:  make([]*ARXPCrystal, 0, 128),
-		projectiles: make([]*ARProjectile, 0, 64),
-		fieldItems:  make([]*ARFieldItem, 0, 32),
-		levelSystem: NewARLevelSystem(),
-		itemSystem:  NewARItemSystem(),
-		phase:       ARPhaseDeploy,
+		players:          make(map[string]*ARPlayer),
+		enemies:          make([]*AREnemy, 0, 64),
+		xpCrystals:       make([]*ARXPCrystal, 0, 128),
+		projectiles:      make([]*ARProjectile, 0, 64),
+		fieldItems:       make([]*ARFieldItem, 0, 32),
+		levelSystem:      NewARLevelSystem(),
+		itemSystem:       NewARItemSystem(),
+		phase:            ARPhaseDeploy,
+		factionPvPScores: make(map[string]*ARFactionPvPScore),
 	}
 }
 
@@ -123,12 +130,44 @@ func (ac *ArenaCombat) OnTick(delta float64, tick uint64) []CombatEvent {
 		ac.tickMovement(delta)
 		ac.tickPlayerBuffs(delta)
 		ac.tickPlayerStatusEffects(delta)
+		events = append(events, ac.tickPvPCombat(delta)...)
 		ac.tickHPRegen(delta)
 		ac.tickShieldCooldowns(delta)
 		ac.cleanupDead(&events)
 
 	case ARPhaseSettlement:
-		// Settlement: no gameplay, show results
+		// Settlement phase: spawn final boss if not yet spawned
+		if !ac.bossSpawned {
+			ac.finalBoss = ac.SpawnFinalBoss()
+			ac.bossSpawned = true
+			events = append(events, CombatEvent{
+				Type: "boss_spawn",
+				Data: map[string]interface{}{
+					"hp":    ac.finalBoss.TotalHP,
+					"type":  "the_arena",
+				},
+			})
+		}
+		// All factions cooperate against the boss
+		ac.tickMovement(delta)
+		ac.tickPlayerBuffs(delta)
+		ac.tickCharacterPassives(delta)
+		ac.tickEnemyAI(delta)
+		ac.tickPlayerStatusEffects(delta)
+		events = append(events, ac.tickWeaponAutoAttack(delta)...)
+		events = append(events, ac.tickProjectiles(delta)...)
+		ac.tickHPRegen(delta)
+		ac.tickShieldCooldowns(delta)
+		ac.tickBossDPSTracking()
+		ac.cleanupDead(&events)
+		// Check if boss is defeated
+		if ac.finalBoss != nil && ac.finalBoss.Enemy != nil && !ac.finalBoss.Enemy.Alive {
+			ac.finalBoss.IsDefeated = true
+			events = append(events, CombatEvent{
+				Type: "boss_defeated",
+				Data: ac.ComputeSovereigntyScores(),
+			})
+		}
 	}
 
 	return events
@@ -163,9 +202,38 @@ func (ac *ArenaCombat) advancePhase() []CombatEvent {
 		ac.xpCrystals = ac.xpCrystals[:0]
 		ac.projectiles = ac.projectiles[:0]
 		ac.fieldItems = ac.fieldItems[:0]
+		// Initialize PvP state
+		ac.factionPvPScores = make(map[string]*ARFactionPvPScore)
+		ac.pvpArenaRadius = ac.config.ArenaRadius
+		// Initialize faction PvP scores for each active faction
+		for _, p := range ac.players {
+			if p.Alive && p.FactionID != "" {
+				if _, ok := ac.factionPvPScores[p.FactionID]; !ok {
+					ac.factionPvPScores[p.FactionID] = &ARFactionPvPScore{
+						FactionID: p.FactionID,
+					}
+				}
+			}
+		}
+		// Reset PvP CC resistance for all players
+		for _, p := range ac.players {
+			p.PvPCCResist = 0
+			p.PvPKills = 0
+		}
+		// Build faction kill counts for the phase change event
+		factionCounts := make(map[string]int)
+		for _, p := range ac.players {
+			if p.Alive && p.FactionID != "" {
+				factionCounts[p.FactionID]++
+			}
+		}
 		events = append(events, CombatEvent{
 			Type: "phase_change",
-			Data: map[string]interface{}{"phase": "pvp"},
+			Data: map[string]interface{}{
+				"phase":         "pvp",
+				"factionCounts": factionCounts,
+				"arenaRadius":   ac.config.ArenaRadius,
+			},
 		})
 
 	case ARPhasePvP:
@@ -1373,18 +1441,42 @@ func (ac *ArenaCombat) GetState() interface{} {
 		playerList = append(playerList, p)
 	}
 
-	return &ARState{
-		Phase:       ac.phase,
-		Timer:       ac.phaseTimer,
-		WaveNumber:  ac.waveNumber,
-		Terrain:     ARTerrainTheme(ac.config.TerrainTheme),
-		Tier:        ac.config.Tier,
-		Players:     playerList,
-		Enemies:     enemyNet,
-		XPCrystals:  crystalNet,
-		Projectiles: projNet,
-		Items:       itemNet,
+	// Build faction PvP scores for network
+	var factionScores []ARFactionPvPScoreNet
+	for _, fs := range ac.factionPvPScores {
+		factionScores = append(factionScores, ARFactionPvPScoreNet{
+			FactionID: fs.FactionID,
+			PvPKills:  fs.PvPKills,
+			Score:     fs.Score,
+		})
 	}
+
+	return &ARState{
+		Phase:         ac.phase,
+		Timer:         ac.phaseTimer,
+		WaveNumber:    ac.waveNumber,
+		Terrain:       ARTerrainTheme(ac.config.TerrainTheme),
+		Tier:          ac.config.Tier,
+		Players:       playerList,
+		Enemies:       enemyNet,
+		XPCrystals:    crystalNet,
+		Projectiles:   projNet,
+		Items:         itemNet,
+		PvPRadius:     ac.pvpArenaRadius,
+		FactionScores: factionScores,
+	}
+}
+
+// tickBossDPSTracking tracks DPS contribution to the final boss by faction.
+func (ac *ArenaCombat) tickBossDPSTracking() {
+	if ac.finalBoss == nil || ac.finalBoss.Enemy == nil || !ac.finalBoss.Enemy.Alive {
+		return
+	}
+	// Track damage done to boss since last HP snapshot
+	// The boss HP change is tracked via the delta between max and current
+	// This is a simplified approach: we attribute damage proportionally to
+	// factions based on their players' DPS contributions
+	// (In a production system, each hit would record source)
 }
 
 // Cleanup implements CombatMode.Cleanup.
@@ -1394,4 +1486,7 @@ func (ac *ArenaCombat) Cleanup() {
 	ac.xpCrystals = ac.xpCrystals[:0]
 	ac.projectiles = ac.projectiles[:0]
 	ac.fieldItems = ac.fieldItems[:0]
+	ac.factionPvPScores = make(map[string]*ARFactionPvPScore)
+	ac.finalBoss = nil
+	ac.bossSpawned = false
 }

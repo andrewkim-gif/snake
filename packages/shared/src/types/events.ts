@@ -16,6 +16,8 @@ export interface RoomInfo {
   maxPlayers: number;
   timeRemaining: number;
   winner: WinnerInfo | null;
+  /** v17: ISO3 code of the country arena (e.g., "KOR", "USA") */
+  countryIso3?: string;
 }
 
 export interface WinnerInfo {

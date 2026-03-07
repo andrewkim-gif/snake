@@ -116,9 +116,10 @@ const vertexShader = /* glsl */ `
   uniform float totalRows;
 
   void main() {
-    // UV: x는 0..1, y는 rowIndex/totalRows..(rowIndex+1)/totalRows
-    float rowStart = rowIndex / totalRows;
-    float rowEnd = (rowIndex + 1.0) / totalRows;
+    // UV: flipY=true(기본값) → canvas y=0(상단)이 UV y=1.0에 매핑
+    // canvas row i = y [i*H .. (i+1)*H] → UV y [1-(i+1)/N .. 1-i/N]
+    float rowStart = 1.0 - (rowIndex + 1.0) / totalRows;
+    float rowEnd   = 1.0 - rowIndex / totalRows;
     vUv = vec2(uv.x, mix(rowStart, rowEnd, uv.y));
     vAlpha = alphaVal;
 
@@ -184,7 +185,6 @@ export function GlobeCountryLabels({
     c.height = LABEL_ATLAS_H;
     const context = c.getContext('2d')!;
     const tex = new THREE.CanvasTexture(c);
-    tex.flipY = false; // canvas row i → shader UV row i (기본 true면 역순 매핑되어 국기 뒤바뀜)
     tex.minFilter = THREE.LinearFilter;
     tex.magFilter = THREE.LinearFilter;
     return { labelCanvas: c, labelTexture: tex, labelCtx: context };
