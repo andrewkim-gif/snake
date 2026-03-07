@@ -151,12 +151,28 @@ export default function FactionsPage() {
           )}
         </div>
       ) : (
-        /* Mock 데이터 모드: 팩션 카드 그리드 */
-        <div style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-          gap: 16,
-        }}>
+        /* Mock 데이터 모드: 팩션 카드 그리드 — 반응형 */
+        <div
+          className="factions-card-grid"
+          style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
+            gap: 16,
+          }}
+        >
+          <style>{`
+            @media (max-width: 767px) {
+              .factions-card-grid {
+                grid-template-columns: 1fr !important;
+                gap: 12px !important;
+              }
+            }
+            @media (min-width: 768px) and (max-width: 1024px) {
+              .factions-card-grid {
+                grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)) !important;
+              }
+            }
+          `}</style>
           {MOCK_FACTIONS.map((faction) => (
             <div
               key={faction.id}

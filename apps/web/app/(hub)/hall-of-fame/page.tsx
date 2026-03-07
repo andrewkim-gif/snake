@@ -232,12 +232,23 @@ export default function HallOfFamePage() {
                 </h2>
               </div>
 
-              {/* 기록 카드 그리드 */}
-              <div style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-                gap: 12,
-              }}>
+              {/* 기록 카드 그리드 — 반응형 */}
+              <div
+                className="hof-record-grid"
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
+                  gap: 12,
+                }}
+              >
+                <style>{`
+                  @media (max-width: 767px) {
+                    .hof-record-grid {
+                      grid-template-columns: 1fr !important;
+                      gap: 10px !important;
+                    }
+                  }
+                `}</style>
                 {seasonRecords.map((record) => {
                   const trophyEmoji = record.trophyType === 'gold'
                     ? '\uD83C\uDFC6'

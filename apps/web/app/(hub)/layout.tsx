@@ -256,8 +256,9 @@ export default function HubLayout({
         </div>
       </header>
 
-      {/* 콘텐츠 영역 */}
+      {/* 콘텐츠 영역 — 반응형 패딩 + max-width */}
       <main
+        className="hub-content-area"
         style={{
           position: 'relative',
           zIndex: 1,
@@ -266,6 +267,29 @@ export default function HubLayout({
           padding: '24px 16px 100px',
         }}
       >
+        <style>{`
+          /* Mobile (<768px): 1-col, 패딩 16px */
+          @media (max-width: 767px) {
+            .hub-content-area {
+              padding: 16px 16px 120px !important;
+              max-width: 100% !important;
+            }
+          }
+          /* Tablet (768-1024px): 2-col grid 지원 */
+          @media (min-width: 768px) and (max-width: 1024px) {
+            .hub-content-area {
+              padding: 20px 20px 100px !important;
+              max-width: 960px !important;
+            }
+          }
+          /* Desktop (>1024px): 2-3 col grid, max-width 1200px */
+          @media (min-width: 1025px) {
+            .hub-content-area {
+              padding: 24px 24px 80px !important;
+              max-width: 1200px !important;
+            }
+          }
+        `}</style>
         {children}
       </main>
 

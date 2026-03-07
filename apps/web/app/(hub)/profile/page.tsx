@@ -74,13 +74,24 @@ export default function ProfilePage() {
         PROFILE
       </h1>
 
-      {/* Agent Card + Wallet 섹션 (2-column) */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
-        gap: 16,
-        marginBottom: 32,
-      }}>
+      {/* Agent Card + Wallet 섹션 (2-column) — 반응형 */}
+      <div
+        className="profile-top-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',
+          gap: 16,
+          marginBottom: 32,
+        }}
+      >
+        <style>{`
+          @media (max-width: 767px) {
+            .profile-top-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
+            }
+          }
+        `}</style>
         {/* Agent Card */}
         <div style={{
           background: SK.cardBg,

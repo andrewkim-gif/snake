@@ -286,8 +286,9 @@ function GovernancePageInner() {
         })}
       </div>
 
-      {/* 메인 콘텐츠: ProposalList + VoteInterface */}
+      {/* 메인 콘텐츠: ProposalList + VoteInterface — 반응형 */}
       <div
+        className="governance-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: selectedProposal ? '1fr 1fr' : '1fr',

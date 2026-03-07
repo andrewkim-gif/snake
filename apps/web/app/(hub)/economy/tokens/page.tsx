@@ -6,7 +6,8 @@
  * Hub Layout (Economy sub-tabs) 적용
  */
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import {
   MarketCapChart,
   BuybackBurnHistory,
@@ -138,7 +139,10 @@ function DashPanel({
   );
 }
 
-export default function TokensPage() {
+function TokensPageInner() {
+  const searchParams = useSearchParams();
+  const countryParam = searchParams.get('country')?.toUpperCase() ?? null;
+
   const [data, setData] = useState<ReturnType<typeof generateMockData> | null>(null);
 
   useEffect(() => {
@@ -199,6 +203,39 @@ export default function TokensPage() {
         </p>
       </div>
 
+      {/* 국가 필터 표시 (deep linking) */}
+      {countryParam && (
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            padding: '6px 12px',
+            borderRadius: '8px',
+            background: `${SK.orange}15`,
+            border: `1px solid ${SK.orange}30`,
+            marginBottom: '16px',
+            fontFamily: bodyFont,
+            fontSize: '12px',
+            color: SK.orange,
+            fontWeight: 600,
+          }}
+        >
+          Highlighted: {countryParam}
+          <a
+            href="/economy/tokens"
+            style={{
+              color: SK.textSecondary,
+              textDecoration: 'none',
+              fontSize: '11px',
+              marginLeft: '4px',
+            }}
+          >
+            Clear
+          </a>
+        </div>
+      )}
+
       {/* Stats summary */}
       <div
         style={{
@@ -240,14 +277,29 @@ export default function TokensPage() {
         ))}
       </div>
 
-      {/* Main grid */}
+      {/* Main grid — 반응형 */}
       <div
+        className="economy-main-grid"
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(400px, 1fr))',
           gap: '16px',
         }}
       >
+        <style>{`
+          @media (max-width: 767px) {
+            .economy-main-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
+            }
+          }
+          @media (min-width: 768px) and (max-width: 1024px) {
+            .economy-main-grid {
+              grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)) !important;
+              gap: 14px !important;
+            }
+          }
+        `}</style>
         <DashPanel title="Market Cap Ranking">
           <MarketCapChart data={data.marketCapData} maxDisplay={15} />
         </DashPanel>
@@ -276,5 +328,29 @@ export default function TokensPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function TokensPage() {
+  return (
+    <Suspense
+      fallback={
+        <div
+          style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '50vh',
+            color: SK.textSecondary,
+            fontFamily: bodyFont,
+            fontSize: '16px',
+          }}
+        >
+          Loading token economy data...
+        </div>
+      }
+    >
+      <TokensPageInner />
+    </Suspense>
   );
 }
