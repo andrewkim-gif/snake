@@ -34,6 +34,12 @@ import { GlobeMissileEffect } from '@/components/3d/GlobeMissileEffect';
 import { GlobeShockwave } from '@/components/3d/GlobeShockwave';
 import type { GlobeShockwaveHandle } from '@/components/3d/GlobeShockwave';
 
+// v15 Phase 5: Trade routes + Event pulse
+import { GlobeTradeRoutes } from '@/components/3d/GlobeTradeRoutes';
+import { GlobeEventPulse } from '@/components/3d/GlobeEventPulse';
+import type { TradeRouteData } from '@/hooks/useSocket';
+import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
+
 interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
   selectedCountry?: string | null;
@@ -47,6 +53,10 @@ interface GlobeViewProps {
   countryCentroids?: Map<string, [number, number]>;
   /** v14: Hover callback for GlobeHoverPanel (iso3, name, or null to clear) */
   onHover?: (iso3: string | null, name: string | null) => void;
+  /** v15 Phase 5: Trade routes for globe visualization */
+  tradeRoutes?: TradeRouteData[];
+  /** v15 Phase 5: Global events for pulse effects */
+  globalEvents?: GlobalEventData[];
 }
 
 const BG = '#030305';
@@ -1145,12 +1155,16 @@ function GlobeScene({
   dominationStates,
   wars,
   countryStates,
+  tradeRoutes,
+  globalEvents,
 }: {
   onCountryClick?: (iso3: string, name: string) => void;
   onHover?: (iso3: string | null, name: string | null) => void;
   dominationStates: Map<string, CountryDominationState>;
   wars: WarEffectData[];
   countryStates: Map<string, CountryClientState>;
+  tradeRoutes: TradeRouteData[];
+  globalEvents: GlobalEventData[];
 }) {
   const [countries, setCountries] = useState<CountryGeo[]>([]);
   const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
@@ -1262,6 +1276,24 @@ function GlobeScene({
           globeRadius={RADIUS}
         />
       )}
+
+      {/* v15 Phase 5: Trade route bezier lines (해상=파란 점선, 육상=초록 실선) */}
+      {tradeRoutes.length > 0 && centroidsMap.size > 0 && (
+        <GlobeTradeRoutes
+          tradeRoutes={tradeRoutes}
+          countryCentroids={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
+      {/* v15 Phase 5: Global event pulse effects (동맹/정책/에포크/휴전/금수) */}
+      {globalEvents.length > 0 && centroidsMap.size > 0 && (
+        <GlobeEventPulse
+          globalEvents={globalEvents}
+          countryCentroids={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
     </>
   );
 }
@@ -1276,11 +1308,16 @@ export function GlobeView({
   wars,
   countryCentroids,
   onHover,
+  tradeRoutes,
+  globalEvents,
 }: GlobeViewProps) {
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
   const warList = wars ?? [];
   const cStates = countryStates ?? new Map<string, CountryClientState>();
+  // v15 Phase 5: fallback empty arrays
+  const tradeList = tradeRoutes ?? [];
+  const eventList = globalEvents ?? [];
 
   return (
     <div style={{ width: '100%', height: '100%', background: BG, position: 'relative', ...style }}>
@@ -1296,6 +1333,8 @@ export function GlobeView({
             dominationStates={domStates}
             wars={warList}
             countryStates={cStates}
+            tradeRoutes={tradeList}
+            globalEvents={eventList}
           />
         </SizeGate>
       </Canvas>

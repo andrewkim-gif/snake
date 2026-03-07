@@ -28,6 +28,10 @@ const CountryPanel = dynamic(
 import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 
+// v15 Phase 5: Trade routes + global events
+import type { TradeRouteData } from '@/hooks/useSocket';
+import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
+
 interface WorldViewProps {
   countryStates?: Map<string, CountryClientState>;
   onEnterArena?: (iso3: string) => void;
@@ -38,6 +42,10 @@ interface WorldViewProps {
   dominationStates?: Map<string, CountryDominationState>;
   /** v14: Active war effects for globe */
   wars?: WarEffectData[];
+  /** v15 Phase 5: Trade routes for globe visualization */
+  tradeRoutes?: TradeRouteData[];
+  /** v15 Phase 5: Global events for pulse effects */
+  globalEvents?: GlobalEventData[];
 }
 
 export function WorldView({
@@ -48,6 +56,8 @@ export function WorldView({
   style,
   dominationStates,
   wars,
+  tradeRoutes,
+  globalEvents,
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -145,6 +155,8 @@ export function WorldView({
           dominationStates={dominationStates}
           wars={wars}
           onHover={handleGlobeHover}
+          tradeRoutes={tradeRoutes}
+          globalEvents={globalEvents}
         />
       </div>
 

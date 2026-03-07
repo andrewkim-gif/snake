@@ -282,6 +282,8 @@ export default function Home() {
         bottomOffset={NEWS_FEED_HEIGHT}
         dominationStates={uiState.dominationStates}
         wars={uiState.wars}
+        tradeRoutes={uiState.tradeRoutes}
+        globalEvents={uiState.globalEvents}
       />
 
       {/* CIC 헤더 바 */}
