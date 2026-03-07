@@ -517,6 +517,82 @@ export interface NationScoreSummary {
   totalKills: number;
 }
 
+// ─── v14 Phase 7: War System Event Payloads ───
+
+/** v14 Phase 7: 전쟁 상태 */
+export type WarState = 'none' | 'preparation' | 'active' | 'ended';
+
+/** v14 Phase 7: 전쟁 결과 */
+export type WarOutcome = 'none' | 'attacker_win' | 'defender_win' | 'auto_surrender' | 'fatigue_end' | 'truce';
+
+/** v14 Phase 7: 전쟁 측면 */
+export type WarSide = 'attacker' | 'defender' | 'neutral';
+
+/** v14 Phase 7: 전쟁 선포 이벤트 */
+export interface WarDeclaredPayload {
+  warId: string;
+  attacker: string;        // ISO3 attacking nation
+  defender: string;        // ISO3 defending nation
+  coalition: string[];     // coalition members (if coalition war)
+  declType: 'hegemony' | 'coalition';
+  state: WarState;
+  timestamp: number;
+}
+
+/** v14 Phase 7: 전쟁 종료 이벤트 */
+export interface WarEndedPayload {
+  warId: string;
+  attacker: string;
+  defender: string;
+  outcome: WarOutcome;
+  attackerScore: number;
+  defenderScore: number;
+  winner: string;          // ISO3 of winner
+  loser: string;           // ISO3 of loser
+  timestamp: number;
+}
+
+/** v14 Phase 7: 전쟁 스코어 업데이트 */
+export interface WarScoreUpdatePayload {
+  warId: string;
+  attacker: string;
+  defender: string;
+  attackerScore: number;
+  defenderScore: number;
+}
+
+/** v14 Phase 7: 전쟁 스냅샷 (전체 상태) */
+export interface WarSnapshotPayload {
+  wars: WarSnapshotEntry[];
+}
+
+export interface WarSnapshotEntry {
+  warId: string;
+  state: WarState;
+  attacker: string;
+  defender: string;
+  attackerAllies: string[];
+  defenderAllies: string[];
+  attackerScore: number;
+  defenderScore: number;
+  declaredAt: number;
+  activatedAt: number;
+  fatiguePenalty: number;
+}
+
+/** v14 Phase 7: 동맹 스냅샷 */
+export interface AllianceSnapshotPayload {
+  alliances: AllianceSnapshotEntry[];
+}
+
+export interface AllianceSnapshotEntry {
+  allianceId: string;
+  name: string;
+  leader: string;
+  members: string[];
+  formedAt: number;
+}
+
 /** v14: 국적 선택 페이로드 */
 export interface SelectNationalityPayload {
   nationality: string;
@@ -548,6 +624,8 @@ export interface ClientToServerEvents {
   // v14: Epoch & Nationality
   select_nationality: (data: SelectNationalityPayload) => void;
   join_country_arena: (data: JoinCountryArenaPayload) => void;
+  // v14 Phase 7: War system
+  declare_war: (data: { attacker: string; defender: string; coalition: string[] }) => void;
 }
 
 export interface ServerToClientEvents {
@@ -591,4 +669,10 @@ export interface ServerToClientEvents {
   kill_reward: (data: KillRewardPayload) => void;
   bounty_alert: (data: BountyAlertPayload) => void;
   epoch_scoreboard: (data: EpochScoreboardPayload) => void;
+  // v14 Phase 7: War system events
+  war_declared: (data: WarDeclaredPayload) => void;
+  war_ended: (data: WarEndedPayload) => void;
+  war_score_update: (data: WarScoreUpdatePayload) => void;
+  war_snapshot: (data: WarSnapshotPayload) => void;
+  alliance_snapshot: (data: AllianceSnapshotPayload) => void;
 }
