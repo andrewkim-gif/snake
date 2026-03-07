@@ -32,6 +32,8 @@ interface SceneProps {
   timeRemaining?: number;
   /** 테마 이름 (forest/desert/mountain/urban/arctic/island) */
   theme?: string;
+  /** v19: 아레나 모드 — MCScene 스타일 조명 (하늘색 안개 + 포인트 라이트) */
+  isArenaMode?: boolean;
 }
 
 // ─── 색상 보간 헬퍼 ───
@@ -62,16 +64,27 @@ function getAtmosphereColor(baseColor: string, t: number): THREE.Color {
   return _colorResult;
 }
 
-export function Scene({ timeRemaining, theme = 'forest' }: SceneProps) {
+// v19: 아레나 모드 MC 스타일 씬 상수 (MCScene.tsx에서 가져옴)
+const MC_SKY_COLOR = 0x87ceeb;
+const MC_FOG_NEAR = 1;
+const MC_FOG_FAR = 120; // 아레나 반경(80블록) 내 가시 거리
+
+export function Scene({ timeRemaining, theme = 'forest', isArenaMode }: SceneProps) {
   const { scene } = useThree();
   const fogRef = useRef<THREE.Fog | null>(null);
   const palette = getTerrainPalette(theme);
 
-  // Fog + 배경색 설정
+  // Fog + 배경색 설정 (아레나 모드: MC 스타일, 클래식: 테마별)
   useEffect(() => {
-    const fog = new THREE.Fog(palette.fogColor, palette.fogNear, palette.fogFar);
+    let fog: THREE.Fog;
+    if (isArenaMode) {
+      fog = new THREE.Fog(MC_SKY_COLOR, MC_FOG_NEAR, MC_FOG_FAR);
+      scene.background = new THREE.Color(MC_SKY_COLOR);
+    } else {
+      fog = new THREE.Fog(palette.fogColor, palette.fogNear, palette.fogFar);
+      scene.background = new THREE.Color(palette.skyColor);
+    }
     scene.fog = fog;
-    scene.background = new THREE.Color(palette.skyColor);
     fogRef.current = fog;
 
     return () => {
@@ -79,12 +92,15 @@ export function Scene({ timeRemaining, theme = 'forest' }: SceneProps) {
       scene.background = null;
       fogRef.current = null;
     };
-  }, [scene, palette.fogColor, palette.fogNear, palette.fogFar, palette.skyColor]);
+  }, [scene, palette.fogColor, palette.fogNear, palette.fogFar, palette.skyColor, isArenaMode]);
 
-  // ─── 분위기 변화 (라운드 시간 기반) ───
+  // ─── 분위기 변화 (라운드 시간 기반, 아레나 모드에서는 고정) ───
   useFrame(() => {
     const fog = fogRef.current;
     if (!fog) return;
+
+    // 아레나 모드: 고정 MC 스타일 안개 (분위기 변화 없음)
+    if (isArenaMode) return;
 
     if (timeRemaining === undefined || timeRemaining >= 300) {
       fog.color.set(palette.fogColor);
@@ -106,6 +122,19 @@ export function Scene({ timeRemaining, theme = 'forest' }: SceneProps) {
       scene.background.copy(color);
     }
   });
+
+  // v19: 아레나 모드 → MCScene 스타일 조명 (포인트 라이트 + 환경광)
+  if (isArenaMode) {
+    return (
+      <>
+        {/* MC 스타일 환경광 */}
+        <ambientLight color={0x404040} intensity={1} />
+        {/* MC 스타일 포인트 라이트 (태양 역할) */}
+        <pointLight position={[500, 500, 500]} intensity={0.5} />
+        <pointLight position={[-500, 500, -500]} intensity={0.2} />
+      </>
+    );
+  }
 
   return (
     <>

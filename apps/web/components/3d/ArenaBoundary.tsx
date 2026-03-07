@@ -21,9 +21,13 @@ interface ArenaBoundaryProps {
   currentRadius: number;
   /** 수축 목표 반경 (수축 예고용, 없으면 currentRadius와 동일) */
   targetRadius?: number;
+  /** v19: 아레나 모드 — MC 블록 단위 경계, 벽을 MC 지형 높이에 맞춤 */
+  isArenaMode?: boolean;
 }
 
 const WALL_HEIGHT = 24;
+/** v19: MC 지형 위 벽 높이 (MC_BASE_Y=30 위에 높은 벽) */
+const MC_WALL_HEIGHT = 40;
 const WALL_SEGMENTS = 64;
 const LERP_SPEED = 0.1;
 const BASE_OPACITY = 0.25;
@@ -34,7 +38,7 @@ const UNIT_RADIUS = 1;
 const RING_INNER = 0.95;
 const RING_OUTER = 1.05;
 
-export function ArenaBoundary({ currentRadius, targetRadius }: ArenaBoundaryProps) {
+export function ArenaBoundary({ currentRadius, targetRadius, isArenaMode }: ArenaBoundaryProps) {
   const wallRef = useRef<THREE.Mesh>(null!);
   const previewRef = useRef<THREE.Mesh>(null!);
   const displayRadiusRef = useRef(currentRadius);
@@ -63,9 +67,10 @@ export function ArenaBoundary({ currentRadius, targetRadius }: ArenaBoundaryProp
   }, []);
 
   // --- unit-size geometry (한 번만 생성, scale로 반경 조절) ---
+  const effectiveWallHeight = isArenaMode ? MC_WALL_HEIGHT : WALL_HEIGHT;
   const wallGeo = useMemo(
-    () => new THREE.CylinderGeometry(UNIT_RADIUS, UNIT_RADIUS, WALL_HEIGHT, WALL_SEGMENTS, 1, true),
-    [],
+    () => new THREE.CylinderGeometry(UNIT_RADIUS, UNIT_RADIUS, effectiveWallHeight, WALL_SEGMENTS, 1, true),
+    [effectiveWallHeight],
   );
   const previewGeo = useMemo(
     () => new THREE.RingGeometry(RING_INNER, RING_OUTER, WALL_SEGMENTS),
@@ -106,10 +111,13 @@ export function ArenaBoundary({ currentRadius, targetRadius }: ArenaBoundaryProp
     };
   }, [wallMat, previewMat, wallGeo, previewGeo]);
 
+  // v19: MC 지형 위 벽 Y 위치 (MC_BASE_Y=30 기준)
+  const wallBaseY = isArenaMode ? 30 + effectiveWallHeight / 2 : effectiveWallHeight / 2;
+
   return (
     <group>
       {/* 경계벽 -- open-ended cylinder (unit radius, scale로 조절) */}
-      <mesh ref={wallRef} position-y={WALL_HEIGHT / 2} geometry={wallGeo}>
+      <mesh ref={wallRef} position-y={wallBaseY} geometry={wallGeo}>
         <primitive object={wallMat} attach="material" />
       </mesh>
 

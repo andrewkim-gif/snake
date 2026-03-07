@@ -35,6 +35,8 @@ import type { AnimationStateMachine } from '@/lib/3d/animation-state-machine';
 import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
 import { TerrainDeco } from '@/components/3d/TerrainDeco';
 import { HeightmapTerrain } from '@/components/3d/HeightmapTerrain';
+import MCTerrain from '@/components/3d/MCTerrain';
+import { countryHash, MC_BLOCK_CONSTANTS } from '@/lib/3d/coordinate-utils';
 import { ObstacleInstances } from '@/components/3d/ObstacleInstances';
 import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
 import { MapStructures } from '@/components/3d/MapStructures';
@@ -94,6 +96,12 @@ interface GameCanvas3DProps {
   onExit: () => void;
   chooseUpgrade?: (choiceId: string) => void;
   dismissSynergyPopup?: (synergyId: string) => void;
+  /** v19: 아레나 모드 (MCTerrain 복셀 지형 사용) */
+  isArenaMode?: boolean;
+  /** v19: 아레나 시드 (국가 해시, 없으면 countryHash에서 자동 계산) */
+  arenaSeed?: number;
+  /** v19: 아레나 반경 (MC 블록 단위, 기본 80) */
+  arenaRadius?: number;
 }
 
 export function GameCanvas3D({
@@ -107,6 +115,9 @@ export function GameCanvas3D({
   onExit,
   chooseUpgrade,
   dismissSynergyPopup,
+  isArenaMode = false,
+  arenaSeed,
+  arenaRadius = MC_BLOCK_CONSTANTS.ARENA_RADIUS_BLOCKS,
 }: GameCanvas3DProps) {
   // ─── Refs ───
   const agentsRef = useRef<AgentNetworkData[]>([]);
@@ -261,6 +272,9 @@ export function GameCanvas3D({
   const { playSFX, startAmbience, stopAmbience, toggleMute, isMuted } = useAudio();
   const prevKillCountRef = useRef(0);
   const prevLevelRef = useRef(0);
+
+  // ─── v19: 아레나 시드 결정 (prop 우선, 없으면 roomId에서 해시) ───
+  const effectiveArenaSeed = arenaSeed ?? countryHash(uiState.currentRoomId ?? 'default');
 
   // ─── 테마 결정 (uiState.terrainTheme → 폴백 "forest") ───
   const terrainTheme = uiState.terrainTheme || 'forest';
@@ -570,8 +584,8 @@ export function GameCanvas3D({
           observerRef={observerRef}
         />
 
-        {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별) */}
-        <Scene timeRemaining={uiState.timeRemaining} theme={terrainTheme} />
+        {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별, v19: 아레나 모드 MC 조명) */}
+        <Scene timeRemaining={uiState.timeRemaining} theme={terrainTheme} isArenaMode={isArenaMode} />
 
         {/* 4. SkyBox — 하늘 돔 + 구름 */}
         <SkyBox />
@@ -583,6 +597,8 @@ export function GameCanvas3D({
           stateMachineRef={stateMachineRef}
           agentIndexMapRef={agentIndexMapRef}
           particlesRef={particlesRef}
+          isArenaMode={isArenaMode}
+          arenaSeed={effectiveArenaSeed}
         />
 
         {/* 5.1. FlagSprite — 에이전트 머리 위 국기 + 이름 Billboard (v14 S09) */}
@@ -600,29 +616,51 @@ export function GameCanvas3D({
           agentIndexMapRef={agentIndexMapRef}
         />
 
-        {/* 6. Terrain — HeightmapTerrain(서버 동기화) 우선, 없으면 ZoneTerrain 폴백 */}
-        {uiState.heightmapData ? (
-          <HeightmapTerrain data={uiState.heightmapData} biomeData={uiState.biomeData} />
+        {/* 6. Terrain — v19: 아레나 모드이면 MCTerrain, 아니면 기존 HeightmapTerrain/ZoneTerrain */}
+        {isArenaMode ? (
+          <MCTerrain
+            seed={effectiveArenaSeed}
+            customBlocks={[]}
+            arenaMode={{
+              radius: arenaRadius,
+              flattenVariance: 5,
+              seed: effectiveArenaSeed,
+            }}
+          />
         ) : (
-          <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
+          <>
+            {uiState.heightmapData ? (
+              <HeightmapTerrain data={uiState.heightmapData} biomeData={uiState.biomeData} />
+            ) : (
+              <ZoneTerrain arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
+            )}
+          </>
         )}
 
-        {/* 6b. ObstacleInstances — 바위/나무/벽/물 InstancedMesh */}
-        <ObstacleInstances
-          obstacleData={uiState.obstacleData}
-          heightmapData={uiState.heightmapData}
-          cellSize={uiState.heightmapData?.cellSize ?? 50}
-          arenaRadius={ARENA_CONFIG.radius}
+        {/* 6b. ObstacleInstances — 바위/나무/벽/물 InstancedMesh (아레나 모드에서는 MCTerrain이 장애물 포함) */}
+        {!isArenaMode && (
+          <ObstacleInstances
+            obstacleData={uiState.obstacleData}
+            heightmapData={uiState.heightmapData}
+            cellSize={uiState.heightmapData?.cellSize ?? 50}
+            arenaRadius={ARENA_CONFIG.radius}
+          />
+        )}
+
+        {/* 7. TerrainDeco — 환경 데코레이션 (아레나 모드에서는 MCTerrain 나무/잎이 대체) */}
+        {!isArenaMode && (
+          <TerrainDeco arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
+        )}
+
+        {/* 8. ArenaBoundary — 수축 경계벽 (아레나 모드: MC 블록 단위 반경) */}
+        <ArenaBoundary
+          currentRadius={isArenaMode ? arenaRadius : currentRadius}
+          targetRadius={isArenaMode ? undefined : targetRadius}
+          isArenaMode={isArenaMode}
         />
 
-        {/* 7. TerrainDeco — 환경 데코레이션 (테마별) */}
-        <TerrainDeco arenaRadius={ARENA_CONFIG.radius} theme={terrainTheme} />
-
-        {/* 8. ArenaBoundary — 수축 경계벽 */}
-        <ArenaBoundary currentRadius={currentRadius} targetRadius={targetRadius} />
-
-        {/* 9. MapStructures — 맵 구조물 (Shrine/Spring/Altar) */}
-        <MapStructures arenaRadius={ARENA_CONFIG.radius} />
+        {/* 9. MapStructures — 맵 구조물 (아레나 모드에서는 비활성 — MCTerrain이 대체) */}
+        {!isArenaMode && <MapStructures arenaRadius={ARENA_CONFIG.radius} />}
 
         {/* 10. OrbInstances — 오브 복셀 큐브 InstancedMesh */}
         <OrbInstances orbsRef={orbsRef} />

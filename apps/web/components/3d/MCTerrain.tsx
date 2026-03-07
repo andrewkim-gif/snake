@@ -28,6 +28,16 @@ import type {
 const BLOCK_TYPE_COUNT = 12
 const blockGeo = new THREE.BoxGeometry(1, 1, 1)
 
+/** 아레나 모드 설정: 반경 내 정적 지형 */
+export interface MCTerrainArenaMode {
+  /** 아레나 반경 (블록 단위, 예: 80) */
+  radius: number
+  /** 높이 편차 제한 ±N 블록 (예: 5) */
+  flattenVariance: number
+  /** 국가 해시 시드 */
+  seed: number
+}
+
 interface MCTerrainProps {
   seed: number
   customBlocks: CustomBlock[]
@@ -35,12 +45,15 @@ interface MCTerrainProps {
     blocks: BlockInstance[]
     idMap: Record<string, number>
   }) => void
+  /** v19: 아레나 모드 — 반경 내 정적 지형, 청크 업데이트 스킵 */
+  arenaMode?: MCTerrainArenaMode
 }
 
 export default function MCTerrain({
   seed,
   customBlocks,
   onTerrainReady,
+  arenaMode,
 }: MCTerrainProps) {
   const { camera } = useThree()
   const groupRef = useRef<THREE.Group>(null)
@@ -141,14 +154,31 @@ export default function MCTerrain({
         else placedBlocks.push({ x: cb.x, y: cb.y, z: cb.z, type: cb.type })
       }
 
-      const startX = -MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE * cx
-      const endX = MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE + MC_CHUNK_SIZE * cx
-      const startZ = -MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE * cz
-      const endZ = MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE + MC_CHUNK_SIZE * cz
+      let startX: number, endX: number, startZ: number, endZ: number
+      if (arenaMode) {
+        startX = -arenaMode.radius
+        endX = arenaMode.radius
+        startZ = -arenaMode.radius
+        endZ = arenaMode.radius
+      } else {
+        startX = -MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE * cx
+        endX = MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE + MC_CHUNK_SIZE * cx
+        startZ = -MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE * cz
+        endZ = MC_CHUNK_SIZE * MC_RENDER_DISTANCE + MC_CHUNK_SIZE + MC_CHUNK_SIZE * cz
+      }
 
       for (let x = startX; x < endX; x++) {
         for (let z = startZ; z < endZ; z++) {
-          const yOffset = noise.getSurfaceOffset(x, z)
+          // 아레나 모드: 원형 경계 밖 블록 스킵
+          if (arenaMode) {
+            if (x * x + z * z > arenaMode.radius * arenaMode.radius) continue
+          }
+
+          let yOffset = noise.getSurfaceOffset(x, z)
+          // 아레나 모드: 높이 편차 클램프
+          if (arenaMode) {
+            yOffset = Math.max(-arenaMode.flattenVariance, Math.min(arenaMode.flattenVariance, yOffset))
+          }
           const y = MC_BASE_Y + yOffset
           const key = blockKey(x, y, z)
           if (removedSet.has(key)) continue
@@ -212,7 +242,7 @@ export default function MCTerrain({
       updateInstancedMeshes(blocks)
       onTerrainReady?.({ blocks, idMap })
     },
-    [seed, customBlocks, updateInstancedMeshes, onTerrainReady]
+    [seed, customBlocks, updateInstancedMeshes, onTerrainReady, arenaMode]
   )
 
   // 청크 변경 감지 + 생성 요청
@@ -223,9 +253,15 @@ export default function MCTerrain({
           chunkX: cx,
           chunkZ: cz,
           chunkSize: MC_CHUNK_SIZE,
-          distance: MC_RENDER_DISTANCE,
+          distance: arenaMode ? 1 : MC_RENDER_DISTANCE,
           seed,
           customBlocks,
+          arenaMode: arenaMode ? {
+            centerX: 0,
+            centerZ: 0,
+            radius: arenaMode.radius,
+            flattenVariance: arenaMode.flattenVariance,
+          } : undefined,
         }
         workerRef.current.postMessage(input)
       } else {
@@ -233,19 +269,26 @@ export default function MCTerrain({
         generateOnMainThread(cx, cz)
       }
     },
-    [seed, customBlocks, generateOnMainThread]
+    [seed, customBlocks, generateOnMainThread, arenaMode]
   )
 
-  // 초기 생성
+  // 초기 생성 (아레나 모드: 중심(0,0)에서 1회, 일반 모드: 카메라 위치)
   useEffect(() => {
-    const cx = Math.floor(camera.position.x / MC_CHUNK_SIZE)
-    const cz = Math.floor(camera.position.z / MC_CHUNK_SIZE)
-    lastChunkRef.current = `${cx}_${cz}`
-    requestGeneration(cx, cz)
-  }, [camera, requestGeneration])
+    if (arenaMode) {
+      lastChunkRef.current = '0_0'
+      requestGeneration(0, 0)
+    } else {
+      const cx = Math.floor(camera.position.x / MC_CHUNK_SIZE)
+      const cz = Math.floor(camera.position.z / MC_CHUNK_SIZE)
+      lastChunkRef.current = `${cx}_${cz}`
+      requestGeneration(cx, cz)
+    }
+  }, [camera, requestGeneration, arenaMode])
 
-  // 매 프레임 청크 변경 체크
+  // 매 프레임 청크 변경 체크 (아레나 모드에서는 스킵 — 정적 지형)
   useFrame(() => {
+    if (arenaMode) return // 아레나: 정적, 청크 업데이트 불필요
+
     const cx = Math.floor(camera.position.x / MC_CHUNK_SIZE)
     const cz = Math.floor(camera.position.z / MC_CHUNK_SIZE)
     const key = `${cx}_${cz}`
@@ -256,12 +299,17 @@ export default function MCTerrain({
     }
   })
 
-  // 최대 인스턴스 수 계산
+  // 최대 인스턴스 수 계산 (아레나: 원형 면적 기반, 일반: 사각형 범위)
   const maxCount = useMemo(() => {
+    if (arenaMode) {
+      // 원형 면적: π * r² + 여유분 (나무/잎 포함)
+      const r = arenaMode.radius
+      return Math.ceil(Math.PI * r * r) + 2000
+    }
     const range =
       MC_RENDER_DISTANCE * MC_CHUNK_SIZE * 2 + MC_CHUNK_SIZE
     return range * range + 500
-  }, [])
+  }, [arenaMode])
 
   return (
     <group ref={groupRef}>
@@ -283,8 +331,8 @@ export default function MCTerrain({
         )
       })}
 
-      {/* 구름 */}
-      <MCClouds seed={seed} />
+      {/* 구름 (아레나 모드에서는 비활성 — 작은 영역이라 불필요) */}
+      {!arenaMode && <MCClouds seed={seed} />}
     </group>
   )
 }

@@ -27,6 +27,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { textureCacheManager } from '@/lib/3d/cubeling-textures';
 import { toWorld, headingToRotY, getAgentScale } from '@/lib/3d/coordinate-utils';
+import { MCNoise } from '@/lib/3d/mc-noise';
+import { MC_BASE_Y } from '@/lib/3d/mc-types';
 import { CUBELING_PARTS } from '@/lib/3d/cubeling-proportions';
 import { resolveAppearance } from '@/lib/3d/skin-migration';
 import { getCachedNetworkAppearance } from '@/lib/3d/appearance-cache';
@@ -108,6 +110,10 @@ interface AgentInstancesProps {
   agentIndexMapRef: React.MutableRefObject<Map<string, number>>;
   /** v16 Phase 6: 파티클 엔진 ref (footstep 파티클용, optional) */
   particlesRef?: React.MutableRefObject<MCParticlesHandle | null>;
+  /** v19: 아레나 모드 — MCNoise 기반 Y 높이 샘플링 */
+  isArenaMode?: boolean;
+  /** v19: 아레나 시드 (MCNoise 초기화용) */
+  arenaSeed?: number;
 }
 
 // ─── 애니메이션 헬퍼 ───
@@ -181,9 +187,15 @@ function hideInstance(mesh: THREE.InstancedMesh, idx: number): void {
 
 // ─── Component ───
 
-export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIndexMapRef, particlesRef }: AgentInstancesProps) {
+export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIndexMapRef, particlesRef, isArenaMode, arenaSeed }: AgentInstancesProps) {
   // ─── Body 패턴별 IM refs (4 IM) ───
   const bodyRefs = useRef<(THREE.InstancedMesh | null)[]>([null, null, null, null]);
+
+  // v19: MCNoise 인스턴스 (아레나 모드 높이 샘플링용)
+  const noiseRef = useRef<MCNoise | null>(null);
+  if (isArenaMode && (!noiseRef.current || noiseRef.current.seed !== arenaSeed)) {
+    noiseRef.current = new MCNoise(arenaSeed);
+  }
 
   // ─── Arm/Leg 단일 IM refs ───
   const armLRef = useRef<THREE.InstancedMesh>(null!);
@@ -372,8 +384,18 @@ export function AgentInstances({ agentsRef, elapsedRef, stateMachineRef, agentIn
       }
 
       // ─── 월드 좌표 + 스케일 ───
-      // v16 Phase 4: agent z (서버 높이) → Three.js Y 좌표
-      const agentZ = agent.z ?? 0;
+      // v19: 아레나 모드 — MCNoise에서 Y 높이 샘플링 (서버 z 무시)
+      // v16: 클래식 모드 — agent z (서버 높이) → Three.js Y 좌표
+      let agentZ: number;
+      if (isArenaMode && noiseRef.current) {
+        // MCNoise.getSurfaceOffset(x, z) + MC_BASE_Y + 1 (블록 표면 위)
+        const surfaceOffset = noiseRef.current.getSurfaceOffset(x, y);
+        // 아레나 모드: flattenVariance ±5로 클램프 (MCTerrain과 동일)
+        const clampedOffset = Math.max(-5, Math.min(5, surfaceOffset));
+        agentZ = MC_BASE_Y + clampedOffset + 1;
+      } else {
+        agentZ = agent.z ?? 0;
+      }
       const [worldX, worldY, worldZ] = toWorld(x, y, agentZ);
       // v16: character faces aim direction (facing), not movement heading
       const rotY = headingToRotY(facing);

@@ -10,6 +10,13 @@ import {
   type CustomBlock,
 } from './mc-types'
 
+export interface ArenaWorkerMode {
+  centerX: number
+  centerZ: number
+  radius: number
+  flattenVariance: number
+}
+
 export interface TerrainWorkerInput {
   chunkX: number
   chunkZ: number
@@ -17,6 +24,7 @@ export interface TerrainWorkerInput {
   distance: number
   seed: number
   customBlocks: CustomBlock[]
+  arenaMode?: ArenaWorkerMode
 }
 
 export interface BlockInstance {
@@ -35,7 +43,7 @@ export interface TerrainWorkerOutput {
 
 // Worker 메시지 핸들러
 self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
-  const { chunkX, chunkZ, chunkSize, distance, seed, customBlocks } = e.data
+  const { chunkX, chunkZ, chunkSize, distance, seed, customBlocks, arenaMode } = e.data
   const noise = new MCNoise(seed)
   const blocks: BlockInstance[] = []
   const idMap: Record<string, number> = {}
@@ -52,14 +60,36 @@ self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
     }
   }
 
-  const startX = -chunkSize * distance + chunkSize * chunkX
-  const endX = chunkSize * distance + chunkSize + chunkSize * chunkX
-  const startZ = -chunkSize * distance + chunkSize * chunkZ
-  const endZ = chunkSize * distance + chunkSize + chunkSize * chunkZ
+  // 아레나 모드: 반경 내 영역만 생성. 일반 모드: 카메라 청크 기반
+  let startX: number, endX: number, startZ: number, endZ: number
+  if (arenaMode) {
+    startX = arenaMode.centerX - arenaMode.radius
+    endX = arenaMode.centerX + arenaMode.radius
+    startZ = arenaMode.centerZ - arenaMode.radius
+    endZ = arenaMode.centerZ + arenaMode.radius
+  } else {
+    startX = -chunkSize * distance + chunkSize * chunkX
+    endX = chunkSize * distance + chunkSize + chunkSize * chunkX
+    startZ = -chunkSize * distance + chunkSize * chunkZ
+    endZ = chunkSize * distance + chunkSize + chunkSize * chunkZ
+  }
 
   for (let x = startX; x < endX; x++) {
     for (let z = startZ; z < endZ; z++) {
-      const yOffset = noise.getSurfaceOffset(x, z)
+      // 아레나 모드: 원형 경계 밖 블록 스킵
+      if (arenaMode) {
+        const dx = x - arenaMode.centerX
+        const dz = z - arenaMode.centerZ
+        if (dx * dx + dz * dz > arenaMode.radius * arenaMode.radius) continue
+      }
+
+      let yOffset = noise.getSurfaceOffset(x, z)
+
+      // 아레나 모드: 높이 편차를 ±flattenVariance로 클램프
+      if (arenaMode) {
+        yOffset = Math.max(-arenaMode.flattenVariance, Math.min(arenaMode.flattenVariance, yOffset))
+      }
+
       const y = MC_BASE_Y + yOffset
 
       const key = blockKey(x, y, z)
