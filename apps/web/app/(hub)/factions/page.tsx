@@ -2,24 +2,23 @@
 
 /**
  * /factions — 팩션 목록 + 대시보드
- * DashboardPage + DetailModal + mock data 모듈 사용
+ * DashboardPage + DetailModal + API 연동 (mock fallback 제거)
  */
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, grid } from '@/lib/sketch-ui';
 import { DashboardPage, DetailModal } from '@/components/hub';
-import { MOCK_FACTIONS, MOCK_FACTION_DETAILS } from '@/lib/mock-data';
-import type { MockFaction } from '@/lib/mock-data';
 import { Swords, Users, MapPin, DollarSign } from 'lucide-react';
-import { isServerAvailable, fetchFactions, type FactionSummary } from '@/lib/api-client';
+import { fetchFactions, fetchFaction, type FactionSummary } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
+import { ServerRequired } from '@/components/ui/ServerRequired';
 
 const FactionList = dynamic(() => import('@/components/faction/FactionList'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
-      …
+      ...
     </div>
   ),
 });
@@ -27,13 +26,10 @@ const FactionList = dynamic(() => import('@/components/faction/FactionList'), {
 const FactionDashboard = dynamic(() => import('@/components/faction/FactionDashboard'), {
   loading: () => (
     <div style={{ color: SK.textSecondary, fontFamily: bodyFont, fontSize: SKFont.sm, padding: 24, textAlign: 'center' }}>
-      …
+      ...
     </div>
   ),
 });
-
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
-// isServerAvailable() from api-client is used for live data toggling
 
 function StarRating({ value, max = 5, label }: { value: number; max?: number; label: string }) {
   return (
@@ -52,34 +48,41 @@ function StarRating({ value, max = 5, label }: { value: number; max?: number; la
   );
 }
 
-export default function FactionsPage() {
+function FactionsPageInner() {
   const tFaction = useTranslations('faction');
-  const [selectedFaction, setSelectedFaction] = useState<MockFaction | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
-  const serverOk = isServerAvailable();
-  const [useServerData, setUseServerData] = useState(serverOk);
 
-  // Fetch live faction data when server is available
-  const { data: liveFactions } = useApiData(fetchFactions, { refreshInterval: serverOk ? 30_000 : 0 });
+  // 서버에서 팩션 목록 가져오기
+  const { data: factions, loading } = useApiData(fetchFactions, { refreshInterval: 30_000 });
+
+  // 선택된 팩션 상세 가져오기
+  const fetchSelectedFaction = useCallback(() => {
+    if (!selectedId) return Promise.resolve(null);
+    return fetchFaction(selectedId);
+  }, [selectedId]);
+  const { data: selectedDetail } = useApiData(fetchSelectedFaction);
 
   const handleFactionSelect = useCallback((faction: { id: string }) => {
-    const f = MOCK_FACTIONS.find((mf) => mf.id === faction.id);
-    if (f) setSelectedFaction(f);
+    setSelectedId(faction.id);
   }, []);
 
-  // Use live data for stats if available, otherwise mock
-  const factionCount = liveFactions ? liveFactions.length : MOCK_FACTIONS.length;
-  const totalMembers = liveFactions
-    ? liveFactions.reduce((s, f) => s + f.member_count, 0)
-    : MOCK_FACTIONS.reduce((s, f) => s + f.member_count, 0);
-  const totalTerritories = liveFactions
-    ? liveFactions.reduce((s, f) => s + (f.territory_count ?? 0), 0)
-    : MOCK_FACTIONS.reduce((s, f) => s + f.territory_count, 0);
-  const totalGdp = liveFactions
-    ? liveFactions.reduce((s, f) => s + (f.total_gdp ?? 0), 0)
-    : MOCK_FACTIONS.reduce((s, f) => s + f.total_gdp, 0);
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
+        Loading factions...
+      </div>
+    );
+  }
 
-  const selectedDetail = selectedFaction ? MOCK_FACTION_DETAILS[selectedFaction.id] : null;
+  const factionList = factions ?? [];
+  const factionCount = factionList.length;
+  const totalMembers = factionList.reduce((s, f) => s + f.member_count, 0);
+  const totalTerritories = factionList.reduce((s, f) => s + (f.territory_count ?? 0), 0);
+  const totalGdp = factionList.reduce((s, f) => s + (f.total_gdp ?? 0), 0);
+
+  // 목록에서 선택된 팩션 찾기 (카드 하이라이트용)
+  const selectedFaction = factionList.find((f) => f.id === selectedId) ?? null;
 
   return (
     <DashboardPage
@@ -88,23 +91,6 @@ export default function FactionsPage() {
       description={tFaction('subtitle')}
       accentColor="#EF4444"
       heroImage="/images/hero-factions.png"
-      headerChildren={
-        <button
-          onClick={() => setUseServerData(!useServerData)}
-          style={{
-            padding: '4px 12px',
-            fontFamily: bodyFont,
-            fontSize: SKFont.xs,
-            color: SK.textMuted,
-            background: 'transparent',
-            border: sketchBorder(SK.borderDark),
-            borderRadius: 0,
-            cursor: 'pointer',
-          }}
-        >
-          {useServerData ? tFaction('mockData') : tFaction('liveData')}
-        </button>
-      }
       stats={[
         { label: tFaction('activeFactions'), value: String(factionCount), color: SK.textPrimary, icon: Swords },
         { label: tFaction('totalMembers'), value: String(totalMembers), color: SK.blue, icon: Users },
@@ -112,166 +98,126 @@ export default function FactionsPage() {
         { label: tFaction('combinedGdp'), value: `${(totalGdp / 1000).toFixed(0)}K`, color: SK.orange, icon: DollarSign },
       ]}
     >
-      {/* 서버 데이터 모드 */}
-      {useServerData && SERVER_URL ? (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <FactionList
-            serverUrl={SERVER_URL}
-            selectedId={selectedFaction?.id ?? undefined}
-            onSelect={handleFactionSelect}
-          />
-          {selectedFaction && showDashboard && (
-            <FactionDashboard
-              serverUrl={SERVER_URL}
-              factionId={selectedFaction.id}
-              currentUserId="local-user"
-              authToken=""
-              onClose={() => setShowDashboard(false)}
-            />
-          )}
-        </div>
-      ) : (
-        /* Mock 데이터 모드: 팩션 카드 그리드 */
-        <div
-          className="factions-card-grid"
-          style={{
-            display: 'grid',
-            gridTemplateColumns: grid.panel,
-            gap: 16,
-          }}
-        >
-          <style>{`
-            @media (max-width: 767px) {
-              .factions-card-grid {
-                grid-template-columns: 1fr !important;
-                gap: 12px !important;
-              }
+      {/* 팩션 카드 그리드 — 서버 데이터 기반 */}
+      <div
+        className="factions-card-grid"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: grid.panel,
+          gap: 16,
+        }}
+      >
+        <style>{`
+          @media (max-width: 767px) {
+            .factions-card-grid {
+              grid-template-columns: 1fr !important;
+              gap: 12px !important;
             }
-          `}</style>
-          {MOCK_FACTIONS.map((faction) => (
-            <div
-              key={faction.id}
-              style={{
-                background: SK.cardBg,
-                border: sketchBorder(selectedFaction?.id === faction.id ? SK.blue : SK.border),
-                borderRadius: 0,
-                padding: 20,
-                boxShadow: sketchShadow('sm'),
-                cursor: 'pointer',
-                transition: 'all 0.2s ease',
-                borderLeft: `4px solid ${faction.color}`,
-              }}
-              onClick={() => setSelectedFaction(faction)}
-            >
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'flex-start',
-                marginBottom: 12,
-              }}>
-                <div>
-                  <h3 style={{
-                    fontFamily: headingFont,
-                    fontSize: SKFont.body,
-                    color: SK.textPrimary,
-                    margin: 0,
-                    letterSpacing: '1px',
-                  }}>
-                    {faction.name}
-                  </h3>
-                  <span style={{
-                    fontFamily: bodyFont,
-                    fontSize: SKFont.xs,
-                    color: SK.textMuted,
-                  }}>
-                    [{faction.tag}]
-                  </span>
-                </div>
-                <div style={{
+          }
+        `}</style>
+        {factionList.map((faction) => (
+          <div
+            key={faction.id}
+            style={{
+              background: SK.cardBg,
+              border: sketchBorder(selectedId === faction.id ? SK.blue : SK.border),
+              borderRadius: 0,
+              padding: 20,
+              boxShadow: sketchShadow('sm'),
+              cursor: 'pointer',
+              transition: 'all 0.2s ease',
+              borderLeft: `4px solid ${faction.color}`,
+            }}
+            onClick={() => setSelectedId(faction.id)}
+          >
+            <div style={{
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'flex-start',
+              marginBottom: 12,
+            }}>
+              <div>
+                <h3 style={{
+                  fontFamily: headingFont,
+                  fontSize: SKFont.body,
+                  color: SK.textPrimary,
+                  margin: 0,
+                  letterSpacing: '1px',
+                }}>
+                  {faction.name}
+                </h3>
+                <span style={{
                   fontFamily: bodyFont,
                   fontSize: SKFont.xs,
-                  color: SK.gold,
-                  textAlign: 'right',
+                  color: SK.textMuted,
                 }}>
-                  <div>{tFaction('prestige')}: {faction.prestige}</div>
-                  <div>{tFaction('totalGdp')} {(faction.total_gdp / 1000).toFixed(1)}K</div>
-                </div>
+                  [{faction.tag}]
+                </span>
               </div>
-
               <div style={{
-                display: 'flex',
-                gap: 16,
-                marginBottom: 12,
                 fontFamily: bodyFont,
                 fontSize: SKFont.xs,
-                color: SK.textSecondary,
+                color: SK.gold,
+                textAlign: 'right',
               }}>
-                <span>{tFaction('membersCount', { count: faction.member_count })}</span>
-                <span>{tFaction('territoriesCount', { count: faction.territory_count })}</span>
+                <div>{tFaction('prestige')}: {faction.prestige}</div>
+                <div>{tFaction('totalGdp')} {((faction.total_gdp ?? 0) / 1000).toFixed(1)}K</div>
               </div>
-
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 4,
-                marginBottom: 16,
-              }}>
-                <StarRating label={tFaction('military')} value={faction.military} />
-                <StarRating label={tFaction('economyRating')} value={faction.economy} />
-              </div>
-
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setSelectedFaction(faction);
-                }}
-                style={{
-                  display: 'inline-block',
-                  fontFamily: headingFont,
-                  fontSize: SKFont.xs,
-                  color: SK.blue,
-                  textDecoration: 'none',
-                  letterSpacing: '1px',
-                  padding: '6px 14px',
-                  border: `1px solid ${SK.blue}40`,
-                  borderRadius: 0,
-                  background: 'transparent',
-                  cursor: 'pointer',
-                  transition: 'all 0.15s ease',
-                }}
-              >
-                {tFaction('viewDetail')}
-              </button>
             </div>
-          ))}
-        </div>
-      )}
 
-      {/* DetailModal — 팩션 상세 */}
+            <div style={{
+              display: 'flex',
+              gap: 16,
+              marginBottom: 12,
+              fontFamily: bodyFont,
+              fontSize: SKFont.xs,
+              color: SK.textSecondary,
+            }}>
+              <span>{tFaction('membersCount', { count: faction.member_count })}</span>
+              <span>{tFaction('territoriesCount', { count: faction.territory_count ?? 0 })}</span>
+            </div>
+
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setSelectedId(faction.id);
+              }}
+              style={{
+                display: 'inline-block',
+                fontFamily: headingFont,
+                fontSize: SKFont.xs,
+                color: SK.blue,
+                textDecoration: 'none',
+                letterSpacing: '1px',
+                padding: '6px 14px',
+                border: `1px solid ${SK.blue}40`,
+                borderRadius: 0,
+                background: 'transparent',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {tFaction('viewDetail')}
+            </button>
+          </div>
+        ))}
+      </div>
+
+      {/* DetailModal — 팩션 상세 (서버 API) */}
       <DetailModal
         open={!!selectedDetail}
-        onClose={() => setSelectedFaction(null)}
+        onClose={() => setSelectedId(null)}
         title={selectedDetail?.name}
         accentColor={selectedDetail?.color}
       >
         {selectedDetail && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-            <p style={{
-              fontFamily: bodyFont,
-              fontSize: '13px',
-              color: SK.textSecondary,
-              margin: 0,
-              lineHeight: 1.6,
-            }}>
-              {selectedDetail.description}
-            </p>
-
             <div style={{
               fontFamily: bodyFont,
               fontSize: SKFont.xs,
               color: SK.textMuted,
             }}>
-              [{selectedDetail.tag}] &mdash; {tFaction('leader')}: {selectedDetail.leader}
+              [{selectedDetail.tag}] &mdash; {tFaction('leader')}: {selectedDetail.leader_id}
             </div>
 
             <div style={{
@@ -280,9 +226,9 @@ export default function FactionsPage() {
               gap: 8,
             }}>
               <StatItem label={tFaction('members')} value={String(selectedDetail.member_count)} color={SK.blue} />
-              <StatItem label={tFaction('territory')} value={String(selectedDetail.territory_count)} color={SK.green} />
+              <StatItem label={tFaction('territory')} value={String(selectedDetail.territory_count ?? 0)} color={SK.green} />
               <StatItem label={tFaction('prestige')} value={String(selectedDetail.prestige)} color={SK.gold} />
-              <StatItem label={tFaction('totalGdp')} value={`${(selectedDetail.total_gdp / 1000).toFixed(1)}K`} color={SK.orange} />
+              <StatItem label={tFaction('totalGdp')} value={`${((selectedDetail.total_gdp ?? 0) / 1000).toFixed(1)}K`} color={SK.orange} />
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
@@ -323,6 +269,22 @@ export default function FactionsPage() {
         )}
       </DetailModal>
     </DashboardPage>
+  );
+}
+
+export default function FactionsPage() {
+  return (
+    <ServerRequired>
+      <Suspense
+        fallback={
+          <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
+            ...
+          </div>
+        }
+      >
+        <FactionsPageInner />
+      </Suspense>
+    </ServerRequired>
   );
 }
 
