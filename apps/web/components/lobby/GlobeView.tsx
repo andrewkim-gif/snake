@@ -411,7 +411,7 @@ const earthFragmentShader = /* glsl */ `
 
     // 낮: 디퓨즈 라이팅
     vec3 dayColor = texture2D(uDayMap, vUv).rgb;
-    float diffuse = max(sunOrientBump, 0.0) * 0.92 + 0.08;
+    float diffuse = max(sunOrientBump, 0.0) * 0.75 + 0.12;
     dayColor *= diffuse;
 
     // 스페큘러: 바다 반사 (Blinn-Phong)
@@ -419,7 +419,7 @@ const earthFragmentShader = /* glsl */ `
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
     vec3 halfDir = normalize(uSunDir + viewDir);
     float specAngle = max(dot(perturbedN, halfDir), 0.0);
-    float specular = pow(specAngle, 48.0) * specMask * 1.2;
+    float specular = pow(specAngle, 64.0) * specMask * 0.5;
     dayColor += vec3(1.0, 0.98, 0.95) * specular * dayStrength;
 
     // 밤: 도시 불빛
@@ -428,20 +428,29 @@ const earthFragmentShader = /* glsl */ `
     float nightAmbient = 0.015;
     vec3 nightColor = nightLights * 1.5 + dayTex * nightAmbient;
 
-    // 대기 프레넬 림 (가장자리 림)
+    // 대기 프레넬 림 (가장자리 프레넬)
     float fresnel = 1.0 - max(dot(viewDir, N), 0.0);
-    float atmosphereDayStrength = smoothstep(-0.25, 1.0, sunOrientation);
-    float rimGlow = pow(fresnel, 5.0) * atmosphereDayStrength;
 
-    // 대기 색상 (twilight ↔ day blue)
+    // 태양 방향 대기 산란: 태양을 향한 림이 훨씬 밝게
+    float sunFresnel = max(dot(N, uSunDir), 0.0);
+    float atmosphereDayStrength = smoothstep(-0.25, 1.0, sunOrientation);
+
+    // 태양 방향 림: 태양을 향한 가장자리에서 강한 산란
+    float sunRim = pow(fresnel, 3.0) * pow(sunFresnel, 0.8) * 1.5;
+    // 일반 림: 전체 가장자리의 은은한 대기
+    float baseRim = pow(fresnel, 5.0) * atmosphereDayStrength * 0.3;
+
+    // 대기 색상 (태양 방향: 밝은 시안/화이트, 반대편: 어두운 블루)
     vec3 twilightColor = vec3(1.0, 0.45, 0.2);
-    vec3 dayAtmoColor = vec3(0.35, 0.6, 1.0);
+    vec3 dayAtmoColor = vec3(0.4, 0.7, 1.0);
+    vec3 brightAtmoColor = vec3(0.7, 0.85, 1.0); // 태양 방향 밝은 산란
     float atmoColorMix = smoothstep(-0.25, 0.75, sunOrientation);
     vec3 atmosphereColor = mix(twilightColor, dayAtmoColor, atmoColorMix);
 
     // 최종 혼합
     vec3 color = mix(nightColor, dayColor, dayStrength);
-    color += atmosphereColor * rimGlow * 0.5;
+    color += atmosphereColor * baseRim;
+    color += brightAtmoColor * sunRim;
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -668,13 +677,87 @@ function EarthClouds() {
   );
 }
 
+// ─── R3F: 대기 산란 (태양→지구 빛 산란 연출) ───
+
+const atmoVertexShader = /* glsl */ `
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+  void main() {
+    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const atmoFragmentShader = /* glsl */ `
+  uniform vec3 uSunDir;
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+
+  void main() {
+    vec3 N = normalize(vWorldNormal);
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+
+    // 프레넬 (가장자리에서 강함)
+    float fresnel = 1.0 - abs(dot(viewDir, N));
+    float rim = pow(fresnel, 3.5);
+
+    // 태양 정렬도: 태양을 향한 면이 더 밝은 산란
+    float sunAlign = max(dot(N, uSunDir), 0.0);
+    float sunScatter = pow(sunAlign, 0.6) * 0.8 + 0.2;
+
+    // 대기 색상: 태양 쪽은 밝은 시안/화이트, 반대편은 진한 블루
+    vec3 sunSideColor = vec3(0.5, 0.75, 1.0);
+    vec3 darkSideColor = vec3(0.08, 0.15, 0.4);
+    vec3 atmoColor = mix(darkSideColor, sunSideColor, sunAlign);
+
+    // 터미네이터 부근 따뜻한 톤 (오렌지)
+    float terminator = 1.0 - smoothstep(-0.1, 0.3, abs(dot(N, uSunDir)));
+    atmoColor += vec3(0.8, 0.35, 0.1) * terminator * 0.4;
+
+    float alpha = rim * sunScatter * 0.65;
+    gl_FragColor = vec4(atmoColor, alpha);
+  }
+`;
+
+function AtmosphereGlow() {
+  const matRef = useRef<THREE.ShaderMaterial>(null);
+
+  useFrame(() => {
+    if (!matRef.current) return;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
+    const ha = ((utcH - 12) / 24) * 2 * Math.PI;
+    const sx = Math.cos(decRad) * Math.cos(ha);
+    const sy = Math.sin(decRad);
+    const sz = Math.cos(decRad) * Math.sin(ha);
+    matRef.current.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+  });
+
+  return (
+    <mesh renderOrder={48}>
+      <sphereGeometry args={[RADIUS * 1.04, 64, 64]} />
+      <shaderMaterial
+        ref={matRef}
+        vertexShader={atmoVertexShader}
+        fragmentShader={atmoFragmentShader}
+        uniforms={{ uSunDir: { value: new THREE.Vector3(1, 0, 0) } }}
+        transparent
+        side={THREE.BackSide}
+        depthWrite={false}
+      />
+    </mesh>
+  );
+}
+
 // ─── R3F: 실시간 태양 (UTC 기반 위치 + 코로나 글로우) ───
 
 function SunLight() {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const sunRef = useRef<THREE.Group>(null);
-  const flareRef = useRef<THREE.Sprite>(null);
-
   // 태양 코로나 — 중심이 밝고 급격히 감쇠하는 자연스러운 그래디언트
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -694,47 +777,6 @@ function SunLight() {
     return new THREE.CanvasTexture(canvas);
   }, []);
 
-  // Phase 2 Task 1: 렌즈 플레어 텍스처 — 6개 광선 줄기 star burst 패턴
-  const flareTexture = useMemo(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 512;
-    canvas.height = 512;
-    const ctx = canvas.getContext('2d')!;
-    const cx = 256;
-    const cy = 256;
-    const numRays = 6;
-    for (let i = 0; i < numRays; i++) {
-      ctx.save();
-      ctx.translate(cx, cy);
-      ctx.rotate((i / numRays) * Math.PI * 2);
-      const grad = ctx.createLinearGradient(0, 0, 256, 0);
-      grad.addColorStop(0, 'rgba(255,250,240,0.6)');
-      grad.addColorStop(0.3, 'rgba(255,230,180,0.15)');
-      grad.addColorStop(1, 'rgba(255,200,120,0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, -2, 256, 4); // 얇은 줄기
-      ctx.restore();
-    }
-    return new THREE.CanvasTexture(canvas);
-  }, []);
-
-  // Phase 2 Task 3: 디퓨전 헤일로 텍스처 — 매우 넓고 부드러운 radial gradient
-  const haloTexture = useMemo(() => {
-    const canvas = document.createElement('canvas');
-    canvas.width = 256;
-    canvas.height = 256;
-    const ctx = canvas.getContext('2d')!;
-    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-    g.addColorStop(0, 'rgba(255,250,235,0.5)');
-    g.addColorStop(0.1, 'rgba(255,240,210,0.2)');
-    g.addColorStop(0.3, 'rgba(255,225,180,0.06)');
-    g.addColorStop(0.6, 'rgba(255,210,150,0.015)');
-    g.addColorStop(1, 'rgba(255,200,120,0)');
-    ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 256, 256);
-    return new THREE.CanvasTexture(canvas);
-  }, []);
-
   useFrame(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
@@ -749,10 +791,6 @@ function SunLight() {
     lightRef.current?.position.set(x, y, z);
     sunRef.current?.position.set(x, y, z);
 
-    // Phase 2 Task 4: 플레어 느린 회전 애니메이션 (~10초에 1회전)
-    if (flareRef.current) {
-      flareRef.current.material.rotation += 0.003;
-    }
   });
 
   return (
@@ -781,28 +819,6 @@ function SunLight() {
             map={glowTexture}
             transparent
             opacity={0.5}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </sprite>
-        {/* Phase 2 Task 2: 렌즈 플레어 — 6줄기 star burst (회전 애니메이션) */}
-        <sprite ref={flareRef} scale={[120, 120, 1]}>
-          <spriteMaterial
-            map={flareTexture}
-            transparent
-            opacity={0.2}
-            blending={THREE.AdditiveBlending}
-            depthWrite={false}
-            toneMapped={false}
-          />
-        </sprite>
-        {/* Phase 2 Task 3: 디퓨전 헤일로 — 매우 넓고 은은한 확산 글로우 */}
-        <sprite scale={[200, 200, 1]}>
-          <spriteMaterial
-            map={haloTexture}
-            transparent
-            opacity={0.08}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
@@ -1556,6 +1572,7 @@ function GlobeScene({
         {/* 지구 텍스처 구체 + 대기 글로우 */}
         <EarthSphere />
         <EarthClouds />
+        <AtmosphereGlow />
         {/* 글로브 위 3D 타이틀 */}
         <GlobeTitle />
         {/* 국가 경계선 + 라벨 + 인터랙션 */}

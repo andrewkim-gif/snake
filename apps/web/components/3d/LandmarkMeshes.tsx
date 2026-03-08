@@ -27,7 +27,7 @@ import { getBlockAtlasTexture } from '@/lib/mc-texture-atlas';
 
 // ─── Constants ───
 
-const SURFACE_ALT = 2.5;
+const SURFACE_ALT = 0.3;
 const BACKFACE_THRESHOLD = 0.05;
 const BACKFACE_FADE_RANGE = 0.3;
 const LANDMARK_SCALE = 1.5; // 전체 스케일 조정 (지구 반경 100 대비 ~5-8 unit 높이)
