@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * GlobeConflictIndicators — 3D 지구본 표면에 전투 아이콘 표시 (v17)
+ * GlobeConflictIndicators — 3D 지구본 표면에 전투 아이콘 표시 (v17, v24 Phase 4 통일)
  *
  * 구현:
  *   - Gemini 생성 아이콘 텍스처 (conflict-icon-256.png) — 교차 검 + 폭발
@@ -9,14 +9,16 @@
  *     Layer 1: 아이콘 (표면 부착, 천천히 회전)
  *     Layer 2: 글로우 링 (확장/수축 펄스)
  *   - 뒷면 오클루전 + 거리 기반 fade
+ *   - v24: EFFECT_COLORS.war 색상, SURFACE_ALT.HIGH 고도, RENDER_ORDER 체계 적용
  *
  * 최적화: GPU 2 드로콜, ~100KB 메모리
  */
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame, useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToXYZ } from '@/lib/globe-utils';
+import { SURFACE_ALT, RENDER_ORDER, EFFECT_COLORS } from '@/lib/effect-constants';
 
 // ─── Constants ───
 
@@ -25,8 +27,8 @@ const MAX_ICONS = 50;
 /** 아이콘 월드 크기 (정사각형) */
 const ICON_SIZE = 5.0;
 
-/** centroid 높이 오프셋 (구체 표면 바로 위) */
-const SURFACE_ALT = 1.5;
+/** centroid 높이 오프셋 — v24: SURFACE_ALT.HIGH (+1.5) */
+const CONFLICT_ALT = SURFACE_ALT.HIGH;
 
 /** 글로우 링 크기 (아이콘보다 큼) */
 const RING_SIZE = 10.0;
@@ -74,6 +76,7 @@ const iconVertexShader = /* glsl */ `
 const iconFragmentShader = /* glsl */ `
   uniform sampler2D uIcon;
   uniform float uTime;
+  uniform vec3 uWarColor;
   varying vec2 vUv;
   varying float vAlpha;
 
@@ -87,10 +90,8 @@ const iconFragmentShader = /* glsl */ `
     // 1.2Hz 펄스 (레티클 느낌 — 안정적이지만 살짝 깜빡)
     float pulse = 0.85 + 0.15 * sin(uTime * 7.54);
 
-    // 밝기 부스트 + 빨간색 강조
-    vec3 boosted = texColor.rgb * 1.5;
-    // 빨간 채널 추가 강조 (레티클 선이 더 선명하게)
-    boosted.r = min(boosted.r * 1.2, 1.0);
+    // v24: 전쟁 적색 통일 색상으로 틴팅
+    vec3 boosted = texColor.rgb * uWarColor * 2.0;
 
     vec3 color = boosted * pulse;
 
@@ -120,6 +121,7 @@ const ringVertexShader = /* glsl */ `
 
 const ringFragmentShader = /* glsl */ `
   uniform float uTime;
+  uniform vec3 uWarColor;
   varying vec2 vUv;
   varying float vAlpha;
 
@@ -142,10 +144,10 @@ const ringFragmentShader = /* glsl */ `
     // 외곽 페이드 (원 바깥 제거)
     float circleMask = smoothstep(1.0, 0.9, dist);
 
-    // 색상: 빨강~오렌지 그라데이션
+    // v24: 전쟁 적색 통일 색상 (EFFECT_COLORS.war 기반 그라데이션)
     vec3 color = mix(
-      vec3(1.0, 0.15, 0.0),  // 진한 빨강
-      vec3(1.0, 0.5, 0.0),   // 오렌지
+      uWarColor * 0.8,        // 중심: 약간 어두운 전쟁색
+      uWarColor * 1.2,        // 외곽: 밝은 전쟁색
       dist
     );
 
@@ -163,8 +165,15 @@ export function GlobeConflictIndicators({
   activeConflictCountries,
   globeRadius = 100,
 }: GlobeConflictIndicatorsProps) {
+  // ★ ref callback으로 count=0 즉시 설정 (useEffect는 첫 렌더 후라 1프레임 지연)
   const iconMeshRef = useRef<THREE.InstancedMesh>(null!);
   const ringMeshRef = useRef<THREE.InstancedMesh>(null!);
+  const iconRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; iconMeshRef.current = mesh; }
+  }, []);
+  const ringRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; ringMeshRef.current = mesh; }
+  }, []);
   const { camera } = useThree();
 
   // Gemini 생성 아이콘 텍스처
@@ -188,29 +197,40 @@ export function GlobeConflictIndicators({
   const iconGeo = useMemo(() => new THREE.PlaneGeometry(ICON_SIZE, ICON_SIZE), []);
   const ringGeo = useMemo(() => new THREE.PlaneGeometry(RING_SIZE, RING_SIZE), []);
 
+  // v24: 전쟁 적색 기반 색상 (EFFECT_COLORS.war hex → normalized RGB)
+  const warColorVec = useMemo(() => new THREE.Color(EFFECT_COLORS.war.hex), []);
+
   // Materials
   const iconMat = useMemo(() => new THREE.ShaderMaterial({
     uniforms: {
       uIcon: { value: iconTexture },
       uTime: { value: 0 },
+      uWarColor: { value: warColorVec },
     },
     vertexShader: iconVertexShader,
     fragmentShader: iconFragmentShader,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-  }), [iconTexture]);
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [iconTexture, warColorVec]);
 
   const ringMat = useMemo(() => new THREE.ShaderMaterial({
     uniforms: {
       uTime: { value: 0 },
+      uWarColor: { value: warColorVec },
     },
     vertexShader: ringVertexShader,
     fragmentShader: ringFragmentShader,
     transparent: true,
     depthWrite: false,
     side: THREE.DoubleSide,
-  }), []);
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), [warColorVec]);
 
   // 정리
   useEffect(() => {
@@ -225,7 +245,7 @@ export function GlobeConflictIndicators({
   // centroid 캐시
   const centroidCache = useMemo(() => {
     const cache = new Map<string, { normal: THREE.Vector3; pos: THREE.Vector3 }>();
-    const r = globeRadius + SURFACE_ALT;
+    const r = globeRadius + CONFLICT_ALT;
     countryCentroids.forEach(([lat, lng], iso3) => {
       const pos = latLngToXYZ(lat, lng, r);
       const normal = pos.clone().normalize();
@@ -344,17 +364,17 @@ export function GlobeConflictIndicators({
     <group>
       {/* 글로우 링 (아이콘 뒤에 렌더) */}
       <instancedMesh
-        ref={ringMeshRef}
+        ref={ringRefCb}
         args={[ringGeo, ringMat, MAX_ICONS]}
         frustumCulled={false}
-        renderOrder={109}
+        renderOrder={RENDER_ORDER.CONFLICT_RING}
       />
       {/* 전투 아이콘 */}
       <instancedMesh
-        ref={iconMeshRef}
+        ref={iconRefCb}
         args={[iconGeo, iconMat, MAX_ICONS]}
         frustumCulled={false}
-        renderOrder={110}
+        renderOrder={RENDER_ORDER.CONFLICT_ICON}
       />
     </group>
   );

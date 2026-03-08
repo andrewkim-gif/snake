@@ -1,18 +1,19 @@
 'use client';
 
 /**
- * GlobeNukeEffect — v23 Phase 5 Task 5
+ * GlobeNukeEffect — v23 Phase 5 Task 5, v24 Phase 4 통일
  * 핵실험 버섯구름 이펙트:
  * - 거대 충격파 링 (RingGeometry, 빠르게 확장, scale 2배 크기)
  * - 버섯구름 파티클: InstancedMesh SphereGeometry 구체 10~15개, 중심에서 상승+확산
  * - 아래쪽 기둥: CylinderGeometry 하나 (먼지 기둥)
- * - 밝은 주황→회색 색상 전이
+ * - v24: COLORS_3D.nuke/nukeDecay 색상, SURFACE_ALT.GROUND 고도, RENDER_ORDER 체계 적용
  */
 
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { COLORS_3D, SURFACE_ALT, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -42,11 +43,11 @@ const SHOCKWAVE_MAX_SCALE = 25;    // 충격파 최대 스케일 (2배 크기)
 const RING_INNER = 0.85;
 const PARTICLE_RADIUS = 1.0;
 
-// Colors
-const FLASH_COLOR = new THREE.Color(0xffaa33).multiplyScalar(3.0); // 밝은 주황 HDR
-const CLOUD_COLOR_HOT = new THREE.Color(0xff6622);
-const CLOUD_COLOR_COOL = new THREE.Color(0x666666); // 회색
-const SHOCKWAVE_COLOR = new THREE.Color(0xff8844).multiplyScalar(2.0);
+// v24: 색상을 effect-constants에서 가져옴
+const FLASH_COLOR = COLORS_3D.nuke;          // 핵 백열 (#FFAA33 × 3.0)
+const CLOUD_COLOR_HOT = COLORS_3D.nuke;      // 핵 주황 HDR
+const CLOUD_COLOR_COOL = COLORS_3D.nukeDecay; // 감쇠 회색 (#666666 × 1.0)
+const SHOCKWAVE_COLOR = COLORS_3D.nuke;      // 충격파도 핵 색상 통일
 
 // ─── GC-prevention ───
 
@@ -128,12 +129,12 @@ export function GlobeNukeEffect({
       const centroid = centroidsMap.get(nuke.country);
       if (!centroid) continue;
 
-      const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + 0.5);
+      const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + SURFACE_ALT.GROUND);
       const normal = pos.clone().normalize();
 
       // ─── 충격파 링 ───
       const shockwaveMaterial = new THREE.MeshBasicMaterial({
-        color: SHOCKWAVE_COLOR.clone(),
+        color: new THREE.Color().copy(SHOCKWAVE_COLOR),
         transparent: true,
         opacity: 1.0,
         blending: THREE.AdditiveBlending,
@@ -147,11 +148,11 @@ export function GlobeNukeEffect({
       _quat.setFromUnitVectors(_up, normal);
       shockwaveRing.quaternion.copy(_quat);
       shockwaveRing.rotateX(-Math.PI / 2);
-      shockwaveRing.renderOrder = 6;
+      shockwaveRing.renderOrder = RENDER_ORDER.NUKE_SHOCKWAVE;
 
       // ─── 먼지 기둥 ───
       const pillarMaterial = new THREE.MeshBasicMaterial({
-        color: CLOUD_COLOR_HOT.clone(),
+        color: new THREE.Color().copy(CLOUD_COLOR_HOT),
         transparent: true,
         opacity: 0.6,
         blending: THREE.AdditiveBlending,
@@ -166,11 +167,11 @@ export function GlobeNukeEffect({
       pillar.position.copy(pillarPos);
       _quat.setFromUnitVectors(_up, normal);
       pillar.quaternion.copy(_quat);
-      pillar.renderOrder = 5;
+      pillar.renderOrder = RENDER_ORDER.NUKE_PILLAR;
 
       // ─── 버섯구름 파티클 ───
       const cloudMaterial = new THREE.MeshBasicMaterial({
-        color: FLASH_COLOR.clone(),
+        color: new THREE.Color().copy(FLASH_COLOR),
         transparent: true,
         opacity: 0.8,
         blending: THREE.AdditiveBlending,
@@ -183,7 +184,8 @@ export function GlobeNukeEffect({
         cloudMaterial,
         MUSHROOM_PARTICLES,
       );
-      cloudParticles.renderOrder = 7;
+      cloudParticles.count = 0; // ★ 초기 count=0 (origin 검은박스 방지)
+      cloudParticles.renderOrder = RENDER_ORDER.NUKE_CLOUD;
 
       // 각 파티클 랜덤 시드 (angle, radiusRatio, heightRatio, phase)
       const seeds = new Float32Array(MUSHROOM_PARTICLES * 4);
@@ -298,6 +300,7 @@ export function GlobeNukeEffect({
 
           d.cloudParticles.setMatrixAt(i, _tempMatrix);
         }
+        d.cloudParticles.count = MUSHROOM_PARTICLES; // ★ count 복원
         d.cloudParticles.instanceMatrix.needsUpdate = true;
 
         // 색상 전이: 밝은 주황 → 회색

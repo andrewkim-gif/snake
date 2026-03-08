@@ -1,18 +1,18 @@
 'use client';
 
 /**
- * GlobeShockwave — v15 Phase 4
+ * GlobeShockwave — v15 Phase 4, v24 Phase 4 통일
  * Shockwave ring effect at missile impact points on the 3D globe.
  * - RingGeometry expanding from impact point
  * - Opacity decay over 0.8 seconds
  * - Object pool of 5 rings for reuse (GC prevention)
- *
- * Style: Dark/Glow | Procedural materials (no image files)
+ * - v24: COLORS_3D.war 색상, RENDER_ORDER.SURFACE_GLOW 체계 적용
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { COLORS_3D, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -31,7 +31,8 @@ const POOL_SIZE = 5;
 const SHOCKWAVE_DURATION = 0.8;       // seconds
 const SHOCKWAVE_MAX_SCALE = 12;       // max ring radius multiplier
 const SHOCKWAVE_INITIAL_SCALE = 0.5;
-const RING_COLOR = new THREE.Color(0xff6633);
+// v24: 색상을 effect-constants에서 가져옴 (전쟁 적색 계열)
+const RING_COLOR = COLORS_3D.war;
 const RING_INNER_RATIO = 0.85;        // inner radius ratio
 
 // ─── Shockwave state per pool item ───
@@ -174,6 +175,7 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
             geometry={ringGeometry}
             material={ringMaterial.clone()}
             visible={false}
+            renderOrder={RENDER_ORDER.SURFACE_GLOW}
           />
         ))}
       </group>

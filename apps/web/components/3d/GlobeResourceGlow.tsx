@@ -1,17 +1,18 @@
 'use client';
 
 /**
- * GlobeResourceGlow — v23 Phase 5 Task 3
+ * GlobeResourceGlow — v23 Phase 5 Task 3, v24 Phase 4 통일
  * 자원 채굴 지표 이펙트:
  * - 자원 산출국 centroid 지표면에 빛나는 원 (RingGeometry + ShaderMaterial pulse)
  * - 상승 파티클 (InstancedMesh SphereGeometry(0.15) 6~8개, 위로 상승 후 페이드)
- * - 노란-금색 글로우, AdditiveBlending
+ * - v24: COLORS_3D.resource 색상, SURFACE_ALT.GROUND 고도, RENDER_ORDER 체계 적용
  */
 
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { COLORS_3D, SURFACE_ALT, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -37,8 +38,8 @@ const PARTICLE_COUNT = 7;  // 6~8 중간값
 const PARTICLE_RADIUS = 0.25;
 const PARTICLE_ASCEND_HEIGHT = 8.0; // 상승 높이
 const PARTICLE_CYCLE_SEC = 3.0;     // 한 사이클 (초)
-const GOLD_COLOR = new THREE.Color(0xccaa33);
-const GOLD_HDR = new THREE.Color(0xccaa33).multiplyScalar(2.5);
+// v24: 색상을 effect-constants에서 가져옴
+const RESOURCE_COLOR_HDR = COLORS_3D.resource;
 
 // ─── GC-prevention ───
 
@@ -129,13 +130,13 @@ export function GlobeResourceGlow({
       const centroid = centroidsMap.get(resource.country);
       if (!centroid) continue;
 
-      const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + 0.5);
+      const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + SURFACE_ALT.GROUND);
       const normal = pos.clone().normalize();
 
       // 글로우 링
       const ringMaterial = new THREE.ShaderMaterial({
         uniforms: {
-          uColor: { value: GOLD_HDR.clone() },
+          uColor: { value: RESOURCE_COLOR_HDR.clone() },
           uTime: { value: 0 },
           uOpacity: { value: 0.7 },
         },
@@ -153,11 +154,11 @@ export function GlobeResourceGlow({
       _quat.setFromUnitVectors(_up, normal);
       ring.quaternion.copy(_quat);
       ring.rotateX(-Math.PI / 2);
-      ring.renderOrder = 4;
+      ring.renderOrder = RENDER_ORDER.SURFACE_GLOW;
 
       // 상승 파티클 (InstancedMesh)
       const particleMaterial = new THREE.MeshBasicMaterial({
-        color: GOLD_HDR.clone(),
+        color: RESOURCE_COLOR_HDR.clone(),
         transparent: true,
         depthWrite: false,
         blending: THREE.AdditiveBlending,
@@ -169,7 +170,8 @@ export function GlobeResourceGlow({
         particleMaterial,
         PARTICLE_COUNT,
       );
-      particles.renderOrder = 5;
+      particles.count = 0; // ★ 초기 count=0 (origin 검은박스 방지)
+      particles.renderOrder = RENDER_ORDER.PARTICLES;
 
       group.add(ring);
       group.add(particles);
@@ -229,6 +231,7 @@ export function GlobeResourceGlow({
         // 색상: opacity 페이드 (위로 갈수록 투명)
         d.particleMaterial.opacity = 0.8 * (1.0 - t * 0.8);
       }
+      d.particles.count = PARTICLE_COUNT; // ★ count 복원
       d.particles.instanceMatrix.needsUpdate = true;
     }
   });

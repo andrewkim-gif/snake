@@ -1,23 +1,24 @@
 'use client';
 
 /**
- * GlobeEventPulse — v15 Phase 5
+ * GlobeEventPulse — v15 Phase 5, v24 Phase 4 통일
  * Global event visual effects on the 3D globe:
  * - Alliance: blue ring expanding from centroid
  * - Policy: purple wave
  * - Epoch: gold wave
  * - Truce: white/olive ring
- * - Embargo: red X mark
+ * - Embargo: sanction orange X mark
  *
  * Event queue system: max 3 simultaneous, rest in FIFO queue.
  * Each ring effect: RingGeometry, 2s expand → fade out.
+ * v24: COLORS_3D 통일 색상, SURFACE_ALT.LOW 고도, RENDER_ORDER.EVENT_PULSE 체계 적용
  */
 
 import { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
-import { CAMERA_PRIORITY } from '@/lib/effect-constants';
+import { CAMERA_PRIORITY, COLORS_3D, SURFACE_ALT, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -51,30 +52,30 @@ const PULSE_DURATION = 2.0;       // 2초 확산→소멸
 const PULSE_MAX_SCALE = 15;       // 링 최대 반경 (구면 위)
 const RING_INNER_RATIO = 0.85;    // 링 내경/외경 비율
 
-// 이벤트 타입별 색상 매핑
-const EVENT_COLORS: Record<string, THREE.Color> = {
-  alliance: new THREE.Color(0x3388ff),     // 파란 링
-  policy: new THREE.Color(0x8833cc),       // 보라 파동
-  epoch: new THREE.Color(0xffcc33),        // 골드 웨이브
-  truce: new THREE.Color(0xccddaa),        // 백색 올리브 링
-  embargo: new THREE.Color(0xff3333),      // 적색
+// v24: 이벤트 타입별 색상을 effect-constants COLORS_3D에서 가져옴
+const EVENT_TYPE_COLORS: Record<string, THREE.Color> = {
+  alliance: COLORS_3D.alliance,   // 전술 청색
+  policy:   COLORS_3D.spy,        // 암자색 (정책≈첩보 계열)
+  epoch:    COLORS_3D.epoch,      // 금색 웨이브
+  truce:    COLORS_3D.alliance,   // 동맹 계열 (휴전)
+  embargo:  COLORS_3D.sanction,   // 제재 오렌지
   // 기본 (알 수 없는 타입)
-  default: new THREE.Color(0xaaaaaa),
+  default:  new THREE.Color(0xaaaaaa),
 };
 
 // ─── Helpers ───
 // latLngToVector3 → @/lib/globe-utils (v20 통합)
 
-/** 이벤트 타입 → 색상 */
+/** 이벤트 타입 → 색상 (v24: effect-constants 통일 색상) */
 function getEventColor(type: string): THREE.Color {
   // message/type에 키워드가 포함되면 매칭
   const normalizedType = type.toLowerCase();
-  if (normalizedType.includes('alliance') || normalizedType.includes('동맹')) return EVENT_COLORS.alliance;
-  if (normalizedType.includes('policy') || normalizedType.includes('정책')) return EVENT_COLORS.policy;
-  if (normalizedType.includes('epoch') || normalizedType.includes('에포크')) return EVENT_COLORS.epoch;
-  if (normalizedType.includes('truce') || normalizedType.includes('휴전')) return EVENT_COLORS.truce;
-  if (normalizedType.includes('embargo') || normalizedType.includes('금수')) return EVENT_COLORS.embargo;
-  return EVENT_COLORS[type] ?? EVENT_COLORS.default;
+  if (normalizedType.includes('alliance') || normalizedType.includes('동맹')) return EVENT_TYPE_COLORS.alliance;
+  if (normalizedType.includes('policy') || normalizedType.includes('정책')) return EVENT_TYPE_COLORS.policy;
+  if (normalizedType.includes('epoch') || normalizedType.includes('에포크')) return EVENT_TYPE_COLORS.epoch;
+  if (normalizedType.includes('truce') || normalizedType.includes('휴전')) return EVENT_TYPE_COLORS.truce;
+  if (normalizedType.includes('embargo') || normalizedType.includes('금수')) return EVENT_TYPE_COLORS.embargo;
+  return EVENT_TYPE_COLORS[type] ?? EVENT_TYPE_COLORS.default;
 }
 
 /** 이벤트 메시지에서 국가 코드 추출 (단순 패턴 매칭) */
@@ -156,7 +157,7 @@ export function GlobeEventPulse({
     for (let i = 0; i < MAX_SIMULTANEOUS; i++) {
       const mesh = new THREE.Mesh(ringGeo, materials[i]);
       mesh.visible = false;
-      mesh.renderOrder = 5;
+      mesh.renderOrder = RENDER_ORDER.EVENT_PULSE;
       meshes.push(mesh);
     }
     return meshes;
@@ -168,7 +169,7 @@ export function GlobeEventPulse({
     if (iso3) {
       const centroid = countryCentroids.get(iso3);
       if (centroid) {
-        const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + 0.8);
+        const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + SURFACE_ALT.LOW);
         const normal = pos.clone().normalize();
         return { position: pos, normal };
       }
@@ -179,7 +180,7 @@ export function GlobeEventPulse({
     if (keys.length === 0) return null;
     const randomKey = keys[Math.floor(Math.random() * keys.length)];
     const centroid = countryCentroids.get(randomKey)!;
-    const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + 0.8);
+    const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + SURFACE_ALT.LOW);
     const normal = pos.clone().normalize();
     return { position: pos, normal };
   }, [countryCentroids, globeRadius]);

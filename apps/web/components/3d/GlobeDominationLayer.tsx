@@ -18,6 +18,7 @@
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
+import { RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -322,7 +323,7 @@ export function GlobeDominationLayer({
       });
 
       const mesh = new THREE.Mesh(geometry, material);
-      mesh.renderOrder = 10; // Render above base globe
+      mesh.renderOrder = RENDER_ORDER.DOMINATION; // v24: 통일 renderOrder
 
       // v15: 전환 웨이브 + 플래시 초기화
       const isNewHegemony = state.level === 'hegemony' &&
