@@ -391,7 +391,8 @@ func (rm *RoomManager) BroadcastLobbyUpdate() domain.RoomsUpdateEvent {
 }
 
 // rotateRoom replaces a room's country with an unused one after cooldown ends.
-// Called by Room.tickCooldown via OnRotate callback (holds Room.mu lock, NOT rm.mu).
+// v17: Called AFTER Room.mu is released (via pendingRotate flag in tick()) to prevent
+// lock-ordering deadlock. Lock order is always: RoomManager.mu → Room.mu.
 func (rm *RoomManager) rotateRoom(roomID string) {
 	rm.mu.Lock()
 	defer rm.mu.Unlock()
@@ -401,24 +402,23 @@ func (rm *RoomManager) rotateRoom(roomID string) {
 		return
 	}
 
-	oldISO3 := room.Config.CountryISO3
-
-	// Pick a random unused country
+	// Pick a random unused country (under rm.mu)
 	newCountry := rm.pickUnusedCountryLocked()
 	if newCountry == nil {
 		// No unused countries available; keep current
 		return
 	}
 
-	// Remove old country from active set
-	delete(rm.activeCountries, oldISO3)
-
-	// Update room config with new country
+	// Acquire room.mu to safely update room config fields
+	room.mu.Lock()
+	oldISO3 := room.Config.CountryISO3
 	room.Config.CountryISO3 = newCountry.ISO3
 	room.Config.CountryName = newCountry.Name
 	room.Name = newCountry.Name
+	room.mu.Unlock()
 
-	// Track new country
+	// Update active countries tracking (under rm.mu)
+	delete(rm.activeCountries, oldISO3)
 	rm.activeCountries[newCountry.ISO3] = roomID
 
 	slog.Info("room rotated to new country",

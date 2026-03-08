@@ -5,6 +5,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log/slog"
+	"math"
 	"sync"
 	"time"
 
@@ -111,6 +112,11 @@ type Room struct {
 	// v17: Room rotation callback — called when cooldown ends, allowing RoomManager to reassign country
 	OnRotate func(roomID string)
 
+	// v17: Pending events collected during tick (emitted after mu unlock)
+	pendingEvents []RoomEvent
+	// v17: Pending rotation flag (OnRotate called after mu unlock to prevent deadlock)
+	pendingRotate bool
+
 	// Arena cancel func (to stop arena loop)
 	arenaCancel      context.CancelFunc
 	arenaTickCounter uint64 // v19: tick counter for arena combat mode
@@ -130,6 +136,7 @@ func NewRoom(id, name string, cfg RoomConfig) *Room {
 		round:         0,
 		stateTicksLeft: 0,
 		recentWinners: make([]domain.WinnerInfo, 0, 5),
+		pendingEvents: make([]RoomEvent, 0, 64),
 		coachAgent:    NewCoachAgent(),
 		analystAgent:  NewAnalystAgent(),
 		terrainMods:   GetTerrainModifiers(cfg.TerrainTheme),
@@ -166,9 +173,13 @@ func (r *Room) safeTick() {
 }
 
 // tick processes one room tick (state machine + broadcasting).
+// v17: Events are collected under mu lock, then emitted after unlock to prevent deadlock.
 func (r *Room) tick() {
 	r.mu.Lock()
-	defer r.mu.Unlock()
+
+	// Reset pending state for this tick
+	r.pendingEvents = r.pendingEvents[:0]
+	r.pendingRotate = false
 
 	switch r.state {
 	case domain.RoomStateWaiting:
@@ -181,6 +192,25 @@ func (r *Room) tick() {
 		r.tickEnding()
 	case domain.RoomStateCooldown:
 		r.tickCooldown()
+	}
+
+	// Snapshot pending state before unlocking
+	events := make([]RoomEvent, len(r.pendingEvents))
+	copy(events, r.pendingEvents)
+	shouldRotate := r.pendingRotate
+	roomID := r.ID
+
+	r.mu.Unlock()
+
+	// Emit events outside lock — prevents deadlock when OnEvents pushes to Hub channels
+	if r.OnEvents != nil && len(events) > 0 {
+		r.OnEvents(events)
+	}
+
+	// v17: Call OnRotate outside lock — prevents lock-ordering deadlock
+	// (Room.mu -> RoomManager.mu vs RoomManager.mu -> Room.mu)
+	if shouldRotate && r.OnRotate != nil {
+		r.OnRotate(roomID)
 	}
 }
 
@@ -302,10 +332,8 @@ func (r *Room) tickCooldown() {
 			},
 		}})
 
-		// v17: Notify RoomManager to rotate this room's country assignment
-		if r.OnRotate != nil {
-			r.OnRotate(r.ID)
-		}
+		// v17: Flag rotation for after mu unlock (prevents lock-ordering deadlock)
+		r.pendingRotate = true
 
 		// Arena already stopped in endRound(); just reset for next round
 		r.transitionTo(domain.RoomStateWaiting)
@@ -695,6 +723,14 @@ func (r *Room) HandleInput(agentID string, angle float64, boost bool, dash bool)
 	if state != domain.RoomStatePlaying {
 		return
 	}
+
+	// v19: Bridge classic input → arena combat when in arena mode
+	if r.IsArenaCombat() {
+		dirX := math.Sin(angle)
+		dirZ := math.Cos(angle)
+		r.HandleARInput(agentID, ARInput{DirX: dirX, DirZ: dirZ, AimY: angle})
+		return
+	}
 	r.arena.HandleInput(agentID, angle, boost, dash)
 }
 
@@ -705,6 +741,14 @@ func (r *Room) HandleInputSplit(agentID string, moveAngle float64, aimAngle floa
 	r.mu.RUnlock()
 
 	if state != domain.RoomStatePlaying {
+		return
+	}
+
+	// v19: Bridge split input → arena combat when in arena mode
+	if r.IsArenaCombat() {
+		dirX := math.Sin(moveAngle)
+		dirZ := math.Cos(moveAngle)
+		r.HandleARInput(agentID, ARInput{DirX: dirX, DirZ: dirZ, Jump: jump, AimY: aimAngle})
 		return
 	}
 	r.arena.HandleInputSplit(agentID, moveAngle, aimAngle, boost, dash, jump)
@@ -1024,8 +1068,9 @@ func (r *Room) aliveHumanCountLocked() int {
 	return count
 }
 
+// emitEvents appends events to pendingEvents (collected during tick, emitted after mu unlock).
 func (r *Room) emitEvents(events []RoomEvent) {
-	if r.OnEvents != nil && len(events) > 0 {
-		r.OnEvents(events)
+	if len(events) > 0 {
+		r.pendingEvents = append(r.pendingEvents, events...)
 	}
 }

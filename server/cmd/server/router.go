@@ -224,6 +224,23 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// WebSocket upgrade endpoint
 	// ==============================================================
 	r.Get("/ws", func(w http.ResponseWriter, r *http.Request) {
+		// v17: Rate-limit connections per IP
+		remoteIP := r.RemoteAddr
+		// Strip port from "ip:port" format
+		if idx := len(remoteIP) - 1; idx > 0 {
+			for i := idx; i >= 0; i-- {
+				if remoteIP[i] == ':' {
+					remoteIP = remoteIP[:i]
+					break
+				}
+			}
+		}
+		if !hub.ConnLimit.Allow(remoteIP) {
+			slog.Warn("connection rate limited", "ip", remoteIP)
+			http.Error(w, "rate limited", http.StatusTooManyRequests)
+			return
+		}
+
 		conn, err := upgrader.Upgrade(w, r, nil)
 		if err != nil {
 			slog.Error("ws upgrade failed", "error", err)
@@ -532,6 +549,86 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 				json.NewEncoder(w).Encode(status)
 			})
 		}
+
+		// --- Simulation Admin: Sovereignty Grant ---
+		// Allows authenticated users to claim sovereignty over their nationality country.
+		// This enables LLM agent simulations to bootstrap without requiring battle victories.
+		r.Group(func(r chi.Router) {
+			r.Use(auth.RequireAuth)
+
+			// POST /api/v11/sim/claim-country
+			// Body: { "country_iso": "KOR" }
+			// Grants sovereignty level 3 to the user's faction over the specified country.
+			r.Post("/sim/claim-country", func(w http.ResponseWriter, req *http.Request) {
+				userID := auth.GetUserID(req.Context())
+				if userID == "" {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusUnauthorized)
+					json.NewEncoder(w).Encode(map[string]string{"error": "unauthorized"})
+					return
+				}
+
+				var body struct {
+					CountryISO string `json:"country_iso"`
+				}
+				if err := json.NewDecoder(req.Body).Decode(&body); err != nil || body.CountryISO == "" {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(map[string]string{"error": "country_iso required"})
+					return
+				}
+
+				// Get user's faction
+				factionID := ""
+				if d.FactionManager != nil {
+					factionID = d.FactionManager.GetUserFaction(userID)
+				}
+				if factionID == "" {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(http.StatusBadRequest)
+					json.NewEncoder(w).Encode(map[string]string{"error": "you must be in a faction"})
+					return
+				}
+
+				// Check if country already has a sovereign (don't overwrite)
+				if d.EconomyEngine != nil {
+					econ := d.EconomyEngine.GetEconomy(body.CountryISO)
+					if econ != nil && econ.SovereignFaction != "" && econ.SovereignFaction != factionID {
+						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(http.StatusConflict)
+						json.NewEncoder(w).Encode(map[string]string{
+							"error":   "country already claimed by another faction",
+							"faction": econ.SovereignFaction,
+						})
+						return
+					}
+				}
+
+				// Grant sovereignty level 3 (minimum for policy changes)
+				sovLevel := 3
+				if d.WorldManager != nil {
+					d.WorldManager.UpdateSovereignty(body.CountryISO, factionID, sovLevel, 1)
+				}
+				if d.EconomyEngine != nil {
+					d.EconomyEngine.UpdateSovereignty(body.CountryISO, factionID, sovLevel)
+				}
+
+				slog.Info("sim: sovereignty granted",
+					"country", body.CountryISO,
+					"faction", factionID,
+					"user", userID,
+					"level", sovLevel,
+				)
+
+				w.Header().Set("Content-Type", "application/json")
+				json.NewEncoder(w).Encode(map[string]interface{}{
+					"country_iso":       body.CountryISO,
+					"faction_id":        factionID,
+					"sovereignty_level": sovLevel,
+					"status":            "granted",
+				})
+			})
+		})
 	})
 
 	// ==============================================================

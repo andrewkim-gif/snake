@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"log/slog"
 	"sync"
+	"time"
 )
 
 // Registration carries data for registering a client into a room.
@@ -28,6 +29,71 @@ type RoomcastMsg struct {
 type UnicastMsg struct {
 	ClientID string
 	Data     []byte
+}
+
+// ConnLimiter rate-limits new WebSocket connections per IP.
+// v17: Prevents burst connections from overwhelming the server.
+type ConnLimiter struct {
+	mu          sync.Mutex
+	connections map[string][]time.Time // IP → timestamps of recent connections
+	maxPerSec   int                    // max connections per IP per second
+	window      time.Duration          // sliding window duration
+}
+
+// NewConnLimiter creates a rate limiter allowing maxPerSec connections per IP per second.
+func NewConnLimiter(maxPerSec int) *ConnLimiter {
+	return &ConnLimiter{
+		connections: make(map[string][]time.Time),
+		maxPerSec:   maxPerSec,
+		window:      time.Second,
+	}
+}
+
+// Allow returns true if the IP is allowed to connect (under rate limit).
+func (cl *ConnLimiter) Allow(ip string) bool {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	now := time.Now()
+	cutoff := now.Add(-cl.window)
+
+	// Prune old entries
+	times := cl.connections[ip]
+	valid := times[:0]
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+
+	if len(valid) >= cl.maxPerSec {
+		cl.connections[ip] = valid
+		return false
+	}
+
+	cl.connections[ip] = append(valid, now)
+	return true
+}
+
+// Cleanup removes stale IP entries (call periodically to prevent memory leak).
+func (cl *ConnLimiter) Cleanup() {
+	cl.mu.Lock()
+	defer cl.mu.Unlock()
+
+	cutoff := time.Now().Add(-cl.window * 2)
+	for ip, times := range cl.connections {
+		valid := times[:0]
+		for _, t := range times {
+			if t.After(cutoff) {
+				valid = append(valid, t)
+			}
+		}
+		if len(valid) == 0 {
+			delete(cl.connections, ip)
+		} else {
+			cl.connections[ip] = valid
+		}
+	}
 }
 
 // Hub manages WebSocket clients and routes messages.
@@ -56,6 +122,9 @@ type Hub struct {
 
 	// mu protects client count reads from outside the hub goroutine.
 	mu sync.RWMutex
+
+	// v17: Connection rate limiter (IP-based)
+	ConnLimit *ConnLimiter
 }
 
 // NewHub creates a new Hub instance.
@@ -64,12 +133,13 @@ func NewHub() *Hub {
 		rooms:      make(map[string]map[*Client]bool),
 		lobby:      make(map[*Client]bool),
 		allClients: make(map[string]*Client),
-		register:   make(chan *Registration, 256),
-		unregister: make(chan *Client, 256),
-		broadcast:  make(chan *BroadcastMsg, 256),
-		roomcast:   make(chan *RoomcastMsg, 256),
-		unicast:    make(chan *UnicastMsg, 256),
+		register:   make(chan *Registration, 1024),
+		unregister: make(chan *Client, 1024),
+		broadcast:  make(chan *BroadcastMsg, 1024),
+		roomcast:   make(chan *RoomcastMsg, 1024),
+		unicast:    make(chan *UnicastMsg, 1024),
 		done:       make(chan struct{}),
+		ConnLimit:  NewConnLimiter(5), // v17: max 5 connections per IP per second
 	}
 }
 
@@ -118,8 +188,14 @@ func (h *Hub) RegisterLobby(client *Client) {
 }
 
 // Unregister queues a client for removal.
+// v17: Non-blocking to prevent goroutine leak if channel is full.
 func (h *Hub) Unregister(client *Client) {
-	h.unregister <- client
+	select {
+	case h.unregister <- client:
+	default:
+		slog.Warn("unregister channel full, forcing close", "clientId", client.ID)
+		client.CloseSend()
+	}
 }
 
 // BroadcastAll sends a message to all connected clients (lobby + rooms).
