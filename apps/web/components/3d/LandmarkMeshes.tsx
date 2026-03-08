@@ -104,11 +104,15 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
 
   const material = useMemo(() => {
     const colorHex = ARCHETYPE_COLORS[group.archetype] || '#CCCCCC';
+    const color = new THREE.Color(colorHex);
     return new THREE.MeshStandardMaterial({
-      color: colorHex,
-      roughness: 0.7,
-      metalness: 0.1,
+      color: color,
+      roughness: 0.6,
+      metalness: 0.15,
       flatShading: true,
+      // emissive로 야간(태양 반대편)에서도 형태가 보이게
+      emissive: color.clone().multiplyScalar(0.3),
+      emissiveIntensity: 0.6,
     });
   }, [group.archetype]);
 
