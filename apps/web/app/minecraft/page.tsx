@@ -2,14 +2,15 @@
 
 // Minecraft R3F 페이지 — 독립 실행 (서버 연결 불필요)
 
-import { useState, useCallback, useMemo, useRef } from 'react'
+import { useState, useCallback, useMemo, useRef, useEffect } from 'react'
 import { Canvas } from '@react-three/fiber'
-import { PlayerMode, HOTBAR_BLOCKS, type CustomBlock } from '@/lib/3d/mc-types'
+import { PlayerMode, BlockType, HOTBAR_BLOCKS, type CustomBlock } from '@/lib/3d/mc-types'
 import type { BlockInstance } from '@/lib/3d/mc-terrain-worker'
 import MCScene from '@/components/3d/MCScene'
 import MCTerrain from '@/components/3d/MCTerrain'
 import MCCamera from '@/components/3d/MCCamera'
 import MCBlockInteraction from '@/components/3d/MCBlockInteraction'
+import { disposeMaterials } from '@/lib/3d/mc-materials'
 import MCMenu from '@/components/mc/MCMenu'
 import MCHotbar from '@/components/mc/MCHotbar'
 import MCCrosshair from '@/components/mc/MCCrosshair'
@@ -29,6 +30,13 @@ export default function MinecraftPage() {
 
   // 월드 시드 (세션 고정)
   const seed = useMemo(() => Math.random(), [])
+
+  // 페이지 언마운트 시 머티리얼/텍스처 캐시 정리
+  useEffect(() => {
+    return () => {
+      disposeMaterials()
+    }
+  }, [])
 
   // Canvas 요소에 포인터 잠금 요청 (사용자 제스처 내에서 호출해야 함)
   const requestPointerLock = useCallback(() => {
@@ -86,9 +94,10 @@ export default function MinecraftPage() {
         if (existingIdx !== -1) {
           return prev.filter((_, i) => i !== existingIdx)
         }
+        // 지형 블록 제거 마커 (AIR로 표시, placed=false)
         return [
           ...prev,
-          { x, y, z, type: 0 as const, placed: false },
+          { x, y, z, type: BlockType.AIR, placed: false },
         ]
       })
     },

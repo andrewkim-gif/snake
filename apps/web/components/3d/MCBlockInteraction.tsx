@@ -36,7 +36,7 @@ export default function MCBlockInteraction({
   const { camera, scene } = useThree()
   const highlightRef = useRef<THREE.Mesh>(null)
   const raycasterRef = useRef(new THREE.Raycaster())
-  const mouseHoldRef = useRef<NodeJS.Timeout | null>(null)
+  const mouseHoldRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // 레이캐스터 설정
   useEffect(() => {
