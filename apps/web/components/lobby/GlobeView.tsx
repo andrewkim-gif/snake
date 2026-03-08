@@ -1796,8 +1796,8 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 동맹 빛줄기 (2국가 연결 파란 아크 빔) */}
-      {alliances.length > 0 && centroidsMap.size > 0 && (
+      {/* v23 Phase 5: 동맹 빛줄기 (2국가 연결 파란 아크 빔) — LOD 제어 */}
+      {lodConfig.enableAllianceBeam && alliances.length > 0 && centroidsMap.size > 0 && (
         <GlobeAllianceBeam
           alliances={alliances}
           centroidsMap={centroidsMap}
@@ -1805,8 +1805,8 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 제재 차단선 (빨간 X + 점선 아크) */}
-      {sanctions.length > 0 && centroidsMap.size > 0 && (
+      {/* v23 Phase 5: 제재 차단선 (빨간 X + 점선 아크) — LOD 제어 */}
+      {lodConfig.enableSanctionBarrier && sanctions.length > 0 && centroidsMap.size > 0 && (
         <GlobeSanctionBarrier
           sanctions={sanctions}
           centroidsMap={centroidsMap}
@@ -1814,8 +1814,8 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 자원 채굴 지표 이펙트 (금색 글로우 + 상승 파티클) */}
-      {resources.length > 0 && centroidsMap.size > 0 && (
+      {/* v23 Phase 5: 자원 채굴 지표 이펙트 (금색 글로우 + 상승 파티클) — LOD 제어 */}
+      {lodConfig.enableResourceGlow && resources.length > 0 && centroidsMap.size > 0 && (
         <GlobeResourceGlow
           resources={resources}
           centroidsMap={centroidsMap}
@@ -1823,8 +1823,8 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 첩보 점선 트레일 (보라 점선 + 눈 아이콘) */}
-      {spyOps.length > 0 && centroidsMap.size > 0 && (
+      {/* v23 Phase 5: 첩보 점선 트레일 (보라 점선 + 눈 아이콘) — LOD 제어 */}
+      {lodConfig.enableSpyTrail && spyOps.length > 0 && centroidsMap.size > 0 && (
         <GlobeSpyTrail
           spyOps={spyOps}
           centroidsMap={centroidsMap}
@@ -1832,8 +1832,8 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 핵실험 버섯구름 (충격파 + 파티클 + 기둥) */}
-      {nukes.length > 0 && centroidsMap.size > 0 && (
+      {/* v23 Phase 5: 핵실험 버섯구름 (충격파 + 파티클 + 기둥) — 모바일 비활성화 */}
+      {lodConfig.enableNukeEffect && nukes.length > 0 && centroidsMap.size > 0 && (
         <GlobeNukeEffect
           nukes={nukes}
           centroidsMap={centroidsMap}

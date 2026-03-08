@@ -56,6 +56,9 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
 const _tempColor = new THREE.Color();
 const _scaleVec = new THREE.Vector3();
+// v23 Phase 6: GC-prevention — reusable lateral vectors for mushroom cloud
+const _lateral1 = new THREE.Vector3();
+const _lateral2 = new THREE.Vector3();
 
 // ─── Internal render data ───
 
@@ -258,10 +261,10 @@ export function GlobeNukeEffect({
       if (cycleTime < MUSHROOM_DURATION) {
         d.cloudParticles.visible = true;
 
-        // 법선에 수직인 두 축
-        const lateral1 = new THREE.Vector3().crossVectors(d.normal, _up).normalize();
-        if (lateral1.lengthSq() < 0.01) lateral1.set(1, 0, 0);
-        const lateral2 = new THREE.Vector3().crossVectors(d.normal, lateral1).normalize();
+        // 법선에 수직인 두 축 (GC-free: 모듈 스코프 재사용)
+        _lateral1.crossVectors(d.normal, _up).normalize();
+        if (_lateral1.lengthSq() < 0.01) _lateral1.set(1, 0, 0);
+        _lateral2.crossVectors(d.normal, _lateral1).normalize();
 
         for (let i = 0; i < MUSHROOM_PARTICLES; i++) {
           const angle = d.particleSeeds[i * 4];
@@ -279,8 +282,8 @@ export function GlobeNukeEffect({
 
           _tempVec.copy(d.position);
           _tempVec.addScaledVector(d.normal, height);
-          _tempVec.addScaledVector(lateral1, Math.cos(angle) * spread);
-          _tempVec.addScaledVector(lateral2, Math.sin(angle) * spread);
+          _tempVec.addScaledVector(_lateral1, Math.cos(angle) * spread);
+          _tempVec.addScaledVector(_lateral2, Math.sin(angle) * spread);
 
           // 크기: 상승하면서 커짐, 후반에 줄어듦
           const sizeT = localT < 0.5

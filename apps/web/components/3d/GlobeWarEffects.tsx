@@ -72,7 +72,19 @@ const BLINK_COLOR = new THREE.Color(0xff3333);
 
 // Particles
 const ARROW_PARTICLE_COUNT = 12;
-const FIREWORK_PARTICLE_COUNT = 300; // v15: upgraded from 50 → 300
+const FIREWORK_PARTICLE_COUNT = 300; // v15: upgraded from 50 → 300 (legacy, unused by VictoryFireworks3D)
+
+// v23 Phase 6: VictoryFireworks3D constants
+const ROCKET_COUNT = 4;                  // 3~5 simultaneous rockets
+const ROCKET_ASCEND_HEIGHT = 4.0;        // units above surface (3~5 range)
+const ROCKET_ASCEND_DURATION = 0.3;      // 0~0.3s ascent
+const ROCKET_FLASH_START = 0.3;          // 0.3~0.5s flash at apex
+const ROCKET_FLASH_END = 0.5;
+const ROCKET_EXPLODE_START = 0.5;        // 0.5~2.0s explosion spread
+const ROCKET_EXPLODE_END = 2.0;
+const ROCKET_CYCLE_DURATION = 2.5;       // total cycle ~2.5s
+const EXPLOSION_PARTICLES_PER_ROCKET = 40; // 35~50 range
+const SMOKE_TRAIL_COUNT = 3;             // small spheres behind each rocket
 
 // v23: Explosion3D constants
 const EXPLOSION_FLASH_DURATION = 0.2;     // seconds
@@ -102,6 +114,12 @@ const CAMERA_SHAKE_FREQUENCY = 40;  // sin wave frequency
 const _tempObj3D = new THREE.Object3D();
 const _tempVec3 = new THREE.Vector3();
 const _tempColor = new THREE.Color();
+// v23 Phase 6: Additional GC-prevention for VictoryFireworks3D
+const _fwVec = new THREE.Vector3();
+const _fwNormal = new THREE.Vector3();
+const _fwObj = new THREE.Object3D();
+const _fwColor = new THREE.Color();
+const _fwUp = new THREE.Vector3(0, 1, 0);
 
 // ─── Helpers ───
 
@@ -638,9 +656,22 @@ function Explosion3D({
 }
 
 /**
- * VictoryFireworks — v15 Enhanced: 300 particles, 3-stage burst (0s, 0.5s, 1.0s), gold + nation colors
+ * VictoryFireworks3D — v23 Phase 6: 3D Rocket Fireworks replacing legacy Points-based system.
+ *
+ * Rocket ascent stage (0~0.3s):
+ * - InstancedMesh + ConeGeometry(0.15, 0.6, 6) rockets (ROCKET_COUNT simultaneous)
+ * - Rise from globe surface along normal direction (3~5 units)
+ * - Short smoke trail: 3 small spheres behind each rocket
+ *
+ * Explosion stage (0.3~2.0s):
+ * - Flash at apex (0.3~0.5s): bright white sphere
+ * - Each rocket spawns spherical burst of 40 InstancedMesh SphereGeometry(0.1) particles
+ * - Particles spread outward while shrinking + color transition (gold→red→orange)
+ * - AdditiveBlending + toneMapped=false (Bloom integration)
+ *
+ * Total cycle: ~2.5 seconds (repeating while active)
  */
-function VictoryFireworks({
+function VictoryFireworks3D({
   position,
   globeRadius,
   active,
@@ -649,124 +680,328 @@ function VictoryFireworks({
   globeRadius: number;
   active: boolean;
 }) {
-  const pointsRef = useRef<THREE.Points>(null);
+  const groupRef = useRef<THREE.Group>(null);
+  const rocketMeshRef = useRef<THREE.InstancedMesh>(null);
+  const smokeMeshRef = useRef<THREE.InstancedMesh>(null);
+  const explosionMeshRef = useRef<THREE.InstancedMesh>(null);
+  const flashRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
 
-  // 3-stage burst: particles divided into 3 batches with delayed activation
-  const STAGE_SIZE = Math.floor(FIREWORK_PARTICLE_COUNT / 3);
-  const STAGE_DELAYS = [0, 0.5, 1.0]; // seconds
+  // Surface normal at position (for ascent direction)
+  const surfaceNormal = useMemo(() => position.clone().normalize(), [position]);
 
-  // Color palette: gold dominant + accent colors
-  const colorPalette = useMemo(() => [
-    new THREE.Color(0xffd700), // gold
-    new THREE.Color(0xffaa00), // amber
-    new THREE.Color(0xff6600), // orange
-    new THREE.Color(0xffee55), // bright gold
-    new THREE.Color(0xffffff), // white sparkle
-  ], []);
-
-  const geometry = useMemo(() => {
-    const positions = new Float32Array(FIREWORK_PARTICLE_COUNT * 3);
-    const velocities = new Float32Array(FIREWORK_PARTICLE_COUNT * 3);
-    const colors = new Float32Array(FIREWORK_PARTICLE_COUNT * 3);
-    const stages = new Float32Array(FIREWORK_PARTICLE_COUNT); // which burst stage (0, 1, 2)
-
-    for (let i = 0; i < FIREWORK_PARTICLE_COUNT; i++) {
-      positions[i * 3] = position.x;
-      positions[i * 3 + 1] = position.y;
-      positions[i * 3 + 2] = position.z;
-
-      // Radial burst velocity with variation per stage
-      const stageIdx = Math.floor(i / STAGE_SIZE);
-      stages[i] = Math.min(stageIdx, 2);
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.random() * Math.PI;
-      const speed = (2 + Math.random() * 5) * (1 + stageIdx * 0.3); // later stages are faster
-      velocities[i * 3] = Math.sin(phi) * Math.cos(theta) * speed;
-      velocities[i * 3 + 1] = Math.sin(phi) * Math.sin(theta) * speed;
-      velocities[i * 3 + 2] = Math.cos(phi) * speed;
-
-      // Color from palette
-      const col = colorPalette[Math.floor(Math.random() * colorPalette.length)];
-      colors[i * 3] = col.r;
-      colors[i * 3 + 1] = col.g;
-      colors[i * 3 + 2] = col.b;
+  // Pre-compute per-rocket data: offset angles, heights, delays
+  const rocketData = useMemo(() => {
+    const offsets: THREE.Vector3[] = [];
+    const heights: number[] = [];
+    const delays: number[] = [];
+    for (let i = 0; i < ROCKET_COUNT; i++) {
+      // Slight random offset from center (spread around position)
+      const angle = (i / ROCKET_COUNT) * Math.PI * 2 + Math.random() * 0.5;
+      const spread = 0.3 + Math.random() * 0.4;
+      offsets.push(new THREE.Vector3(
+        Math.cos(angle) * spread,
+        0,
+        Math.sin(angle) * spread,
+      ));
+      heights.push(ROCKET_ASCEND_HEIGHT * (0.8 + Math.random() * 0.4)); // 3.2~5.6
+      delays.push(i * 0.06); // staggered launch
     }
+    return { offsets, heights, delays };
+  }, []);
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
-    geo.userData.velocities = velocities;
-    geo.userData.stages = stages;
-    geo.userData.originPos = position.clone();
-    return geo;
-  }, [position, colorPalette]);
+  // Pre-compute per-explosion particle data (directions + speeds)
+  const explosionData = useMemo(() => {
+    const allDirs: THREE.Vector3[][] = [];
+    const allSpeeds: number[][] = [];
+    for (let r = 0; r < ROCKET_COUNT; r++) {
+      const dirs: THREE.Vector3[] = [];
+      const spds: number[] = [];
+      for (let p = 0; p < EXPLOSION_PARTICLES_PER_ROCKET; p++) {
+        const theta = Math.random() * Math.PI * 2;
+        const phi = Math.acos(2 * Math.random() - 1);
+        dirs.push(new THREE.Vector3(
+          Math.sin(phi) * Math.cos(theta),
+          Math.sin(phi) * Math.sin(theta),
+          Math.cos(phi),
+        ));
+        spds.push(1.5 + Math.random() * 3.0);
+      }
+      allDirs.push(dirs);
+      allSpeeds.push(spds);
+    }
+    return { allDirs, allSpeeds };
+  }, []);
 
-  const material = useMemo(
-    () =>
-      new THREE.PointsMaterial({
-        size: globeRadius * 0.012,
-        transparent: true,
-        opacity: 1.0,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-        vertexColors: true,
-      }),
-    [globeRadius],
-  );
+  // Shared geometries
+  const rocketGeo = useMemo(() => new THREE.ConeGeometry(0.15, 0.6, 6), []);
+  const smokeGeo = useMemo(() => new THREE.SphereGeometry(0.08, 4, 4), []);
+  const explosionGeo = useMemo(() => new THREE.SphereGeometry(0.1, 6, 6), []);
+  const flashGeo = useMemo(() => new THREE.SphereGeometry(0.4, 8, 8), []);
+
+  // Materials
+  const rocketMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0xffcc33,
+    emissive: 0xff8800,
+    emissiveIntensity: 3,
+    transparent: true,
+    opacity: 1,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }), []);
+
+  const smokeMat = useMemo(() => new THREE.MeshBasicMaterial({
+    color: 0xcccccc,
+    transparent: true,
+    opacity: 0.5,
+    depthWrite: false,
+  }), []);
+
+  const explosionMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0xffd700,
+    emissive: 0xffd700,
+    emissiveIntensity: 4,
+    transparent: true,
+    opacity: 1,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }), []);
+
+  const flashMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 10,
+    transparent: true,
+    opacity: 1,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }), []);
+
+  const totalExplosionParticles = ROCKET_COUNT * EXPLOSION_PARTICLES_PER_ROCKET;
+  const totalSmoke = ROCKET_COUNT * SMOKE_TRAIL_COUNT;
+
+  // Initialize instanceColor for explosion
+  useEffect(() => {
+    if (explosionMeshRef.current) {
+      for (let i = 0; i < totalExplosionParticles; i++) {
+        explosionMeshRef.current.setColorAt(i, new THREE.Color(0xffd700));
+      }
+      if (explosionMeshRef.current.instanceColor) {
+        explosionMeshRef.current.instanceColor.needsUpdate = true;
+      }
+    }
+  }, [totalExplosionParticles]);
 
   useFrame((_, delta) => {
-    if (!pointsRef.current || !active) return;
+    if (!active) return;
     timeRef.current += delta;
 
-    const positions = geometry.attributes.position as THREE.BufferAttribute;
-    const velocities = geometry.userData.velocities as Float32Array;
-    const stages = geometry.userData.stages as Float32Array;
-    const origin = geometry.userData.originPos as THREE.Vector3;
+    const rocketMesh = rocketMeshRef.current;
+    const smokeMesh = smokeMeshRef.current;
+    const explosionMesh = explosionMeshRef.current;
+    const flash = flashRef.current;
+    if (!rocketMesh || !smokeMesh || !explosionMesh || !flash) return;
 
-    // 4-second total animation (3 stages)
-    if (timeRef.current > 4.0) {
-      material.opacity = Math.max(0, material.opacity - delta * 0.5);
-      return;
-    }
+    const cycleTime = timeRef.current % ROCKET_CYCLE_DURATION;
 
-    for (let i = 0; i < FIREWORK_PARTICLE_COUNT; i++) {
-      const stage = stages[i];
-      const stageDelay = STAGE_DELAYS[Math.min(Math.floor(stage), 2)];
-      const localTime = timeRef.current - stageDelay;
+    // ─── Process each rocket ───
+    for (let r = 0; r < ROCKET_COUNT; r++) {
+      const delay = rocketData.delays[r];
+      const localT = cycleTime - delay;
+      const maxH = rocketData.heights[r];
+      const offset = rocketData.offsets[r];
 
-      if (localTime < 0) {
-        // Not yet launched — stay at origin
-        positions.setXYZ(i, origin.x, origin.y, origin.z);
-        continue;
+      // ─── Rocket ascent (0 ~ 0.3s) ───
+      if (localT >= 0 && localT < ROCKET_ASCEND_DURATION) {
+        const ascentProgress = localT / ROCKET_ASCEND_DURATION;
+        const height = ascentProgress * maxH;
+
+        // Rocket position: surface position + offset + normal * height
+        _fwVec.copy(position).addScaledVector(surfaceNormal, height);
+        _fwVec.add(offset);
+
+        _fwObj.position.copy(_fwVec);
+        // Orient cone tip upward (along normal) — use module-scope constant
+        _fwObj.quaternion.setFromUnitVectors(_fwUp, surfaceNormal);
+        _fwObj.scale.setScalar(1.0);
+        _fwObj.updateMatrix();
+        rocketMesh.setMatrixAt(r, _fwObj.matrix);
+
+        // Smoke trail behind rocket
+        for (let s = 0; s < SMOKE_TRAIL_COUNT; s++) {
+          const sIdx = r * SMOKE_TRAIL_COUNT + s;
+          const smokeHeight = height - (s + 1) * 0.5;
+          if (smokeHeight < 0) {
+            _fwObj.position.set(0, 0, -9999);
+            _fwObj.scale.setScalar(0);
+            _fwObj.updateMatrix();
+            smokeMesh.setMatrixAt(sIdx, _fwObj.matrix);
+          } else {
+            _fwVec.copy(position).addScaledVector(surfaceNormal, smokeHeight);
+            _fwVec.add(offset);
+            _fwObj.position.copy(_fwVec);
+            const smokeScale = 0.8 + s * 0.3; // bigger smoke farther back
+            _fwObj.scale.setScalar(smokeScale);
+            _fwObj.updateMatrix();
+            smokeMesh.setMatrixAt(sIdx, _fwObj.matrix);
+          }
+        }
+      } else {
+        // Hide rocket
+        _fwObj.position.set(0, 0, -9999);
+        _fwObj.scale.setScalar(0);
+        _fwObj.updateMatrix();
+        rocketMesh.setMatrixAt(r, _fwObj.matrix);
+
+        // Hide smoke
+        for (let s = 0; s < SMOKE_TRAIL_COUNT; s++) {
+          const sIdx = r * SMOKE_TRAIL_COUNT + s;
+          smokeMesh.setMatrixAt(sIdx, _fwObj.matrix);
+        }
       }
 
-      const x = positions.getX(i) + velocities[i * 3] * delta;
-      const y = positions.getY(i) + velocities[i * 3 + 1] * delta;
-      const z = positions.getZ(i) + velocities[i * 3 + 2] * delta;
-      positions.setXYZ(i, x, y, z);
+      // ─── Explosion particles (0.5 ~ 2.0s) ───
+      const explodeLocalT = localT - ROCKET_EXPLODE_START;
+      const explodeDuration = ROCKET_EXPLODE_END - ROCKET_EXPLODE_START;
 
-      // Gravity + drag
-      velocities[i * 3] *= 0.97;
-      velocities[i * 3 + 1] *= 0.97;
-      velocities[i * 3 + 2] *= 0.97;
+      if (explodeLocalT >= 0 && explodeLocalT < explodeDuration) {
+        const explodeProgress = explodeLocalT / explodeDuration; // 0→1
+
+        // Apex position (where rocket peaked)
+        _fwNormal.copy(position).addScaledVector(surfaceNormal, maxH);
+        _fwNormal.add(offset);
+
+        const dirs = explosionData.allDirs[r];
+        const spds = explosionData.allSpeeds[r];
+
+        for (let p = 0; p < EXPLOSION_PARTICLES_PER_ROCKET; p++) {
+          const pIdx = r * EXPLOSION_PARTICLES_PER_ROCKET + p;
+          const dir = dirs[p];
+          const spd = spds[p];
+
+          // Position: spread from apex
+          const dist = spd * explodeProgress * 3.0;
+          _fwVec.copy(_fwNormal);
+          _fwVec.addScaledVector(dir, dist);
+
+          // Scale: shrink over time
+          const scale = Math.max(0.05, 1.0 - explodeProgress * 0.8);
+
+          _fwObj.position.copy(_fwVec);
+          _fwObj.scale.setScalar(scale);
+          _fwObj.updateMatrix();
+          explosionMesh.setMatrixAt(pIdx, _fwObj.matrix);
+
+          // Color transition: gold(0) → red(0.5) → orange(1.0)
+          if (explodeProgress < 0.5) {
+            const ct = explodeProgress / 0.5;
+            _fwColor.setRGB(1.0, 0.84 - ct * 0.54, 0.0); // gold→red
+          } else {
+            const ct = (explodeProgress - 0.5) / 0.5;
+            _fwColor.setRGB(1.0, 0.3 + ct * 0.35, ct * 0.2); // red→orange
+          }
+          explosionMesh.setColorAt(pIdx, _fwColor);
+        }
+      } else {
+        // Hide explosion particles for this rocket
+        for (let p = 0; p < EXPLOSION_PARTICLES_PER_ROCKET; p++) {
+          const pIdx = r * EXPLOSION_PARTICLES_PER_ROCKET + p;
+          _fwObj.position.set(0, 0, -9999);
+          _fwObj.scale.setScalar(0);
+          _fwObj.updateMatrix();
+          explosionMesh.setMatrixAt(pIdx, _fwObj.matrix);
+        }
+      }
     }
-    positions.needsUpdate = true;
 
-    // Fade out over time
-    material.opacity = Math.max(0, 1.0 - timeRef.current / 4.0);
+    // ─── Flash at apex (0.3 ~ 0.5s, first rocket) ───
+    const flashLocalT = cycleTime - ROCKET_FLASH_START;
+    const flashDuration = ROCKET_FLASH_END - ROCKET_FLASH_START;
+    if (flashLocalT >= 0 && flashLocalT < flashDuration) {
+      flash.visible = true;
+      const flashProgress = flashLocalT / flashDuration;
+      // Scale: 0→3→0
+      const flashScale = flashProgress < 0.5
+        ? (flashProgress / 0.5) * 3.0
+        : (1 - (flashProgress - 0.5) / 0.5) * 3.0;
+      flash.scale.setScalar(Math.max(0.01, flashScale));
+      _fwVec.copy(position).addScaledVector(surfaceNormal, rocketData.heights[0]);
+      flash.position.copy(_fwVec);
+      flashMat.opacity = 1 - flashProgress * 0.5;
+      flashMat.emissiveIntensity = 10 * (1 - flashProgress * 0.6);
+    } else {
+      flash.visible = false;
+    }
+
+    // ─── Update instance matrices ───
+    rocketMesh.instanceMatrix.needsUpdate = true;
+    smokeMesh.instanceMatrix.needsUpdate = true;
+    explosionMesh.instanceMatrix.needsUpdate = true;
+    if (explosionMesh.instanceColor) {
+      explosionMesh.instanceColor.needsUpdate = true;
+    }
+
+    // Overall fade when cycle nears end (last 0.3s)
+    const fadeT = ROCKET_CYCLE_DURATION - cycleTime;
+    if (fadeT < 0.3) {
+      const fade = fadeT / 0.3;
+      explosionMat.opacity = fade;
+      rocketMat.opacity = fade;
+    } else {
+      explosionMat.opacity = 1;
+      rocketMat.opacity = 1;
+    }
   });
 
+  // Cleanup
   useEffect(() => {
     return () => {
-      geometry.dispose();
-      material.dispose();
+      rocketGeo.dispose();
+      smokeGeo.dispose();
+      explosionGeo.dispose();
+      flashGeo.dispose();
+      rocketMat.dispose();
+      smokeMat.dispose();
+      explosionMat.dispose();
+      flashMat.dispose();
     };
-  }, [geometry, material]);
+  }, [rocketGeo, smokeGeo, explosionGeo, flashGeo, rocketMat, smokeMat, explosionMat, flashMat]);
 
   if (!active) return null;
 
-  return <points ref={pointsRef} geometry={geometry} material={material} />;
+  return (
+    <group ref={groupRef}>
+      {/* Rocket cones */}
+      <instancedMesh
+        ref={rocketMeshRef}
+        args={[rocketGeo, rocketMat, ROCKET_COUNT]}
+        frustumCulled={false}
+      />
+      {/* Smoke trail spheres */}
+      <instancedMesh
+        ref={smokeMeshRef}
+        args={[smokeGeo, smokeMat, totalSmoke]}
+        frustumCulled={false}
+      />
+      {/* Explosion particles */}
+      <instancedMesh
+        ref={explosionMeshRef}
+        args={[explosionGeo, explosionMat, totalExplosionParticles]}
+        frustumCulled={false}
+      />
+      {/* Flash sphere at apex */}
+      <mesh
+        ref={flashRef}
+        geometry={flashGeo}
+        material={flashMat}
+        position={position}
+        visible={false}
+      />
+    </group>
+  );
 }
 
 /**
@@ -1193,9 +1428,9 @@ export function GlobeWarEffects({
               />
             )}
 
-            {/* 5. Victory fireworks for winner (v15: enhanced 300 particles, 3-stage burst) */}
+            {/* 5. v23 Phase 6: Victory fireworks 3D (rocket ascent → spherical explosion) */}
             {war.state === 'ended' && war.winner && (
-              <VictoryFireworks
+              <VictoryFireworks3D
                 position={
                   war.winner === war.attacker ? attackerPos : defenderPos
                 }

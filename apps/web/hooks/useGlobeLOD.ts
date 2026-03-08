@@ -43,6 +43,19 @@ export interface GlobeLODConfig {
   maxLandmarks: number;
   /** 랜드마크 디테일 수준 (모바일: 'low', 데스크탑: 'high') */
   landmarkDetail: 'high' | 'low';
+
+  // ─── v23 Phase 6: New Effect LOD Flags ───
+
+  /** 동맹 빛줄기 활성화 여부 (모바일: true, 비교적 가벼움) */
+  enableAllianceBeam: boolean;
+  /** 제재 차단선 활성화 여부 (모바일: true, 가벼움) */
+  enableSanctionBarrier: boolean;
+  /** 자원 채굴 글로우 활성화 여부 (모바일: true, 비교적 가벼움) */
+  enableResourceGlow: boolean;
+  /** 첩보 트레일 활성화 여부 (모바일: true, 가벼움) */
+  enableSpyTrail: boolean;
+  /** 핵실험 버섯구름 활성화 여부 (모바일: false, 무거움) */
+  enableNukeEffect: boolean;
 }
 
 // ─── 감지 함수 ───
@@ -79,6 +92,12 @@ const DESKTOP_CONFIG: GlobeLODConfig = {
   // v20 Landmark
   maxLandmarks: 42,
   landmarkDetail: 'high',
+  // v23 Phase 6: New effects
+  enableAllianceBeam: true,
+  enableSanctionBarrier: true,
+  enableResourceGlow: true,
+  enableSpyTrail: true,
+  enableNukeEffect: true,
 };
 
 const MOBILE_CONFIG: GlobeLODConfig = {
@@ -94,6 +113,12 @@ const MOBILE_CONFIG: GlobeLODConfig = {
   // v20 Landmark
   maxLandmarks: 15,
   landmarkDetail: 'low',
+  // v23 Phase 6: New effects — disable heavy (nuke), keep light ones
+  enableAllianceBeam: true,
+  enableSanctionBarrier: true,
+  enableResourceGlow: true,
+  enableSpyTrail: true,
+  enableNukeEffect: false,    // 버섯구름 파티클 무거움 — 모바일 비활성화
 };
 
 // ─── Hook ───

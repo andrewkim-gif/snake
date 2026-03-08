@@ -46,6 +46,10 @@ const _tempVec = new THREE.Vector3();
 const _tempMatrix = new THREE.Matrix4();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
+// v23 Phase 6: GC-prevention — reusable lateral vectors + scale vector
+const _lateral1 = new THREE.Vector3();
+const _lateral2 = new THREE.Vector3();
+const _scaleVec = new THREE.Vector3();
 
 // ─── Glow ring shader ───
 
@@ -207,17 +211,18 @@ export function GlobeResourceGlow({
         // 약간의 수평 오프셋 (나선형)
         const angle = t * Math.PI * 4 + phase * Math.PI * 2;
         const lateralOffset = Math.sin(t * Math.PI) * 1.2; // 중간이 가장 넓음
-        const lateral1 = new THREE.Vector3().crossVectors(d.normal, _up).normalize();
-        if (lateral1.lengthSq() < 0.01) lateral1.set(1, 0, 0); // fallback
-        const lateral2 = new THREE.Vector3().crossVectors(d.normal, lateral1).normalize();
-        _tempVec.addScaledVector(lateral1, Math.cos(angle) * lateralOffset);
-        _tempVec.addScaledVector(lateral2, Math.sin(angle) * lateralOffset);
+        _lateral1.crossVectors(d.normal, _up).normalize();
+        if (_lateral1.lengthSq() < 0.01) _lateral1.set(1, 0, 0); // fallback
+        _lateral2.crossVectors(d.normal, _lateral1).normalize();
+        _tempVec.addScaledVector(_lateral1, Math.cos(angle) * lateralOffset);
+        _tempVec.addScaledVector(_lateral2, Math.sin(angle) * lateralOffset);
 
         // 크기: 위로 갈수록 작아짐
         const scale = 1.0 - t * 0.7;
 
         _tempMatrix.makeTranslation(_tempVec.x, _tempVec.y, _tempVec.z);
-        _tempMatrix.scale(new THREE.Vector3(scale, scale, scale));
+        _scaleVec.set(scale, scale, scale);
+        _tempMatrix.scale(_scaleVec);
 
         d.particles.setMatrixAt(i, _tempMatrix);
 
