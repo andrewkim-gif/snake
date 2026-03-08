@@ -6,7 +6,7 @@
  * 모바일: 하단 바텀시트, 데스크탑: 우측 슬라이드
  */
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { BarChart3, Coins, Vote, Shield, Building2, X, Play, Eye } from 'lucide-react';
 import { McButton } from '@/components/lobby/McButton';
@@ -22,6 +22,8 @@ import type { TokenBalance, StakingInfo } from '@/lib/crossx-config';
 import { CivilizationPanel } from '@/components/civilization/CivilizationPanel';
 import type { NationStatsData } from '@/components/civilization/StatsChart';
 import type { CountryPoliciesData, PolicyCategory } from '@/components/civilization/PolicyManager';
+import { fetchCouncilProposals, fetchGdpData, fetchFactions, fetchWorldStatus, type CouncilProposal, type GdpEntry, type FactionSummary, type WorldStatusData } from '@/lib/api-client';
+import { useApiData } from '@/hooks/useApiData';
 
 // ─── Types ───────────────────────────────────────────────
 type CountryTab = 'OVERVIEW' | 'TOKEN' | 'VOTE' | 'FACTION' | 'CIVILIZATION';
@@ -45,104 +47,74 @@ interface CountryPanelProps {
   onSpectate?: (iso3: string) => void;
 }
 
-// ─── Mock Data Generators ────────────────────────────────
-function getMockTokenBalance(country: CountryClientState): TokenBalance {
-  const tierMultiplier: Record<string, number> = { S: 50, A: 20, B: 10, C: 5, D: 2 };
-  const mult = tierMultiplier[country.tier] || 5;
+// ─── API Data Helpers ────────────────────────────────────
+
+/** GDP 데이터에서 해당 국가의 TokenBalance 생성 */
+function getTokenBalance(country: CountryClientState, gdpEntries: GdpEntry[] | null): TokenBalance {
+  const gdp = gdpEntries?.find(g => g.iso3 === country.iso3);
   return {
     iso3: country.iso3,
     name: `${country.name} Token`,
     symbol: country.iso3.slice(0, 3),
-    balance: String(mult * 1000 * 1e18),
-    stakedBalance: String(mult * 400 * 1e18),
-    pendingReward: String(mult * 10 * 1e18),
+    balance: '0',
+    stakedBalance: '0',
+    pendingReward: '0',
     tier: country.tier,
-    marketCap: mult * 1_000_000,
-    defenseMultiplier: 10000 + mult * 100,
-    stakingAPR: 800 + mult * 50,
+    marketCap: gdp?.gdp || 0,
+    defenseMultiplier: 10000,
+    stakingAPR: 500,
   };
 }
 
-function getMockStakingInfo(country: CountryClientState): StakingInfo {
-  const tierMultiplier: Record<string, number> = { S: 50, A: 20, B: 10, C: 5, D: 2 };
-  const mult = tierMultiplier[country.tier] || 5;
+/** GDP 데이터에서 해당 국가의 StakingInfo 생성 */
+function getStakingInfo(country: CountryClientState, _gdpEntries: GdpEntry[] | null): StakingInfo {
   return {
     iso3: country.iso3,
-    totalStaked: String(mult * 50000 * 1e18),
-    userStaked: String(mult * 400 * 1e18),
-    pendingReward: String(mult * 10 * 1e18),
-    apr: 800 + mult * 50,
+    totalStaked: '0',
+    userStaked: '0',
+    pendingReward: '0',
+    apr: 500,
     lastStakeTimestamp: Date.now() / 1000 - 86400,
   };
 }
 
-function getMockProposals(iso3: string): Proposal[] {
-  return [
-    {
-      id: 1,
-      iso3,
-      proposer: '0x1234567890abcdef1234567890abcdef12345678',
-      title: `${iso3} Tax Rate Reduction Proposal`,
-      description: `Reduce the national tax rate of ${iso3} from 5% to 3% to stimulate economic growth.`,
-      proposalType: 'tax',
-      forVotes: 124.5,
-      againstVotes: 45.2,
-      startTime: Date.now() / 1000 - 86400 * 2,
-      endTime: Date.now() / 1000 + 86400 * 5,
-      status: 'active',
-      executed: false,
-      totalVoters: 89,
-    },
-    {
-      id: 2,
-      iso3,
-      proposer: '0xabcdef1234567890abcdef1234567890abcdef12',
-      title: `${iso3} Defense Budget Increase`,
-      description: `Increase defense spending by 15% to strengthen territorial defense.`,
-      proposalType: 'defense',
-      forVotes: 200.1,
-      againstVotes: 30.0,
-      startTime: Date.now() / 1000 - 86400 * 7,
-      endTime: Date.now() / 1000 - 86400 * 1,
-      status: 'passed',
-      executed: false,
-      totalVoters: 145,
-    },
-    {
-      id: 3,
-      iso3,
-      proposer: '0x9876543210fedcba9876543210fedcba98765432',
-      title: `${iso3}-Allied Trade Agreement`,
-      description: `Establish a bilateral trade agreement with neighboring allied nations.`,
-      proposalType: 'trade',
-      forVotes: 55.0,
-      againstVotes: 88.3,
-      startTime: Date.now() / 1000 - 86400 * 10,
-      endTime: Date.now() / 1000 - 86400 * 3,
-      status: 'rejected',
-      executed: false,
-      totalVoters: 72,
-    },
-  ];
+/** CouncilProposal → Proposal 변환 (거버넌스 컴포넌트 호환) */
+function toProposals(apiProposals: CouncilProposal[] | null): Proposal[] {
+  if (!apiProposals) return [];
+  return apiProposals.map(p => ({
+    id: typeof p.id === 'string' ? parseInt(p.id, 10) || 0 : (p.id as unknown as number),
+    iso3: p.iso3,
+    proposer: p.proposer,
+    title: p.title,
+    description: p.description,
+    proposalType: p.proposalType as Proposal['proposalType'],
+    forVotes: p.forVotes,
+    againstVotes: p.againstVotes,
+    startTime: typeof p.startTime === 'string' ? new Date(p.startTime).getTime() / 1000 : p.startTime as unknown as number,
+    endTime: typeof p.endTime === 'string' ? new Date(p.endTime).getTime() / 1000 : p.endTime as unknown as number,
+    status: p.status as Proposal['status'],
+    executed: p.executed,
+    totalVoters: p.totalVoters,
+  }));
 }
 
-// ─── Mock Civilization Data ─────────────────────────────
-function getMockNationStats(country: CountryClientState): NationStatsData {
-  const tierMult: Record<string, number> = { S: 1.5, A: 1.2, B: 1.0, C: 0.8, D: 0.6 };
-  const mult = tierMult[country.tier] || 1.0;
+/** WorldStatus에서 해당 국가의 NationStats 추출 */
+function getNationStats(country: CountryClientState, worldStatus: WorldStatusData | null): NationStatsData {
+  const ws = worldStatus?.countries?.find((c) => c.iso3 === country.iso3);
   return {
-    happiness: Math.min(100, 50 * mult + Math.random() * 20),
-    birthRate: Math.min(4.0, Math.max(0.5, 2.0 * mult + (Math.random() - 0.5))),
-    gdp: Math.max(100, 1000 * mult + Math.random() * 500),
-    militaryPower: Math.min(100, 50 * mult + Math.random() * 20),
-    techLevel: Math.min(100, 50 * mult + Math.random() * 15),
-    loyalty: Math.min(100, 50 * mult + Math.random() * 20),
-    population: Math.max(10, 1000 * mult + Math.random() * 500),
-    internationalRep: (mult - 1.0) * 30 + (Math.random() - 0.5) * 20,
+    happiness: ws?.happiness ?? 50,
+    birthRate: 2.0,
+    gdp: country.gdp || 0,
+    militaryPower: ws?.militaryPower ?? 50,
+    techLevel: 50,
+    loyalty: 50,
+    population: ws?.population ?? 0,
+    internationalRep: 0,
   };
 }
 
-function getMockPolicies(country: CountryClientState): CountryPoliciesData {
+/** 기본 정책값 (정책 API는 PolicyPanel이 별도로 처리) */
+function getDefaultPolicies(country: CountryClientState): CountryPoliciesData {
   const policies: Record<PolicyCategory, number> = {
     religion: 1, language: 1, government: 0, tax_rate: 1,
     military: 1, education: 1, trade: 1, environment: 1,
@@ -157,28 +129,25 @@ function getMockPolicies(country: CountryClientState): CountryPoliciesData {
   };
 }
 
-interface MockFactionInfo {
+/** FactionSummary 리스트에서 해당 국가의 팩션 정보 추출 */
+interface FactionInfo {
   name: string;
+  tag: string;
+  color: string;
   memberCount: number;
-  diplomacy: { allies: string[]; enemies: string[]; neutral: string[] };
-  techProgress: { name: string; branch: string; progress: number; icon: string }[];
+  prestige: number;
 }
 
-function getMockFactionInfo(country: CountryClientState): MockFactionInfo {
-  const faction = country.sovereignFaction || 'Independent';
+function getFactionInfo(country: CountryClientState, factionsList: FactionSummary[] | null): FactionInfo | null {
+  if (!country.sovereignFaction || !factionsList) return null;
+  const faction = factionsList.find(f => f.name === country.sovereignFaction);
+  if (!faction) return null;
   return {
-    name: faction,
-    memberCount: Math.floor(Math.random() * 30) + 5,
-    diplomacy: {
-      allies: ['NATO Alliance', 'Pacific Rim Coalition'].slice(0, faction === 'Independent' ? 0 : 2),
-      enemies: ['Shadow Syndicate'].slice(0, faction === 'Independent' ? 0 : 1),
-      neutral: ['Non-Aligned Movement', 'Arctic Council'],
-    },
-    techProgress: [
-      { name: 'Advanced Infantry', branch: 'military', progress: 0.72, icon: '⚔️' },
-      { name: 'Trade Network', branch: 'economic', progress: 0.45, icon: '💰' },
-      { name: 'Diplomatic Corps', branch: 'diplomatic', progress: 0.30, icon: '🛡️' },
-    ],
+    name: faction.name,
+    tag: faction.tag,
+    color: faction.color,
+    memberCount: faction.member_count,
+    prestige: faction.prestige,
   };
 }
 
@@ -508,9 +477,9 @@ function OverviewTab({ country }: { country: CountryClientState }) {
 }
 
 /** TOKEN 탭 — CountryTokenInfo + StakingPanel 축소 연결 */
-function TokenTab({ country }: { country: CountryClientState }) {
-  const token = getMockTokenBalance(country);
-  const stakingInfo = getMockStakingInfo(country);
+function TokenTab({ country, gdpData }: { country: CountryClientState; gdpData: GdpEntry[] | null }) {
+  const token = getTokenBalance(country, gdpData);
+  const stakingInfo = getStakingInfo(country, gdpData);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -547,8 +516,7 @@ function TokenTab({ country }: { country: CountryClientState }) {
 }
 
 /** VOTE 탭 — ProposalList + VoteInterface 인라인 */
-function VoteTab({ country }: { country: CountryClientState }) {
-  const proposals = getMockProposals(country.iso3);
+function VoteTab({ country, proposals }: { country: CountryClientState; proposals: Proposal[] }) {
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
 
   return (
@@ -630,14 +598,14 @@ function VoteTab({ country }: { country: CountryClientState }) {
 }
 
 /** FACTION 탭 — 팩션 소속 + 외교 + 테크트리 축약 */
-function FactionTab({ country }: { country: CountryClientState }) {
-  const factionInfo = getMockFactionInfo(country);
-  const branchColors: Record<string, string> = {
-    military: SK.red,
-    economic: SK.gold,
-    diplomatic: SK.blue,
+function FactionTab({ country, factionInfo }: { country: CountryClientState; factionInfo: FactionInfo | null }) {
+  const displayInfo = factionInfo || {
+    name: country.sovereignFaction || 'Independent',
+    tag: '',
+    color: '',
+    memberCount: 0,
+    prestige: 0,
   };
-
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
       {/* 소속 팩션 정보 */}
@@ -658,182 +626,71 @@ function FactionTab({ country }: { country: CountryClientState }) {
           Faction
         </div>
         <div style={{
-          fontFamily: headingFont,
-          fontSize: SKFont.body,
-          color: factionInfo.name !== 'Independent' ? SK.textPrimary : SK.textMuted,
-          fontWeight: 700,
+          display: 'flex',
+          alignItems: 'center',
+          gap: '8px',
           marginBottom: '4px',
         }}>
-          {factionInfo.name}
+          {displayInfo.color && (
+            <div style={{
+              width: '12px',
+              height: '12px',
+              borderRadius: '2px',
+              backgroundColor: displayInfo.color,
+              flexShrink: 0,
+            }} />
+          )}
+          <div style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.body,
+            color: displayInfo.name !== 'Independent' ? SK.textPrimary : SK.textMuted,
+            fontWeight: 700,
+          }}>
+            {displayInfo.name}
+            {displayInfo.tag && (
+              <span style={{ color: SK.textMuted, fontWeight: 400, marginLeft: '6px', fontSize: SKFont.xs }}>
+                [{displayInfo.tag}]
+              </span>
+            )}
+          </div>
         </div>
         <div style={{
           fontFamily: bodyFont,
           fontSize: SKFont.xs,
           color: SK.textSecondary,
         }}>
-          {factionInfo.memberCount} member nations
+          {displayInfo.memberCount} member nations
         </div>
       </div>
 
-      {/* 외교 상태 */}
-      <div style={{
-        padding: '12px',
-        background: SK.cardBg,
-        borderRadius: radius.md,
-        border: sketchBorder(),
-      }}>
+      {/* 프레스티지 */}
+      {displayInfo.prestige > 0 && (
         <div style={{
-          fontFamily: bodyFont,
-          fontSize: SKFont.xs,
-          color: SK.textMuted,
-          letterSpacing: '2px',
-          marginBottom: '10px',
-          textTransform: 'uppercase',
+          padding: '12px',
+          background: SK.cardBg,
+          borderRadius: radius.md,
+          border: sketchBorder(),
         }}>
-          Diplomacy
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: SKFont.xs,
+            color: SK.textMuted,
+            letterSpacing: '2px',
+            marginBottom: '10px',
+            textTransform: 'uppercase',
+          }}>
+            Prestige
+          </div>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: SKFont.h3,
+            color: SK.gold,
+            fontWeight: 700,
+          }}>
+            {displayInfo.prestige.toLocaleString()}
+          </div>
         </div>
-
-        {/* Allies */}
-        {factionInfo.diplomacy.allies.length > 0 && (
-          <div style={{ marginBottom: '8px' }}>
-            <div style={{
-              fontFamily: bodyFont,
-              fontSize: '10px',
-              color: SK.green,
-              fontWeight: 700,
-              marginBottom: '4px',
-              letterSpacing: '1px',
-            }}>
-              ALLIES
-            </div>
-            {factionInfo.diplomacy.allies.map((ally) => (
-              <div key={ally} style={{
-                fontFamily: bodyFont,
-                fontSize: SKFont.xs,
-                color: SK.textSecondary,
-                padding: '2px 0',
-              }}>
-                {ally}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Enemies */}
-        {factionInfo.diplomacy.enemies.length > 0 && (
-          <div style={{ marginBottom: '8px' }}>
-            <div style={{
-              fontFamily: bodyFont,
-              fontSize: '10px',
-              color: SK.red,
-              fontWeight: 700,
-              marginBottom: '4px',
-              letterSpacing: '1px',
-            }}>
-              HOSTILE
-            </div>
-            {factionInfo.diplomacy.enemies.map((enemy) => (
-              <div key={enemy} style={{
-                fontFamily: bodyFont,
-                fontSize: SKFont.xs,
-                color: SK.textSecondary,
-                padding: '2px 0',
-              }}>
-                {enemy}
-              </div>
-            ))}
-          </div>
-        )}
-
-        {/* Neutral */}
-        {factionInfo.diplomacy.neutral.length > 0 && (
-          <div>
-            <div style={{
-              fontFamily: bodyFont,
-              fontSize: '10px',
-              color: SK.textMuted,
-              fontWeight: 700,
-              marginBottom: '4px',
-              letterSpacing: '1px',
-            }}>
-              NEUTRAL
-            </div>
-            {factionInfo.diplomacy.neutral.map((n) => (
-              <div key={n} style={{
-                fontFamily: bodyFont,
-                fontSize: SKFont.xs,
-                color: SK.textSecondary,
-                padding: '2px 0',
-              }}>
-                {n}
-              </div>
-            ))}
-          </div>
-        )}
-      </div>
-
-      {/* TechTree 진행 상황 (핵심 3개) */}
-      <div style={{
-        padding: '12px',
-        background: SK.cardBg,
-        borderRadius: radius.md,
-        border: sketchBorder(),
-      }}>
-        <div style={{
-          fontFamily: bodyFont,
-          fontSize: SKFont.xs,
-          color: SK.textMuted,
-          letterSpacing: '2px',
-          marginBottom: '10px',
-          textTransform: 'uppercase',
-        }}>
-          Tech Progress
-        </div>
-        {factionInfo.techProgress.map((tech) => {
-          const barColor = branchColors[tech.branch] || SK.textSecondary;
-          return (
-            <div key={tech.name} style={{ marginBottom: '10px' }}>
-              <div style={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                marginBottom: '4px',
-              }}>
-                <span style={{
-                  fontFamily: bodyFont,
-                  fontSize: SKFont.xs,
-                  color: SK.textPrimary,
-                  fontWeight: 600,
-                }}>
-                  {tech.icon} {tech.name}
-                </span>
-                <span style={{
-                  fontFamily: bodyFont,
-                  fontSize: '10px',
-                  color: barColor,
-                  fontWeight: 700,
-                }}>
-                  {Math.round(tech.progress * 100)}%
-                </span>
-              </div>
-              <div style={{
-                height: '4px',
-                background: 'rgba(255,255,255,0.04)',
-                borderRadius: 0,
-                overflow: 'hidden',
-              }}>
-                <div style={{
-                  width: `${tech.progress * 100}%`,
-                  height: '100%',
-                  background: barColor,
-                  borderRadius: 0,
-                  transition: 'width 300ms ease',
-                }} />
-              </div>
-            </div>
-          );
-        })}
-      </div>
+      )}
 
       {/* View Faction 링크 */}
       <Link href="/factions" style={{
@@ -878,6 +735,21 @@ export function CountryPanel({
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<CountryTab>('OVERVIEW');
   const isMobile = useIsMobile();
+
+  // ─── API Data Hooks ───
+  const selectedCountry = country;
+  const gdpFetcher = useMemo(() => () => fetchGdpData(), []);
+  const factionsFetcher = useMemo(() => () => fetchFactions(), []);
+  const worldStatusFetcher = useMemo(() => () => fetchWorldStatus(), []);
+  const proposalsFetcher = useMemo(
+    () => () => fetchCouncilProposals(selectedCountry?.iso3),
+    [selectedCountry?.iso3],
+  );
+
+  const { data: gdpData } = useApiData(gdpFetcher);
+  const { data: factions } = useApiData(factionsFetcher);
+  const { data: worldStatus } = useApiData(worldStatusFetcher);
+  const { data: apiProposals } = useApiData(proposalsFetcher);
 
   // 모바일 바텀시트 상태
   const [sheetStage, setSheetStage] = useState<SheetStage>('closed');
@@ -946,18 +818,18 @@ export function CountryPanel({
       case 'OVERVIEW':
         return <OverviewTab country={country} />;
       case 'TOKEN':
-        return <TokenTab country={country} />;
+        return <TokenTab country={country} gdpData={gdpData} />;
       case 'VOTE':
-        return <VoteTab country={country} />;
+        return <VoteTab country={country} proposals={toProposals(apiProposals)} />;
       case 'FACTION':
-        return <FactionTab country={country} />;
+        return <FactionTab country={country} factionInfo={getFactionInfo(country, factions)} />;
       case 'CIVILIZATION':
         return (
           <CivilizationPanel
             countryCode={country.iso3}
             countryName={country.name}
-            stats={getMockNationStats(country)}
-            policies={getMockPolicies(country)}
+            stats={getNationStats(country, worldStatus)}
+            policies={getDefaultPolicies(country)}
             canChangePolicy={false}
             dominantNation={country.sovereignFaction || undefined}
             hasHegemony={false}
