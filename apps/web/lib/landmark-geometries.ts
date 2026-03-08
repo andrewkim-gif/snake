@@ -13,7 +13,7 @@ import { LandmarkArchetype } from './landmark-data';
 
 // ─── 스케일 상수 ───
 // 지구 반경 100 기준, 랜드마크는 1~4 unit 정도가 적절
-const S = 1.0; // base scale multiplier
+const S = 1.8; // base scale multiplier (지구 반경 100 기준, 눈에 잘 띄도록)
 
 // ─── 헬퍼 ───
 

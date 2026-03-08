@@ -24,10 +24,10 @@ import { createArchetypeGeometry, disposeGeometryCache } from '@/lib/landmark-ge
 
 // ─── Constants ───
 
-const SURFACE_ALT = 1.5;
+const SURFACE_ALT = 2.5;
 const BACKFACE_THRESHOLD = 0.05;
 const BACKFACE_FADE_RANGE = 0.3;
-const LANDMARK_SCALE = 0.7; // 전체 스케일 조정 (지구본 대비 적절한 크기)
+const LANDMARK_SCALE = 1.5; // 전체 스케일 조정 (지구 반경 100 대비 ~5-8 unit 높이)
 
 // ─── GC 방지: 모듈 스코프 temp 객체 ───
 
