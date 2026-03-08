@@ -96,6 +96,16 @@ import type { ARState, ARMinimapEntity, ARTerrainTheme } from '@/lib/3d/ar-types
 import type { ARUiState, AREvent } from '@/hooks/useSocket';
 import type { ARChoice } from '@/lib/3d/ar-types';
 
+// v19 Phase 3: 전투 피드백 AR 컴포넌트
+import { ARDamageNumbersBridge } from '@/components/game/ar/ARDamageNumbersBridge';
+import ARNameTags from '@/components/game/ar/ARNameTags';
+import { ARLevelUp } from '@/components/game/ar/ARLevelUp';
+import { ARPvPOverlay } from '@/components/game/ar/ARPvPOverlay';
+import { ARMobileControls, isTouchDevice } from '@/components/game/ar/ARMobileControls';
+import { ARWeaponEvolutionToast } from '@/components/game/ar/ARWeaponEvolutionToast';
+import { ARSynergyBar } from '@/components/game/ar/ARSynergyBar';
+import { ARStatusEffects } from '@/components/game/ar/ARStatusEffects';
+
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
@@ -172,6 +182,14 @@ export function GameCanvas3D({
   // v19 Phase 2: AR-specific refs
   const arPlayerPosRef = useRef({ x: 0, y: 0, z: 0 });
   const arYawRef = useRef(0);
+
+  // v19 Phase 3: Weapon evolution toast state
+  const [weaponToasts, setWeaponToasts] = useState<Array<{ id: number; weaponId: string; timestamp: number }>>([]);
+  const prevWeaponsRef = useRef<Set<string>>(new Set());
+  const weaponToastIdRef = useRef(0);
+
+  // v19 Phase 3: PvP kill feed state
+  const [pvpKillFeed, setPvpKillFeed] = useState<Array<{ id: string; killerName: string; victimName: string; killerFaction: string; victimFaction: string; timestamp: number }>>([]);
 
   // v16: InputManager + TPSCamera refs
   const cameraRef = useRef<Camera | null>(null);
@@ -605,6 +623,97 @@ export function GameCanvas3D({
   const currentRadius = uiState.arenaShrink?.currentRadius ?? ARENA_CONFIG.radius;
   const targetRadius = uiState.arenaShrink?.minRadius;
 
+  // ─── v19 Phase 3: AR 모바일 컨트롤 콜백 ───
+  const handleARMobileMove = useCallback((dirX: number, dirZ: number) => {
+    // 모바일 조이스틱 → InputManager 입력에 반영
+    if (!isArenaMode) return;
+    const inp = inputManager.inputRef.current;
+    // 조이스틱 X,Z를 moveAngle로 변환
+    const mag = Math.sqrt(dirX * dirX + dirZ * dirZ);
+    if (mag > 0.1) {
+      inp.moveAngle = Math.atan2(dirX, -dirZ) + arYawRef.current;
+      inp.boost = mag > 0.8; // 강하게 밀면 부스트
+    } else {
+      inp.moveAngle = null;
+    }
+  }, [isArenaMode, inputManager, arYawRef]);
+
+  const handleARMobileCameraRotate = useCallback((deltaYaw: number, deltaPitch: number) => {
+    // 모바일 터치 → ARCamera yaw 직접 조정
+    if (!isArenaMode) return;
+    inputManager.cameraDeltaRef.current.dx += deltaYaw;
+    inputManager.cameraDeltaRef.current.dy += deltaPitch;
+  }, [isArenaMode, inputManager]);
+
+  // ─── v19 Phase 3: 무기 진화 감지 (arUiState에서 무기 목록 추적) ───
+  useEffect(() => {
+    if (!isArenaMode || !arStateRef?.current) return;
+    const pid = dataRef.current.playerId;
+    if (!pid) return;
+    const me = arStateRef.current.players.find(p => p.id === pid);
+    if (!me) return;
+
+    const evolvedWeapons = new Set(['storm_bow', 'dexecutioner', 'inferno', 'dragon_breath', 'pandemic']);
+    for (const w of me.weapons) {
+      if (evolvedWeapons.has(w) && !prevWeaponsRef.current.has(w)) {
+        weaponToastIdRef.current++;
+        setWeaponToasts(prev => [
+          ...prev.slice(-(2)),
+          { id: weaponToastIdRef.current, weaponId: w, timestamp: Date.now() },
+        ]);
+      }
+    }
+    prevWeaponsRef.current = new Set(me.weapons);
+  }, [isArenaMode, arStateRef, dataRef, arUiState?.level]); // re-check on level change
+
+  // v19 Phase 3: 무기 토스트 만료 처리
+  useEffect(() => {
+    if (weaponToasts.length === 0) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setWeaponToasts(prev => prev.filter(t => now - t.timestamp < 3000));
+    }, 200);
+    return () => clearInterval(timer);
+  }, [weaponToasts.length]);
+
+  // ─── v19 Phase 3: PvP kill feed from arEventQueue ───
+  useEffect(() => {
+    if (!isArenaMode || !arEventQueueRef) return;
+    const interval = setInterval(() => {
+      const queue = arEventQueueRef.current;
+      const pvpEvents = queue.filter(e => e.type === 'pvp_kill');
+      if (pvpEvents.length > 0) {
+        const newEntries = pvpEvents.map(e => {
+          const data = e.data as { killerId: string; victimId: string; killerFac: string; victimFac: string };
+          // 이름 조회 (arState에서)
+          const state = arStateRef?.current;
+          const killerPlayer = state?.players.find(p => p.id === data.killerId);
+          const victimPlayer = state?.players.find(p => p.id === data.victimId);
+          return {
+            id: `${data.killerId}-${data.victimId}-${Date.now()}`,
+            killerName: killerPlayer?.name || data.killerId.slice(0, 6),
+            victimName: victimPlayer?.name || data.victimId.slice(0, 6),
+            killerFaction: data.killerFac || '',
+            victimFaction: data.victimFac || '',
+            timestamp: Date.now(),
+          };
+        });
+        setPvpKillFeed(prev => [...prev, ...newEntries].slice(-10));
+      }
+    }, 200);
+    return () => clearInterval(interval);
+  }, [isArenaMode, arEventQueueRef, arStateRef]);
+
+  // PvP kill feed 만료 (10초)
+  useEffect(() => {
+    if (pvpKillFeed.length === 0) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setPvpKillFeed(prev => prev.filter(e => now - e.timestamp < 10000));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [pvpKillFeed.length]);
+
   // ─── 오버레이 표시 조건 (v12: BattleResult + Spectator 추가) ───
   const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
   const showBattleResult = uiState.battleComplete != null;
@@ -714,6 +823,29 @@ export function GameCanvas3D({
               xpCrystals={arStateRef?.current?.xpCrystals ?? []}
               playerPos={arPlayerPosRef.current}
             />
+
+            {/* v19 Phase 3 Task 1: ARDamageNumbers — arEventQueue에서 ar_damage 소비 */}
+            {arEventQueueRef && (
+              <ARDamageNumbersBridge arEventQueueRef={arEventQueueRef} />
+            )}
+
+            {/* v19 Phase 3 Task 2: ARNameTags — 팩션 이름태그 */}
+            {arStateRef?.current && arInterpRef && (
+              <ARNameTags
+                players={arStateRef.current.players}
+                myId={dataRef.current.playerId ?? ''}
+                myFactionId={arUiState?.factionId ?? ''}
+                interpRef={arInterpRef}
+              />
+            )}
+
+            {/* v19 Phase 3 Task 8: ARStatusEffects — 상태이상 비주얼 링 */}
+            {arStateRef && arEventQueueRef && (
+              <ARStatusEffects
+                arStateRef={arStateRef}
+                arEventQueueRef={arEventQueueRef}
+              />
+            )}
           </>
         ) : (
           <>
@@ -899,9 +1031,10 @@ export function GameCanvas3D({
       {/* v16 Phase 8: Weather HUD (classic only) */}
       {!isArenaMode && <WeatherHUD weather={uiState.weather} />}
 
-      {/* ─── v19 Phase 2: AR HTML HUD (isArenaMode only) ─── */}
+      {/* ─── v19 Phase 2+3: AR HTML HUD (isArenaMode only) ─── */}
       {isArenaMode && arUiState && (
         <>
+          {/* Phase 2: ARHUD — HP/XP/타이머/페이즈/웨이브/킬 */}
           <ARHUD
             hp={arUiState.hp}
             maxHp={arUiState.maxHp}
@@ -914,6 +1047,8 @@ export function GameCanvas3D({
             kills={arUiState.kills}
             alive={arUiState.alive}
           />
+
+          {/* Phase 2: ARMinimap — 아레나 미니맵 */}
           <ARMinimap
             entities={buildMinimapEntities(arStateRef?.current, dataRef.current.playerId)}
             playerX={arPlayerPosRef.current.x}
@@ -922,6 +1057,97 @@ export function GameCanvas3D({
             pvpRadius={arUiState.pvpRadius || undefined}
             phase={arUiState.phase}
           />
+
+          {/* Phase 3 Task 3: ARLevelUp — 레벨업 토메 선택 팝업 */}
+          {arUiState.levelUpChoices && arUiState.levelUpChoices.length > 0 && sendARChoice && (
+            <ARLevelUp
+              level={arUiState.level}
+              choices={arUiState.levelUpChoices}
+              onChoose={(tomeId) => sendARChoice({ tomeId })}
+            />
+          )}
+
+          {/* Phase 3 Task 4: ARPvPOverlay — PvP 페이즈 UI */}
+          <ARPvPOverlay
+            phase={arUiState.phase}
+            timer={arUiState.timer}
+            pvpRadius={arUiState.pvpRadius || undefined}
+            baseRadius={arStateRef?.current?.arenaRadius ?? 40}
+            factionScores={arUiState.factionScores}
+            playerFaction={arUiState.factionId}
+            enemies={arStateRef?.current?.enemies}
+            killFeed={pvpKillFeed}
+          />
+
+          {/* Phase 3 Task 5: ARMobileControls — 모바일 조이스틱 */}
+          <ARMobileControls
+            onMove={handleARMobileMove}
+            onCameraRotate={handleARMobileCameraRotate}
+            active={arUiState.alive && !menuOpen}
+          />
+
+          {/* Phase 3 Task 6: 무기 진화 토스트 */}
+          {weaponToasts.length > 0 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: 100,
+                left: '50%',
+                transform: 'translateX(-50%)',
+                zIndex: 65,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 8,
+                pointerEvents: 'none',
+              }}
+            >
+              {weaponToasts.map((toast) => {
+                const WEAPON_INFO_MAP: Record<string, { icon: string; name: string; desc: string }> = {
+                  storm_bow: { icon: '\u26A1', name: 'Storm Bow', desc: 'Arrows with chain lightning' },
+                  dexecutioner: { icon: '\u2694\uFE0F', name: 'Dexecutioner', desc: 'Executes below 30% HP' },
+                  inferno: { icon: '\uD83D\uDD25', name: 'Inferno', desc: 'Screen-wide fire storm' },
+                  dragon_breath: { icon: '\uD83D\uDC09', name: 'Dragon Breath', desc: 'Continuous flame spray' },
+                  pandemic: { icon: '\u2620\uFE0F', name: 'Pandemic', desc: 'Spreading poison cloud' },
+                };
+                const info = WEAPON_INFO_MAP[toast.weaponId];
+                const age = Date.now() - toast.timestamp;
+                const fadeOut = age > 2500;
+                return (
+                  <div
+                    key={toast.id}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '8px 20px',
+                      backgroundColor: 'rgba(255, 152, 0, 0.2)',
+                      border: '1px solid rgba(255, 152, 0, 0.6)',
+                      borderRadius: 6,
+                      backdropFilter: 'blur(4px)',
+                      fontFamily: '"Rajdhani", sans-serif',
+                      color: '#FFD700',
+                      opacity: fadeOut ? 0 : 1,
+                      transition: 'opacity 0.5s ease',
+                    }}
+                  >
+                    <span style={{ fontSize: 24 }}>{info?.icon || '?'}</span>
+                    <div>
+                      <div style={{ fontSize: 14, fontWeight: 700, color: '#FF9800', letterSpacing: 1, textTransform: 'uppercase' as const }}>
+                        WEAPON EVOLVED!
+                      </div>
+                      <div style={{ fontSize: 13, color: '#E8E0D4' }}>
+                        {info?.name || toast.weaponId} — {info?.desc || ''}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Phase 3 Task 7: ARSynergyBar — 활성 시너지 아이콘 바 */}
+          <ARSynergyBar synergies={arUiState.synergies} />
         </>
       )}
 
