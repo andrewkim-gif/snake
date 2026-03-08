@@ -93,7 +93,7 @@ function drawLandmarkIcon(
   switch (arch) {
     case 'TOWER':
     case 'CLOCK_TOWER':
-    case 'TILTED_TOWER': {
+    case 'MINARET': {
       // 삼각형 타워 실루엣
       ctx.beginPath();
       ctx.moveTo(cx - iw * 0.3, iy + ih);
@@ -120,7 +120,7 @@ function drawLandmarkIcon(
       ctx.fill();
       break;
     }
-    case 'DOME': {
+    case 'MOSQUE': {
       // 돔 (반원 + 직사각형 베이스)
       ctx.beginPath();
       ctx.arc(cx, iy + ih * 0.55, iw * 0.35, Math.PI, 0);
