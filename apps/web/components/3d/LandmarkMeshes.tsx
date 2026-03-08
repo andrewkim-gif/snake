@@ -1,17 +1,16 @@
 'use client';
 
 /**
- * LandmarkMeshes — Mid/Close LOD 3D 형상 레이어 (v20 Phase 3)
+ * LandmarkMeshes — MC 복셀 스타일 3D 랜드마크 레이어 (v20 Phase 3 MC)
  *
  * 구현:
  *   - Archetype별 InstancedMesh (사용 중인 Archetype 수만큼 draw calls)
- *   - 프로시저럴 BufferGeometry (landmark-geometries.ts)
+ *   - MC 복셀 BoxGeometry (landmark-geometries.ts) — 모든 형상 박스만 사용
+ *   - MeshLambertMaterial + flatShading → MC 블록 미학
  *   - 구면 정렬: Quaternion.setFromUnitVectors로 지구 표면 수직 배치
  *   - Backface culling: dot(normal, camDir) < 0.05 → hide, fade 0.05~0.35
- *   - renderOrder = 95 (스프라이트=98, 라벨=100 아래)
+ *   - renderOrder = 95 (라벨=100 아래)
  *   - GC 방지: 모듈 스코프 temp 객체 사전 할당
- *
- * 최적화: Archetype별 InstancedMesh → 실제 사용 Archetype 수만큼 draw calls (~12-15)
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
@@ -56,35 +55,35 @@ interface ArchetypeGroup {
 
 // ─── 머티리얼 (공유) ───
 
-// Archetype별 색상 테이블 — 각 건축물 유형에 맞는 따뜻한 색조
+// MC 스타일 색상 테이블 — 마인크래프트 블록 느낌의 선명한 색상
 const ARCHETYPE_COLORS: Record<string, string> = {
-  [LandmarkArchetype.TOWER]:         '#D4A574', // 따뜻한 샌드
-  [LandmarkArchetype.PYRAMID]:       '#C8A850', // 사막 골드
-  [LandmarkArchetype.DOME]:          '#E8D5B0', // 아이보리
-  [LandmarkArchetype.NEEDLE]:        '#B0C4DE', // 스틸 블루
-  [LandmarkArchetype.STATUE]:        '#8FBC8F', // 청록 (구리 녹)
-  [LandmarkArchetype.WALL]:          '#A0896C', // 갈색 돌
-  [LandmarkArchetype.ARENA]:         '#D2B48C', // 탠
-  [LandmarkArchetype.BRIDGE]:        '#CD5C5C', // 인디안 레드 (골든게이트)
-  [LandmarkArchetype.PAGODA]:        '#B8860B', // 다크 골드로드
-  [LandmarkArchetype.SHELLS]:        '#F5F5DC', // 베이지
-  [LandmarkArchetype.ONION_DOME]:    '#E6BE8A', // 골드
-  [LandmarkArchetype.MOUNTAIN]:      '#708090', // 슬레이트 그레이
-  [LandmarkArchetype.TWIN_TOWER]:    '#C0C0C0', // 실버
-  [LandmarkArchetype.BRIDGE_TOP]:    '#A9A9A9', // 다크 그레이
-  [LandmarkArchetype.SPIRE_CLUSTER]: '#DAA520', // 골든로드
-  [LandmarkArchetype.SKYSCRAPER]:    '#B8B8B8', // 밝은 그레이
-  [LandmarkArchetype.CLOCK_TOWER]:   '#DEB887', // 벌리우드
-  [LandmarkArchetype.TILTED_TOWER]:  '#F5DEB3', // 밀 색
-  [LandmarkArchetype.TEMPLE]:        '#DCDCDC', // 대리석 화이트
-  [LandmarkArchetype.GATE]:          '#C8B88A', // 사암
-  [LandmarkArchetype.WINDMILL]:      '#8B7355', // 나무 브라운
-  [LandmarkArchetype.CASTLE]:        '#A9A9A9', // 성 회색
-  [LandmarkArchetype.STONE_RING]:    '#808080', // 돌 회색
-  [LandmarkArchetype.OBELISK]:       '#F0E68C', // 카키
-  [LandmarkArchetype.TERRACE]:       '#9ACD32', // 옐로 그린 (테라스)
-  [LandmarkArchetype.MESA]:          '#CD853F', // 페루
-  [LandmarkArchetype.MONOLITH]:      '#CC4400', // 울루루 레드
+  [LandmarkArchetype.TOWER]:         '#B87333', // MC 구리/철 (에펠탑)
+  [LandmarkArchetype.PYRAMID]:       '#D4A017', // MC 사암 골드
+  [LandmarkArchetype.DOME]:          '#E0C88C', // MC 석영 블록
+  [LandmarkArchetype.NEEDLE]:        '#8899AA', // MC 철 블록
+  [LandmarkArchetype.STATUE]:        '#5D8A5D', // MC 산화 구리 (녹)
+  [LandmarkArchetype.WALL]:          '#7A6652', // MC 돌 벽돌
+  [LandmarkArchetype.ARENA]:         '#C19A6B', // MC 사암
+  [LandmarkArchetype.BRIDGE]:        '#CC3333', // MC 레드스톤 (골든게이트)
+  [LandmarkArchetype.PAGODA]:        '#AA3322', // MC 네더 벽돌 (기와)
+  [LandmarkArchetype.SHELLS]:        '#E8E0D0', // MC 석영
+  [LandmarkArchetype.ONION_DOME]:    '#DD8833', // MC 구리 (산화 전)
+  [LandmarkArchetype.MOUNTAIN]:      '#6B7B6B', // MC 이끼 낀 돌
+  [LandmarkArchetype.TWIN_TOWER]:    '#9999AA', // MC 철 블록
+  [LandmarkArchetype.BRIDGE_TOP]:    '#8888AA', // MC 돌
+  [LandmarkArchetype.SPIRE_CLUSTER]: '#CC8833', // MC 벌집 블록
+  [LandmarkArchetype.SKYSCRAPER]:    '#7799BB', // MC 프리즈머린
+  [LandmarkArchetype.CLOCK_TOWER]:   '#C8A060', // MC 버치 판자
+  [LandmarkArchetype.TILTED_TOWER]:  '#D4C4A4', // MC 석영 + 사암
+  [LandmarkArchetype.TEMPLE]:        '#CCCCCC', // MC 매끈한 돌
+  [LandmarkArchetype.GATE]:          '#AA9966', // MC 사암 계단
+  [LandmarkArchetype.WINDMILL]:      '#8B6914', // MC 오크 판자
+  [LandmarkArchetype.CASTLE]:        '#777788', // MC 돌 벽돌
+  [LandmarkArchetype.STONE_RING]:    '#666666', // MC 돌
+  [LandmarkArchetype.OBELISK]:       '#D4C060', // MC 골드 블록
+  [LandmarkArchetype.TERRACE]:       '#669944', // MC 잔디 블록
+  [LandmarkArchetype.MESA]:          '#BB6622', // MC 테라코타
+  [LandmarkArchetype.MONOLITH]:      '#993311', // MC 적색 사암
 };
 
 // ─── ArchetypeInstancedMesh 서브 컴포넌트 ───
@@ -105,14 +104,13 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
   const material = useMemo(() => {
     const colorHex = ARCHETYPE_COLORS[group.archetype] || '#CCCCCC';
     const color = new THREE.Color(colorHex);
-    return new THREE.MeshStandardMaterial({
+    // MC 스타일: MeshLambertMaterial + flatShading (복셀 미학)
+    return new THREE.MeshLambertMaterial({
       color: color,
-      roughness: 0.6,
-      metalness: 0.15,
       flatShading: true,
-      // emissive로 야간(태양 반대편)에서도 형태가 보이게
-      emissive: color.clone().multiplyScalar(0.3),
-      emissiveIntensity: 0.6,
+      // emissive로 야간에도 형태 보이게 (MC 밝기 레벨 느낌)
+      emissive: color.clone().multiplyScalar(0.25),
+      emissiveIntensity: 0.5,
     });
   }, [group.archetype]);
 
