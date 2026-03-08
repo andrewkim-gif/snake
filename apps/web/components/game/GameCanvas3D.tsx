@@ -67,8 +67,6 @@ import { KillFeedHUD } from './KillFeedHUD';
 import { BattleResultOverlay } from './BattleResultOverlay';
 import { SpectatorMode } from './SpectatorMode';
 import type { SpectatorTarget } from './SpectatorMode';
-import { useAudio } from '@/hooks/useAudio';
-import type { AmbienceTheme } from '@/hooks/useAudio';
 import { useSoundEngine } from '@/hooks/useSoundEngine';
 import { PostProcessingEffects, CSSVignetteOverlay, CSSChromaticOverlay } from '@/components/3d/PostProcessingEffects';
 import type { FXQualityLevel } from '@/components/3d/PostProcessingEffects';
@@ -83,6 +81,20 @@ import { ScoreboardOverlay, useScoreboardToggle } from './ScoreboardOverlay';
 import { WeaponRenderer } from '@/components/3d/WeaponRenderer';
 import { DamageNumbers } from '@/components/3d/DamageNumbers';
 import { CapturePointRenderer } from '@/components/3d/CapturePointRenderer';
+
+// v19 Phase 2: AR 컴포넌트 imports
+import { ARInterpolationTick } from '@/components/game/ar/ARInterpolationTick';
+import { ARCamera } from '@/components/game/ar/ARCamera';
+import { ARPlayer } from '@/components/game/ar/ARPlayer';
+import { AREntities } from '@/components/game/ar/AREntities';
+import { ARTerrain } from '@/components/game/ar/ARTerrain';
+import { ARHUD } from '@/components/game/ar/ARHUD';
+import { ARMinimap } from '@/components/game/ar/ARMinimap';
+import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
+import { getInterpolatedPos } from '@/lib/3d/ar-interpolation';
+import type { ARState, ARMinimapEntity, ARTerrainTheme } from '@/lib/3d/ar-types';
+import type { ARUiState, AREvent } from '@/hooks/useSocket';
+import type { ARChoice } from '@/lib/3d/ar-types';
 
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
@@ -102,6 +114,17 @@ interface GameCanvas3DProps {
   arenaSeed?: number;
   /** v19: 아레나 반경 (MC 블록 단위, 기본 80) */
   arenaRadius?: number;
+  // v19 Phase 2: AR data pipeline props
+  /** Raw AR state ref (20Hz, for 3D useFrame consumers) */
+  arStateRef?: React.MutableRefObject<ARState | null>;
+  /** AR interpolation state ref (20Hz → 60fps smooth positions) */
+  arInterpRef?: React.MutableRefObject<ARInterpolationState>;
+  /** AR event queue ref (damage, kill, boss events) */
+  arEventQueueRef?: React.MutableRefObject<AREvent[]>;
+  /** AR UI state (250ms throttle, for HTML overlay components) */
+  arUiState?: ARUiState;
+  /** AR choice callback (level-up tome/weapon selection) */
+  sendARChoice?: (choice: ARChoice) => void;
 }
 
 export function GameCanvas3D({
@@ -118,6 +141,11 @@ export function GameCanvas3D({
   isArenaMode = false,
   arenaSeed,
   arenaRadius = MC_BLOCK_CONSTANTS.ARENA_RADIUS_BLOCKS,
+  arStateRef,
+  arInterpRef,
+  arEventQueueRef,
+  arUiState,
+  sendARChoice,
 }: GameCanvas3DProps) {
   // ─── Refs ───
   const agentsRef = useRef<AgentNetworkData[]>([]);
@@ -134,6 +162,16 @@ export function GameCanvas3D({
   // v14 S09: 플레이어 ID ref (FlagSprite용, rAF에서 동기화)
   const playerIdRef = useRef<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  // v19: 아레나 로딩 오버레이 (지형 생성 + 서버 상태 수신 완료까지)
+  const [arenaLoading, setArenaLoading] = useState(isArenaMode);
+  const [loadProgress, setLoadProgress] = useState(0); // 0-100
+  const [loadStatus, setLoadStatus] = useState('Connecting to server...');
+  const terrainReadyRef = useRef(false);
+  const serverReadyRef = useRef(false);
+
+  // v19 Phase 2: AR-specific refs
+  const arPlayerPosRef = useRef({ x: 0, y: 0, z: 0 });
+  const arYawRef = useRef(0);
 
   // v16: InputManager + TPSCamera refs
   const cameraRef = useRef<Camera | null>(null);
@@ -268,10 +306,69 @@ export function GameCanvas3D({
   // v14: Tab scoreboard toggle
   const scoreboardVisible = useScoreboardToggle();
 
-  // v12 S24: Audio system
-  const { playSFX, startAmbience, stopAmbience, toggleMute, isMuted } = useAudio();
-  const prevKillCountRef = useRef(0);
   const prevLevelRef = useRef(0);
+
+  // v19: 아레나 로딩 진행률 추적 — 지형 생성 + 서버 상태 수신
+  useEffect(() => {
+    if (!arenaLoading) return;
+    const interval = setInterval(() => {
+      let progress = 0;
+      let status = 'Connecting to server...';
+
+      // 서버 연결 상태 (0-30%)
+      if (uiState.connected) {
+        progress += 15;
+        status = 'Connected. Joining arena...';
+      }
+      if (uiState.currentRoomId) {
+        progress += 15;
+        status = 'Joined! Generating terrain...';
+      }
+
+      // 지형 생성 완료 (30-70%)
+      if (terrainReadyRef.current) {
+        progress += 40;
+        status = 'Terrain ready. Waiting for game state...';
+      }
+
+      // 서버 게임 상태 수신 (70-100%)
+      const state = dataRef.current.latestState;
+      const pid = dataRef.current.playerId;
+      if (state && pid) {
+        progress += 15;
+        status = 'Receiving game data...';
+        if (state.s.find(a => a.i === pid)) {
+          progress = 100;
+          status = 'Ready!';
+          serverReadyRef.current = true;
+        }
+      }
+
+      setLoadProgress(Math.min(progress, 100));
+      setLoadStatus(status);
+
+      // 지형 + 서버 모두 준비되면 로딩 해제
+      if (terrainReadyRef.current && serverReadyRef.current) {
+        setTimeout(() => setArenaLoading(false), 300); // 짧은 딜레이로 "Ready!" 표시
+        clearInterval(interval);
+      }
+    }, 150);
+
+    // 10초 타임아웃: 어떤 이유든 너무 오래 걸리면 강제 해제
+    const timeout = setTimeout(() => {
+      setArenaLoading(false);
+    }, 10000);
+
+    return () => {
+      clearInterval(interval);
+      clearTimeout(timeout);
+    };
+  }, [arenaLoading, dataRef, uiState.connected, uiState.currentRoomId]);
+
+  // MCTerrain onTerrainReady 콜백
+  const handleTerrainReady = useCallback(() => {
+    terrainReadyRef.current = true;
+  }, []);
 
   // ─── v19: 아레나 시드 결정 (prop 우선, 없으면 roomId에서 해시) ───
   const effectiveArenaSeed = arenaSeed ?? countryHash(uiState.currentRoomId ?? 'default');
@@ -289,40 +386,15 @@ export function GameCanvas3D({
     }
   }, [terrainTheme]);
 
-  // v12 S24: 테마별 앰비언스 시작/정지
-  useEffect(() => {
-    const validThemes: AmbienceTheme[] = ['forest', 'desert', 'mountain', 'urban', 'arctic', 'island'];
-    if (validThemes.includes(terrainTheme as AmbienceTheme)) {
-      startAmbience(terrainTheme as AmbienceTheme);
-    }
-    return () => stopAmbience();
-  }, [terrainTheme, startAmbience, stopAmbience]);
-
-  // v12 S24: 킬 SFX (killFeed 변화 감지)
-  useEffect(() => {
-    const feed = dataRef.current.killFeed;
-    if (feed.length > prevKillCountRef.current) {
-      playSFX('kill');
-    }
-    prevKillCountRef.current = feed.length;
-  });
-
-  // v12 S24: 레벨업 SFX
+  // v16: 레벨업 SFX (soundEngine)
   useEffect(() => {
     if (uiState.levelUp && uiState.levelUp.level > prevLevelRef.current) {
-      playSFX('level_up');
+      soundEngine.playUI('levelup');
     }
     if (uiState.levelUp) {
       prevLevelRef.current = uiState.levelUp.level;
     }
-  }, [uiState.levelUp, playSFX]);
-
-  // v12 S24: 사망 SFX
-  useEffect(() => {
-    if (uiState.deathInfo && uiState.isSpectating) {
-      playSFX('death');
-    }
-  }, [uiState.isSpectating, uiState.deathInfo, playSFX]);
+  }, [uiState.levelUp, soundEngine]);
 
   // v16 Phase 8: 킬캠 트리거 (사망 + 킬러 존재 시)
   useEffect(() => {
@@ -557,6 +629,7 @@ export function GameCanvas3D({
     >
       {/* ─── R3F Canvas ─── */}
       <Canvas
+        flat={isArenaMode}
         dpr={[1, 1.5]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
         camera={{ fov: 50, near: 1, far: 5000, position: [0, 500, 400] }}
@@ -564,25 +637,41 @@ export function GameCanvas3D({
       >
         {/* 실행 순서: JSX 마운트 순서 = useFrame 실행 순서 (priority 0) */}
 
-        {/* 1. GameLoop — 서버 상태 보간 + 클라이언트 예측 */}
-        <GameLoop
-          dataRef={dataRef}
-          agentsRef={agentsRef}
-          angleRef={angleRef}
-          boostRef={boostRef}
-          inputStateRef={inputManager.inputRef}
-        />
+        {/* v19 Phase 2: AR Interpolation Tick — 모든 AR 컴포넌트보다 먼저 (JSX mount order) */}
+        {isArenaMode && arInterpRef && (
+          <ARInterpolationTick interpRef={arInterpRef} />
+        )}
 
-        {/* 2. TPSCamera — v16 TPS 오비탈 카메라 (보간된 Agent 위치 추적) */}
-        <TPSCamera
-          agentsRef={agentsRef}
-          dataRef={dataRef}
-          inputManager={inputManager}
-          cameraRef={cameraRef}
-          playerPosRef={playerPosRef}
-          killcamRef={killcamRef}
-          observerRef={observerRef}
-        />
+        {/* 1. GameLoop — 서버 상태 보간 + 클라이언트 예측 (classic only) */}
+        {!isArenaMode && (
+          <GameLoop
+            dataRef={dataRef}
+            agentsRef={agentsRef}
+            angleRef={angleRef}
+            boostRef={boostRef}
+            inputStateRef={inputManager.inputRef}
+            isArenaMode={isArenaMode}
+          />
+        )}
+
+        {/* 2. Camera — 배타적 마운트 (ADR-006: TPSCamera XOR ARCamera) */}
+        {isArenaMode ? (
+          <ARCamera
+            playerPosRef={arPlayerPosRef}
+            locked={!menuOpen}
+            yawRef={arYawRef}
+          />
+        ) : (
+          <TPSCamera
+            agentsRef={agentsRef}
+            dataRef={dataRef}
+            inputManager={inputManager}
+            cameraRef={cameraRef}
+            playerPosRef={playerPosRef}
+            killcamRef={killcamRef}
+            observerRef={observerRef}
+          />
+        )}
 
         {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별, v19: 아레나 모드 MC 조명) */}
         <Scene timeRemaining={uiState.timeRemaining} theme={terrainTheme} isArenaMode={isArenaMode} />
@@ -590,43 +679,92 @@ export function GameCanvas3D({
         {/* 4. SkyBox — 하늘 돔 + 구름 */}
         <SkyBox />
 
-        {/* 5. AgentInstances — MC 복셀 캐릭터 InstancedMesh 렌더링 */}
-        <AgentInstances
-          agentsRef={agentsRef}
-          elapsedRef={elapsedRef}
-          stateMachineRef={stateMachineRef}
-          agentIndexMapRef={agentIndexMapRef}
-          particlesRef={particlesRef}
-          isArenaMode={isArenaMode}
-          arenaSeed={effectiveArenaSeed}
-        />
-
-        {/* 5.1. FlagSprite — 에이전트 머리 위 국기 + 이름 Billboard (v14 S09) */}
-        <FlagSprite
-          agentsRef={agentsRef}
-          playerIdRef={playerIdRef}
-          playerNationality={uiState.nationality ?? ''}
-        />
-
-        {/* 5.5. EquipmentInstances — 장비(모자/무기/등) InstancedMesh 렌더링 (Phase 5) */}
-        <EquipmentInstances
-          agentsRef={agentsRef}
-          elapsedRef={elapsedRef}
-          stateMachineRef={stateMachineRef}
-          agentIndexMapRef={agentIndexMapRef}
-        />
-
-        {/* 6. Terrain — v19: 아레나 모드이면 MCTerrain, 아니면 기존 HeightmapTerrain/ZoneTerrain */}
+        {/* 5. 캐릭터/엔티티 — 배타적 마운트 (Classic vs Arena) */}
         {isArenaMode ? (
-          <MCTerrain
-            seed={effectiveArenaSeed}
-            customBlocks={[]}
-            arenaMode={{
-              radius: arenaRadius,
-              flattenVariance: 5,
-              seed: effectiveArenaSeed,
-            }}
-          />
+          <>
+            {/* v19 Phase 2: ARPlayer — 로컬 플레이어 복셀 캐릭터 */}
+            <ARPlayer
+              position={(() => {
+                if (!arInterpRef || !dataRef.current.playerId) return [0, 0, 0] as [number, number, number];
+                const pos = getInterpolatedPos(arInterpRef.current, dataRef.current.playerId);
+                return pos ? [pos.x, 0, pos.z] as [number, number, number] : [0, 0, 0] as [number, number, number];
+              })()}
+              rotation={(() => {
+                if (!arInterpRef || !dataRef.current.playerId) return 0;
+                const pos = getInterpolatedPos(arInterpRef.current, dataRef.current.playerId);
+                return pos?.rot ?? 0;
+              })()}
+              moving={(() => {
+                // 이동 여부는 보간된 position delta로 추론
+                if (!arInterpRef || !dataRef.current.playerId) return false;
+                const entity = arInterpRef.current.entities.get(dataRef.current.playerId);
+                if (!entity) return false;
+                const dx = entity.currX - entity.prevX;
+                const dz = entity.currZ - entity.prevZ;
+                return dx * dx + dz * dz > 0.001;
+              })()}
+              attackRange={3.0}
+              hpRatio={arUiState ? (arUiState.maxHp > 0 ? arUiState.hp / arUiState.maxHp : 0) : 0}
+              posRef={arPlayerPosRef}
+            />
+
+            {/* v19 Phase 2: AREntities — 적 + XP 크리스탈 InstancedMesh */}
+            <AREntities
+              enemies={arStateRef?.current?.enemies ?? []}
+              xpCrystals={arStateRef?.current?.xpCrystals ?? []}
+              playerPos={arPlayerPosRef.current}
+            />
+          </>
+        ) : (
+          <>
+            {/* Classic: AgentInstances — MC 복셀 캐릭터 InstancedMesh 렌더링 */}
+            <AgentInstances
+              agentsRef={agentsRef}
+              elapsedRef={elapsedRef}
+              stateMachineRef={stateMachineRef}
+              agentIndexMapRef={agentIndexMapRef}
+              particlesRef={particlesRef}
+              isArenaMode={isArenaMode}
+              arenaSeed={effectiveArenaSeed}
+            />
+
+            {/* Classic: FlagSprite — 에이전트 머리 위 국기 + 이름 Billboard */}
+            <FlagSprite
+              agentsRef={agentsRef}
+              playerIdRef={playerIdRef}
+              playerNationality={uiState.nationality ?? ''}
+            />
+
+            {/* Classic: EquipmentInstances — 장비 InstancedMesh 렌더링 */}
+            <EquipmentInstances
+              agentsRef={agentsRef}
+              elapsedRef={elapsedRef}
+              stateMachineRef={stateMachineRef}
+              agentIndexMapRef={agentIndexMapRef}
+            />
+          </>
+        )}
+
+        {/* 6. Terrain — v19: 아레나 모드이면 ARTerrain + MCTerrain, 아니면 기존 HeightmapTerrain/ZoneTerrain */}
+        {isArenaMode ? (
+          <>
+            {/* v19 Phase 2: ARTerrain — 국가 테마별 바닥 + 장애물 (meter 단위) */}
+            <ARTerrain
+              theme={(arStateRef?.current?.terrain ?? 'urban') as ARTerrainTheme}
+              arenaRadius={arStateRef?.current?.arenaRadius ?? 40}
+            />
+            {/* MCTerrain — 복셀 지형 (기존 MC 블록 스타일 바닥) */}
+            <MCTerrain
+              seed={effectiveArenaSeed}
+              customBlocks={[]}
+              arenaMode={{
+                radius: arenaRadius,
+                flattenVariance: 5,
+                seed: effectiveArenaSeed,
+              }}
+              onTerrainReady={handleTerrainReady}
+            />
+          </>
         ) : (
           <>
             {uiState.heightmapData ? (
@@ -662,70 +800,135 @@ export function GameCanvas3D({
         {/* 9. MapStructures — 맵 구조물 (아레나 모드에서는 비활성 — MCTerrain이 대체) */}
         {!isArenaMode && <MapStructures arenaRadius={ARENA_CONFIG.radius} />}
 
-        {/* 10. OrbInstances — 오브 복셀 큐브 InstancedMesh */}
-        <OrbInstances orbsRef={orbsRef} />
+        {/* 10-17: Classic-only 3D 컴포넌트 (v19 Phase 2: isArenaMode 시 비활성) */}
+        {!isArenaMode && (
+          <>
+            {/* 10. OrbInstances — 오브 복셀 큐브 InstancedMesh */}
+            <OrbInstances orbsRef={orbsRef} />
 
-        {/* 11. MCParticles — MC 스타일 파티클 엔진 */}
+            {/* 12. AuraRings — Agent 전투 오라 시각화 */}
+            <AuraRings agentsRef={agentsRef} />
+
+            {/* 13. BuildEffects — 빌드별 시각 이펙트 (글로우/잔상/보호막) */}
+            <BuildEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
+
+            {/* 14. AbilityEffects — 어빌리티 발동 이펙트 (6종) */}
+            <AbilityEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
+
+            {/* 15. WeaponRenderer — v14 무기 파티클 VFX */}
+            <WeaponRenderer damageEvents={uiState.damageEvents} />
+
+            {/* 16. DamageNumbers — v14 플로팅 대미지 숫자 */}
+            <DamageNumbers damageEvents={uiState.damageEvents} />
+
+            {/* 17. CapturePointRenderer — v14 거점 빔/영역/점령 */}
+            <CapturePointRenderer capturePoints={uiState.capturePoints} />
+          </>
+        )}
+
+        {/* 11. MCParticles — MC 스타일 파티클 엔진 (공유) */}
         <MCParticles ref={particlesRef} />
 
-        {/* 12. AuraRings — Agent 전투 오라 시각화 */}
-        <AuraRings agentsRef={agentsRef} />
-
-        {/* 13. BuildEffects — 빌드별 시각 이펙트 (글로우/잔상/보호막) */}
-        <BuildEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
-
-        {/* 14. AbilityEffects — 어빌리티 발동 이펙트 (6종) */}
-        <AbilityEffects agentsRef={agentsRef} elapsedRef={elapsedRef} />
-
-        {/* 15. WeaponRenderer — v14 무기 파티클 VFX (10종 무기, LOD)
-            damageEvents delivered via damage_dealt WS event → uiState.damageEvents */}
-        <WeaponRenderer
-          damageEvents={uiState.damageEvents}
-        />
-
-        {/* 16. DamageNumbers — v14 플로팅 대미지 숫자 (128 풀) */}
-        <DamageNumbers
-          damageEvents={uiState.damageEvents}
-        />
-
-        {/* 17. CapturePointRenderer — v14 거점 빔/영역/점령 프로그레스
-            capturePoints delivered via capture_point_update WS event → uiState.capturePoints */}
-        <CapturePointRenderer
-          capturePoints={uiState.capturePoints}
-        />
-
         {/* 18. PostProcessingEffects — v16 Phase 7 (크로매틱 수차 + 비네팅) */}
-        <PostProcessingEffects
-          quality={soundEngine.fxQuality as FXQualityLevel}
-          chromaticIntensity={chromaticIntensity}
-          vignetteIntensity={vignetteIntensity}
-        />
+        {/* v19: 아레나 모드에서는 PostProcessing 비활성 (MC reference 스타일 — 순수 렌더링) */}
+        {!isArenaMode && (
+          <PostProcessingEffects
+            quality={soundEngine.fxQuality as FXQualityLevel}
+            chromaticIntensity={chromaticIntensity}
+            vignetteIntensity={vignetteIntensity}
+          />
+        )}
 
         {/* 19. WeatherEffects — v16 Phase 8 (비/눈/모래 파티클 + fog) */}
-        <WeatherEffects weather={uiState.weather} />
+        {!isArenaMode && <WeatherEffects weather={uiState.weather} />}
       </Canvas>
 
-      {/* ─── v16 Phase 7: CSS Fallback Overlays (모바일/low 설정) ─── */}
-      {soundEngine.fxQuality === 'low' && (
+      {/* ─── v19: 아레나 로딩 오버레이 (실제 진행률 추적) ─── */}
+      {arenaLoading && (
+        <div style={{
+          position: 'absolute', inset: 0,
+          display: 'flex', flexDirection: 'column',
+          alignItems: 'center', justifyContent: 'center',
+          backgroundColor: 'rgba(0, 0, 0, 0.9)',
+          zIndex: 50, fontFamily: '"Rajdhani", sans-serif',
+          color: '#E8E0D4', gap: 16,
+        }}>
+          <div style={{
+            fontSize: 28, fontWeight: 700, letterSpacing: 3,
+            textTransform: 'uppercase', color: '#CC9933',
+          }}>
+            ARENA
+          </div>
+          {/* 실제 진행률 바 */}
+          <div style={{
+            width: 240, height: 6, backgroundColor: '#222',
+            borderRadius: 3, overflow: 'hidden', border: '1px solid #333',
+          }}>
+            <div style={{
+              width: `${loadProgress}%`, height: '100%',
+              backgroundColor: loadProgress >= 100 ? '#4A9E4A' : '#CC9933',
+              borderRadius: 3,
+              transition: 'width 0.3s ease, background-color 0.3s ease',
+            }} />
+          </div>
+          {/* 진행률 퍼센트 */}
+          <div style={{ fontSize: 14, color: '#CC9933', fontWeight: 600 }}>
+            {loadProgress}%
+          </div>
+          {/* 현재 상태 */}
+          <div style={{ fontSize: 13, color: '#888' }}>
+            {loadStatus}
+          </div>
+        </div>
+      )}
+
+      {/* ─── v16 Phase 7: CSS Fallback Overlays (모바일/low 설정, 아레나 모드 비활성) ─── */}
+      {!isArenaMode && soundEngine.fxQuality === 'low' && (
         <>
           <CSSVignetteOverlay intensity={vignetteIntensity} />
           <CSSChromaticOverlay intensity={chromaticIntensity} />
         </>
       )}
 
-      {/* v16 Phase 8: 모바일 듀얼 조이스틱 */}
-      <MobileControls inputManager={inputManager} enabled={!menuOpen && uiState.alive} />
+      {/* v16 Phase 8: 모바일 듀얼 조이스틱 (classic only) */}
+      {!isArenaMode && <MobileControls inputManager={inputManager} enabled={!menuOpen && uiState.alive} />}
 
-      {/* v16 Phase 8: Lightning flash overlay */}
-      <LightningFlashOverlay weather={uiState.weather} />
+      {/* v16 Phase 8: Lightning flash overlay (classic only) */}
+      {!isArenaMode && <LightningFlashOverlay weather={uiState.weather} />}
 
-      {/* v16 Phase 8: Weather HUD (좌상단) */}
-      <WeatherHUD weather={uiState.weather} />
+      {/* v16 Phase 8: Weather HUD (classic only) */}
+      {!isArenaMode && <WeatherHUD weather={uiState.weather} />}
 
-      {/* ─── HTML HUD 오버레이 (Canvas 밖) ─── */}
+      {/* ─── v19 Phase 2: AR HTML HUD (isArenaMode only) ─── */}
+      {isArenaMode && arUiState && (
+        <>
+          <ARHUD
+            hp={arUiState.hp}
+            maxHp={arUiState.maxHp}
+            xp={arUiState.xp}
+            xpToNext={arUiState.xpToNext}
+            level={arUiState.level}
+            phase={arUiState.phase}
+            timer={arUiState.timer}
+            wave={arUiState.wave}
+            kills={arUiState.kills}
+            alive={arUiState.alive}
+          />
+          <ARMinimap
+            entities={buildMinimapEntities(arStateRef?.current, dataRef.current.playerId)}
+            playerX={arPlayerPosRef.current.x}
+            playerZ={arPlayerPosRef.current.z}
+            arenaRadius={arStateRef?.current?.arenaRadius ?? 40}
+            pvpRadius={arUiState.pvpRadius || undefined}
+            phase={arUiState.phase}
+          />
+        </>
+      )}
+
+      {/* ─── HTML HUD 오버레이 (Canvas 밖) — Classic only ─── */}
 
       {/* v14: EpochHUD — 에포크 타이머 + 페이즈 뱃지 + KDA (상단 중앙) */}
-      {uiState.epoch && (
+      {!isArenaMode && uiState.epoch && (
         <EpochHUD
           epochNumber={uiState.epoch.epochNumber}
           phase={uiState.epoch.phase}
@@ -735,7 +938,6 @@ export function GameCanvas3D({
           nationScores={uiState.epoch.nationScores}
           kills={myAgent?.ks ?? 0}
           deaths={
-            // v14: epoch_scoreboard에서 사망 수 추출 (없으면 0)
             uiState.epochScoreboard.find(e => e.id === dataRef.current.playerId)?.deaths ?? 0
           }
           assists={
@@ -752,60 +954,66 @@ export function GameCanvas3D({
         />
       )}
 
-      {/* v14: War Countdown Overlay (전쟁 카운트다운 3-2-1) */}
-      {uiState.warCountdown != null && uiState.warCountdown > 0 && (
+      {/* v14: War Countdown Overlay (classic only) */}
+      {!isArenaMode && uiState.warCountdown != null && uiState.warCountdown > 0 && (
         <WarCountdownOverlay countdown={uiState.warCountdown} />
       )}
 
-      {/* v14: War Vignette (전쟁/수축 페이즈 적색 비네트) */}
-      <WarVignetteOverlay
-        active={uiState.epoch?.phase === 'war' || uiState.epoch?.phase === 'shrink'}
-        intensity={uiState.epoch?.phase === 'shrink' ? 0.7 : 0.5}
-      />
+      {/* v14: War Vignette (classic only) */}
+      {!isArenaMode && (
+        <WarVignetteOverlay
+          active={uiState.epoch?.phase === 'war' || uiState.epoch?.phase === 'shrink'}
+          intensity={uiState.epoch?.phase === 'shrink' ? 0.7 : 0.5}
+        />
+      )}
 
-      {/* v14: Respawn Overlay (리스폰 카운트다운 + 부활 이펙트) */}
-      {uiState.respawnState && (
+      {/* v14: Respawn Overlay (classic only) */}
+      {!isArenaMode && uiState.respawnState && (
         <RespawnOverlay
           countdown={uiState.respawnState.countdown}
           isRespawning={uiState.respawnState.isRespawning}
         />
       )}
 
-      {/* v12 S24: 킬피드 (좌측 상단) */}
-      <KillFeedHUD dataRef={dataRef} />
+      {/* v12 S24: 킬피드 (classic only) */}
+      {!isArenaMode && <KillFeedHUD dataRef={dataRef} />}
 
-      {/* v12 S24: 음소거 토글 버튼 (우상단) — v16: 새 SoundEngine도 동기 */}
-      <MuteButton isMuted={isMuted} onToggle={() => { toggleMute(); soundEngine.toggleMute(); }} />
+      {/* v16: 음소거 토글 버튼 (공유) */}
+      <MuteButton isMuted={soundEngine.isMuted} onToggle={() => soundEngine.toggleMute()} />
 
-      {/* 전투 보너스 토스트 (입장 시 4초) */}
+      {/* 전투 보너스 토스트 (공유) */}
       {terrainToast && <TerrainBonusToast text={terrainToast} />}
 
-      <ShrinkWarning
-        shrinkData={uiState.arenaShrink}
-        playerDistance={playerDistance}
-        currentRadius={currentRadius}
-      />
+      {/* Classic-only HUD 컴포넌트 (v19 Phase 2: isArenaMode 시 비활성) */}
+      {!isArenaMode && (
+        <>
+          <ShrinkWarning
+            shrinkData={uiState.arenaShrink}
+            playerDistance={playerDistance}
+            currentRadius={currentRadius}
+          />
 
-      {dismissSynergyPopup && (
-        <SynergyPopup
-          synergies={uiState.synergyPopups}
-          onDismiss={dismissSynergyPopup}
-        />
-      )}
+          {dismissSynergyPopup && (
+            <SynergyPopup
+              synergies={uiState.synergyPopups}
+              onDismiss={dismissSynergyPopup}
+            />
+          )}
 
-      <BuildHUD build={null} />
+          <BuildHUD build={null} />
 
-      {/* 빌드 타입 인디케이터 */}
-      {myAgent?.bt && myAgent.bt !== 'balanced' && (
-        <BuildTypeIndicator buildType={myAgent.bt} />
-      )}
+          {myAgent?.bt && myAgent.bt !== 'balanced' && (
+            <BuildTypeIndicator buildType={myAgent.bt} />
+          )}
 
-      {myAgent && (
-        <XPBar
-          level={myAgent.lv ?? 1}
-          xp={0}
-          xpToNext={100}
-        />
+          {myAgent && (
+            <XPBar
+              level={myAgent.lv ?? 1}
+              xp={0}
+              xpToNext={100}
+            />
+          )}
+        </>
       )}
 
       {showTimer && <RoundTimerHUD timeRemaining={uiState.timeRemaining} />}
@@ -862,48 +1070,52 @@ export function GameCanvas3D({
         />
       )}
 
-      {/* ─── 팩션 스코어보드 (우측 상단) ─── */}
-      <FactionScoreboard dataRef={dataRef} />
+      {/* ─── 팩션 스코어보드 (우측 상단, classic only) ─── */}
+      {!isArenaMode && <FactionScoreboard dataRef={dataRef} />}
 
-      {/* ─── 국가 이름 (미니맵 상단) ─── */}
-      <MinimapHUD
-        dataRef={dataRef}
-        arenaRadius={ARENA_CONFIG.radius}
-        shrinkData={uiState.arenaShrink}
-        countryName={(() => {
-          const iso = uiState.currentRoomId;
-          if (!iso) return undefined;
-          const cs = uiState.countryStates.get(iso);
-          return cs?.name ?? iso;
-        })()}
-        countryTier={(() => {
-          const iso = uiState.currentRoomId;
-          if (!iso) return undefined;
-          const cs = uiState.countryStates.get(iso);
-          return cs?.tier;
-        })()}
-      />
-
-      {/* ─── 미니맵 (우하단) — v16 Phase 8: heightmap 있으면 Minimap, 없으면 GameMinimap ─── */}
-      {uiState.heightmapData ? (
-        <Minimap
+      {/* ─── 국가 이름 (미니맵 상단, classic only) ─── */}
+      {!isArenaMode && (
+        <MinimapHUD
           dataRef={dataRef}
           arenaRadius={ARENA_CONFIG.radius}
           shrinkData={uiState.arenaShrink}
-          heightmapData={uiState.heightmapData}
-          biomeData={uiState.biomeData}
-          obstacleData={uiState.obstacleData}
-        />
-      ) : (
-        <GameMinimap
-          dataRef={dataRef}
-          arenaRadius={ARENA_CONFIG.radius}
-          shrinkData={uiState.arenaShrink}
+          countryName={(() => {
+            const iso = uiState.currentRoomId;
+            if (!iso) return undefined;
+            const cs = uiState.countryStates.get(iso);
+            return cs?.name ?? iso;
+          })()}
+          countryTier={(() => {
+            const iso = uiState.currentRoomId;
+            if (!iso) return undefined;
+            const cs = uiState.countryStates.get(iso);
+            return cs?.tier;
+          })()}
         />
       )}
 
-      {/* v14: ScoreboardOverlay — Tab키 스코어보드 + 에포크/국가 순위 */}
-      <ScoreboardOverlay
+      {/* ─── 미니맵 (우하단, classic only — AR uses ARMinimap above) ─── */}
+      {!isArenaMode && (
+        uiState.heightmapData ? (
+          <Minimap
+            dataRef={dataRef}
+            arenaRadius={ARENA_CONFIG.radius}
+            shrinkData={uiState.arenaShrink}
+            heightmapData={uiState.heightmapData}
+            biomeData={uiState.biomeData}
+            obstacleData={uiState.obstacleData}
+          />
+        ) : (
+          <GameMinimap
+            dataRef={dataRef}
+            arenaRadius={ARENA_CONFIG.radius}
+            shrinkData={uiState.arenaShrink}
+          />
+        )
+      )}
+
+      {/* v14: ScoreboardOverlay — Tab키 스코어보드 (classic only) */}
+      {!isArenaMode && <ScoreboardOverlay
         visible={scoreboardVisible}
         players={
           // v14: epoch_scoreboard 이벤트에서 전체 데이터 사용, 없으면 leaderboard + agent 상태에서 구성
@@ -941,13 +1153,71 @@ export function GameCanvas3D({
         currentPlayerId={dataRef.current.playerId ?? undefined}
         epochNumber={uiState.epoch?.epochNumber ?? 1}
         phase={uiState.epoch?.phase ?? 'peace'}
-      />
+      />}
 
       {menuOpen && (
         <PauseMenu onResume={() => setMenuOpen(false)} onExit={handleExitToLobby} />
       )}
     </div>
   );
+}
+
+// ─── v19 Phase 2: AR Minimap entity builder ───
+
+/** AR state에서 미니맵 엔티티 목록을 구축한다 */
+function buildMinimapEntities(arState: ARState | null | undefined, playerId: string | null): ARMinimapEntity[] {
+  if (!arState) return [];
+  const entities: ARMinimapEntity[] = [];
+
+  // 플레이어 (자신 제외 — 미니맵 중앙에 별도 표시)
+  for (const p of arState.players) {
+    if (p.id === playerId) continue;
+    entities.push({
+      id: p.id,
+      x: p.pos.x,
+      z: p.pos.z,
+      type: 'ally',
+      alive: p.alive,
+    });
+  }
+
+  // 적 엔티티
+  for (const e of arState.enemies) {
+    let type: ARMinimapEntity['type'] = 'enemy';
+    if (e.isMiniboss) type = 'miniboss';
+    else if (e.isElite) type = 'elite';
+    entities.push({
+      id: e.id,
+      x: e.x,
+      z: e.z,
+      type,
+      alive: true,
+    });
+  }
+
+  // XP 크리스탈
+  for (const c of arState.xpCrystals) {
+    entities.push({
+      id: c.id,
+      x: c.x,
+      z: c.z,
+      type: 'crystal',
+      alive: true,
+    });
+  }
+
+  // 필드 아이템
+  for (const item of arState.items) {
+    entities.push({
+      id: item.id,
+      x: item.x,
+      z: item.z,
+      type: 'item',
+      alive: true,
+    });
+  }
+
+  return entities;
 }
 
 // ─── 내부 컴포넌트 (기존 GameCanvas.tsx에서 복사) ───

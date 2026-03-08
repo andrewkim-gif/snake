@@ -22,8 +22,11 @@ import {
 } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useSocket } from '@/hooks/useSocket';
-import type { GameData, UiState } from '@/hooks/useSocket';
+import type { GameData, UiState, ARUiState, AREvent } from '@/hooks/useSocket';
 import type { CountryClientState } from '@/lib/globe-data';
+import type { ARState } from '@/lib/3d/ar-types';
+import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
+import type { ARChoice } from '@/lib/3d/ar-types';
 
 // ─── 게임 모드 타입 ───
 export type GameMode = 'idle' | 'lobby' | 'transitioning' | 'playing';
@@ -65,6 +68,12 @@ export interface SocketRefContextValue {
 export interface SocketContextValue extends SocketStableContextValue {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
+  // v19 Phase 2: AR data pipeline
+  arStateRef: React.MutableRefObject<ARState | null>;
+  arInterpRef: React.MutableRefObject<ARInterpolationState>;
+  arEventQueueRef: React.MutableRefObject<AREvent[]>;
+  arUiState: ARUiState;
+  sendARChoice: (choice: ARChoice) => void;
 }
 
 // ─── Context 생성 ───
@@ -94,6 +103,12 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     joinCountryArena,
     dismissEpochResult,
     switchArena,
+    // v19 Phase 2: AR data pipeline
+    arStateRef,
+    arInterpRef,
+    arEventQueueRef,
+    arUiState,
+    sendARChoice,
   } = useSocket();
 
   // ─── 게임 모드 상태 (전역화) ───
@@ -120,9 +135,9 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   }, [uiState]);
 
   // ─── 게임 시작 리디렉트: joined 이벤트 감지 시 → '/'로 자동 이동 ───
-  // /debug 페이지는 자체적으로 게임 렌더링하므로 리디렉트 제외
+  // /debug, /arena 페이지는 자체적으로 게임 렌더링하므로 리디렉트 제외
   useEffect(() => {
-    if (uiState.currentRoomId && pathname !== '/' && pathname !== '/debug') {
+    if (uiState.currentRoomId && pathname !== '/' && pathname !== '/debug' && pathname !== '/arena') {
       router.push('/');
     }
   }, [uiState.currentRoomId, pathname, router]);
@@ -182,8 +197,14 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       ...stableValue,
       dataRef,
       uiState,
+      // v19 Phase 2: AR data pipeline
+      arStateRef,
+      arInterpRef,
+      arEventQueueRef,
+      arUiState,
+      sendARChoice,
     }),
-    [stableValue, dataRef, uiState],
+    [stableValue, dataRef, uiState, arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice],
   );
 
   return (
