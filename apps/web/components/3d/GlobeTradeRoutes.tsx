@@ -15,6 +15,8 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { createArcPoints } from '@/lib/effect-utils';
+import { ARC_HEIGHT, COLORS_BASE, RENDER_ORDER } from '@/lib/effect-constants';
 import type { TradeRouteData } from '@/hooks/useSocket';
 
 // ─── Types ───
@@ -33,14 +35,13 @@ export interface GlobeTradeRoutesProps {
 // ─── Constants ───
 
 const DEFAULT_GLOBE_RADIUS = 100;
-const ARC_SEGMENTS = 48;
-const ARC_HEIGHT_FACTOR = 0.15; // 무역 라인은 전쟁 아크보다 낮게
+const TRADE_ARC_SEGMENTS = 48;
 const MAX_VISIBLE_ROUTES = 30;  // 성능 제한: 최대 동시 표시 루트
 const CARGO_SPEED = 0.3;        // 화물 이동 속도 (초당 t 진행)
 
-// 색상 팔레트
-const SEA_COLOR = new THREE.Color(0x3399ff);  // 해상: 파란색
-const LAND_COLOR = new THREE.Color(0x33cc66); // 육상: 초록색
+// 색상 팔레트 — v24: 통일 색상 체계 (교역 녹색 기반)
+const SEA_COLOR = new THREE.Color(COLORS_BASE.trade).multiplyScalar(0.85);  // 해상: 교역색 약간 어둡게
+const LAND_COLOR = COLORS_BASE.trade.clone(); // 육상: 교역 녹색
 
 // v23: 자원별 화물 색상
 const CARGO_COLORS: Record<string, THREE.Color> = {
@@ -59,32 +60,6 @@ const _tempQuaternion = new THREE.Quaternion();
 const _upAxis = new THREE.Vector3(0, 1, 0);
 
 // ─── Helpers ───
-
-/** 두 구면 점 사이의 베지어 곡선 포인트 배열 생성 */
-function createBezierArcPoints(
-  start: THREE.Vector3,
-  end: THREE.Vector3,
-  radius: number,
-  segments: number,
-): THREE.Vector3[] {
-  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const dist = start.distanceTo(end);
-  // 중점을 구면 바깥으로 밀어서 곡선 높이 생성
-  mid.normalize().multiplyScalar(radius + dist * ARC_HEIGHT_FACTOR);
-
-  const points: THREE.Vector3[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const invT = 1 - t;
-    // 2차 베지어: B(t) = (1-t)^2 P0 + 2(1-t)t P1 + t^2 P2
-    const p = new THREE.Vector3()
-      .addScaledVector(start, invT * invT)
-      .addScaledVector(mid, 2 * invT * t)
-      .addScaledVector(end, t * t);
-    points.push(p);
-  }
-  return points;
-}
 
 /** trade volume -> 라인 두께 (1~4) */
 function volumeToWidth(volume: number): number {
@@ -141,6 +116,8 @@ function createCargoMaterial(type: ResourceType): THREE.MeshBasicMaterial {
     transparent: true,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
+    toneMapped: false,
   });
 }
 
@@ -267,7 +244,7 @@ export function GlobeTradeRoutes({
       const startPos = latLngToVector3(fromCentroid[0], fromCentroid[1], globeRadius + 0.5);
       const endPos = latLngToVector3(toCentroid[0], toCentroid[1], globeRadius + 0.5);
 
-      const points = createBezierArcPoints(startPos, endPos, globeRadius, ARC_SEGMENTS);
+      const points = createArcPoints(startPos, endPos, globeRadius, ARC_HEIGHT.trade, TRADE_ARC_SEGMENTS);
       const isSea = route.type === 'sea';
 
       // 라인 geometry (+ line distance attribute for dashed shader)
@@ -286,7 +263,7 @@ export function GlobeTradeRoutes({
       materialsRef.current.push(mat);
 
       const line = new THREE.Line(lineGeo, mat);
-      line.renderOrder = 3;
+      line.renderOrder = RENDER_ORDER.ARC_TRADE;
       linesRef.current.push(line);
       groupRef.current.add(line);
 
@@ -295,7 +272,7 @@ export function GlobeTradeRoutes({
       const cargoGeo = getCargoGeo(resType);
       const cargoMat = getCargoMat(resType);
       const cargo = new THREE.Mesh(cargoGeo, cargoMat);
-      cargo.renderOrder = 4;
+      cargo.renderOrder = RENDER_ORDER.CARGO;
       cargosRef.current.push(cargo);
       groupRef.current.add(cargo);
 

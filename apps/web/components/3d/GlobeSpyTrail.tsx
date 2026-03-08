@@ -12,6 +12,8 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { createArcPoints } from '@/lib/effect-utils';
+import { ARC_HEIGHT, COLORS_BASE, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -31,9 +33,7 @@ export interface GlobeSpyTrailProps {
 // ─── Constants ───
 
 const DEFAULT_RADIUS = 100;
-const ARC_SEGMENTS = 48;
-const ARC_HEIGHT_FACTOR = 0.20; // 약간 낮은 아크 (은밀)
-const SPY_COLOR = new THREE.Color(0x9966cc);
+const SPY_ARC_SEGMENTS = 48;
 const EYE_CANVAS_SIZE = 64;
 
 // ─── GC-prevention ───
@@ -64,9 +64,9 @@ function getEyeTexture(): THREE.CanvasTexture {
   ctx.quadraticCurveTo(cx, 8, EYE_CANVAS_SIZE - 8, cy);
   ctx.quadraticCurveTo(cx, EYE_CANVAS_SIZE - 8, 8, cy);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(153, 102, 204, 0.6)';
+  ctx.fillStyle = 'rgba(153, 85, 204, 0.6)';
   ctx.fill();
-  ctx.strokeStyle = 'rgba(153, 102, 204, 0.9)';
+  ctx.strokeStyle = 'rgba(153, 85, 204, 0.9)';
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -85,31 +85,6 @@ function getEyeTexture(): THREE.CanvasTexture {
   _eyeTexture = new THREE.CanvasTexture(canvas);
   _eyeTexture.needsUpdate = true;
   return _eyeTexture;
-}
-
-// ─── Helpers ───
-
-function createArcPoints(
-  start: THREE.Vector3,
-  end: THREE.Vector3,
-  radius: number,
-  segments: number,
-): THREE.Vector3[] {
-  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const dist = start.distanceTo(end);
-  mid.normalize().multiplyScalar(radius + dist * ARC_HEIGHT_FACTOR);
-
-  const points: THREE.Vector3[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const invT = 1 - t;
-    const p = new THREE.Vector3()
-      .addScaledVector(start, invT * invT)
-      .addScaledVector(mid, 2 * invT * t)
-      .addScaledVector(end, t * t);
-    points.push(p);
-  }
-  return points;
 }
 
 // ─── Internal render data ───
@@ -156,12 +131,12 @@ export function GlobeSpyTrail({
 
       const startPos = latLngToVector3(fromC[0], fromC[1], globeRadius + 0.8);
       const endPos = latLngToVector3(toC[0], toC[1], globeRadius + 0.8);
-      const points = createArcPoints(startPos, endPos, globeRadius, ARC_SEGMENTS);
+      const points = createArcPoints(startPos, endPos, globeRadius, ARC_HEIGHT.spy, SPY_ARC_SEGMENTS);
 
       // 보라색 점선 라인
       const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
       const dashMaterial = new THREE.LineDashedMaterial({
-        color: SPY_COLOR,
+        color: COLORS_BASE.spy.clone(),
         dashSize: 1.5,
         gapSize: 2.0,
         transparent: true,
@@ -171,7 +146,7 @@ export function GlobeSpyTrail({
 
       const dashLine = new THREE.Line(lineGeo, dashMaterial);
       dashLine.computeLineDistances();
-      dashLine.renderOrder = 3;
+      dashLine.renderOrder = RENDER_ORDER.ARC_SPY;
 
       // 눈 아이콘 (아크 중점에 Sprite)
       const midIdx = Math.floor(points.length / 2);
@@ -189,7 +164,7 @@ export function GlobeSpyTrail({
       const eyeSprite = new THREE.Sprite(eyeMaterial);
       eyeSprite.position.copy(arcMidpoint);
       eyeSprite.scale.set(3.0, 3.0, 1.0);
-      eyeSprite.renderOrder = 5;
+      eyeSprite.renderOrder = RENDER_ORDER.SPY_EYE;
 
       group.add(dashLine);
       group.add(eyeSprite);

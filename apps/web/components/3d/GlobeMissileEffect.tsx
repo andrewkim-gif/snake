@@ -14,6 +14,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { getArcPointGCFree } from '@/lib/effect-utils';
+import { ARC_HEIGHT } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -46,13 +48,12 @@ export interface GlobeMissileEffectProps {
 const MAX_MISSILES = 10;
 const MISSILE_DURATION = 1.8;
 const MISSILE_LAUNCH_INTERVAL = 2.5;
-const ARC_HEIGHT_FACTOR = 0.35;
 const SMOKE_PARTICLES_PER_MISSILE = 7;
 const TOTAL_SMOKE = MAX_MISSILES * SMOKE_PARTICLES_PER_MISSILE;
 
 // ─── Colors ───
 
-const NOSE_COLOR = new THREE.Color(0xcc2222);   // 빨간 노즈콘
+const NOSE_COLOR = new THREE.Color(0xff3333);   // v24: 통일 전쟁 적색 노즈콘
 const BODY_COLOR = new THREE.Color(0xcccccc);   // 밝은 회색 바디
 
 // ─── Module-scope temp objects (GC 방지, NFR-4) ───
@@ -62,10 +63,6 @@ const _smokeDummy = new THREE.Object3D();
 const _tempVec = new THREE.Vector3();
 const _tempVec2 = new THREE.Vector3();
 const _tempVec3 = new THREE.Vector3();
-const _tempMid = new THREE.Vector3();
-const _tempNormal = new THREE.Vector3();
-const _tempControl = new THREE.Vector3();
-const _arcResult = new THREE.Vector3();
 const _forward = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
@@ -141,33 +138,6 @@ function createSmokeTexture(): THREE.CanvasTexture {
   return new THREE.CanvasTexture(canvas);
 }
 
-// ─── Arc interpolation (GC-free) ───
-
-/** Quadratic bezier point along parabolic arc on the globe — GC-free version */
-function getArcPoint(
-  start: THREE.Vector3,
-  end: THREE.Vector3,
-  t: number,
-  arcHeight: number,
-  out: THREE.Vector3,
-): THREE.Vector3 {
-  _tempMid.addVectors(start, end).multiplyScalar(0.5);
-  _tempNormal.copy(_tempMid).normalize();
-  _tempControl.copy(_tempMid).addScaledVector(_tempNormal, arcHeight);
-
-  const oneMinusT = 1 - t;
-  const a = oneMinusT * oneMinusT;
-  const b = 2 * oneMinusT * t;
-  const c = t * t;
-
-  out.set(
-    a * start.x + b * _tempControl.x + c * end.x,
-    a * start.y + b * _tempControl.y + c * end.y,
-    a * start.z + b * _tempControl.z + c * end.z,
-  );
-  return out;
-}
-
 // ─── Missile state tracking ───
 
 interface MissileState {
@@ -214,6 +184,9 @@ export function GlobeMissileEffect({
       transparent: true,
       opacity: 0.95,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
     }),
     [],
   );
@@ -227,14 +200,22 @@ export function GlobeMissileEffect({
       transparent: true,
       opacity: 1.0,
       depthWrite: false,
-      blending: THREE.NormalBlending,
+      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
+      toneMapped: false,
     }),
     [smokeTexture],
   );
 
+  // ★ ref callback으로 count=0 즉시 설정 (useEffect는 첫 렌더 후라 1프레임 지연)
   const headInstancedRef = useRef<THREE.InstancedMesh>(null);
   const smokeInstancedRef = useRef<THREE.InstancedMesh>(null);
+  const headRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; headInstancedRef.current = mesh; }
+  }, []);
+  const smokeRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; smokeInstancedRef.current = mesh; }
+  }, []);
 
   // Get position for country from centroids
   const getPos = useCallback(
@@ -259,7 +240,7 @@ export function GlobeMissileEffect({
           missiles[i].startPos.copy(start);
           missiles[i].endPos.copy(end);
           missiles[i].startTime = time;
-          missiles[i].arcHeight = dist * ARC_HEIGHT_FACTOR;
+          missiles[i].arcHeight = dist * ARC_HEIGHT.missile;
           return;
         }
       }
@@ -341,11 +322,11 @@ export function GlobeMissileEffect({
       }
 
       // ─── Missile head: 현재 위치 ───
-      getArcPoint(m.startPos, m.endPos, t, m.arcHeight, _tempVec);
+      getArcPointGCFree(m.startPos, m.endPos, t, m.arcHeight, _tempVec);
 
       // ─── Tangent 방향 계산 (다음 위치 - 현재 위치) ───
       const tNext = Math.min(t + 0.02, 1.0);
-      getArcPoint(m.startPos, m.endPos, tNext, m.arcHeight, _tempVec2);
+      getArcPointGCFree(m.startPos, m.endPos, tNext, m.arcHeight, _tempVec2);
       _forward.subVectors(_tempVec2, _tempVec).normalize();
 
       // 미사일 방향 정렬: 기본 방향 Y+를 forward로 회전
@@ -364,7 +345,7 @@ export function GlobeMissileEffect({
         const sIdx = i * SMOKE_PARTICLES_PER_MISSILE + j;
         const tailT = Math.max(0, t - (j + 1) * 0.035);
 
-        getArcPoint(m.startPos, m.endPos, tailT, m.arcHeight, _tempVec3);
+        getArcPointGCFree(m.startPos, m.endPos, tailT, m.arcHeight, _tempVec3);
 
         // 크기: 뒤로 갈수록 증가 (0.3 → 0.8)
         const sizeFactor = 0.3 + (j / (SMOKE_PARTICLES_PER_MISSILE - 1)) * 0.5;
@@ -385,6 +366,9 @@ export function GlobeMissileEffect({
       }
     }
 
+    // ★ count 복원 (useEffect에서 count=0으로 시작했을 수 있음)
+    headMesh.count = MAX_MISSILES;
+    smokeMesh.count = TOTAL_SMOKE;
     headMesh.instanceMatrix.needsUpdate = true;
     smokeMesh.instanceMatrix.needsUpdate = true;
     if (smokeMesh.instanceColor) {
@@ -409,13 +393,13 @@ export function GlobeMissileEffect({
     <group ref={groupRef}>
       {/* 미사일 헤드 — 3D 원뿔+원기둥 InstancedMesh */}
       <instancedMesh
-        ref={headInstancedRef}
+        ref={headRefCb}
         args={[missileGeometry, missileMaterial, MAX_MISSILES]}
         frustumCulled={false}
       />
       {/* 연기 트레일 — 빌보드 PlaneGeometry InstancedMesh */}
       <instancedMesh
-        ref={smokeInstancedRef}
+        ref={smokeRefCb}
         args={[smokeGeometry, smokeMaterial, TOTAL_SMOKE]}
         frustumCulled={false}
       />

@@ -1,17 +1,19 @@
 'use client';
 
 /**
- * GlobeAllianceBeam — v23 Phase 5 Task 1
+ * GlobeAllianceBeam — v23 Phase 5 Task 1 (v2: Line-based, no TubeGeometry)
  * 동맹 빛줄기: 2국가 centroid 사이 파란 빛 아크 라인
- * - QuadraticBezierCurve3 기반 TubeGeometry
- * - AdditiveBlending, 파란색(#4488ff), 파동 애니메이션 (uTime 기반 UV offset)
+ * - QuadraticBezierCurve3 기반 BufferGeometry Line (TubeGeometry 제거 → 검은박스 해결)
+ * - AdditiveBlending, 파란색(#4488ff)
  * - 연결선 위에 작은 빛 파티클 4~6개 흘러감 (InstancedMesh)
  */
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { createArcCurve } from '@/lib/effect-utils';
+import { ARC_HEIGHT, COLORS_3D, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -31,94 +33,44 @@ export interface GlobeAllianceBeamProps {
 // ─── Constants ───
 
 const DEFAULT_RADIUS = 100;
-const ARC_SEGMENTS = 48;
-const ARC_HEIGHT_FACTOR = 0.30;  // 30% of centroid distance
-const BEAM_COLOR = new THREE.Color(0x4488ff);
-const BEAM_HDR = new THREE.Color(0x4488ff).multiplyScalar(2.5); // Bloom 연동
 const FLOW_PARTICLES_PER_BEAM = 5;
 const PARTICLE_RADIUS = 0.5;
-const TUBE_RADIUS = 0.4;
-const TUBE_SEGMENTS = 48;
-const TUBE_RADIAL = 6;
+const LINE_POINTS = 64; // 커브 샘플링 포인트 수
 
 // ─── GC-prevention temp objects ───
 
 const _tempVec = new THREE.Vector3();
 const _tempMatrix = new THREE.Matrix4();
-const _tempColor = new THREE.Color();
-
-// ─── Beam shader material ───
-
-const beamVertexShader = `
-  varying vec2 vUv;
-  void main() {
-    vUv = uv;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-
-const beamFragmentShader = `
-  uniform vec3 uColor;
-  uniform float uTime;
-  uniform float uOpacity;
-  varying vec2 vUv;
-  void main() {
-    // 파동 애니메이션: UV.x를 따라 이동하는 밝기 패턴
-    float wave = sin((vUv.x - uTime * 0.5) * 12.0) * 0.5 + 0.5;
-    float pulse = 0.4 + 0.6 * wave;
-    // 중심 밝기 (vUv.y = 0~1, 중심 = 0.5)
-    float centerGlow = 1.0 - abs(vUv.y - 0.5) * 2.0;
-    centerGlow = pow(centerGlow, 0.5); // 부드러운 가장자리
-    float alpha = pulse * centerGlow * uOpacity;
-    gl_FragColor = vec4(uColor * (1.0 + wave * 0.5), alpha);
-  }
-`;
 
 // ─── Helpers ───
 
-/** 두 구면 점 사이의 2차 베지어 커브 포인트 */
-function createArcCurve(
-  start: THREE.Vector3,
-  end: THREE.Vector3,
-  radius: number,
-): THREE.QuadraticBezierCurve3 {
-  const mid = _tempVec.addVectors(start, end).multiplyScalar(0.5);
-  const dist = start.distanceTo(end);
-  const control = mid.clone().normalize().multiplyScalar(radius + dist * ARC_HEIGHT_FACTOR);
-  return new THREE.QuadraticBezierCurve3(start.clone(), control, end.clone());
-}
-
-/** 아크 라인 TubeGeometry + ShaderMaterial 생성 */
-function createBeamMesh(curve: THREE.QuadraticBezierCurve3): {
-  mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+/** 아크 라인 BufferGeometry + LineBasicMaterial 생성 (TubeGeometry 대체) */
+function createBeamLine(curve: THREE.QuadraticBezierCurve3): {
+  line: THREE.Line;
+  material: THREE.LineBasicMaterial;
 } {
-  const geometry = new THREE.TubeGeometry(curve, TUBE_SEGMENTS, TUBE_RADIUS, TUBE_RADIAL, false);
-  const material = new THREE.ShaderMaterial({
-    uniforms: {
-      uColor: { value: BEAM_HDR.clone() },
-      uTime: { value: 0 },
-      uOpacity: { value: 0.8 },
-    },
-    vertexShader: beamVertexShader,
-    fragmentShader: beamFragmentShader,
+  const points = curve.getPoints(LINE_POINTS);
+  const geometry = new THREE.BufferGeometry().setFromPoints(points);
+  const material = new THREE.LineBasicMaterial({
+    color: COLORS_3D.alliance.clone(),
     transparent: true,
+    opacity: 0.8,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
-    side: THREE.DoubleSide,
     toneMapped: false,
+    linewidth: 1, // WebGL 제한: 항상 1px, 파티클로 두께감 보완
   });
-  const mesh = new THREE.Mesh(geometry, material);
-  mesh.renderOrder = 5;
-  return { mesh, material };
+  const line = new THREE.Line(geometry, material);
+  line.renderOrder = RENDER_ORDER.ARC_ALLIANCE;
+  return { line, material };
 }
 
 // ─── Internal beam data ───
 
 interface BeamRenderData {
   curve: THREE.QuadraticBezierCurve3;
-  mesh: THREE.Mesh;
-  material: THREE.ShaderMaterial;
+  line: THREE.Line;
+  lineMaterial: THREE.LineBasicMaterial;
   particleMesh: THREE.InstancedMesh;
   key: string;
 }
@@ -141,7 +93,7 @@ export function GlobeAllianceBeam({
   );
   const particleMat = useMemo(
     () => new THREE.MeshBasicMaterial({
-      color: BEAM_HDR.clone(),
+      color: COLORS_3D.alliance.clone(),
       transparent: true,
       depthWrite: false,
       blending: THREE.AdditiveBlending,
@@ -157,10 +109,10 @@ export function GlobeAllianceBeam({
 
     // 기존 정리
     for (const beam of beamsRef.current) {
-      group.remove(beam.mesh);
+      group.remove(beam.line);
       group.remove(beam.particleMesh);
-      beam.mesh.geometry.dispose();
-      beam.material.dispose();
+      beam.line.geometry.dispose();
+      beam.lineMaterial.dispose();
       beam.particleMesh.dispose();
     }
     beamsRef.current = [];
@@ -173,24 +125,25 @@ export function GlobeAllianceBeam({
       const startPos = latLngToVector3(fromC[0], fromC[1], globeRadius + 1.0);
       const endPos = latLngToVector3(toC[0], toC[1], globeRadius + 1.0);
 
-      const curve = createArcCurve(startPos, endPos, globeRadius);
-      const { mesh, material } = createBeamMesh(curve);
+      const curve = createArcCurve(startPos, endPos, globeRadius, ARC_HEIGHT.alliance);
+      const { line, material: lineMaterial } = createBeamLine(curve);
 
-      // 흐르는 빛 파티클 (InstancedMesh)
+      // 흐르는 빛 파티클 (InstancedMesh) — 라인 두께감 보완
       const particleMesh = new THREE.InstancedMesh(
         particleGeo,
         particleMat.clone(),
         FLOW_PARTICLES_PER_BEAM,
       );
-      particleMesh.renderOrder = 6;
+      particleMesh.count = 0; // ★ 초기 count=0 (origin 검은박스 방지)
+      particleMesh.renderOrder = RENDER_ORDER.PARTICLES;
 
-      group.add(mesh);
+      group.add(line);
       group.add(particleMesh);
 
       beamsRef.current.push({
         curve,
-        mesh,
-        material,
+        line,
+        lineMaterial,
         particleMesh,
         key: `${alliance.from}_${alliance.to}_${alliance.timestamp}`,
       });
@@ -198,14 +151,15 @@ export function GlobeAllianceBeam({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alliances, centroidsMap, globeRadius]);
 
-  // 매 프레임: 셰이더 time + 파티클 위치 업데이트
+  // 매 프레임: 라인 opacity 파동 + 파티클 위치 업데이트
   useFrame(({ clock }) => {
     if (!visible) return;
     const elapsed = clock.getElapsedTime();
 
     for (const beam of beamsRef.current) {
-      // 셰이더 time uniform
-      beam.material.uniforms.uTime.value = elapsed;
+      // 라인 opacity 파동 애니메이션
+      const pulse = 0.5 + 0.3 * Math.sin(elapsed * 2.0);
+      beam.lineMaterial.opacity = pulse;
 
       // 파티클 위치: 곡선을 따라 등간격 이동
       for (let i = 0; i < FLOW_PARTICLES_PER_BEAM; i++) {
@@ -221,6 +175,7 @@ export function GlobeAllianceBeam({
 
         beam.particleMesh.setMatrixAt(i, _tempMatrix);
       }
+      beam.particleMesh.count = FLOW_PARTICLES_PER_BEAM; // ★ count 복원
       beam.particleMesh.instanceMatrix.needsUpdate = true;
     }
   });
@@ -229,8 +184,8 @@ export function GlobeAllianceBeam({
   useEffect(() => {
     return () => {
       for (const beam of beamsRef.current) {
-        beam.mesh.geometry.dispose();
-        beam.material.dispose();
+        beam.line.geometry.dispose();
+        beam.lineMaterial.dispose();
         beam.particleMesh.dispose();
       }
       particleGeo.dispose();

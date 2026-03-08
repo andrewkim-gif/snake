@@ -12,6 +12,8 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { createArcPoints } from '@/lib/effect-utils';
+import { ARC_HEIGHT, COLORS_3D, COLORS_BASE, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -31,48 +33,18 @@ export interface GlobeSanctionBarrierProps {
 // ─── Constants ───
 
 const DEFAULT_RADIUS = 100;
-const ARC_SEGMENTS = 48;
-const ARC_HEIGHT_FACTOR = 0.25;
-const SANCTION_COLOR = new THREE.Color(0xcc3333);
-const SANCTION_HDR = new THREE.Color(0xcc3333).multiplyScalar(2.0);
+const SANCTION_ARC_SEGMENTS = 48;
 const X_BAR_LENGTH = 3.0;
 const X_BAR_THICKNESS = 0.4;
 
 const RING_INNER = 4.0;
 const RING_OUTER = 4.5;
-const DASH_LINE_SEGMENTS = 48;
 
 // ─── GC-prevention ───
 
 const _tempVec = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
-
-// ─── Helpers ───
-
-/** 두 구면 점 사이의 아크 라인 포인트 */
-function createArcPoints(
-  start: THREE.Vector3,
-  end: THREE.Vector3,
-  radius: number,
-  segments: number,
-): THREE.Vector3[] {
-  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const dist = start.distanceTo(end);
-  mid.normalize().multiplyScalar(radius + dist * ARC_HEIGHT_FACTOR);
-
-  const points: THREE.Vector3[] = [];
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    const invT = 1 - t;
-    const p = new THREE.Vector3()
-      .addScaledVector(start, invT * invT)
-      .addScaledVector(mid, 2 * invT * t)
-      .addScaledVector(end, t * t);
-    points.push(p);
-  }
-  return points;
-}
 
 // ─── Internal render data ───
 
@@ -114,7 +86,7 @@ export function GlobeSanctionBarrier({
   // 공유 material
   const xMaterial = useMemo(
     () => new THREE.MeshBasicMaterial({
-      color: SANCTION_HDR,
+      color: COLORS_3D.sanction.clone(),
       transparent: true,
       opacity: 0.9,
       blending: THREE.AdditiveBlending,
@@ -127,7 +99,7 @@ export function GlobeSanctionBarrier({
 
   const ringMaterial = useMemo(
     () => new THREE.MeshBasicMaterial({
-      color: SANCTION_COLOR,
+      color: COLORS_BASE.sanction.clone(),
       transparent: true,
       opacity: 0.4,
       blending: THREE.AdditiveBlending,
@@ -178,15 +150,15 @@ export function GlobeSanctionBarrier({
       xBar2.rotateX(-Math.PI / 2);
       xBar2.rotateZ(-Math.PI / 4); // -45도 회전
 
-      xBar1.renderOrder = 5;
-      xBar2.renderOrder = 5;
+      xBar1.renderOrder = RENDER_ORDER.SANCTION_XMARK;
+      xBar2.renderOrder = RENDER_ORDER.SANCTION_XMARK;
 
       // 빨간 점선 원 (대상국 주변)
       const ring = new THREE.Mesh(ringGeo, ringMaterial.clone());
       ring.position.copy(targetPos);
       ring.quaternion.copy(_quat);
       ring.rotateX(-Math.PI / 2);
-      ring.renderOrder = 4;
+      ring.renderOrder = RENDER_ORDER.SURFACE_RING;
 
       group.add(xBar1);
       group.add(xBar2);
@@ -199,11 +171,11 @@ export function GlobeSanctionBarrier({
       if (fromC) {
         const startPos = latLngToVector3(fromC[0], fromC[1], globeRadius + 1.0);
         const endPos = latLngToVector3(toC[0], toC[1], globeRadius + 1.0);
-        const points = createArcPoints(startPos, endPos, globeRadius, DASH_LINE_SEGMENTS);
+        const points = createArcPoints(startPos, endPos, globeRadius, ARC_HEIGHT.sanction, SANCTION_ARC_SEGMENTS);
 
         const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
         dashMaterial = new THREE.LineDashedMaterial({
-          color: SANCTION_COLOR,
+          color: COLORS_BASE.sanction.clone(),
           dashSize: 2.0,
           gapSize: 1.5,
           transparent: true,
@@ -213,10 +185,10 @@ export function GlobeSanctionBarrier({
 
         dashLine = new THREE.Line(lineGeo, dashMaterial);
         dashLine.computeLineDistances(); // dashed material 필수
-        dashLine.renderOrder = 4;
+        dashLine.renderOrder = RENDER_ORDER.ARC_SANCTION;
       } else {
         // from 없으면 빈 라인
-        dashMaterial = new THREE.LineDashedMaterial({ color: SANCTION_COLOR });
+        dashMaterial = new THREE.LineDashedMaterial({ color: COLORS_BASE.sanction.clone() });
         dashLine = new THREE.Line(new THREE.BufferGeometry(), dashMaterial);
         dashLine.visible = false;
       }

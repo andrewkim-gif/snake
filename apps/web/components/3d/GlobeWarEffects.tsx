@@ -17,7 +17,8 @@ import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
-import { CAMERA_PRIORITY } from '@/lib/effect-constants';
+import { CAMERA_PRIORITY, ARC_HEIGHT, COLORS_BASE } from '@/lib/effect-constants';
+import { createArcPoints } from '@/lib/effect-utils';
 
 // ─── Types ───
 
@@ -61,17 +62,16 @@ export interface GlobeWarEffectsProps {
 
 const DEFAULT_GLOBE_RADIUS = 100;
 
-// Arc line
-const ARC_COLOR_WAR = new THREE.Color(0xff3333);
+// Arc line — v24: 통일 색상 + 높이 체계
+const ARC_COLOR_WAR = COLORS_BASE.war.clone();
 const ARC_COLOR_PREP = new THREE.Color(0xff6633);
-const ARC_HEIGHT_FACTOR = 0.25; // arc height as fraction of distance
-const ARC_SEGMENTS = 64;
+const WAR_ARC_SEGMENTS = 64;
 const ARC_DASH_SIZE = 0.03;
 const ARC_GAP_SIZE = 0.02;
 
 // Territory blinking
 const BLINK_FREQUENCY = 0.5; // Hz
-const BLINK_COLOR = new THREE.Color(0xff3333);
+const BLINK_COLOR = COLORS_BASE.war.clone();
 
 // Particles
 const ARROW_PARTICLE_COUNT = 12;
@@ -124,38 +124,7 @@ const _fwUp = new THREE.Vector3(0, 1, 0);
 // ─── Helpers ───
 
 // latLngToVector3 → @/lib/globe-utils (v20 통합)
-
-/**
- * Create a curved arc between two points on a sphere.
- * Returns an array of Vector3 points.
- */
-function createArcPoints(
-  start: THREE.Vector3,
-  end: THREE.Vector3,
-  radius: number,
-  segments: number,
-  heightFactor: number,
-): THREE.Vector3[] {
-  const points: THREE.Vector3[] = [];
-  const distance = start.distanceTo(end);
-  const arcHeight = distance * heightFactor;
-  const midPoint = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const normal = midPoint.clone().normalize();
-  const controlPoint = midPoint.clone().add(normal.multiplyScalar(arcHeight));
-
-  for (let i = 0; i <= segments; i++) {
-    const t = i / segments;
-    // Quadratic bezier
-    const p = new THREE.Vector3();
-    const oneMinusT = 1 - t;
-    p.x = oneMinusT * oneMinusT * start.x + 2 * oneMinusT * t * controlPoint.x + t * t * end.x;
-    p.y = oneMinusT * oneMinusT * start.y + 2 * oneMinusT * t * controlPoint.y + t * t * end.y;
-    p.z = oneMinusT * oneMinusT * start.z + 2 * oneMinusT * t * controlPoint.z + t * t * end.z;
-    points.push(p);
-  }
-
-  return points;
-}
+// createArcPoints → @/lib/effect-utils (v24 통합)
 
 // ─── Sub-components ───
 
@@ -184,7 +153,7 @@ function WarArcLine({
   const timeRef = useRef(0);
 
   const arcPoints = useMemo(
-    () => createArcPoints(start, end, globeRadius, ARC_SEGMENTS, ARC_HEIGHT_FACTOR),
+    () => createArcPoints(start, end, globeRadius, ARC_HEIGHT.war, WAR_ARC_SEGMENTS),
     [start, end, globeRadius],
   );
 
