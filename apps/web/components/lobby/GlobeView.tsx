@@ -428,29 +428,19 @@ const earthFragmentShader = /* glsl */ `
     float nightAmbient = 0.015;
     vec3 nightColor = nightLights * 1.5 + dayTex * nightAmbient;
 
-    // 대기 프레넬 림 (가장자리 프레넬)
+    // 대기 프레넬 (가장자리에서만 — 표면 내부에선 없음)
     float fresnel = 1.0 - max(dot(viewDir, N), 0.0);
+    float rim = pow(fresnel, 6.0); // 높은 지수 → 극단적 가장자리만
 
-    // 태양 방향 대기 산란: 태양을 향한 림이 훨씬 밝게
-    float sunFresnel = max(dot(N, uSunDir), 0.0);
-    float atmosphereDayStrength = smoothstep(-0.25, 1.0, sunOrientation);
-
-    // 태양 방향 림: 태양을 향한 가장자리에서 강한 산란
-    float sunRim = pow(fresnel, 3.0) * pow(sunFresnel, 0.8) * 1.5;
-    // 일반 림: 전체 가장자리의 은은한 대기
-    float baseRim = pow(fresnel, 5.0) * atmosphereDayStrength * 0.3;
-
-    // 대기 색상 (태양 방향: 밝은 시안/화이트, 반대편: 어두운 블루)
+    // 대기 색상: twilight(터미네이터) ↔ day blue
     vec3 twilightColor = vec3(1.0, 0.45, 0.2);
-    vec3 dayAtmoColor = vec3(0.4, 0.7, 1.0);
-    vec3 brightAtmoColor = vec3(0.7, 0.85, 1.0); // 태양 방향 밝은 산란
+    vec3 dayAtmoColor = vec3(0.3, 0.55, 0.9);
     float atmoColorMix = smoothstep(-0.25, 0.75, sunOrientation);
     vec3 atmosphereColor = mix(twilightColor, dayAtmoColor, atmoColorMix);
 
     // 최종 혼합
     vec3 color = mix(nightColor, dayColor, dayStrength);
-    color += atmosphereColor * baseRim;
-    color += brightAtmoColor * sunRim;
+    color += atmosphereColor * rim * smoothstep(-0.2, 0.5, sunOrientation) * 0.4;
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -677,7 +667,7 @@ function EarthClouds() {
   );
 }
 
-// ─── R3F: 대기 산란 (태양→지구 빛 산란 — 드라마틱 2레이어) ───
+// ─── R3F: 대기 산란 (태양→지구 빛 산란) ───
 
 const atmoVertexShader = /* glsl */ `
   varying vec3 vWorldNormal;
@@ -689,8 +679,7 @@ const atmoVertexShader = /* glsl */ `
   }
 `;
 
-// Inner atmosphere — 얇고 선명한 림 (지구 가장자리의 날카로운 대기선)
-const atmoInnerFragShader = /* glsl */ `
+const atmoFragmentShader = /* glsl */ `
   uniform vec3 uSunDir;
   varying vec3 vWorldNormal;
   varying vec3 vWorldPos;
@@ -699,66 +688,44 @@ const atmoInnerFragShader = /* glsl */ `
     vec3 N = normalize(vWorldNormal);
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
 
-    // 얇은 프레넬 림
-    float fresnel = 1.0 - abs(dot(viewDir, N));
-    float rim = pow(fresnel, 4.0);
+    // 프레넬: 극단적 가장자리에서만 보이는 얇은 림
+    float NdotV = dot(viewDir, N);
+    float fresnel = 1.0 - abs(NdotV);
+    float rim = pow(fresnel, 5.0);
 
-    // 태양 방향 산란 — 태양 쪽 강하고, 반대쪽은 약하지만 존재
+    // 태양 방향: 태양 쪽 가장자리에서만 강한 글로우
     float sunDot = dot(N, uSunDir);
     float sunFacing = max(sunDot, 0.0);
-    float sunScatter = pow(sunFacing, 0.5) * 0.85 + 0.15;
 
-    // 태양 hot spot — 태양 방향 극점에서 매우 밝게 (Bloom이 잡음)
-    float hotSpot = pow(sunFacing, 4.0) * 2.0;
+    // 핵심: 프레넬 림 × 태양 방향을 곱하되, 밤 쪽은 완전 제거
+    // 태양을 향한 가장자리에서만 빛나는 대기 산란
+    float dayCut = smoothstep(-0.1, 0.15, sunDot);
 
-    // 대기 색상: 태양 쪽은 밝은 시안/화이트, 측면은 블루
-    vec3 baseColor = mix(vec3(0.1, 0.2, 0.5), vec3(0.4, 0.7, 1.0), sunFacing);
-    // hot spot → 거의 화이트 (HDR 초과값 → Bloom 트리거)
-    baseColor += vec3(0.8, 0.9, 1.0) * hotSpot;
+    // 태양 hot spot: 태양을 정면으로 향한 림 극점 (HDR → Bloom 트리거)
+    float hotSpot = pow(sunFacing, 3.0) * rim * 3.0;
 
-    // 터미네이터: 따뜻한 오렌지 산란
-    float termRegion = smoothstep(-0.15, 0.0, sunDot) * smoothstep(0.3, 0.0, sunDot);
-    baseColor += vec3(1.0, 0.5, 0.15) * termRegion * 0.6;
+    // 대기 색상
+    vec3 blueAtmo = vec3(0.3, 0.55, 0.9);
+    vec3 hotColor = vec3(0.7, 0.85, 1.0);
 
-    float alpha = rim * sunScatter * 0.55;
-    gl_FragColor = vec4(baseColor, alpha);
-  }
-`;
+    // 터미네이터 따뜻한 산란
+    float termRegion = smoothstep(-0.1, 0.05, sunDot) * smoothstep(0.25, 0.05, sunDot);
+    vec3 termColor = vec3(1.0, 0.5, 0.15) * termRegion * 0.5;
 
-// Outer atmosphere — 넓고 부드러운 확산 글로우 (빛이 우주로 퍼져나가는 느낌)
-const atmoOuterFragShader = /* glsl */ `
-  uniform vec3 uSunDir;
-  varying vec3 vWorldNormal;
-  varying vec3 vWorldPos;
+    vec3 color = blueAtmo + hotColor * hotSpot + termColor;
 
-  void main() {
-    vec3 N = normalize(vWorldNormal);
-    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    float alpha = rim * dayCut * 0.5 + hotSpot * 0.3;
+    alpha = clamp(alpha, 0.0, 0.85);
 
-    // 넓은 프레넬 (더 낮은 지수 → 넓게 퍼짐)
-    float fresnel = 1.0 - abs(dot(viewDir, N));
-    float rim = pow(fresnel, 2.5);
-
-    // 태양 방향 집중 — 태양 쪽에서만 넓은 글로우
-    float sunFacing = max(dot(N, uSunDir), 0.0);
-    float scatter = pow(sunFacing, 1.5);
-
-    // 부드러운 시안 글로우 색상 (Bloom이 더 넓게 확산시킴)
-    vec3 glowColor = vec3(0.3, 0.55, 0.9) * 1.2;
-
-    float alpha = rim * scatter * 0.2;
-    // 밤 쪽은 완전히 제거
-    alpha *= smoothstep(-0.1, 0.2, dot(N, uSunDir));
-
-    gl_FragColor = vec4(glowColor, alpha);
+    gl_FragColor = vec4(color, alpha);
   }
 `;
 
 function AtmosphereGlow() {
-  const innerRef = useRef<THREE.ShaderMaterial>(null);
-  const outerRef = useRef<THREE.ShaderMaterial>(null);
+  const matRef = useRef<THREE.ShaderMaterial>(null);
 
   useFrame(() => {
+    if (!matRef.current) return;
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
@@ -768,40 +735,23 @@ function AtmosphereGlow() {
     const sx = Math.cos(decRad) * Math.cos(ha);
     const sy = Math.sin(decRad);
     const sz = Math.cos(decRad) * Math.sin(ha);
-    const sunDir = new THREE.Vector3(sx, sy, sz).normalize();
-    if (innerRef.current) innerRef.current.uniforms.uSunDir.value.copy(sunDir);
-    if (outerRef.current) outerRef.current.uniforms.uSunDir.value.copy(sunDir);
+    matRef.current.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
   });
 
   return (
-    <group>
-      {/* Inner: 선명한 대기 림 (r=102.5%) */}
-      <mesh renderOrder={48}>
-        <sphereGeometry args={[RADIUS * 1.025, 64, 64]} />
-        <shaderMaterial
-          ref={innerRef}
-          vertexShader={atmoVertexShader}
-          fragmentShader={atmoInnerFragShader}
-          uniforms={{ uSunDir: { value: new THREE.Vector3(1, 0, 0) } }}
-          transparent
-          side={THREE.BackSide}
-          depthWrite={false}
-        />
-      </mesh>
-      {/* Outer: 넓은 확산 글로우 (r=107%) — Bloom과 합쳐져 극적 산란 */}
-      <mesh renderOrder={47}>
-        <sphereGeometry args={[RADIUS * 1.07, 64, 64]} />
-        <shaderMaterial
-          ref={outerRef}
-          vertexShader={atmoVertexShader}
-          fragmentShader={atmoOuterFragShader}
-          uniforms={{ uSunDir: { value: new THREE.Vector3(1, 0, 0) } }}
-          transparent
-          side={THREE.BackSide}
-          depthWrite={false}
-        />
-      </mesh>
-    </group>
+    <mesh renderOrder={48}>
+      <sphereGeometry args={[RADIUS * 1.02, 64, 64]} />
+      <shaderMaterial
+        ref={matRef}
+        vertexShader={atmoVertexShader}
+        fragmentShader={atmoFragmentShader}
+        uniforms={{ uSunDir: { value: new THREE.Vector3(1, 0, 0) } }}
+        transparent
+        side={THREE.BackSide}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
   );
 }
 
