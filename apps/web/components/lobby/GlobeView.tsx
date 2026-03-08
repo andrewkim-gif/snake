@@ -367,7 +367,7 @@ const earthVertexShader = /* glsl */ `
   }
 `;
 
-// v21: EarthSphere PBR fragment shader (day/night 혼합 + 터미네이터 오렌지 림)
+// v21: EarthSphere PBR fragment shader (Three.js TSL Earth 예제 참고)
 const earthFragmentShader = /* glsl */ `
   uniform sampler2D uDayMap;
   uniform sampler2D uNightMap;
@@ -379,26 +379,38 @@ const earthFragmentShader = /* glsl */ `
 
   void main() {
     vec3 N = normalize(vWorldNormal);
-    float NdotL = dot(N, uSunDir);
+    float sunOrientation = dot(N, uSunDir);
 
-    // 낮/밤 혼합 팩터 (터미네이터 부드러운 전환)
-    float dayFactor = smoothstep(-0.15, 0.25, NdotL);
+    // 낮/밤 혼합 팩터 (Three.js TSL: smoothstep(-0.25, 0.5))
+    float dayStrength = smoothstep(-0.25, 0.5, sunOrientation);
 
-    // 낮: 디퓨즈 라이팅
+    // 낮: 디퓨즈 라이팅 (부드러운 Lambert)
     vec3 dayColor = texture2D(uDayMap, vUv).rgb;
-    float diffuse = max(NdotL, 0.0) * 0.8 + 0.2;
+    float diffuse = max(sunOrientation, 0.0) * 0.7 + 0.3;
     dayColor *= diffuse;
 
-    // 밤: 도시 불빛 (emissive, 조명 무관)
-    vec3 nightColor = texture2D(uNightMap, vUv).rgb;
-    nightColor *= 1.5;
+    // 밤: 도시 불빛 + 최소 앰비언트 (완전 검정 방지)
+    vec3 nightLights = texture2D(uNightMap, vUv).rgb;
+    // 텍스처가 검정(fallback)이면 아주 미세한 지구 윤곽 표시
+    vec3 dayTex = texture2D(uDayMap, vUv).rgb;
+    float nightAmbient = 0.012;  // 최소 앰비언트 (완전 검정 방지)
+    vec3 nightColor = nightLights * 1.5 + dayTex * nightAmbient;
 
-    // 터미네이터 잔사광 (오렌지 림)
-    float terminator = 1.0 - smoothstep(-0.05, 0.15, abs(NdotL));
-    vec3 terminatorColor = vec3(1.0, 0.4, 0.1) * terminator * 0.3;
+    // 대기 산란 프레넬 (지구 표면에 오버레이 — Three.js TSL fresnel 기법)
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    float fresnel = 1.0 - max(dot(viewDir, N), 0.0);
+    float atmosphereMix = smoothstep(-0.5, 1.0, sunOrientation) * pow(fresnel, 2.0);
+    atmosphereMix = clamp(atmosphereMix, 0.0, 1.0);
 
-    // 최종 혼합
-    vec3 color = mix(nightColor, dayColor, dayFactor) + terminatorColor;
+    // 대기 색상 (황혼 오렌지 → 낮 시안)
+    vec3 twilightColor = vec3(1.0, 0.4, 0.2);
+    vec3 dayAtmoColor = vec3(0.4, 0.7, 1.0);
+    float atmoColorMix = smoothstep(-0.25, 0.75, sunOrientation);
+    vec3 atmosphereColor = mix(twilightColor, dayAtmoColor, atmoColorMix);
+
+    // 최종 혼합: 밤↔낮 + 대기 오버레이
+    vec3 color = mix(nightColor, dayColor, dayStrength);
+    color = mix(color, atmosphereColor, atmosphereMix * 0.4);
 
     gl_FragColor = vec4(color, 1.0);
   }
@@ -659,21 +671,30 @@ function AtmosphereGlow() {
         varying vec3 vViewDir;
 
         void main() {
-          float rim = 1.0 - abs(dot(vViewDir, vWorldNormal));
-          rim = pow(rim, 3.0);
+          // 프레넬: 가장자리에서만 보이도록 (Three.js TSL 예제 참고)
+          // remap(0.73, 1.0) → 0.73 이하에서 완전 투명, 극단 가장자리에서만 보임
+          float fresnel = 1.0 - max(dot(vViewDir, vWorldNormal), 0.0);
+          float alpha = smoothstep(0.73, 1.0, fresnel);
+          alpha = pow(alpha, 3.0);
 
-          float sunAlignment = max(dot(vWorldNormal, uSunDir), 0.0);
-          float atmosphereBright = 0.3 + 0.7 * sunAlignment;
+          // 태양 방향 기반 밝기 (야간 쪽은 대기 거의 안 보임)
+          float sunOrientation = dot(vWorldNormal, uSunDir);
+          float atmosphereDayStrength = smoothstep(-0.5, 1.0, sunOrientation);
+          alpha *= atmosphereDayStrength;
 
-          vec3 dayAtmo = mix(vec3(0.1, 0.3, 0.8), vec3(0.4, 0.7, 1.0), sunAlignment);
-          vec3 atmoColor = dayAtmo * rim * atmosphereBright;
+          // 대기 색상: 낮=밝은 시안, 황혼=오렌지/레드 (터미네이터 부근)
+          vec3 dayAtmoColor = vec3(0.4, 0.7, 1.0);
+          vec3 twilightColor = vec3(1.0, 0.4, 0.2);
+          float twilightMix = smoothstep(-0.25, 0.75, sunOrientation);
+          vec3 atmoColor = mix(twilightColor, dayAtmoColor, twilightMix);
 
-          gl_FragColor = vec4(atmoColor, rim * atmosphereBright);
+          gl_FragColor = vec4(atmoColor, alpha * 0.6);
         }
       `,
       side: THREE.BackSide,
       blending: THREE.AdditiveBlending,
       transparent: true,
+      depthWrite: false,
     });
   }, []);
 
