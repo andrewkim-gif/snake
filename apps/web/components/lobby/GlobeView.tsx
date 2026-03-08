@@ -1330,12 +1330,15 @@ function GlobeScene({
         />
       )}
 
-      {/* v20: Landmark sprites (Far LOD — Tier 1 icons on globe surface) */}
-      <GlobeLandmarks
-        globeRadius={RADIUS}
-        maxLandmarks={lodConfig.maxLandmarks}
-        landmarkDetail={lodConfig.landmarkDetail}
-      />
+      {/* v20: 195국 랜드마크 3D 메시 (countryCentroids 기반 동적 생성) */}
+      {centroidsMap.size > 0 && (
+        <GlobeLandmarks
+          countryCentroids={centroidsMap}
+          globeRadius={RADIUS}
+          maxLandmarks={lodConfig.maxLandmarks}
+          landmarkDetail={lodConfig.landmarkDetail}
+        />
+      )}
 
       {/* v17: Conflict indicators — "분쟁중" badges on active country arenas */}
       {centroidsMap.size > 0 && activeConflictCountries.size > 0 && (

@@ -18,7 +18,7 @@ import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
-import { LANDMARKS, LandmarkArchetype } from '@/lib/landmark-data';
+import { LandmarkArchetype } from '@/lib/landmark-data';
 import type { Landmark } from '@/lib/landmark-data';
 import { createArchetypeGeometry, disposeGeometryCache } from '@/lib/landmark-geometries';
 

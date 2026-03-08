@@ -1,15 +1,14 @@
 /**
- * landmark-data.ts — 42개 세계 랜드마크 데이터 정의 (v20 Phase 1)
+ * landmark-data.ts — 195국 랜드마크 데이터 (v20 Phase 3 리팩토링)
  *
- * 각 랜드마크: id, name, city, country, iso3, lat, lng, tier, archetype, description
- * Tier 1 (15): 줌아웃 시에도 항상 표시 — 대륙별 최고 아이콘
- * Tier 2 (15): 중간 줌부터 표시 — 주요 도시 대표
- * Tier 3 (12): 근접 줌에서만 표시 — 보조 랜드마크
+ * 기존 42개 하드코딩 → 195국 동적 생성:
+ *   - ISO3별 고유 Archetype 할당 (유명 랜드마크 or 대륙/지역 기반)
+ *   - countryCentroids (GeoJSON에서 계산)로 정확한 위치
+ *   - 서버 Tier (S/A/B/C/D) → LOD Tier (1/2/3) 매핑
  */
 
 // ─── Enums ───
 
-/** 랜드마크 형상 분류 (12종) — Archetype별 프로시저럴 지오메트리 생성 기준 */
 export enum LandmarkArchetype {
   TOWER = 'TOWER',
   PYRAMID = 'PYRAMID',
@@ -40,100 +39,206 @@ export enum LandmarkArchetype {
   MONOLITH = 'MONOLITH',
 }
 
-/** 랜드마크 표시 우선순위 */
 export enum LandmarkTier {
-  /** 항상 표시 (줌아웃 포함) */
   TIER_1 = 1,
-  /** 중간 줌부터 표시 */
   TIER_2 = 2,
-  /** 근접 줌에서만 표시 */
   TIER_3 = 3,
 }
 
 // ─── Types ───
 
 export interface Landmark {
-  /** 고유 ID (1~42) */
   id: number;
-  /** 랜드마크 이름 (영문) */
   name: string;
-  /** 소재 도시 */
-  city: string;
-  /** 소재 국가 */
-  country: string;
-  /** ISO 3166-1 alpha-3 국가 코드 */
   iso3: string;
-  /** 위도 */
   lat: number;
-  /** 경도 */
   lng: number;
-  /** 표시 우선순위 (1=항상, 2=중간줌, 3=근접) */
   tier: LandmarkTier;
-  /** 로우폴리 형상 분류 */
   archetype: LandmarkArchetype;
-  /** 간략 설명 (한국어) */
-  description: string;
 }
 
-// ─── 42개 랜드마크 데이터 ───
+// ─── ISO3 → Archetype 매핑 (195국) ───
+// 유명 랜드마크가 있는 국가: 실제 건축물 기반
+// 나머지: 대륙/지역 문화권에 맞는 대표 Archetype
 
-export const LANDMARKS: Landmark[] = [
-  // ═══ Asia (12) ═══
-  { id: 1,  name: 'Tokyo Tower',           city: 'Tokyo',          country: 'Japan',       iso3: 'JPN', lat: 35.66,  lng: 139.75,  tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.TOWER,          description: '격자 원뿔 타워' },
-  { id: 2,  name: 'Taj Mahal',             city: 'Agra',           country: 'India',       iso3: 'IND', lat: 27.17,  lng: 78.04,   tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.DOME,           description: '돔 + 4 미나렛' },
-  { id: 3,  name: 'Great Wall',            city: 'Badaling',       country: 'China',       iso3: 'CHN', lat: 40.43,  lng: 116.57,  tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.WALL,           description: '지그재그 성벽 세그먼트' },
-  { id: 4,  name: 'Burj Khalifa',          city: 'Dubai',          country: 'UAE',         iso3: 'ARE', lat: 25.20,  lng: 55.27,   tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.NEEDLE,         description: '단계적 첨탑 (stacked, 테이퍼)' },
-  { id: 5,  name: 'Petronas Towers',       city: 'Kuala Lumpur',   country: 'Malaysia',    iso3: 'MYS', lat: 3.16,   lng: 101.71,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.TWIN_TOWER,     description: '쌍둥이 실린더 + 스카이 브릿지' },
-  { id: 6,  name: 'Mount Fuji',            city: 'Shizuoka',       country: 'Japan',       iso3: 'JPN', lat: 35.36,  lng: 138.73,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.MOUNTAIN,       description: '원뿔 + 백색 정상 캡' },
-  { id: 7,  name: 'Angkor Wat',            city: 'Siem Reap',      country: 'Cambodia',    iso3: 'KHM', lat: 13.41,  lng: 103.87,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.PYRAMID,        description: '단계식 피라미드 + 5 첨탑' },
-  { id: 8,  name: 'Forbidden City',        city: 'Beijing',        country: 'China',       iso3: 'CHN', lat: 39.92,  lng: 116.39,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.PAGODA,         description: '중층 파고다 (stacked BoxGeo)' },
-  { id: 9,  name: 'Marina Bay Sands',      city: 'Singapore',      country: 'Singapore',   iso3: 'SGP', lat: 1.28,   lng: 103.86,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.BRIDGE_TOP,     description: '3 타워 + 상판' },
-  { id: 10, name: 'Taipei 101',            city: 'Taipei',         country: 'Taiwan',      iso3: 'TWN', lat: 25.03,  lng: 121.56,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.TOWER,          description: '적층 팔각 타워' },
-  { id: 11, name: 'Gyeongbokgung',         city: 'Seoul',          country: 'South Korea', iso3: 'KOR', lat: 37.58,  lng: 126.98,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.PAGODA,         description: '기와지붕 전각' },
-  { id: 12, name: 'Wat Arun',              city: 'Bangkok',        country: 'Thailand',    iso3: 'THA', lat: 13.74,  lng: 100.49,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.SPIRE_CLUSTER,  description: '프랑 첨탑 클러스터' },
+const A = LandmarkArchetype;
 
-  // ═══ Europe & Middle East (12) ═══
-  { id: 13, name: 'Eiffel Tower',          city: 'Paris',          country: 'France',      iso3: 'FRA', lat: 48.86,  lng: 2.29,    tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.TOWER,          description: '격자 테이퍼드 타워' },
-  { id: 14, name: 'Big Ben',               city: 'London',         country: 'UK',          iso3: 'GBR', lat: 51.50,  lng: -0.12,   tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.CLOCK_TOWER,    description: '시계탑 + 피라미드 캡' },
-  { id: 15, name: 'Colosseum',             city: 'Rome',           country: 'Italy',       iso3: 'ITA', lat: 41.89,  lng: 12.49,   tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.ARENA,          description: '타원 링 (TorusGeo, 반높이)' },
-  { id: 16, name: 'Leaning Tower of Pisa', city: 'Pisa',           country: 'Italy',       iso3: 'ITA', lat: 43.72,  lng: 10.40,   tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.TILTED_TOWER,   description: '기울어진 실린더 + 링 티어' },
-  { id: 17, name: 'Sagrada Familia',       city: 'Barcelona',      country: 'Spain',       iso3: 'ESP', lat: 41.40,  lng: 2.17,    tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.SPIRE_CLUSTER,  description: '다중 첨탑 클러스터' },
-  { id: 18, name: 'Parthenon',             city: 'Athens',         country: 'Greece',      iso3: 'GRC', lat: 37.97,  lng: 23.73,   tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.TEMPLE,         description: '열주 직사각형' },
-  { id: 19, name: 'Brandenburg Gate',      city: 'Berlin',         country: 'Germany',     iso3: 'DEU', lat: 52.52,  lng: 13.38,   tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.GATE,           description: '기둥 열 + 상부 블록' },
-  { id: 20, name: "St. Basil's Cathedral", city: 'Moscow',         country: 'Russia',      iso3: 'RUS', lat: 55.75,  lng: 37.62,   tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.ONION_DOME,     description: '다색 양파돔 스택' },
-  { id: 21, name: 'Windmill',              city: 'Amsterdam',      country: 'Netherlands', iso3: 'NLD', lat: 52.37,  lng: 4.89,    tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.WINDMILL,       description: '원통 + 4블레이드' },
-  { id: 22, name: 'Neuschwanstein Castle', city: 'Bavaria',        country: 'Germany',     iso3: 'DEU', lat: 47.56,  lng: 10.75,   tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.CASTLE,         description: '성 타워 + 원뿔 캡' },
-  { id: 23, name: 'Stonehenge',            city: 'Wiltshire',      country: 'UK',          iso3: 'GBR', lat: 51.18,  lng: -1.83,   tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.STONE_RING,     description: '석판 링 원형 배치' },
-  { id: 24, name: 'Petra (Al-Khazneh)',    city: 'Petra',          country: 'Jordan',      iso3: 'JOR', lat: 30.33,  lng: 35.44,   tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.TEMPLE,         description: '암벽 파사드 + 기둥' },
+export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
+  // ═══ S-Tier (8) — 초강대국 ═══
+  USA: A.STATUE,        // 자유의 여신상
+  CHN: A.WALL,          // 만리장성
+  RUS: A.ONION_DOME,    // 성 바실리 성당
+  IND: A.DOME,          // 타지마할
+  BRA: A.STATUE,        // 구세주 그리스도상
+  JPN: A.PAGODA,        // 도쿄 타워/파고다
+  DEU: A.GATE,          // 브란덴부르크 문
+  GBR: A.CLOCK_TOWER,   // 빅벤
 
-  // ═══ Americas (10) ═══
-  { id: 25, name: 'Statue of Liberty',     city: 'New York',       country: 'USA',         iso3: 'USA', lat: 40.69,  lng: -74.04,  tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.STATUE,         description: '페데스탈 + 인체형 + 횃불' },
-  { id: 26, name: 'Christ the Redeemer',   city: 'Rio de Janeiro', country: 'Brazil',      iso3: 'BRA', lat: -22.95, lng: -43.21,  tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.STATUE,         description: '십자형 인체 + 산 정상' },
-  { id: 27, name: 'CN Tower',              city: 'Toronto',        country: 'Canada',      iso3: 'CAN', lat: 43.64,  lng: -79.39,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.NEEDLE,         description: '니들 타워 + 도넛 관측대' },
-  { id: 28, name: 'Empire State Building', city: 'New York',       country: 'USA',         iso3: 'USA', lat: 40.75,  lng: -73.99,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.SKYSCRAPER,     description: '아르데코 단계식 타워' },
-  { id: 29, name: 'Golden Gate Bridge',    city: 'San Francisco',  country: 'USA',         iso3: 'USA', lat: 37.82,  lng: -122.48, tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.BRIDGE,         description: '두 타워 + 현수 케이블' },
-  { id: 30, name: 'Chichen Itza',          city: 'Yucatan',        country: 'Mexico',      iso3: 'MEX', lat: 20.68,  lng: -88.57,  tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.PYRAMID,        description: '단계식 피라미드' },
-  { id: 31, name: 'Machu Picchu',          city: 'Cusco',          country: 'Peru',        iso3: 'PER', lat: -13.16, lng: -72.55,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.TERRACE,        description: '산악 계단식' },
-  { id: 32, name: 'Washington Monument',   city: 'Washington DC',  country: 'USA',         iso3: 'USA', lat: 38.89,  lng: -77.04,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.OBELISK,        description: '오벨리스크' },
-  { id: 33, name: 'Space Needle',          city: 'Seattle',        country: 'USA',         iso3: 'USA', lat: 47.62,  lng: -122.35, tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.NEEDLE,         description: '디스크 + 스템' },
-  { id: 34, name: 'US Capitol',            city: 'Washington DC',  country: 'USA',         iso3: 'USA', lat: 38.89,  lng: -77.01,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.DOME,           description: '돔 + 윙' },
+  // ═══ A-Tier (20) — 주요국 ═══
+  KOR: A.PAGODA,        // 경복궁
+  FRA: A.TOWER,         // 에펠탑
+  CAN: A.NEEDLE,        // CN 타워
+  AUS: A.SHELLS,        // 시드니 오페라하우스
+  SAU: A.DOME,          // 메카 모스크
+  TUR: A.DOME,          // 하기아 소피아
+  IDN: A.TEMPLE,        // 보로부두르
+  MEX: A.PYRAMID,       // 치첸이트사
+  ITA: A.ARENA,         // 콜로세움
+  ESP: A.SPIRE_CLUSTER, // 사그라다 파밀리아
+  IRN: A.DOME,          // 이맘 모스크
+  EGY: A.PYRAMID,       // 기자 피라미드
+  PAK: A.DOME,          // 바드샤히 모스크
+  NGA: A.OBELISK,       // 아부자 국가모스크/기념비
+  ISR: A.DOME,          // 바위의 돔
+  POL: A.CASTLE,        // 바벨 성
+  ZAF: A.MESA,          // 테이블 마운틴
+  UKR: A.ONION_DOME,    // 키이우 소피아 성당
+  NLD: A.WINDMILL,      // 풍차
+  SWE: A.CASTLE,        // 왕궁
 
-  // ═══ Africa & Oceania (8) ═══
-  { id: 35, name: 'Great Pyramid of Giza', city: 'Giza',           country: 'Egypt',       iso3: 'EGY', lat: 29.98,  lng: 31.13,   tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.PYRAMID,        description: '정사면체 (ConeGeo, 4seg)' },
-  { id: 36, name: 'Sydney Opera House',    city: 'Sydney',         country: 'Australia',   iso3: 'AUS', lat: -33.86, lng: 151.21,  tier: LandmarkTier.TIER_1, archetype: LandmarkArchetype.SHELLS,         description: '조개 돛 아크 지오메트리' },
-  { id: 37, name: 'Table Mountain',        city: 'Cape Town',      country: 'South Africa',iso3: 'ZAF', lat: -33.96, lng: 18.40,   tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.MESA,           description: '평탄 정상 메사' },
-  { id: 38, name: 'Great Sphinx',          city: 'Giza',           country: 'Egypt',       iso3: 'EGY', lat: 29.97,  lng: 31.14,   tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.STATUE,         description: '사자 몸체 로우폴리' },
-  { id: 39, name: 'Uluru',                 city: 'Northern Territory', country: 'Australia', iso3: 'AUS', lat: -25.34, lng: 131.04, tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.MONOLITH,       description: '반구체 모노리스' },
-  { id: 40, name: 'Sky Tower',             city: 'Auckland',       country: 'New Zealand', iso3: 'NZL', lat: -36.85, lng: 174.76,  tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.NEEDLE,         description: '니들 타워 변형' },
-  { id: 41, name: 'Mount Kilimanjaro',     city: 'Kilimanjaro',    country: 'Tanzania',    iso3: 'TZA', lat: -3.07,  lng: 37.35,   tier: LandmarkTier.TIER_2, archetype: LandmarkArchetype.MOUNTAIN,       description: '눈덮인 원뿔' },
-  { id: 42, name: 'Moai Statues',          city: 'Easter Island',  country: 'Chile',       iso3: 'CHL', lat: -27.12, lng: -109.35, tier: LandmarkTier.TIER_3, archetype: LandmarkArchetype.STATUE,         description: '직사각 머리 + 페데스탈' },
-];
+  // ═══ B-Tier (40) — 지역 강국 ═══
+  THA: A.SPIRE_CLUSTER, // 왓 아룬
+  ARG: A.OBELISK,       // 부에노스아이레스 오벨리스크
+  COL: A.STATUE,        // 보테로 동상
+  MYS: A.TWIN_TOWER,    // 페트로나스 타워
+  PHL: A.TERRACE,       // 바나웨 계단식 논
+  VNM: A.PAGODA,        // 한기둥 사원
+  BGD: A.DOME,          // 국회의사당
+  NOR: A.MOUNTAIN,      // 피요르드
+  CHE: A.MOUNTAIN,      // 마터호른
+  AUT: A.CASTLE,        // 쇤브룬 궁전
+  BEL: A.SKYSCRAPER,    // 아토미움
+  CHL: A.STATUE,        // 모아이
+  PER: A.TERRACE,       // 마추픽추
+  VEN: A.MOUNTAIN,      // 앙헬 폭포
+  IRQ: A.DOME,          // 사마라 모스크
+  KWT: A.NEEDLE,        // 쿠웨이트 타워
+  ARE: A.NEEDLE,        // 부르즈 칼리파
+  QAT: A.SKYSCRAPER,    // 도하 스카이라인
+  SGP: A.BRIDGE_TOP,    // 마리나 베이 샌즈
+  FIN: A.CASTLE,        // 수오멘린나
+  DNK: A.STATUE,        // 인어공주 동상
+  IRL: A.CASTLE,        // 벙케리 성
+  PRT: A.TOWER,         // 벨렝 타워
+  GRC: A.TEMPLE,        // 파르테논
+  CZE: A.CASTLE,        // 프라하 성
+  ROU: A.CASTLE,        // 브란 성 (드라큘라)
+  NZL: A.NEEDLE,        // 스카이 타워
+  KAZ: A.NEEDLE,        // 바이테렉 타워
+  ETH: A.OBELISK,       // 악숨 오벨리스크
+  DZA: A.DOME,          // 케찌와 모스크
+  MAR: A.DOME,          // 하산 2세 모스크
+  KEN: A.MOUNTAIN,      // 킬리만자로 근접
+  MMR: A.PAGODA,        // 쉐다곤 파고다
+  TWN: A.TOWER,         // 타이페이 101
+  HUN: A.DOME,          // 국회의사당
+  PRK: A.OBELISK,       // 주체탑
+  CUB: A.DOME,          // 카피톨리오
+  LBY: A.DOME,          // 트리폴리 모스크
+  AGO: A.MONOLITH,      // 투카 요새
+  COD: A.MONOLITH,      // 콩고 기념비
 
-// ─── 유틸리티 ───
+  // ═══ C-Tier (80) — 중간국 ═══
+  SVK: A.CASTLE,    SVN: A.CASTLE,    HRV: A.ARENA,     SRB: A.TEMPLE,
+  BGR: A.DOME,      LTU: A.CASTLE,    LVA: A.CASTLE,    EST: A.CASTLE,
+  BLR: A.OBELISK,   GEO: A.DOME,      ARM: A.DOME,      AZE: A.TOWER,
+  UZB: A.DOME,      TKM: A.DOME,      KGZ: A.MOUNTAIN,  TJK: A.MOUNTAIN,
+  AFG: A.DOME,      NPL: A.PAGODA,    LKA: A.PAGODA,    KHM: A.PYRAMID,
+  LAO: A.PAGODA,    MNG: A.MONOLITH,  JOR: A.TEMPLE,    LBN: A.TEMPLE,
+  SYR: A.DOME,      YEM: A.TOWER,     OMN: A.DOME,      BHR: A.NEEDLE,
+  ECU: A.DOME,      BOL: A.TERRACE,   PRY: A.DOME,      URY: A.OBELISK,
+  PAN: A.BRIDGE,    CRI: A.MOUNTAIN,  GTM: A.PYRAMID,   HND: A.PYRAMID,
+  SLV: A.PYRAMID,   NIC: A.DOME,      DOM: A.DOME,      HTI: A.DOME,
+  JAM: A.STATUE,    TTO: A.SKYSCRAPER,CMR: A.MONOLITH,  GHA: A.GATE,
+  CIV: A.DOME,      SEN: A.STATUE,    MLI: A.DOME,      BFA: A.MONOLITH,
+  NER: A.DOME,      TCD: A.MONOLITH,  SDN: A.DOME,      SSD: A.MONOLITH,
+  ERI: A.OBELISK,   DJI: A.MONOLITH,  SOM: A.DOME,      UGA: A.DOME,
+  RWA: A.MOUNTAIN,  BDI: A.MONOLITH,  TZA: A.MOUNTAIN,  MOZ: A.MONOLITH,
+  MDG: A.MONOLITH,  ZMB: A.MONOLITH,  ZWE: A.STONE_RING,MWI: A.MONOLITH,
+  BWA: A.MONOLITH,  NAM: A.MONOLITH,  LSO: A.MOUNTAIN,  SWZ: A.MONOLITH,
+  TUN: A.DOME,      MRT: A.DOME,      GAB: A.MONOLITH,  COG: A.MONOLITH,
+  GNQ: A.MONOLITH,  CAF: A.MONOLITH,  PNG: A.MONOLITH,  FJI: A.MONOLITH,
+  SLB: A.MONOLITH,  VUT: A.MONOLITH,  WSM: A.MONOLITH,  TON: A.MONOLITH,
 
-/** Tier별 랜드마크 필터 */
-export const TIER_1_LANDMARKS = LANDMARKS.filter(l => l.tier === LandmarkTier.TIER_1);
-export const TIER_2_LANDMARKS = LANDMARKS.filter(l => l.tier <= LandmarkTier.TIER_2);
+  // ═══ D-Tier (~47) — 소국 ═══
+  LUX: A.CASTLE,    MCO: A.SKYSCRAPER,LIE: A.CASTLE,    AND: A.CASTLE,
+  MLT: A.TEMPLE,    ISL: A.MOUNTAIN,  CYP: A.TEMPLE,    MNE: A.CASTLE,
+  ALB: A.CASTLE,    MKD: A.DOME,      BIH: A.BRIDGE,    MDA: A.DOME,
+  BRN: A.DOME,      TLS: A.MONOLITH,  BTN: A.PAGODA,    MDV: A.MONOLITH,
+  BRB: A.STATUE,    BHS: A.MONOLITH,  BLZ: A.PYRAMID,   GUY: A.MONOLITH,
+  SUR: A.MONOLITH,  ATG: A.MONOLITH,  DMA: A.MONOLITH,  GRD: A.MONOLITH,
+  KNA: A.MONOLITH,  LCA: A.MONOLITH,  VCT: A.MONOLITH,  MUS: A.MONOLITH,
+  SYC: A.MONOLITH,  COM: A.MONOLITH,  CPV: A.MONOLITH,  STP: A.MONOLITH,
+  GNB: A.MONOLITH,  GMB: A.MONOLITH,  SLE: A.MONOLITH,  LBR: A.MONOLITH,
+  TGO: A.MONOLITH,  BEN: A.MONOLITH,  PLW: A.MONOLITH,  MHL: A.MONOLITH,
+  FSM: A.MONOLITH,  NRU: A.MONOLITH,  TUV: A.MONOLITH,  KIR: A.MONOLITH,
+  PSE: A.DOME,      XKX: A.DOME,      SMR: A.CASTLE,
+};
 
-/** 총 개수 상수 */
-export const LANDMARK_COUNT = LANDMARKS.length; // 42
+// ─── ISO3 → Tier 매핑 (서버 Tier에 기반) ───
+// S-Tier, A-Tier → TIER_1 (항상 표시)
+// B-Tier → TIER_2 (중간 줌)
+// C-Tier, D-Tier → TIER_3 (근접 줌)
+
+const TIER_1_COUNTRIES = new Set([
+  // S-Tier
+  'USA','CHN','RUS','IND','BRA','JPN','DEU','GBR',
+  // A-Tier
+  'KOR','FRA','CAN','AUS','SAU','TUR','IDN','MEX','ITA','ESP',
+  'IRN','EGY','PAK','NGA','ISR','POL','ZAF','UKR','NLD','SWE',
+]);
+
+const TIER_2_COUNTRIES = new Set([
+  'THA','ARG','COL','MYS','PHL','VNM','BGD','NOR','CHE','AUT',
+  'BEL','CHL','PER','VEN','IRQ','KWT','ARE','QAT','SGP','FIN',
+  'DNK','IRL','PRT','GRC','CZE','ROU','NZL','KAZ','ETH','DZA',
+  'MAR','KEN','MMR','TWN','HUN','PRK','CUB','LBY','AGO','COD',
+]);
+
+function getTierForISO3(iso3: string): LandmarkTier {
+  if (TIER_1_COUNTRIES.has(iso3)) return LandmarkTier.TIER_1;
+  if (TIER_2_COUNTRIES.has(iso3)) return LandmarkTier.TIER_2;
+  return LandmarkTier.TIER_3;
+}
+
+function getArchetypeForISO3(iso3: string): LandmarkArchetype {
+  return COUNTRY_ARCHETYPE[iso3] || LandmarkArchetype.MONOLITH;
+}
+
+// ─── 동적 랜드마크 생성 ───
+
+/**
+ * countryCentroids Map에서 전체 Landmark 배열을 생성
+ * GlobeLandmarks에서 호출 — GeoJSON 기반 centroid 좌표 사용
+ */
+export function generateLandmarksFromCentroids(
+  centroids: Map<string, [number, number]>,
+): Landmark[] {
+  const landmarks: Landmark[] = [];
+  let id = 1;
+  for (const [iso3, [lat, lng]] of centroids) {
+    landmarks.push({
+      id: id++,
+      name: iso3,
+      iso3,
+      lat,
+      lng,
+      tier: getTierForISO3(iso3),
+      archetype: getArchetypeForISO3(iso3),
+    });
+  }
+  return landmarks;
+}
+
+// ─── Tier 필터 유틸리티 ───
+
+export function filterByTier(landmarks: Landmark[], maxTier: LandmarkTier): Landmark[] {
+  return landmarks.filter(l => l.tier <= maxTier);
+}
+
+// ─── 레거시 호환: 42개 하드코딩 (LandmarkSprites에서 아직 참조) ───
+
+export const LANDMARKS: Landmark[] = [];
+export const TIER_1_LANDMARKS: Landmark[] = [];
+export const TIER_2_LANDMARKS: Landmark[] = [];
+export const LANDMARK_COUNT = 0;
