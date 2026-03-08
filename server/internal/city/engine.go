@@ -38,36 +38,39 @@ type WarEventReceiver interface {
 
 // CityCommand represents a player command to the city engine.
 type CityCommand struct {
-	Type       string `json:"type"`       // "build", "demolish", "upgrade", "toggle", "issue_edict", "revoke_edict"
-	BuildingID string `json:"buildingId"` // for demolish/upgrade/toggle
-	DefID      string `json:"defId"`      // for build
-	TileX      int    `json:"tileX"`      // for build
-	TileY      int    `json:"tileY"`      // for build
-	EdictID    string `json:"edictId"`    // for issue_edict/revoke_edict
+	Type        string `json:"type"`        // "build", "demolish", "upgrade", "toggle", "issue_edict", "revoke_edict", "vote"
+	BuildingID  string `json:"buildingId"`  // for demolish/upgrade/toggle
+	DefID       string `json:"defId"`       // for build
+	TileX       int    `json:"tileX"`       // for build
+	TileY       int    `json:"tileY"`       // for build
+	EdictID     string `json:"edictId"`     // for issue_edict/revoke_edict
+	CandidateID string `json:"candidateId"` // for vote
 }
 
 // CityState is the serializable state sent to clients.
 type CityState struct {
-	ISO3        string              `json:"iso3"`
-	Tier        string              `json:"tier"`
-	Mode        ControlMode         `json:"mode"`
-	Buildings   []*Building         `json:"buildings"`
-	Citizens    []CitizenSnapshot   `json:"citizens"`
-	Resources   map[string]float64  `json:"resources"` // resource type → quantity
-	Treasury    float64             `json:"treasury"`
-	GDP         float64             `json:"gdp"`
-	Population  int                 `json:"population"`
-	Happiness   float64             `json:"happiness"`
-	Military    float64             `json:"military"`
-	PowerGen    float64             `json:"powerGen"`
-	PowerUse    float64             `json:"powerUse"`
-	TaxRate     float64             `json:"taxRate"`
-	TickCount   uint64              `json:"tickCount"`
-	AtWar       bool                `json:"atWar"`
-	TradeRoutes []*TradeRoute       `json:"tradeRoutes"`
-	Employed    int                 `json:"employed"`
-	Unemployed  int                 `json:"unemployed"`
-	Politics    *PoliticsSnapshot   `json:"politics,omitempty"`
+	ISO3        string                    `json:"iso3"`
+	Tier        string                    `json:"tier"`
+	Mode        ControlMode               `json:"mode"`
+	Buildings   []*Building               `json:"buildings"`
+	Citizens    []CitizenSnapshot         `json:"citizens"`
+	Resources   map[string]float64        `json:"resources"` // resource type → quantity
+	Treasury    float64                   `json:"treasury"`
+	GDP         float64                   `json:"gdp"`
+	Population  int                       `json:"population"`
+	Happiness   float64                   `json:"happiness"`
+	Military    float64                   `json:"military"`
+	PowerGen    float64                   `json:"powerGen"`
+	PowerUse    float64                   `json:"powerUse"`
+	TaxRate     float64                   `json:"taxRate"`
+	TickCount   uint64                    `json:"tickCount"`
+	AtWar       bool                      `json:"atWar"`
+	TradeRoutes []*TradeRoute             `json:"tradeRoutes"`
+	Employed    int                       `json:"employed"`
+	Unemployed  int                       `json:"unemployed"`
+	Politics    *PoliticsSnapshot         `json:"politics,omitempty"`
+	Election    *ElectionSnapshot         `json:"election,omitempty"`
+	Diplomacy   *DiplomacyBridgeSnapshot  `json:"diplomacy,omitempty"`
 }
 
 // CitySimEngine manages the simulation for a single country's city.
@@ -88,9 +91,11 @@ type CitySimEngine struct {
 	happiness    float64
 
 	// Sub-engines
-	production  *ProductionEngine
-	politics    *PoliticsEngine
-	tradeRoutes []*TradeRoute
+	production      *ProductionEngine
+	politics        *PoliticsEngine
+	election        *ElectionEngine
+	diplomacyBridge *DiplomacyBridge
+	tradeRoutes     []*TradeRoute
 
 	// External references (interfaces for decoupling)
 	worldMgr   WorldSyncer
@@ -129,22 +134,24 @@ func NewCitySimEngine(iso3, tier string) *CitySimEngine {
 	}
 
 	return &CitySimEngine{
-		iso3:         iso3,
-		tier:         tier,
-		mode:         ModeAI,
-		buildings:    make(map[string]*Building),
-		citizens:     citizens,
-		stockpile:    NewStockpile(),
-		treasury:     10000, // starting treasury
-		taxRate:      0.10,  // 10% default tax
-		citizenCount: citizenTarget,
-		happiness:    70.0, // 0-100
-		production:   NewProductionEngine(),
-		politics:     NewPoliticsEngine(),
-		tradeRoutes:  make([]*TradeRoute, 0),
-		tickInterval: 10 * time.Second,
-		lastTick:     time.Now(),
-		rng:          rng,
+		iso3:            iso3,
+		tier:            tier,
+		mode:            ModeAI,
+		buildings:       make(map[string]*Building),
+		citizens:        citizens,
+		stockpile:       NewStockpile(),
+		treasury:        10000, // starting treasury
+		taxRate:         0.10,  // 10% default tax
+		citizenCount:    citizenTarget,
+		happiness:       70.0, // 0-100
+		production:      NewProductionEngine(),
+		politics:        NewPoliticsEngine(),
+		election:        NewElectionEngine(),
+		diplomacyBridge: NewDiplomacyBridge(iso3),
+		tradeRoutes:     make([]*TradeRoute, 0),
+		tickInterval:    10 * time.Second,
+		lastTick:        time.Now(),
+		rng:             rng,
 	}
 }
 
@@ -242,6 +249,43 @@ func (e *CitySimEngine) FullTick() {
 		e.treasury = 0
 	}
 
+	// Step 5.6: Diplomacy bridge tick — war effects, trade modifiers
+	if e.diplomacyBridge != nil {
+		warDrain, _, militaryMult := e.diplomacyBridge.TickDiplomacy(e.iso3)
+		if warDrain > 0 {
+			if e.treasury >= warDrain {
+				e.treasury -= warDrain
+			} else {
+				e.treasury = 0
+			}
+		}
+		// Apply military boost to military power calculation
+		if militaryMult > 1.0 {
+			e.militaryPower *= militaryMult
+		}
+	}
+
+	// Step 5.7: Election tick — campaign, voting, results
+	if e.election != nil && e.politics != nil {
+		pledgedEdicts := e.election.TickElection(e.tickCount, e.citizens, e.politics, e.rng)
+		// Enact winner's pledged edicts
+		for _, edictID := range pledgedEdicts {
+			// Revoke conflicting active edicts in same category first
+			def := GetEdictDef(edictID)
+			if def != nil {
+				// Try to issue the edict (may fail if max active reached)
+				err := e.politics.IssueEdict(edictID, e.treasury, e.tickCount)
+				if err != nil {
+					slog.Debug("election edict enactment failed",
+						"iso3", e.iso3,
+						"edict", edictID,
+						"error", err,
+					)
+				}
+			}
+		}
+	}
+
 	// Step 6: Pay citizen savings (salary → savings each tick)
 	e.payCitizenSalaries()
 
@@ -303,6 +347,8 @@ func (e *CitySimEngine) HandleCommand(cmd CityCommand) error {
 		return e.handleIssueEdict(cmd)
 	case "revoke_edict":
 		return e.handleRevokeEdict(cmd)
+	case "vote":
+		return e.handleVote(cmd)
 	default:
 		return fmt.Errorf("unknown command type: %s", cmd.Type)
 	}
@@ -429,6 +475,14 @@ func (e *CitySimEngine) handleRevokeEdict(cmd CityCommand) error {
 	return e.politics.RevokeEdict(EdictID(cmd.EdictID), e.tickCount)
 }
 
+// handleVote casts the player's vote for a candidate.
+func (e *CitySimEngine) handleVote(cmd CityCommand) error {
+	if e.election == nil {
+		return fmt.Errorf("election engine not initialized")
+	}
+	return e.election.CastVote(cmd.CandidateID)
+}
+
 // GetCityState returns the current city state for client serialization.
 func (e *CitySimEngine) GetCityState() CityState {
 	e.mu.RLock()
@@ -468,6 +522,20 @@ func (e *CitySimEngine) GetCityState() CityState {
 		politicsSnap = &snap
 	}
 
+	// Election snapshot
+	var electionSnap *ElectionSnapshot
+	if e.election != nil {
+		snap := e.election.Snapshot()
+		electionSnap = &snap
+	}
+
+	// Diplomacy bridge snapshot
+	var diplomacySnap *DiplomacyBridgeSnapshot
+	if e.diplomacyBridge != nil {
+		snap := e.diplomacyBridge.Snapshot()
+		diplomacySnap = &snap
+	}
+
 	return CityState{
 		ISO3:        e.iso3,
 		Tier:        e.tier,
@@ -489,6 +557,8 @@ func (e *CitySimEngine) GetCityState() CityState {
 		Employed:    employed,
 		Unemployed:  len(e.citizens) - employed,
 		Politics:    politicsSnap,
+		Election:    electionSnap,
+		Diplomacy:   diplomacySnap,
 	}
 }
 

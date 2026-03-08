@@ -1,5 +1,5 @@
 /**
- * v26 Phase 4+5 — UI Components barrel export
+ * v26 Phase 4+5+6 — UI Components barrel export
  */
 
 export { ResourceHUD } from './ResourceHUD';
@@ -8,3 +8,4 @@ export { ConstructionPanel } from './ConstructionPanel';
 export { EconomyDashboard } from './EconomyDashboard';
 export { ProductionChainOverlay } from './ProductionChainOverlay';
 export { PoliticsPanel } from './PoliticsPanel';
+export { ElectionPanel } from './ElectionPanel';

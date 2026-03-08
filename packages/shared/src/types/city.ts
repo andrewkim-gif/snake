@@ -140,11 +140,15 @@ export interface CityClientState {
   unemployed: number;
   /** Phase 5: Politics state */
   politics?: PoliticsClientState;
+  /** Phase 6: Election state */
+  election?: ElectionClientState;
+  /** Phase 6: Diplomacy bridge state */
+  diplomacy?: DiplomacyBridgeState;
 }
 
 // --- City Commands (Client → Server) ---
 
-export type CityCommandType = "build" | "demolish" | "upgrade" | "toggle" | "issue_edict" | "revoke_edict";
+export type CityCommandType = "build" | "demolish" | "upgrade" | "toggle" | "issue_edict" | "revoke_edict" | "vote";
 
 export interface CityCommand {
   iso3: string;
@@ -153,7 +157,8 @@ export interface CityCommand {
   defId?: string;      // for build
   tileX?: number;      // for build
   tileY?: number;      // for build
-  edictId?: string;    // for issue_edict/revoke_edict
+  edictId?: string;       // for issue_edict/revoke_edict
+  candidateId?: string;   // for vote
 }
 
 // --- City Events (Server → Client) ---
@@ -279,4 +284,66 @@ export interface PoliticsClientState {
   activeEdicts: ActiveEdict[];
   availableEdicts: EdictDef[];
   recentEvents: PoliticalEvent[];
+}
+
+// --- Phase 6: Election System Types ---
+
+/** Election cycle phase */
+export type ElectionPhase = 'none' | 'campaign' | 'voting' | 'results';
+
+/** Pledge (edict promise) in a candidate's platform */
+export interface PledgeSnapshot {
+  edictId: string;
+  edictName: string;
+  category: string;
+  description: string;
+}
+
+/** Election candidate */
+export interface CandidateSnapshot {
+  id: string;
+  name: string;
+  isIncumbent: boolean;
+  /** Candidate's political stance (4 axes) */
+  factionAxes: FactionAxes;
+  /** Edicts the candidate pledges to enact */
+  pledges: PledgeSnapshot[];
+  /** Current poll support (0~100%) */
+  supportPct: number;
+  /** Final vote count (only after results) */
+  votes: number;
+}
+
+/** Completed election record */
+export interface ElectionRecord {
+  tick: number;
+  winnerId: string;
+  winnerName: string;
+  candidates: CandidateSnapshot[];
+  totalVotes: number;
+}
+
+/** Election state included in CityClientState */
+export interface ElectionClientState {
+  phase: ElectionPhase;
+  candidates: CandidateSnapshot[];
+  phaseStart: number;
+  nextElection: number;
+  playerVote: string;
+  history: ElectionRecord[];
+}
+
+// --- Phase 6: Diplomacy Bridge Types ---
+
+/** Diplomacy bridge state (Iso ↔ Globe connection) */
+export interface DiplomacyBridgeState {
+  isAtWar: boolean;
+  enemies: string[];
+  warResourceDrain: number;
+  warHappinessPenalty: number;
+  militaryBoost: number;
+  tradeBonus: number;
+  allyCount: number;
+  tradePartners: number;
+  sanctionedBy: number;
 }

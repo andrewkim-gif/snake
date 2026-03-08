@@ -30,6 +30,7 @@ import { ConstructionPanel } from './ui/ConstructionPanel';
 import { EconomyDashboard } from './ui/EconomyDashboard';
 import { ProductionChainOverlay } from './ui/ProductionChainOverlay';
 import { PoliticsPanel } from './ui/PoliticsPanel';
+import { ElectionPanel } from './ui/ElectionPanel';
 
 // ─── Props ───
 
@@ -72,6 +73,9 @@ export function IsoCanvas({
   const serverBuildings = useCityStore(s => s.serverBuildings);
   const showPoliticsPanel = useCityStore(s => s.showPoliticsPanel);
   const togglePoliticsPanel = useCityStore(s => s.togglePoliticsPanel);
+  const showElectionPanel = useCityStore(s => s.showElectionPanel);
+  const toggleElectionPanel = useCityStore(s => s.toggleElectionPanel);
+  const electionPhase = useCityStore(s => s.election?.phase ?? 'none');
 
   // 선택된 건물 인스턴스 조회
   const selectedBuilding: Building | null = selectedBuildingId
@@ -277,7 +281,12 @@ export function IsoCanvas({
           setPlacingDefId(null);
           return;
         }
-        // 2순위: 정치 패널 닫기
+        // 2순위: 선거 패널 닫기
+        if (showElectionPanel) {
+          toggleElectionPanel();
+          return;
+        }
+        // 3순위: 정치 패널 닫기
         if (showPoliticsPanel) {
           togglePoliticsPanel();
           return;
@@ -311,10 +320,13 @@ export function IsoCanvas({
       if (e.key === 'p' || e.key === 'P') {
         togglePoliticsPanel();
       }
+      if (e.key === 'v' || e.key === 'V') {
+        toggleElectionPanel();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, showPoliticsPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel, togglePoliticsPanel]);
+  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, showPoliticsPanel, showElectionPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel, togglePoliticsPanel, toggleElectionPanel]);
 
   return (
     <div style={{
@@ -440,6 +452,37 @@ export function IsoCanvas({
           >
             POLITICS [P]
           </button>
+          {/* 선거 패널 토글 */}
+          <button
+            onClick={toggleElectionPanel}
+            style={{
+              fontFamily: bodyFont,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: showElectionPanel
+                ? '#10B981'
+                : electionPhase !== 'none'
+                  ? '#F59E0B'
+                  : SK.textSecondary,
+              backgroundColor: showElectionPanel
+                ? 'rgba(16, 185, 129, 0.12)'
+                : electionPhase !== 'none'
+                  ? 'rgba(245, 158, 11, 0.08)'
+                  : 'rgba(9,9,11,0.88)',
+              border: `1px solid ${showElectionPanel
+                ? 'rgba(16, 185, 129, 0.25)'
+                : electionPhase !== 'none'
+                  ? 'rgba(245, 158, 11, 0.2)'
+                  : SK.glassBorder}`,
+              borderRadius: 0,
+              padding: '6px 10px',
+              cursor: 'pointer',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+            }}
+          >
+            {electionPhase !== 'none' ? `VOTE [V]` : 'ELECTION [V]'}
+          </button>
 
           {/* 호버 타일 정보 */}
           {hoverInfo && (
@@ -455,6 +498,53 @@ export function IsoCanvas({
           )}
         </div>
       </div>
+
+      {/* ──── Phase 6: 선거 배너 알림 ──── */}
+      {electionPhase !== 'none' && !showElectionPanel && (
+        <div
+          onClick={toggleElectionPanel}
+          style={{
+            position: 'absolute',
+            top: '52px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            padding: '6px 16px',
+            background: electionPhase === 'voting'
+              ? 'rgba(16, 185, 129, 0.15)'
+              : electionPhase === 'results'
+                ? 'rgba(59, 130, 246, 0.15)'
+                : 'rgba(245, 158, 11, 0.15)',
+            border: `1px solid ${electionPhase === 'voting'
+              ? 'rgba(16, 185, 129, 0.3)'
+              : electionPhase === 'results'
+                ? 'rgba(59, 130, 246, 0.3)'
+                : 'rgba(245, 158, 11, 0.3)'}`,
+            cursor: 'pointer',
+            zIndex: 15,
+            pointerEvents: 'auto',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+          }}
+        >
+          <span style={{
+            fontFamily: bodyFont,
+            fontSize: '10px',
+            fontWeight: 700,
+            color: electionPhase === 'voting'
+              ? '#10B981'
+              : electionPhase === 'results'
+                ? '#3B82F6'
+                : '#F59E0B',
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+          }}>
+            {electionPhase === 'campaign' && 'ELECTION: Campaign Period — Click to view candidates'}
+            {electionPhase === 'voting' && 'ELECTION: Voting in Progress — Click to cast your vote'}
+            {electionPhase === 'results' && 'ELECTION: Results Announced — Click to view'}
+          </span>
+        </div>
+      )}
 
       {/* ──── Phase 4: 자원 HUD ──── */}
       <ResourceHUD />
@@ -514,6 +604,17 @@ export function IsoCanvas({
           onRevokeEdict={(edictId) => {
             console.log('[IsoCanvas] revoke edict:', edictId);
             // city_command { type: 'revoke_edict', edictId } 전송
+          }}
+        />
+      )}
+
+      {/* ──── Phase 6: 선거 패널 (중앙 모달) ──── */}
+      {showElectionPanel && (
+        <ElectionPanel
+          onClose={toggleElectionPanel}
+          onVote={(candidateId) => {
+            console.log('[IsoCanvas] vote for candidate:', candidateId);
+            // city_command { type: 'vote', candidateId } 전송
           }}
         />
       )}

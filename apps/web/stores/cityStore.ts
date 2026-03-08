@@ -15,6 +15,8 @@ import type {
   TradeRoute,
   PoliticsClientState,
   PoliticalEvent,
+  ElectionClientState,
+  DiplomacyBridgeState,
 } from '@agent-survivor/shared/types/city';
 
 // ─── UI 상태 타입 ───
@@ -72,6 +74,12 @@ interface CityState {
   /** 최근 정치 이벤트 알림 큐 */
   politicalEvents: PoliticalEvent[];
 
+  // ── Phase 6: 선거 + 외교 상태 ──
+  /** 선거 상태 (서버에서 수신) */
+  election: ElectionClientState | null;
+  /** 외교 브릿지 상태 */
+  diplomacyBridge: DiplomacyBridgeState | null;
+
   // ── Phase 4: UI 상태 ──
   /** 선택된 건물 ID (건물 정보 패널용) */
   selectedBuildingId: string | null;
@@ -85,6 +93,8 @@ interface CityState {
   constructionCategory: ConstructionCategory;
   /** 정치 패널 표시 */
   showPoliticsPanel: boolean;
+  /** 선거 패널 표시 */
+  showElectionPanel: boolean;
 }
 
 // ─── Actions ───
@@ -127,6 +137,14 @@ interface CityActions {
   addPoliticalEvent: (event: PoliticalEvent) => void;
   /** 정치 이벤트 클리어 */
   clearPoliticalEvents: () => void;
+
+  // ── Phase 6: 선거 + 외교 액션 ──
+  /** 선거 상태 업데이트 (서버 city_state 수신 시) */
+  syncElection: (election: ElectionClientState | null) => void;
+  /** 외교 브릿지 상태 업데이트 */
+  syncDiplomacyBridge: (diplomacy: DiplomacyBridgeState | null) => void;
+  /** 선거 패널 토글 */
+  toggleElectionPanel: () => void;
 
   // ── Phase 4: UI 액션 ──
   /** 건물 선택 (정보 패널용) */
@@ -173,6 +191,10 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
   politics: null,
   politicalEvents: [],
 
+  // 초기 상태 — Phase 6: 선거 + 외교
+  election: null,
+  diplomacyBridge: null,
+
   // 초기 상태 — Phase 4: UI
   selectedBuildingId: null,
   showEconomyDashboard: false,
@@ -180,6 +202,7 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
   showProductionChain: false,
   constructionCategory: 'all',
   showPoliticsPanel: false,
+  showElectionPanel: false,
 
   // ── Phase 1 액션 ──
   enterCountry: (iso3, name, tier = 'C') =>
@@ -213,6 +236,10 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
       politics: null,
       politicalEvents: [],
       showPoliticsPanel: false,
+      // Phase 6 상태 초기화
+      election: null,
+      diplomacyBridge: null,
+      showElectionPanel: false,
     }),
 
   leaveCountry: () =>
@@ -244,6 +271,10 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
       politics: null,
       politicalEvents: [],
       showPoliticsPanel: false,
+      // Phase 6 상태 초기화
+      election: null,
+      diplomacyBridge: null,
+      showElectionPanel: false,
     }),
 
   addBuilding: (building) =>
@@ -286,6 +317,16 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
 
   clearPoliticalEvents: () =>
     set({ politicalEvents: [] }),
+
+  // ── Phase 6: 선거 + 외교 액션 ──
+  syncElection: (election) =>
+    set({ election }),
+
+  syncDiplomacyBridge: (diplomacy) =>
+    set({ diplomacyBridge: diplomacy }),
+
+  toggleElectionPanel: () =>
+    set((state) => ({ showElectionPanel: !state.showElectionPanel })),
 
   // ── Phase 4: UI 액션 ──
   selectBuilding: (buildingId) =>
