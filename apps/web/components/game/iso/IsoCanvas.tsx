@@ -1,14 +1,13 @@
 'use client';
 
 /**
- * v26 Phase 1 — IsoCanvas
+ * v26 Phase 1+4 — IsoCanvas
  * PixiJS 8 기반 아이소메트릭 캔버스 (Next.js dynamic import, ssr: false)
  *
  * - PixiJS Application 생성/파괴 lifecycle
  * - 마우스/휠/키보드 입력 처리
  * - 카메라 팬/줌 컨트롤
- * - 건물 배치 UI (팔레트 + 클릭)
- * - Globe 복귀 버튼
+ * - Phase 4: 경제 UI + 생산 시각화 오버레이 통합
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
@@ -19,11 +18,17 @@ import {
   BUILDING_DEFS,
   TILE_DEFS,
   type MapTier,
-  type BuildingDef,
-  type TileCoord,
 } from './types';
-import type { CitizenSnapshot } from '@agent-survivor/shared/types/city';
+import type { CitizenSnapshot, Building } from '@agent-survivor/shared/types/city';
 import { SK, bodyFont } from '@/lib/sketch-ui';
+import { useCityStore } from '@/stores/cityStore';
+
+// Phase 4 UI 컴포넌트
+import { ResourceHUD } from './ui/ResourceHUD';
+import { BuildingInfoPanel } from './ui/BuildingInfoPanel';
+import { ConstructionPanel } from './ui/ConstructionPanel';
+import { EconomyDashboard } from './ui/EconomyDashboard';
+import { ProductionChainOverlay } from './ui/ProductionChainOverlay';
 
 // ─── Props ───
 
@@ -51,8 +56,24 @@ export function IsoCanvas({
   const appRef = useRef<Application | null>(null);
   const tilemapRef = useRef<IsoTilemap | null>(null);
   const citizenLayerRef = useRef<IsoCitizenLayer | null>(null);
-  const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null);
+  const [placingDefId, setPlacingDefId] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<{ tileX: number; tileY: number; tileType: string } | null>(null);
+
+  // Phase 4: Zustand store 바인딩
+  const selectedBuildingId = useCityStore(s => s.selectedBuildingId);
+  const selectBuilding = useCityStore(s => s.selectBuilding);
+  const showEconomyDashboard = useCityStore(s => s.showEconomyDashboard);
+  const toggleEconomyDashboard = useCityStore(s => s.toggleEconomyDashboard);
+  const showConstructionPanel = useCityStore(s => s.showConstructionPanel);
+  const toggleConstructionPanel = useCityStore(s => s.toggleConstructionPanel);
+  const showProductionChain = useCityStore(s => s.showProductionChain);
+  const toggleProductionChain = useCityStore(s => s.toggleProductionChain);
+  const serverBuildings = useCityStore(s => s.serverBuildings);
+
+  // 선택된 건물 인스턴스 조회
+  const selectedBuilding: Building | null = selectedBuildingId
+    ? serverBuildings.find(b => b.id === selectedBuildingId) ?? null
+    : null;
 
   // 마우스 드래그 상태
   const dragRef = useRef({ dragging: false, lastX: 0, lastY: 0 });
@@ -213,38 +234,76 @@ export function IsoCanvas({
     tilemap.zoom(delta, worldX, worldY);
   }, []);
 
-  // ─── 건물 선택 ───
+  // ─── 건물 선택 (Phase 1 팔레트 배치 모드) ───
 
-  const handleSelectBuilding = useCallback((defId: string) => {
+  const handleSelectPlacingBuilding = useCallback((defId: string) => {
     const tilemap = tilemapRef.current;
     if (!tilemap) return;
 
-    if (selectedBuilding === defId) {
-      // 동일 건물 재클릭 → 배치 모드 취소
+    if (placingDefId === defId) {
       tilemap.cancelPlacing();
-      setSelectedBuilding(null);
+      setPlacingDefId(null);
     } else {
       tilemap.startPlacing(defId);
-      setSelectedBuilding(defId);
+      setPlacingDefId(defId);
     }
-  }, [selectedBuilding]);
+  }, [placingDefId]);
 
-  // ─── ESC 키 → 배치 취소 또는 Globe 복귀 ───
+  // ─── Phase 4: 건설 패널에서 건물 선택 → 배치 모드 ───
+  const handleConstructionSelect = useCallback((defId: string) => {
+    const tilemap = tilemapRef.current;
+    if (!tilemap) return;
+
+    if (placingDefId === defId) {
+      tilemap.cancelPlacing();
+      setPlacingDefId(null);
+    } else {
+      tilemap.startPlacing(defId);
+      setPlacingDefId(defId);
+    }
+  }, [placingDefId]);
+
+  // ─── ESC 키 → 배치 취소 / 패널 닫기 / Globe 복귀 ───
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
+        // 1순위: 배치 모드 취소
         const tilemap = tilemapRef.current;
         if (tilemap?.getPlacingBuilding()) {
           tilemap.cancelPlacing();
-          setSelectedBuilding(null);
-        } else {
-          onBackToGlobe();
+          setPlacingDefId(null);
+          return;
         }
+        // 2순위: 경제 대시보드 닫기
+        if (showEconomyDashboard) {
+          toggleEconomyDashboard();
+          return;
+        }
+        // 3순위: 건물 정보 패널 닫기
+        if (selectedBuildingId) {
+          selectBuilding(null);
+          return;
+        }
+        // 4순위: 건설 패널 닫기
+        if (showConstructionPanel) {
+          toggleConstructionPanel();
+          return;
+        }
+        // 5순위: Globe 복귀
+        onBackToGlobe();
+      }
+
+      // 단축키: E = Economy, B = Build
+      if (e.key === 'e' || e.key === 'E') {
+        toggleEconomyDashboard();
+      }
+      if (e.key === 'b' || e.key === 'B') {
+        toggleConstructionPanel();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBackToGlobe]);
+  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel]);
 
   return (
     <div style={{
@@ -266,7 +325,7 @@ export function IsoCanvas({
         onWheel={handleWheel}
       />
 
-      {/* 상단 바: 국가 이름 + Back to Globe */}
+      {/* ──── 상단 바: 국가 이름 + 툴바 ──── */}
       <div style={{
         position: 'absolute',
         top: 0,
@@ -311,84 +370,175 @@ export function IsoCanvas({
           </span>
         </div>
 
-        {/* 호버 타일 정보 */}
-        {hoverInfo && (
-          <span style={{
-            fontFamily: bodyFont,
-            fontSize: '11px',
-            color: SK.textMuted,
-            letterSpacing: '0.5px',
-            pointerEvents: 'none',
-          }}>
-            [{hoverInfo.tileX}, {hoverInfo.tileY}] {hoverInfo.tileType}
-          </span>
-        )}
-      </div>
-
-      {/* 하단: 건물 팔레트 */}
-      <div style={{
-        position: 'absolute',
-        bottom: 16,
-        left: '50%',
-        transform: 'translateX(-50%)',
-        display: 'flex',
-        gap: '8px',
-        padding: '8px 12px',
-        background: 'rgba(9,9,11,0.92)',
-        backdropFilter: 'blur(12px)',
-        border: `1px solid ${SK.glassBorder}`,
-        borderRadius: 0,
-        zIndex: 10,
-      }}>
-        {BUILDING_DEFS.map((def) => (
+        {/* 우측: 도구 버튼 + 호버 정보 */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'auto' }}>
+          {/* 건설 패널 토글 */}
           <button
-            key={def.id}
-            onClick={() => handleSelectBuilding(def.id)}
+            onClick={toggleConstructionPanel}
             style={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: '4px',
-              padding: '8px 12px',
-              backgroundColor: selectedBuilding === def.id
-                ? 'rgba(204, 153, 51, 0.3)'
-                : 'rgba(255,255,255,0.05)',
-              border: selectedBuilding === def.id
-                ? '1px solid #CC9933'
-                : `1px solid ${SK.glassBorder}`,
-              borderRadius: 0,
-              cursor: 'pointer',
-              transition: 'all 150ms ease',
-              minWidth: '64px',
-            }}
-          >
-            {/* 프로시저럴 건물 아이콘 (색상 박스) */}
-            <div style={{
-              width: '24px',
-              height: '24px',
-              backgroundColor: `#${def.color.toString(16).padStart(6, '0')}`,
-              border: `2px solid #${def.roofColor.toString(16).padStart(6, '0')}`,
-            }} />
-            <span style={{
               fontFamily: bodyFont,
-              fontSize: '9px',
-              color: selectedBuilding === def.id ? '#CC9933' : SK.textSecondary,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: showConstructionPanel ? SK.gold : SK.textSecondary,
+              backgroundColor: showConstructionPanel ? 'rgba(245, 158, 11, 0.12)' : 'rgba(9,9,11,0.88)',
+              border: `1px solid ${showConstructionPanel ? 'rgba(245, 158, 11, 0.25)' : SK.glassBorder}`,
+              borderRadius: 0,
+              padding: '6px 10px',
+              cursor: 'pointer',
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
-              fontWeight: 600,
-            }}>
-              {def.name}
-            </span>
+            }}
+          >
+            BUILD [B]
+          </button>
+          {/* 경제 대시보드 토글 */}
+          <button
+            onClick={toggleEconomyDashboard}
+            style={{
+              fontFamily: bodyFont,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: showEconomyDashboard ? SK.gold : SK.textSecondary,
+              backgroundColor: showEconomyDashboard ? 'rgba(245, 158, 11, 0.12)' : 'rgba(9,9,11,0.88)',
+              border: `1px solid ${showEconomyDashboard ? 'rgba(245, 158, 11, 0.25)' : SK.glassBorder}`,
+              borderRadius: 0,
+              padding: '6px 10px',
+              cursor: 'pointer',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+            }}
+          >
+            ECONOMY [E]
+          </button>
+
+          {/* 호버 타일 정보 */}
+          {hoverInfo && (
             <span style={{
               fontFamily: bodyFont,
-              fontSize: '8px',
+              fontSize: '11px',
               color: SK.textMuted,
+              letterSpacing: '0.5px',
+              pointerEvents: 'none',
             }}>
-              {def.sizeW}x{def.sizeH}
+              [{hoverInfo.tileX}, {hoverInfo.tileY}] {hoverInfo.tileType}
             </span>
-          </button>
-        ))}
+          )}
+        </div>
       </div>
+
+      {/* ──── Phase 4: 자원 HUD ──── */}
+      <ResourceHUD />
+
+      {/* ──── Phase 4: 건설 패널 (좌측) ──── */}
+      {showConstructionPanel && (
+        <ConstructionPanel
+          onClose={toggleConstructionPanel}
+          onSelectBuilding={handleConstructionSelect}
+          selectedDefId={placingDefId}
+        />
+      )}
+
+      {/* ──── Phase 4: 건물 정보 패널 (우측) ──── */}
+      {selectedBuilding && (
+        <BuildingInfoPanel
+          building={selectedBuilding}
+          onClose={() => selectBuilding(null)}
+          onUpgrade={(id) => {
+            // Phase 5+: city_command { type: 'upgrade', buildingId: id } 전송
+            console.log('[IsoCanvas] upgrade building:', id);
+          }}
+          onToggle={(id) => {
+            // Phase 5+: city_command { type: 'toggle', buildingId: id } 전송
+            console.log('[IsoCanvas] toggle building:', id);
+          }}
+          onDemolish={(id) => {
+            // Phase 5+: city_command { type: 'demolish', buildingId: id } 전송
+            console.log('[IsoCanvas] demolish building:', id);
+          }}
+        />
+      )}
+
+      {/* ──── Phase 4: 생산 체인 오버레이 (하단) ──── */}
+      {showProductionChain && selectedBuilding && (
+        <ProductionChainOverlay
+          building={selectedBuilding}
+          onClose={toggleProductionChain}
+        />
+      )}
+
+      {/* ──── Phase 4: 경제 대시보드 (중앙 모달) ──── */}
+      {showEconomyDashboard && (
+        <EconomyDashboard
+          onClose={toggleEconomyDashboard}
+        />
+      )}
+
+      {/* ──── 하단: 건물 팔레트 (Phase 1 — 건설 패널이 열리지 않은 경우만 표시) ──── */}
+      {!showConstructionPanel && (
+        <div style={{
+          position: 'absolute',
+          bottom: 16,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          gap: '8px',
+          padding: '8px 12px',
+          background: 'rgba(9,9,11,0.92)',
+          backdropFilter: 'blur(12px)',
+          border: `1px solid ${SK.glassBorder}`,
+          borderRadius: 0,
+          zIndex: 10,
+        }}>
+          {BUILDING_DEFS.map((def) => (
+            <button
+              key={def.id}
+              onClick={() => handleSelectPlacingBuilding(def.id)}
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '8px 12px',
+                backgroundColor: placingDefId === def.id
+                  ? 'rgba(204, 153, 51, 0.3)'
+                  : 'rgba(255,255,255,0.05)',
+                border: placingDefId === def.id
+                  ? '1px solid #CC9933'
+                  : `1px solid ${SK.glassBorder}`,
+                borderRadius: 0,
+                cursor: 'pointer',
+                transition: 'all 150ms ease',
+                minWidth: '64px',
+              }}
+            >
+              {/* 프로시저럴 건물 아이콘 (색상 박스) */}
+              <div style={{
+                width: '24px',
+                height: '24px',
+                backgroundColor: `#${def.color.toString(16).padStart(6, '0')}`,
+                border: `2px solid #${def.roofColor.toString(16).padStart(6, '0')}`,
+              }} />
+              <span style={{
+                fontFamily: bodyFont,
+                fontSize: '9px',
+                color: placingDefId === def.id ? '#CC9933' : SK.textSecondary,
+                letterSpacing: '0.5px',
+                textTransform: 'uppercase',
+                fontWeight: 600,
+              }}>
+                {def.name}
+              </span>
+              <span style={{
+                fontFamily: bodyFont,
+                fontSize: '8px',
+                color: SK.textMuted,
+              }}>
+                {def.sizeW}x{def.sizeH}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
