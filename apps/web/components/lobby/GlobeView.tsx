@@ -831,38 +831,41 @@ function SunLight() {
 // ─── R3F: Stars + Milky Way 배경 (8K equirectangular skybox) ───
 
 function Starfield() {
-  const meshRef = useRef<THREE.Mesh>(null);
-  const { camera } = useThree();
+  const { scene, camera } = useThree();
   const milkyWayTexture = useLoader(THREE.TextureLoader, '/textures/stars-milky-way.jpg');
-  milkyWayTexture.colorSpace = THREE.SRGBColorSpace;
 
-  // 매 프레임 카메라 위치를 살짝 따라가서 줌/패닝 시 자연스러운 시차
+  useMemo(() => {
+    milkyWayTexture.colorSpace = THREE.SRGBColorSpace;
+    milkyWayTexture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = milkyWayTexture;
+  }, [milkyWayTexture, scene]);
+
+  // 카메라 위치 기반 배경 회전 → 줌/패닝 시 자연스러운 시차
   useFrame(() => {
-    if (!meshRef.current) return;
-    // 카메라 위치의 30%만 따라감 → 패럴랙스 효과
-    meshRef.current.position.copy(camera.position).multiplyScalar(0.3);
-
-    // 거리 기반 밝기 조절 — 줌인하면 약간 어둡게
     const dist = camera.position.length();
+    // 거리 기반 밝기: 줌인=약간 어둡게, 줌아웃=밝게
     const t = THREE.MathUtils.clamp((dist - 150) / (400 - 150), 0, 1);
     const smooth = t * t * (3 - 2 * t);
-    const opacity = 0.4 + smooth * 0.4; // 0.4(줌인) ~ 0.8(줌아웃)
-    (meshRef.current.material as THREE.MeshBasicMaterial).opacity = opacity;
+    scene.backgroundIntensity = 0.4 + smooth * 0.4;
+
+    // 카메라 방향 기반 미세 회전 → 패럴랙스 효과
+    const factor = 0.03; // 회전 강도 (작을수록 미세)
+    scene.backgroundRotation.set(
+      camera.position.y * factor * 0.01,
+      camera.position.x * factor * 0.01,
+      0,
+    );
   });
 
-  return (
-    <mesh ref={meshRef} renderOrder={-1}>
-      <sphereGeometry args={[900, 64, 64]} />
-      <meshBasicMaterial
-        map={milkyWayTexture}
-        side={THREE.BackSide}
-        transparent
-        opacity={0.6}
-        depthWrite={false}
-        toneMapped={false}
-      />
-    </mesh>
-  );
+  useEffect(() => {
+    return () => {
+      scene.background = null;
+      scene.backgroundIntensity = 1;
+      scene.backgroundRotation.set(0, 0, 0);
+    };
+  }, [scene]);
+
+  return null;
 }
 
 // ─── R3F: 국가 경계선 (단일 배치 LineSegments) ───
