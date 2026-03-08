@@ -816,7 +816,7 @@ function SunLight() {
 // ─── R3F: Stars + Milky Way 배경 (8K equirectangular skybox) ───
 
 function Starfield() {
-  const { scene } = useThree();
+  const { scene, camera } = useThree();
   const milkyWayTexture = useLoader(THREE.TextureLoader, '/textures/stars-milky-way.jpg');
 
   // scene.background로 equirectangular 텍스처 설정 — 메시 없이 완벽한 배경
@@ -826,9 +826,21 @@ function Starfield() {
     scene.background = milkyWayTexture;
   }, [milkyWayTexture, scene]);
 
+  // v22 Phase 3: 밀키웨이 거리 감쇠 — 줌인(가까이)하면 어둡고, 줌아웃하면 자연스럽게 보임
+  useFrame(() => {
+    const dist = camera.position.length();
+    // smoothstep(150, 400, dist): 150 이하=0.15(어둡게), 400 이상=0.6(자연스럽게)
+    const t = THREE.MathUtils.clamp((dist - 150) / (400 - 150), 0, 1);
+    const smooth = t * t * (3 - 2 * t); // smoothstep
+    scene.backgroundIntensity = 0.15 + smooth * (0.6 - 0.15);
+  });
+
   // cleanup: 언마운트 시 배경 제거
   useEffect(() => {
-    return () => { scene.background = null; };
+    return () => {
+      scene.background = null;
+      scene.backgroundIntensity = 1;
+    };
   }, [scene]);
 
   return null;
