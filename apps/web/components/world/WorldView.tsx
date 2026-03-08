@@ -5,7 +5,7 @@
  * v15: viewMode 제거, 2D 맵 제거
  */
 
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import type { CountryClientState } from '@/lib/globe-data';
@@ -74,16 +74,31 @@ export function WorldView({
 
   // v14: Hover state for GlobeHoverPanel
   const [hoverData, setHoverData] = useState<GlobeHoverData | null>(null);
+  // v19 PERF: 마우스 위치를 ref로 추적 (매 이동마다 setState → re-render 방지)
+  const hoverMouseRef = useRef({ x: 0, y: 0 });
   const [hoverMouse, setHoverMouse] = useState({ x: 0, y: 0 });
   const [hoverVisible, setHoverVisible] = useState(false);
 
-  // v14: Track mouse position for hover panel
+  // v14: Track mouse position for hover panel — throttled setState
   useEffect(() => {
+    let rafId = 0;
+    let dirty = false;
     const handleMouseMove = (e: MouseEvent) => {
-      setHoverMouse({ x: e.clientX, y: e.clientY });
+      hoverMouseRef.current.x = e.clientX;
+      hoverMouseRef.current.y = e.clientY;
+      if (!dirty) {
+        dirty = true;
+        rafId = requestAnimationFrame(() => {
+          setHoverMouse({ x: hoverMouseRef.current.x, y: hoverMouseRef.current.y });
+          dirty = false;
+        });
+      }
     };
     window.addEventListener('mousemove', handleMouseMove);
-    return () => window.removeEventListener('mousemove', handleMouseMove);
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove);
+      cancelAnimationFrame(rafId);
+    };
   }, []);
 
   // GeoJSON에서 기본 국가 데이터 항상 로드 (이름, 좌표, 리소스 등 정적 필드)
@@ -146,29 +161,35 @@ export function WorldView({
     setTimeout(() => setSelectedCountry(null), 300);
   }, []);
 
+  // v19 PERF: refs로 안정적 콜백 유지 (states/dominationStates 변경 시 콜백 재생성 방지 → 무한 루프 차단)
+  const statesRef = useRef(states);
+  statesRef.current = states;
+  const domStatesRef = useRef(dominationStates);
+  domStatesRef.current = dominationStates;
+
   // v14: Globe hover → GlobeHoverPanel data
   const handleGlobeHover = useCallback((iso3: string | null, name: string | null) => {
     if (!iso3 || !name) {
       setHoverVisible(false);
       return;
     }
-    const cs = states.get(iso3);
-    const domState = dominationStates?.get(iso3);
+    const cs = statesRef.current.get(iso3);
+    const domState = domStatesRef.current?.get(iso3);
     setHoverData({
       countryCode: iso3,
       countryName: cs?.name ?? name,
-      happiness: 50,  // placeholder until civilization system sends data
+      happiness: 0,       // TODO: awaiting civilization system (not yet in CountryClientState)
       gdp: cs?.gdp ?? 0,
-      militaryPower: 50,
-      population: 0,
-      atWar: false,
+      militaryPower: 0,   // TODO: awaiting civilization system (not yet in CountryClientState)
+      population: cs?.population ?? 0,
+      atWar: false,       // TODO: derive from battleStatus once war system is live
       hasSovereignty: domState?.level === 'sovereignty' || domState?.level === 'hegemony',
       hasHegemony: domState?.level === 'hegemony',
       activeAgents: cs?.activeAgents ?? 0,
       dominantNation: domState?.dominantNation,
     });
     setHoverVisible(true);
-  }, [states, dominationStates]);
+  }, []);
 
   const selectedCountryData = selectedCountry
     ? states.get(selectedCountry) || null
