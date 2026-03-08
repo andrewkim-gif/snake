@@ -831,34 +831,38 @@ function SunLight() {
 // ─── R3F: Stars + Milky Way 배경 (8K equirectangular skybox) ───
 
 function Starfield() {
-  const { scene, camera } = useThree();
+  const meshRef = useRef<THREE.Mesh>(null);
+  const { camera } = useThree();
   const milkyWayTexture = useLoader(THREE.TextureLoader, '/textures/stars-milky-way.jpg');
+  milkyWayTexture.colorSpace = THREE.SRGBColorSpace;
 
-  // scene.background로 equirectangular 텍스처 설정 — 메시 없이 완벽한 배경
-  useMemo(() => {
-    milkyWayTexture.colorSpace = THREE.SRGBColorSpace;
-    milkyWayTexture.mapping = THREE.EquirectangularReflectionMapping;
-    scene.background = milkyWayTexture;
-  }, [milkyWayTexture, scene]);
-
-  // v22 Phase 3: 밀키웨이 거리 감쇠 — 줌인(가까이)하면 어둡고, 줌아웃하면 자연스럽게 보임
+  // 매 프레임 카메라 위치를 살짝 따라가서 줌/패닝 시 자연스러운 시차
   useFrame(() => {
+    if (!meshRef.current) return;
+    // 카메라 위치의 30%만 따라감 → 패럴랙스 효과
+    meshRef.current.position.copy(camera.position).multiplyScalar(0.3);
+
+    // 거리 기반 밝기 조절 — 줌인하면 약간 어둡게
     const dist = camera.position.length();
-    // smoothstep(150, 400, dist): 줌인=0.35(약간 어둡게), 줌아웃=0.7(자연스럽게)
     const t = THREE.MathUtils.clamp((dist - 150) / (400 - 150), 0, 1);
-    const smooth = t * t * (3 - 2 * t); // smoothstep
-    scene.backgroundIntensity = 0.35 + smooth * (0.7 - 0.35);
+    const smooth = t * t * (3 - 2 * t);
+    const opacity = 0.4 + smooth * 0.4; // 0.4(줌인) ~ 0.8(줌아웃)
+    (meshRef.current.material as THREE.MeshBasicMaterial).opacity = opacity;
   });
 
-  // cleanup: 언마운트 시 배경 제거
-  useEffect(() => {
-    return () => {
-      scene.background = null;
-      scene.backgroundIntensity = 1;
-    };
-  }, [scene]);
-
-  return null;
+  return (
+    <mesh ref={meshRef} renderOrder={-1}>
+      <sphereGeometry args={[900, 64, 64]} />
+      <meshBasicMaterial
+        map={milkyWayTexture}
+        side={THREE.BackSide}
+        transparent
+        opacity={0.6}
+        depthWrite={false}
+        toneMapped={false}
+      />
+    </mesh>
+  );
 }
 
 // ─── R3F: 국가 경계선 (단일 배치 LineSegments) ───
