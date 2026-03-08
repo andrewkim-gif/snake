@@ -12,6 +12,7 @@
 
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { SK, SKFont, bodyFont, radius } from '@/lib/sketch-ui';
+import { OVERLAY } from '@/lib/overlay-tokens';
 
 // ─── Types ──
 
@@ -179,13 +180,14 @@ export function GlobeHoverPanel({
         width: `${PANEL_WIDTH}px`,
         zIndex: 50,
         pointerEvents: 'auto',
-        background: SK.glassBg,
-        backdropFilter: 'blur(16px)',
-        border: `1px solid ${SK.glassBorder}`,
-        borderRadius: radius.lg,
+        background: OVERLAY.bg,
+        backdropFilter: OVERLAY.blur,
+        WebkitBackdropFilter: OVERLAY.blur,
+        border: OVERLAY.border,
+        borderRadius: OVERLAY.borderRadius,
         padding: '14px',
         boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
-        transition: 'opacity 150ms ease',
+        transition: `opacity ${OVERLAY.transition}`,
         opacity: visible ? 1 : 0,
       }}
     >

@@ -22,10 +22,12 @@ import { Tutorial } from '@/components/game/Tutorial';
 import { NewsFeed, type NewsEventType } from '@/components/lobby/NewsFeed';
 import { GameSystemPopup } from '@/components/hub/GameSystemPopup';
 import { IntroSequence } from '@/components/lobby/IntroSequence';
+import { BgmPlayer } from '@/components/lobby/BgmPlayer';
 import type { IntroPhase } from '@/components/lobby/IntroSequence';
 import { useSocketContext } from '@/providers/SocketProvider';
 import type { GameMode } from '@/providers/SocketProvider';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { OVERLAY, KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 import type { MainTabKey } from '@/components/hub/PopupTabNav';
 import { ChevronRight, Minus, Settings, Globe } from 'lucide-react';
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
@@ -556,11 +558,11 @@ export default function Home() {
           pointerEvents: 'none',
         }}>
           <div style={{
-            backgroundColor: SK.glassBg,
-            backdropFilter: 'blur(12px)',
-            WebkitBackdropFilter: 'blur(12px)',
-            border: `1px solid ${SK.glassBorder}`,
-            borderRadius: 0,
+            backgroundColor: OVERLAY.bg,
+            backdropFilter: OVERLAY.blur,
+            WebkitBackdropFilter: OVERLAY.blur,
+            border: OVERLAY.border,
+            borderRadius: OVERLAY.borderRadius,
             padding: '6px 16px',
             display: 'flex',
             alignItems: 'center',
@@ -571,7 +573,7 @@ export default function Home() {
               height: '6px',
               borderRadius: '50%',
               backgroundColor: '#CC9933',
-              animation: 'pulse 1.5s infinite',
+              animation: 'effectPulse 1.5s infinite',
             }} />
             <span style={{
               fontFamily: bodyFont,
@@ -642,14 +644,14 @@ export default function Home() {
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
               padding: '8px 14px',
-              border: `1px solid ${SK.glassBorder}`,
-              borderRadius: 0,
-              backgroundColor: 'rgba(9, 9, 11, 0.88)',
+              border: OVERLAY.border,
+              borderRadius: OVERLAY.borderRadius,
+              backgroundColor: OVERLAY.bg,
               borderTop: '1px solid rgba(239, 68, 68, 0.4)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
+              backdropFilter: OVERLAY.blur,
+              WebkitBackdropFilter: OVERLAY.blur,
               cursor: 'pointer',
-              transition: 'all 200ms ease',
+              transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -682,14 +684,14 @@ export default function Home() {
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
               padding: '8px 14px',
-              border: `1px solid ${SK.glassBorder}`,
-              borderRadius: 0,
-              backgroundColor: 'rgba(9, 9, 11, 0.88)',
+              border: OVERLAY.border,
+              borderRadius: OVERLAY.borderRadius,
+              backgroundColor: OVERLAY.bg,
               borderTop: '1px solid rgba(239, 68, 68, 0.4)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
+              backdropFilter: OVERLAY.blur,
+              WebkitBackdropFilter: OVERLAY.blur,
               cursor: 'pointer',
-              transition: 'all 200ms ease',
+              transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
               gap: '6px',
@@ -727,11 +729,11 @@ export default function Home() {
         }}>
           <div style={{
             position: 'relative',
-            backgroundColor: 'rgba(9, 9, 11, 0.94)',
-            backdropFilter: 'blur(24px)',
-            WebkitBackdropFilter: 'blur(24px)',
-            border: `1px solid ${SK.glassBorder}`,
-            borderRadius: 0,
+            backgroundColor: OVERLAY.bg,
+            backdropFilter: OVERLAY.blur,
+            WebkitBackdropFilter: OVERLAY.blur,
+            border: OVERLAY.border,
+            borderRadius: OVERLAY.borderRadius,
             borderTop: '1px solid rgba(239, 68, 68, 0.5)',
             boxShadow: '0 8px 40px rgba(0, 0, 0, 0.7)',
             overflow: 'visible',
@@ -769,7 +771,7 @@ export default function Home() {
                   padding: '4px',
                   display: 'flex',
                   alignItems: 'center',
-                  transition: 'color 150ms ease',
+                  transition: `color ${OVERLAY.transition}`,
                 }}
               >
                 <Minus size={14} strokeWidth={2} />
@@ -845,6 +847,12 @@ export default function Home() {
         </div>
       )}
 
+      {/* BGM Player — 우하단 (NewsFeed 위) */}
+      <BgmPlayer
+        visible={showLeftPanel && mode === 'lobby'}
+        bottomOffset={NEWS_FEED_HEIGHT + 12}
+      />
+
       {/* 뉴스 피드 — 하단 고정 — v17: staggered reveal */}
       <div style={{
         position: 'absolute',
@@ -870,6 +878,9 @@ export default function Home() {
         initialTab={panelTab}
         initialSubTab={panelSubTab}
       />
+
+      {/* 통일 pulse 키프레임 (overlay-tokens.ts) */}
+      <style>{KEYFRAMES_PULSE}</style>
 
       {/* v15: Server error toast (arena_full, join_failed 등) */}
       {uiState.lastError && (

@@ -6,9 +6,10 @@
  * i18n: next-intl 기반 다국어 지원
  */
 
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
+import { OVERLAY, NEWS_TYPE_COLORS, KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 
 // next-intl Translator 함수 타입
 type TFunc = ReturnType<typeof useTranslations<'news'>>;
@@ -34,17 +35,8 @@ export interface NewsItem {
   timestamp: number; // unix ms
 }
 
-// 뉴스 타입별 색상
-const newsTypeColors: Record<NewsEventType, string> = {
-  sovereignty_change: '#22C55E',
-  battle_start: '#EF4444',
-  battle_end: '#F59E0B',
-  war_declared: '#FF0000',
-  treaty_signed: '#3B82F6',
-  economy_event: '#CC9933',
-  season_event: '#8B5CF6',
-  global_event: '#EC4899',
-};
+// 뉴스 타입별 색상 — overlay-tokens.ts의 NEWS_TYPE_COLORS (3D 이펙트 동기화)
+const newsTypeColors: Record<NewsEventType, string> = NEWS_TYPE_COLORS as Record<NewsEventType, string>;
 
 // 뉴스 타입 → i18n 태그 키 매핑
 const newsTypeTagKeys: Record<NewsEventType, string> = {
@@ -148,9 +140,37 @@ export function NewsFeed({
   const demoInitRef = useRef(false);
   const [internalNews, setInternalNews] = useState<NewsItem[]>([]);
 
+  // 스냅샷 패턴: 티커에 표시 중인 뉴스는 ref로 고정하여 스크롤 중 DOM 변경 방지
+  const [displayNews, setDisplayNews] = useState<NewsItem[]>([]);
+  const pendingNewsRef = useRef<NewsItem[]>([]);
+  const needsUpdateRef = useRef(false);
+
   // 외부 뉴스가 실제로 있는지 안정적으로 판단 (빈 배열 ≠ 유효 데이터)
   const hasExternalNews = !!(externalNews && externalNews.length > 0);
   const allNews = hasExternalNews ? externalNews : internalNews;
+
+  // 새 뉴스가 도착하면 pending에 저장 (즉시 표시 안 함)
+  useEffect(() => {
+    if (allNews.length === 0) return;
+    // 최초 또는 확장 뷰에서는 즉시 반영
+    if (displayNews.length === 0 || expanded) {
+      setDisplayNews(allNews);
+      return;
+    }
+    // 스크롤 중이면 pending에 대기
+    pendingNewsRef.current = allNews;
+    needsUpdateRef.current = true;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [allNews, expanded]);
+
+  // 스크롤 사이클 완료 시 pending 뉴스를 교체하는 콜백
+  const commitPendingNews = useCallback(() => {
+    if (needsUpdateRef.current && pendingNewsRef.current.length > 0) {
+      setDisplayNews(pendingNewsRef.current);
+      pendingNewsRef.current = [];
+      needsUpdateRef.current = false;
+    }
+  }, []);
 
   // 데모 뉴스 초기화 — 한 번만 실행 (tNews 변경에 재실행 안 함)
   useEffect(() => {
@@ -205,12 +225,12 @@ export function NewsFeed({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hasExternalNews]);
 
-  // 뉴스 아이템 개수 (effect 의존성 안정화용)
-  const newsCount = allNews.length;
+  // displayNews 개수 (effect 의존성 안정화)
+  const displayCount = displayNews.length;
 
-  // 티커 스크롤 애니메이션 — offset을 ref로 유지하여 재시작 방지
+  // 티커 스크롤 애니메이션 — 사이클 완료 시 pending 뉴스 교체
   useEffect(() => {
-    if (!tickerRef.current || expanded || newsCount === 0) return;
+    if (!tickerRef.current || expanded || displayCount === 0) return;
 
     const el = tickerRef.current;
     let animFrame: number;
@@ -221,6 +241,8 @@ export function NewsFeed({
       const halfWidth = el.scrollWidth / 2;
       if (halfWidth > 0 && offsetRef.current >= halfWidth) {
         offsetRef.current = 0;
+        // 스크롤 사이클 완료 → pending 뉴스 교체 (DOM 안정적 전환)
+        commitPendingNews();
       }
       el.style.transform = `translateX(-${offsetRef.current}px)`;
       animFrame = requestAnimationFrame(animate);
@@ -228,19 +250,20 @@ export function NewsFeed({
 
     animFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animFrame);
-  }, [newsCount, expanded]);
+  }, [displayCount, expanded, commitPendingNews]);
 
   // 확장 뷰 (아카이브)
   if (expanded) {
     return (
       <div style={{
-        background: 'rgba(14, 14, 18, 0.95)',
-        backdropFilter: 'blur(16px)',
-        WebkitBackdropFilter: 'blur(16px)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+        background: OVERLAY.bg,
+        backdropFilter: OVERLAY.blur,
+        WebkitBackdropFilter: OVERLAY.blur,
+        borderTop: OVERLAY.border,
         padding: '12px 20px',
         maxHeight: '40vh',
         overflowY: 'auto',
+        transition: `all ${OVERLAY.transition}`,
         ...style,
       }}>
         <div style={{
@@ -342,10 +365,11 @@ export function NewsFeed({
   return (
     <div
       style={{
-        background: 'rgba(14, 14, 18, 0.90)',
-        backdropFilter: 'blur(8px)',
-        WebkitBackdropFilter: 'blur(8px)',
-        borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+        background: OVERLAY.bg,
+        backdropFilter: OVERLAY.blur,
+        WebkitBackdropFilter: OVERLAY.blur,
+        borderTop: OVERLAY.border,
+        transition: `all ${OVERLAY.transition}`,
         height: '36px',
         display: 'flex',
         alignItems: 'center',
@@ -370,7 +394,7 @@ export function NewsFeed({
           height: '6px',
           borderRadius: '50%',
           backgroundColor: '#EF4444',
-          animation: 'pulse 1.5s infinite',
+          animation: 'effectPulse 1.5s infinite',
         }} />
         <span style={{
           fontFamily: bodyFont,
@@ -383,15 +407,18 @@ export function NewsFeed({
         </span>
       </div>
 
-      {/* 스크롤 티커 */}
+      {/* 스크롤 티커 — displayNews (스냅샷)로 렌더링, 사이클 완료 시만 교체 */}
       <div style={{ flex: 1, overflow: 'hidden', whiteSpace: 'nowrap' }}>
         <div ref={tickerRef} style={{ display: 'inline-block' }}>
           {/* 뉴스 2벌 (무한 스크롤용) */}
-          {[...allNews, ...allNews].map((item, i) => (
-            <TickerItem key={`${item.id}-${i}`} item={item} tNews={tNews} />
+          {[...displayNews, ...displayNews].map((item, i) => (
+            <TickerItem key={`${item.id}-dup${i}`} item={item} tNews={tNews} />
           ))}
         </div>
       </div>
+
+      {/* 통일 pulse 키프레임 (overlay-tokens.ts) */}
+      <style>{KEYFRAMES_PULSE}</style>
     </div>
   );
 }

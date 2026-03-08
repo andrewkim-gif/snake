@@ -24,6 +24,7 @@ import type { NationStatsData } from '@/components/civilization/StatsChart';
 import type { CountryPoliciesData, PolicyCategory } from '@/components/civilization/PolicyManager';
 import { fetchCouncilProposals, fetchGdpData, fetchFactions, fetchWorldStatus, type CouncilProposal, type GdpEntry, type FactionSummary, type WorldStatusData } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
+import { KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 
 // ─── Types ───────────────────────────────────────────────
 type CountryTab = 'OVERVIEW' | 'TOKEN' | 'VOTE' | 'FACTION' | 'CIVILIZATION';
@@ -229,7 +230,7 @@ function BattleStatusIndicator({ status }: { status: string }) {
         borderRadius: '50%',
         backgroundColor: cfg.color,
         boxShadow: cfg.pulse ? `0 0 8px ${cfg.color}` : 'none',
-        animation: cfg.pulse ? 'pulse 1.5s infinite' : 'none',
+        animation: cfg.pulse ? 'effectPulse 1.5s infinite' : 'none',
       }} />
       <span style={{
         fontFamily: bodyFont,
@@ -1041,13 +1042,8 @@ export function CountryPanel({
           {footer}
         </div>
 
-        {/* Pulse 애니메이션 */}
-        <style jsx global>{`
-          @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.4; }
-          }
-        `}</style>
+        {/* 통일 pulse 키프레임 (overlay-tokens.ts) */}
+        <style>{KEYFRAMES_PULSE}</style>
       </>
     );
   }
@@ -1125,13 +1121,8 @@ export function CountryPanel({
         }} />
       </div>
 
-      {/* Pulse 애니메이션 CSS */}
-      <style jsx global>{`
-        @keyframes pulse {
-          0%, 100% { opacity: 1; }
-          50% { opacity: 0.4; }
-        }
-      `}</style>
+      {/* 통일 pulse 키프레임 (overlay-tokens.ts) */}
+      <style>{KEYFRAMES_PULSE}</style>
     </>
   );
 }

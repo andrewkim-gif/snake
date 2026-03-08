@@ -8,6 +8,7 @@
  */
 
 import { SK, bodyFont } from '@/lib/sketch-ui';
+import { OVERLAY } from '@/lib/overlay-tokens';
 import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
 import { useTranslations } from 'next-intl';
 
@@ -30,8 +31,8 @@ export function LobbyHeader({ connected }: LobbyHeaderProps) {
       justifyContent: 'space-between',
       padding: '0 20px',
       background: 'linear-gradient(to bottom, rgba(9,9,11,0.95) 0%, rgba(9,9,11,0.7) 70%, transparent 100%)',
-      backdropFilter: 'blur(14px)',
-      WebkitBackdropFilter: 'blur(14px)',
+      backdropFilter: OVERLAY.blur,
+      WebkitBackdropFilter: OVERLAY.blur,
       borderBottom: '1px solid rgba(239,68,68,0.3)',
       boxShadow: '0 1px 12px rgba(239,68,68,0.04)',
       zIndex: 70,

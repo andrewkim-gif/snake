@@ -9,6 +9,7 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import { FileText, Swords, Target } from 'lucide-react';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { OVERLAY, KEYFRAMES_FADE_IN } from '@/lib/overlay-tokens';
 import { McButton } from './McButton';
 import type { LucideIcon } from 'lucide-react';
 
@@ -102,11 +103,11 @@ export function WelcomeTutorial() {
       zIndex: 100,
     }}>
       <div style={{
-        backgroundColor: SK.glassBg,
-        backdropFilter: 'blur(20px)',
-        WebkitBackdropFilter: 'blur(20px)',
-        borderRadius: 0,
-        border: '1px solid rgba(255,255,255,0.06)',
+        backgroundColor: OVERLAY.bg,
+        backdropFilter: OVERLAY.blur,
+        WebkitBackdropFilter: OVERLAY.blur,
+        borderRadius: OVERLAY.borderRadius,
+        border: OVERLAY.border,
         borderTop: `1px solid ${SK.gold}`,
         boxShadow: '0 12px 48px rgba(0, 0, 0, 0.5)',
         padding: '32px',
@@ -121,7 +122,7 @@ export function WelcomeTutorial() {
         <div
           key={fadeKey}
           style={{
-            animation: 'tutorialFadeIn 350ms ease',
+            animation: 'effectFadeIn 350ms ease',
           }}
         >
           <div style={{
@@ -186,13 +187,8 @@ export function WelcomeTutorial() {
         </div>
       </div>
 
-      {/* 페이드 애니메이션 */}
-      <style>{`
-        @keyframes tutorialFadeIn {
-          from { opacity: 0; transform: translateY(8px); }
-          to { opacity: 1; transform: translateY(0); }
-        }
-      `}</style>
+      {/* 통일 fadeIn 키프레임 (overlay-tokens.ts) */}
+      <style>{KEYFRAMES_FADE_IN}</style>
     </div>
   );
 }
