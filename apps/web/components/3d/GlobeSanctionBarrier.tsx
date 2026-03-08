@@ -37,7 +37,7 @@ const SANCTION_COLOR = new THREE.Color(0xcc3333);
 const SANCTION_HDR = new THREE.Color(0xcc3333).multiplyScalar(2.0);
 const X_BAR_LENGTH = 3.0;
 const X_BAR_THICKNESS = 0.4;
-const X_BAR_DEPTH = 0.3;
+
 const RING_INNER = 4.0;
 const RING_OUTER = 4.5;
 const DASH_LINE_SEGMENTS = 48;
@@ -101,9 +101,9 @@ export function GlobeSanctionBarrier({
   const groupRef = useRef<THREE.Group>(null);
   const dataRef = useRef<SanctionRenderData[]>([]);
 
-  // 공유 geometry
+  // 공유 geometry — PlaneGeometry로 교체 (BoxGeometry는 검은 박스 문제 유발)
   const barGeo = useMemo(
-    () => new THREE.BoxGeometry(X_BAR_LENGTH, X_BAR_THICKNESS, X_BAR_DEPTH),
+    () => new THREE.PlaneGeometry(X_BAR_LENGTH, X_BAR_THICKNESS),
     [],
   );
   const ringGeo = useMemo(
@@ -119,6 +119,7 @@ export function GlobeSanctionBarrier({
       opacity: 0.9,
       blending: THREE.AdditiveBlending,
       depthWrite: false,
+      side: THREE.DoubleSide,
       toneMapped: false,
     }),
     [],

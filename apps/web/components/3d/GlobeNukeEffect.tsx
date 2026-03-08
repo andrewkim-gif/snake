@@ -156,6 +156,7 @@ export function GlobeNukeEffect({
         opacity: 0.6,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
+        side: THREE.DoubleSide,
         toneMapped: false,
       });
 
