@@ -24,7 +24,7 @@ export function ARBattleRewardsOverlay({ rewards, onClose }: ARBattleRewardsProp
   return (
     <div
       style={{
-        position: 'fixed',
+        position: 'absolute',
         inset: 0,
         background: 'rgba(0, 0, 0, 0.85)',
         zIndex: 100,
@@ -172,7 +172,7 @@ export function ARBattleRewardsOverlay({ rewards, onClose }: ARBattleRewardsProp
               letterSpacing: 2,
             }}
           >
-            Continue
+            Return to Lobby
           </button>
         </div>
       </div>

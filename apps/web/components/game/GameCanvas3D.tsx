@@ -106,6 +106,11 @@ import { ARWeaponEvolutionToast } from '@/components/game/ar/ARWeaponEvolutionTo
 import { ARSynergyBar } from '@/components/game/ar/ARSynergyBar';
 import { ARStatusEffects } from '@/components/game/ar/ARStatusEffects';
 
+// v19 Phase 4: 게임 흐름 AR 컴포넌트
+import { ARCharacterSelect } from '@/components/game/ar/ARCharacterSelect';
+import { ARSpectateOverlay } from '@/components/game/ar/ARSpectateOverlay';
+import { ARBattleRewardsOverlay } from '@/components/game/ar/ARBattleRewards';
+
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
   uiState: UiState;
@@ -190,6 +195,10 @@ export function GameCanvas3D({
 
   // v19 Phase 3: PvP kill feed state
   const [pvpKillFeed, setPvpKillFeed] = useState<Array<{ id: string; killerName: string; victimName: string; killerFaction: string; victimFaction: string; timestamp: number }>>([]);
+
+  // v19 Phase 4: 게임 흐름 state
+  const [charSelectDone, setCharSelectDone] = useState(false);
+  const spectateTargetRef = useRef<string | null>(null);
 
   // v16: InputManager + TPSCamera refs
   const cameraRef = useRef<Camera | null>(null);
@@ -644,6 +653,26 @@ export function GameCanvas3D({
     inputManager.cameraDeltaRef.current.dx += deltaYaw;
     inputManager.cameraDeltaRef.current.dy += deltaPitch;
   }, [isArenaMode, inputManager]);
+
+  // ─── v19 Phase 4: 캐릭터 선택 핸들러 ───
+  const handleCharacterSelect = useCallback((choice: ARChoice) => {
+    if (sendARChoice) {
+      sendARChoice(choice);
+    }
+    setCharSelectDone(true);
+  }, [sendARChoice]);
+
+  // v19 Phase 4: deploy→pve 전환 시 charSelectDone 자동 해제 (다음 라운드 대비)
+  useEffect(() => {
+    if (arUiState?.phase !== 'deploy') {
+      // deploy 아닌 페이즈로 전환되면 캐릭터 선택 완료 상태 유지 (이미 전투 중)
+    } else if (arUiState?.phase === 'deploy' && charSelectDone) {
+      // 새로운 deploy 페이즈가 시작되면 (timer가 높으면 새 라운드) 리셋
+      if (arUiState.timer > 8) {
+        setCharSelectDone(false);
+      }
+    }
+  }, [arUiState?.phase, arUiState?.timer, charSelectDone]);
 
   // ─── v19 Phase 3: 무기 진화 감지 (arUiState에서 무기 목록 추적) ───
   useEffect(() => {
@@ -1148,6 +1177,38 @@ export function GameCanvas3D({
 
           {/* Phase 3 Task 7: ARSynergyBar — 활성 시너지 아이콘 바 */}
           <ARSynergyBar synergies={arUiState.synergies} />
+
+          {/* ─── v19 Phase 4: 게임 흐름 AR 컴포넌트 ─── */}
+
+          {/* Phase 4 Task 1: ARCharacterSelect — deploy 페이즈 캐릭터 선택 */}
+          {arUiState.phase === 'deploy' && !charSelectDone && sendARChoice && (
+            <ARCharacterSelect
+              timer={arUiState.timer}
+              onSelect={handleCharacterSelect}
+              alreadySelected={charSelectDone}
+            />
+          )}
+
+          {/* Phase 4 Task 2: ARSpectateOverlay — 사망 후 관전 UI */}
+          {!arUiState.alive && !arUiState.battleEnd && arStateRef && (
+            <ARSpectateOverlay
+              kills={arUiState.kills}
+              level={arUiState.level}
+              canSpectate={arUiState.phase !== 'settlement'}
+              arStateRef={arStateRef}
+              playerId={dataRef.current.playerId}
+              spectateTargetRef={spectateTargetRef}
+              onReturnToLobby={handleExitToLobby}
+            />
+          )}
+
+          {/* Phase 4 Task 3: ARBattleRewards — 전투 종료 보상 요약 */}
+          {arUiState.battleEnd && (
+            <ARBattleRewardsOverlay
+              rewards={arUiState.battleEnd}
+              onClose={handleExitToLobby}
+            />
+          )}
         </>
       )}
 

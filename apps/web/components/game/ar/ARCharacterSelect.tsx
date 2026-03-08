@@ -1,16 +1,18 @@
 'use client';
 
 /**
- * ARCharacterSelect — 캐릭터 선택 화면 (Phase 3)
+ * ARCharacterSelect — 캐릭터 선택 화면 (Phase 4)
  *
- * 8종 캐릭터 카드 표시
+ * deploy 페이즈에서 8종 캐릭터 카드 표시
  * 각 캐릭터별 고유 패시브, 시작 무기, 스탯 정보
- * 선택 시 콜백으로 캐릭터 타입 전달
+ * 선택 시 sendARChoice emit
+ * deploy 10초 타이머와 연동 (arUiState.timer)
+ * 타이머 만료 시 자동 선택 (기본: striker)
  */
 
-import { useState } from 'react';
-import type { ARCharacterType } from '@/lib/3d/ar-types';
-import { CHARACTER_INFO, WEAPON_INFO, RARITY_COLORS } from '@/lib/3d/ar-types';
+import { useState, useEffect, useCallback, useRef } from 'react';
+import type { ARCharacterType, ARChoice } from '@/lib/3d/ar-types';
+import { CHARACTER_INFO, WEAPON_INFO } from '@/lib/3d/ar-types';
 
 const ALL_CHARACTERS: ARCharacterType[] = [
   'striker',
@@ -34,18 +36,40 @@ const TAG_COLORS: Record<string, string> = {
 };
 
 interface ARCharacterSelectProps {
-  onSelect: (character: ARCharacterType) => void;
+  /** Deploy 페이즈 남은 시간 (초) */
+  timer: number;
+  /** 캐릭터 선택 콜백 — sendARChoice({ characterId }) */
+  onSelect: (choice: ARChoice) => void;
+  /** 이미 선택 완료했는지 여부 (선택 후 UI 숨기기) */
+  alreadySelected?: boolean;
 }
 
-export function ARCharacterSelect({ onSelect }: ARCharacterSelectProps) {
+export function ARCharacterSelect({ timer, onSelect, alreadySelected }: ARCharacterSelectProps) {
   const [selected, setSelected] = useState<ARCharacterType | null>(null);
   const [hovering, setHovering] = useState<ARCharacterType | null>(null);
+  const [confirmed, setConfirmed] = useState(false);
+  const autoSelectRef = useRef(false);
 
-  const handleConfirm = () => {
-    if (selected) {
-      onSelect(selected);
+  // 타이머 만료 시 자동 선택 (기본: striker)
+  useEffect(() => {
+    if (confirmed || autoSelectRef.current) return;
+    if (timer <= 0) {
+      autoSelectRef.current = true;
+      const character = selected || 'striker';
+      setSelected(character);
+      setConfirmed(true);
+      onSelect({ tomeId: character });
     }
-  };
+  }, [timer, selected, confirmed, onSelect]);
+
+  const handleConfirm = useCallback(() => {
+    if (!selected || confirmed) return;
+    setConfirmed(true);
+    onSelect({ tomeId: selected });
+  }, [selected, confirmed, onSelect]);
+
+  // 이미 선택 완료 — UI 숨기기
+  if (confirmed || alreadySelected) return null;
 
   return (
     <div
@@ -61,18 +85,33 @@ export function ARCharacterSelect({ onSelect }: ARCharacterSelectProps) {
         fontFamily: '"Rajdhani", sans-serif',
       }}
     >
-      {/* Title */}
+      {/* Title + Timer */}
       <h1
         style={{
           fontFamily: '"Black Ops One", sans-serif',
           fontSize: 32,
           color: '#E8E0D4',
-          marginBottom: 8,
+          marginBottom: 4,
           letterSpacing: 2,
         }}
       >
         SELECT CHARACTER
       </h1>
+
+      {/* Deploy timer */}
+      <div
+        style={{
+          fontSize: 20,
+          fontWeight: 700,
+          color: timer <= 3 ? '#F44336' : '#CC9933',
+          marginBottom: 4,
+          fontFamily: '"Black Ops One", sans-serif',
+          transition: 'color 300ms',
+        }}
+      >
+        {Math.ceil(timer)}s
+      </div>
+
       <p style={{ color: '#888', fontSize: 14, marginBottom: 24 }}>
         Choose your combat style. Each character has a unique passive ability.
       </p>
