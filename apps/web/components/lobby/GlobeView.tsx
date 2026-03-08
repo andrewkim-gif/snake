@@ -282,15 +282,80 @@ interface CountryGeo {
 
 const LABEL_R = RADIUS + ALT + 2; // 라벨 높이 (폴리곤 위)
 
-// 가장 큰 폴리곤 파트의 중심점 계산
-function computeCentroid(polygons: number[][][][]): [number, number] {
-  let bestRing = polygons[0][0];
-  for (const rings of polygons) {
-    if (rings[0].length > bestRing.length) bestRing = rings[0];
+// ─── 면적 가중 중심 (area-weighted centroid) ───
+// 각 폴리곤의 외곽 링을 삼각형으로 분할, 삼각형 면적 가중 평균으로
+// 불규칙 국가(칠레, 인도네시아, 러시아 등)에서도 시각 중심에 정확히 위치
+
+// GC 방지: 모듈 스코프 temp 변수
+let _triArea = 0;
+let _cx = 0;
+let _cy = 0;
+
+/** 단일 링(외곽)의 면적 가중 centroid 반환 [lon, lat, signedArea] */
+function ringAreaCentroid(ring: number[][]): [number, number, number] {
+  const n = ring.length;
+  if (n < 3) return [ring[0][0], ring[0][1], 0];
+
+  let totalArea = 0;
+  let wLon = 0;
+  let wLat = 0;
+
+  // 삼각형 분할: ring[0] 기준 fan triangulation
+  for (let i = 1; i < n - 1; i++) {
+    const x0 = ring[0][0], y0 = ring[0][1];
+    const x1 = ring[i][0], y1 = ring[i][1];
+    const x2 = ring[i + 1][0], y2 = ring[i + 1][1];
+
+    // 삼각형의 부호 있는 면적 (shoelace의 삼각형 버전)
+    _triArea = ((x1 - x0) * (y2 - y0) - (x2 - x0) * (y1 - y0)) * 0.5;
+
+    // 삼각형 중심
+    _cx = (x0 + x1 + x2) / 3;
+    _cy = (y0 + y1 + y2) / 3;
+
+    // 면적 가중 누적 (부호 있는 면적으로 방향 유지)
+    wLon += _triArea * _cx;
+    wLat += _triArea * _cy;
+    totalArea += _triArea;
   }
-  let sLon = 0, sLat = 0;
-  for (const [lon, lat] of bestRing) { sLon += lon; sLat += lat; }
-  return [sLon / bestRing.length, sLat / bestRing.length];
+
+  if (Math.abs(totalArea) < 1e-10) {
+    // 퇴화 폴리곤: 단순 평균 폴백
+    let sLon = 0, sLat = 0;
+    for (const [lon, lat] of ring) { sLon += lon; sLat += lat; }
+    return [sLon / n, sLat / n, 0];
+  }
+
+  return [wLon / totalArea, wLat / totalArea, Math.abs(totalArea)];
+}
+
+function computeCentroid(polygons: number[][][][]): [number, number] {
+  let totalWeight = 0;
+  let wLon = 0;
+  let wLat = 0;
+
+  for (const rings of polygons) {
+    const outerRing = rings[0];
+    if (!outerRing || outerRing.length < 3) continue;
+
+    const [cLon, cLat, area] = ringAreaCentroid(outerRing);
+    wLon += area * cLon;
+    wLat += area * cLat;
+    totalWeight += area;
+  }
+
+  if (totalWeight < 1e-10) {
+    // 모든 폴리곤이 퇴화: 가장 큰 외곽 링의 단순 평균 폴백
+    let bestRing = polygons[0][0];
+    for (const rings of polygons) {
+      if (rings[0].length > bestRing.length) bestRing = rings[0];
+    }
+    let sLon = 0, sLat = 0;
+    for (const [lon, lat] of bestRing) { sLon += lon; sLat += lat; }
+    return [sLon / bestRing.length, sLat / bestRing.length];
+  }
+
+  return [wLon / totalWeight, wLat / totalWeight];
 }
 
 function buildCountryGeometries(geoData: { features: any[] }): CountryGeo[] {
@@ -688,33 +753,41 @@ const atmoFragmentShader = /* glsl */ `
     vec3 N = normalize(vWorldNormal);
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
 
-    // 프레넬: 극단적 가장자리에서만 보이는 얇은 림
+    // 프레넬 림
     float NdotV = dot(viewDir, N);
     float fresnel = 1.0 - abs(NdotV);
-    float rim = pow(fresnel, 5.0);
+    float rim = pow(fresnel, 4.5);
 
-    // 태양 방향: 태양 쪽 가장자리에서만 강한 글로우
+    // 태양 방향
     float sunDot = dot(N, uSunDir);
     float sunFacing = max(sunDot, 0.0);
 
-    // 핵심: 프레넬 림 × 태양 방향을 곱하되, 밤 쪽은 완전 제거
-    // 태양을 향한 가장자리에서만 빛나는 대기 산란
-    float dayCut = smoothstep(-0.1, 0.15, sunDot);
+    // 밤 쪽 제거
+    float dayCut = smoothstep(-0.1, 0.2, sunDot);
 
-    // 태양 hot spot: 태양을 정면으로 향한 림 극점 (HDR → Bloom 트리거)
-    float hotSpot = pow(sunFacing, 3.0) * rim * 3.0;
+    // --- 태양→지구 대기 수렴 산란 (Forward Scattering) ---
+    // 카메라가 태양 쪽을 볼 때, 대기 가장자리에서 빛이 수렴/집중
+    // Mie scattering 근사: viewDir·sunDir 가 높을수록 (역광) 강한 산란
+    float VdotS = max(dot(viewDir, uSunDir), 0.0);
+    float forwardScatter = pow(VdotS, 6.0) * rim * dayCut;  // ★ dayCut 적용 — 밤면 제거
+    float scatterIntensity = forwardScatter * 8.0;  // HDR 강화 → threshold 0.9 돌파
+
+    // 기본 대기 림 (태양 방향 가중)
+    float basicAtmo = pow(sunFacing, 2.0) * rim * 0.8;
 
     // 대기 색상
-    vec3 blueAtmo = vec3(0.3, 0.55, 0.9);
-    vec3 hotColor = vec3(0.7, 0.85, 1.0);
+    vec3 blueAtmo = vec3(0.35, 0.55, 0.95);
+    vec3 scatterColor = vec3(1.0, 0.92, 0.8); // 따뜻한 수렴 산란
 
-    // 터미네이터 따뜻한 산란
-    float termRegion = smoothstep(-0.1, 0.05, sunDot) * smoothstep(0.25, 0.05, sunDot);
-    vec3 termColor = vec3(1.0, 0.5, 0.15) * termRegion * 0.5;
+    // 터미네이터 오렌지 림
+    float termRegion = smoothstep(-0.1, 0.05, sunDot) * smoothstep(0.3, 0.05, sunDot);
+    vec3 termColor = vec3(1.0, 0.5, 0.15) * termRegion * 0.6;
 
-    vec3 color = blueAtmo + hotColor * hotSpot + termColor;
+    // 합성: 기본 파란 대기 + 수렴 산란 HDR + 터미네이터
+    vec3 color = blueAtmo * basicAtmo + scatterColor * scatterIntensity + termColor;
 
-    float alpha = rim * dayCut * 0.5 + hotSpot * 0.3;
+    // 알파: 기본 림 + 수렴 산란 보정
+    float alpha = rim * dayCut * 0.45 + forwardScatter * 0.4;
     alpha = clamp(alpha, 0.0, 0.85);
 
     gl_FragColor = vec4(color, alpha);
@@ -760,6 +833,7 @@ function AtmosphereGlow() {
 function SunLight() {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const sunRef = useRef<THREE.Group>(null);
+
   // 태양 코로나 — 중심이 밝고 급격히 감쇠하는 자연스러운 그래디언트
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
@@ -767,7 +841,6 @@ function SunLight() {
     canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
     const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
-    // 핵심: 중심은 매우 밝지만, 0.1 지점에서 이미 급감쇠
     g.addColorStop(0, 'rgba(255,252,240,1.0)');
     g.addColorStop(0.05, 'rgba(255,248,220,0.8)');
     g.addColorStop(0.12, 'rgba(255,235,180,0.3)');
@@ -792,19 +865,18 @@ function SunLight() {
     const z = d * Math.cos(decRad) * Math.sin(ha);
     lightRef.current?.position.set(x, y, z);
     sunRef.current?.position.set(x, y, z);
-
   });
 
   return (
     <>
       <directionalLight ref={lightRef} intensity={2.5} color="#FFF8F0" />
       <group ref={sunRef}>
-        {/* 태양 코어 (작고 밝은 구체) */}
+        {/* 태양 코어 */}
         <mesh>
           <sphereGeometry args={[3, 16, 16]} />
           <meshBasicMaterial color="#FFF8E0" toneMapped={false} />
         </mesh>
-        {/* 코로나 외부 — Bloom이 자연스럽게 확산 (크기 줄임, opacity 낮춤) */}
+        {/* 코로나 외부 */}
         <sprite scale={[50, 50, 1]}>
           <spriteMaterial
             map={glowTexture}
@@ -815,7 +887,7 @@ function SunLight() {
             toneMapped={false}
           />
         </sprite>
-        {/* 코로나 내부 — 밝은 중심 글로우 */}
+        {/* 코로나 내부 */}
         <sprite scale={[20, 20, 1]}>
           <spriteMaterial
             map={glowTexture}
@@ -831,7 +903,9 @@ function SunLight() {
   );
 }
 
-// ─── R3F: Stars + Milky Way 배경 (8K equirectangular skybox) ───
+// ─── R3F: Stars + Milky Way 배경 (equirectangular skybox) ───
+
+const _starCamDir = new THREE.Vector3();
 
 function Starfield() {
   const { scene, camera } = useThree();
@@ -843,19 +917,19 @@ function Starfield() {
     scene.background = milkyWayTexture;
   }, [milkyWayTexture, scene]);
 
-  // 카메라 위치 기반 배경 회전 → 줌/패닝 시 자연스러운 시차
   useFrame(() => {
     const dist = camera.position.length();
-    // 거리 기반 밝기: 줌인=약간 어둡게, 줌아웃=밝게
     const t = THREE.MathUtils.clamp((dist - 150) / (400 - 150), 0, 1);
     const smooth = t * t * (3 - 2 * t);
-    scene.backgroundIntensity = 0.4 + smooth * 0.4;
 
-    // 카메라 방향 기반 미세 회전 → 패럴랙스 효과
-    const factor = 0.03; // 회전 강도 (작을수록 미세)
+    // 거리 기반 밝기: 줌인=어둡게, 줌아웃=밝게
+    scene.backgroundIntensity = 0.3 + smooth * 0.3;
+
+    // 패럴랙스 회전
+    _starCamDir.copy(camera.position).normalize();
     scene.backgroundRotation.set(
-      camera.position.y * factor * 0.01,
-      camera.position.x * factor * 0.01,
+      _starCamDir.y * 0.08,
+      -_starCamDir.x * 0.08,
       0,
     );
   });
@@ -1417,6 +1491,7 @@ function AdaptiveOrbitControls() {
   return (
     <OrbitControls
       ref={controlsRef}
+      makeDefault
       enablePan={false}
       enableZoom
       minDistance={MIN_DIST}
@@ -1693,10 +1768,10 @@ function GlobeScene({
       {!isMobile && (
         <EffectComposer>
           <Bloom
-            luminanceThreshold={0.6}
-            luminanceSmoothing={0.2}
-            intensity={0.8}
-            radius={0.65}
+            luminanceThreshold={0.4}
+            luminanceSmoothing={0.15}
+            intensity={1.2}
+            radius={0.75}
             mipmapBlur
           />
         </EffectComposer>
