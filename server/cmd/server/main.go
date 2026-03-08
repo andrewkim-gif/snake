@@ -15,6 +15,7 @@ import (
 	"github.com/andrewkim-gif/snake/server/internal/api"
 	"github.com/andrewkim-gif/snake/server/internal/blockchain"
 	"github.com/andrewkim-gif/snake/server/internal/cache"
+	"github.com/andrewkim-gif/snake/server/internal/db"
 	"github.com/andrewkim-gif/snake/server/internal/domain"
 	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/meta"
@@ -90,6 +91,33 @@ func main() {
 	}
 
 	// ================================================================
+	// 4b. Supabase REST API (optional — graceful fallback if unavailable)
+	// ================================================================
+	var pgDB *db.DB
+	pgConn, pgErr := db.NewFromEnv()
+	if pgErr != nil {
+		slog.Warn("Supabase unavailable — running without persistence",
+			"error", pgErr,
+		)
+	} else if pgConn == nil {
+		slog.Info("SUPABASE_URL not set — running without persistence")
+	} else {
+		pgDB = pgConn
+		defer pgDB.Close()
+
+		// Verify connectivity
+		if err := pgDB.HealthCheck(context.Background()); err != nil {
+			slog.Error("Supabase health check failed", "error", err)
+			pgDB.Close()
+			pgDB = nil
+		} else {
+			slog.Info("Supabase REST connected")
+		}
+	}
+	// Store is created after managers are initialized (see section 7d below)
+	// pgDB is used in section 7d for Store wiring
+
+	// ================================================================
 	// 5. v11 Core: WebSocket Hub (RoomManager replaced by WorldManager)
 	// ================================================================
 	hub := ws.NewHub()
@@ -153,6 +181,13 @@ func main() {
 
 	// --- Economy ---
 	economyCfg := meta.DefaultEconomyConfig()
+	// Allow faster tick interval via env var (e.g. "30s" for simulations)
+	if tickEnv := os.Getenv("ECONOMY_TICK_INTERVAL"); tickEnv != "" {
+		if d, err := time.ParseDuration(tickEnv); err == nil {
+			economyCfg.TickInterval = d
+			slog.Info("economy tick interval overridden", "interval", d)
+		}
+	}
 	economyEngine := meta.NewEconomyEngine(economyCfg)
 
 	// Initialize economy for all 195 countries from seed data
@@ -241,6 +276,29 @@ func main() {
 		"achievement", "ready",
 		"news", "ready",
 	)
+
+	// ================================================================
+	// 7d. Database Store Wiring (v18 — Supabase PostgreSQL persistence)
+	// ================================================================
+	if pgDB != nil {
+		store := db.NewStore(pgDB)
+		factionManager.SetStore(db.NewFactionStoreAdapter(store))
+		seasonEngine.SetStore(db.NewSeasonStoreAdapter(store))
+		diplomacyEngine.SetStore(db.NewDiplomacyStoreAdapter(store))
+		economyEngine.SetStore(db.NewCountryStoreAdapter(store))
+
+		// Load persisted data from DB into in-memory managers
+		if err := factionManager.LoadFromDB(); err != nil {
+			slog.Warn("failed to load factions from DB", "error", err)
+		}
+		if err := seasonEngine.LoadFromDB(); err != nil {
+			slog.Warn("failed to load seasons from DB", "error", err)
+		}
+		if err := diplomacyEngine.LoadFromDB(); err != nil {
+			slog.Warn("failed to load diplomacy from DB", "error", err)
+		}
+		slog.Info("Store wired — persistence active")
+	}
 
 	// ================================================================
 	// 7c. v14 In-Game Total Overhaul — Core Systems
@@ -644,6 +702,7 @@ func main() {
 		SiegeManager:      siegeManager,
 		ContinentalEngine: continentalEngine,
 		Metrics:           metrics,
+		PgDB:              pgDB,
 		// v14 modules
 		V14ArenaManager:    v14ArenaManager,
 		V14AccountLevelMgr: v14AccountLevelMgr,

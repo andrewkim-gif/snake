@@ -24,7 +24,9 @@ const Achievements = dynamic(() => import('@/components/profile/Achievements'), 
   ),
 });
 
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
+import { getServerUrl } from '@/lib/api-client';
+
+const SERVER_URL = getServerUrl();
 
 const TIER_COLOR_MAP: Record<string, string> = {
   bronze: tierColors.bronze,

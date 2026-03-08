@@ -57,8 +57,8 @@ func (r *Room) InitArenaCombat() {
 
 	// Create AI bots (60% of max agents)
 	botCount := maxAgents * 60 / 100
-	if botCount < 2 {
-		botCount = 2
+	if botCount < 5 {
+		botCount = 5
 	}
 
 	bots := make([]*ARBotState, 0, botCount)

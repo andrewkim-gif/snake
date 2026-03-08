@@ -120,17 +120,25 @@ export function useInputManager(
     const container = containerRef.current;
     if (!container) return;
 
-    // Pointer Lock 진입
-    const handleClick = () => {
+    // Pointer Lock 진입 — canvas 엘리먼트만 대상 (HTML overlay 클릭 시 방지)
+    const handleClick = (e: MouseEvent) => {
       if (!enabled) return;
+      // 오버레이 요소 클릭 시 pointer lock 방지 (canvas/webgl 요소만 허용)
+      const target = e.target as HTMLElement;
+      if (target.tagName !== 'CANVAS') return;
       if (!document.pointerLockElement) {
-        container.requestPointerLock();
+        // v19 PERF: canvas 엘리먼트에 pointer lock (container div가 아닌 canvas 직접)
+        // container div에 lock하면 HTML overlay 클릭까지 먹힘
+        const canvas = container.querySelector('canvas');
+        if (canvas) {
+          canvas.requestPointerLock();
+        }
       }
     };
 
     // Pointer Lock 상태 변경
     const handleLockChange = () => {
-      pointerLockedRef.current = document.pointerLockElement === container;
+      pointerLockedRef.current = !!document.pointerLockElement;
     };
 
     // 마우스 이동 → cameraDelta (Pointer Lock 상태에서만)
@@ -233,6 +241,13 @@ export function useInputManager(
       }
     };
   }, [containerRef, cameraRef, playerPosRef, enabled]);
+
+  // ─── v19 fix: enabled가 false가 되면 pointer lock 해제 ───
+  useEffect(() => {
+    if (!enabled && document.pointerLockElement) {
+      document.exitPointerLock();
+    }
+  }, [enabled]);
 
   // ─── rAF: moveAngle + aimAngle을 카메라 yaw 변화에 따라 실시간 재계산 ───
   useEffect(() => {

@@ -164,6 +164,26 @@ func DefaultSeasonConfig() SeasonConfig {
 	}
 }
 
+// SeasonDBRow is a DB-loaded season record (decoupled from db package).
+type SeasonDBRow struct {
+	ID         string
+	Name       string
+	Number     int
+	Phase      string
+	Status     string
+	StartAt    time.Time
+	EndAt      time.Time
+	ConfigJSON []byte
+	CreatedAt  time.Time
+}
+
+// SeasonStore is the persistence interface for seasons.
+type SeasonStore interface {
+	UpsertSeason(id, name string, number int, phase, status string, startAt, endAt time.Time, configJSON []byte, createdAt time.Time) error
+	LoadActiveSeason() (*SeasonDBRow, error)
+	LoadAllSeasons() ([]SeasonDBRow, error)
+}
+
 // --- Season Engine ---
 
 // SeasonEngine manages season lifecycle, era transitions, and rule enforcement.
@@ -189,6 +209,9 @@ type SeasonEngine struct {
 	OnEraChange     func(season *Season, oldEra, newEra Era)
 	OnSeasonEnd     func(season *Season)
 	OnFinalRush     func(season *Season)
+
+	// Persistence
+	store SeasonStore
 
 	// Lifecycle
 	cancel context.CancelFunc
@@ -247,6 +270,9 @@ func (se *SeasonEngine) CreateSeason(name, theme string) (*Season, error) {
 		"end", season.EndAt.Format(time.RFC3339),
 		"finalRush", season.FinalRushAt.Format(time.RFC3339),
 	)
+
+	// Write-through to DB
+	go se.persistSeasonAsync()
 
 	return season, nil
 }
@@ -317,6 +343,7 @@ func (se *SeasonEngine) checkAndTransitionEra(now time.Time) bool {
 			if se.OnEraChange != nil {
 				go se.OnEraChange(se.current, oldEra, era)
 			}
+			go se.persistSeasonAsync()
 			return true
 		}
 	}
@@ -367,6 +394,7 @@ func (se *SeasonEngine) endSeason(now time.Time) {
 	if se.OnSeasonEnd != nil {
 		go se.OnSeasonEnd(se.current)
 	}
+	go se.persistSeasonAsync()
 }
 
 // --- Background Worker ---
@@ -691,6 +719,83 @@ func ComputeSeasonLeaderboard(factions []*Faction, factionGDPs map[string]int64,
 	}
 
 	return entries
+}
+
+// --- Persistence ---
+
+// SetStore sets the optional persistence store.
+func (se *SeasonEngine) SetStore(s SeasonStore) {
+	se.mu.Lock()
+	defer se.mu.Unlock()
+	se.store = s
+}
+
+// LoadFromDB loads the active season from the database.
+func (se *SeasonEngine) LoadFromDB() error {
+	if se.store == nil {
+		return nil
+	}
+
+	row, err := se.store.LoadActiveSeason()
+	if err != nil {
+		return fmt.Errorf("load active season from DB: %w", err)
+	}
+	if row == nil {
+		slog.Info("no active season in DB")
+		return nil
+	}
+
+	se.mu.Lock()
+	defer se.mu.Unlock()
+
+	season := &Season{
+		ID:          row.ID,
+		Number:      row.Number,
+		Name:        row.Name,
+		Status:      SeasonStatus(row.Status),
+		CurrentEra:  Era(row.Phase),
+		StartAt:     row.StartAt,
+		EndAt:       row.EndAt,
+		EraStartAt:  row.StartAt,
+		FinalRushAt: row.EndAt.Add(-time.Duration(se.config.FinalRushHours) * time.Hour),
+		EraSchedule: se.computeEraSchedule(row.StartAt, row.EndAt),
+		CreatedAt:   row.CreatedAt,
+	}
+
+	se.current = season
+	se.seasonCounter = row.Number
+	if rule, ok := se.eraRules[Era(row.Phase)]; ok {
+		se.activeRules = rule
+	}
+
+	slog.Info("season loaded from DB", "id", row.ID, "name", row.Name, "era", row.Phase)
+	return nil
+}
+
+// persistSeasonAsync writes the current season to the database in the background.
+func (se *SeasonEngine) persistSeasonAsync() {
+	if se.store == nil {
+		return
+	}
+
+	se.mu.RLock()
+	s := se.current
+	if s == nil {
+		se.mu.RUnlock()
+		return
+	}
+	sCopy := *s
+	se.mu.RUnlock()
+
+	go func() {
+		if err := se.store.UpsertSeason(
+			sCopy.ID, sCopy.Name, sCopy.Number,
+			string(sCopy.CurrentEra), string(sCopy.Status),
+			sCopy.StartAt, sCopy.EndAt, nil, sCopy.CreatedAt,
+		); err != nil {
+			slog.Warn("persist season failed", "id", sCopy.ID, "error", err)
+		}
+	}()
 }
 
 // --- HTTP API ---

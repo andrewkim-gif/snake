@@ -21,7 +21,9 @@ const HallOfFame = dynamic(() => import('@/components/hall-of-fame/HallOfFame'),
   ),
 });
 
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
+import { getServerUrl } from '@/lib/api-client';
+
+const SERVER_URL = getServerUrl();
 
 export default function HallOfFamePage() {
   const tHof = useTranslations('hallOfFame');

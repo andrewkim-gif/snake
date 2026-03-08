@@ -116,6 +116,7 @@ export default function Home() {
   const {
     dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput, sendInputV16,
     respawn, chooseUpgrade, dismissSynergyPopup, setGameMode, switchArena,
+    arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice,
   } = useSocketContext();
 
   // 뉴스 피드 데이터 안정화 (매 렌더 .map() 재생성 방지)
@@ -210,20 +211,8 @@ export default function Home() {
     setMode('lobby');
   }, [leaveRoom]);
 
-  // v14 S36: ESC 키 핸들러 (인게임에서만 작동)
-  useEffect(() => {
-    if (mode !== 'playing') return;
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        e.preventDefault();
-        handleExitToLobby();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [mode, handleExitToLobby]);
+  // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
+  // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
   // v14 S36: 글로브에서 국가 클릭 시 아레나 즉시 입장 (소켓 유지 + 전환)
   const handleQuickEnterArena = useCallback((iso3: string) => {
@@ -306,6 +295,11 @@ export default function Home() {
         chooseUpgrade={chooseUpgrade}
         dismissSynergyPopup={dismissSynergyPopup}
         isArenaMode={true}
+        arStateRef={arStateRef}
+        arInterpRef={arInterpRef}
+        arEventQueueRef={arEventQueueRef}
+        arUiState={arUiState}
+        sendARChoice={sendARChoice}
       />
     );
   }

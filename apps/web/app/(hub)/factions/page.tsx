@@ -13,6 +13,8 @@ import { DashboardPage, DetailModal } from '@/components/hub';
 import { MOCK_FACTIONS, MOCK_FACTION_DETAILS } from '@/lib/mock-data';
 import type { MockFaction } from '@/lib/mock-data';
 import { Swords, Users, MapPin, DollarSign } from 'lucide-react';
+import { isServerAvailable, fetchFactions, type FactionSummary } from '@/lib/api-client';
+import { useApiData } from '@/hooks/useApiData';
 
 const FactionList = dynamic(() => import('@/components/faction/FactionList'), {
   loading: () => (
@@ -31,6 +33,7 @@ const FactionDashboard = dynamic(() => import('@/components/faction/FactionDashb
 });
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
+// isServerAvailable() from api-client is used for live data toggling
 
 function StarRating({ value, max = 5, label }: { value: number; max?: number; label: string }) {
   return (
@@ -53,16 +56,28 @@ export default function FactionsPage() {
   const tFaction = useTranslations('faction');
   const [selectedFaction, setSelectedFaction] = useState<MockFaction | null>(null);
   const [showDashboard, setShowDashboard] = useState(false);
-  const [useServerData, setUseServerData] = useState(!!SERVER_URL);
+  const serverOk = isServerAvailable();
+  const [useServerData, setUseServerData] = useState(serverOk);
+
+  // Fetch live faction data when server is available
+  const { data: liveFactions } = useApiData(fetchFactions, { refreshInterval: serverOk ? 30_000 : 0 });
 
   const handleFactionSelect = useCallback((faction: { id: string }) => {
     const f = MOCK_FACTIONS.find((mf) => mf.id === faction.id);
     if (f) setSelectedFaction(f);
   }, []);
 
-  const totalMembers = MOCK_FACTIONS.reduce((s, f) => s + f.member_count, 0);
-  const totalTerritories = MOCK_FACTIONS.reduce((s, f) => s + f.territory_count, 0);
-  const totalGdp = MOCK_FACTIONS.reduce((s, f) => s + f.total_gdp, 0);
+  // Use live data for stats if available, otherwise mock
+  const factionCount = liveFactions ? liveFactions.length : MOCK_FACTIONS.length;
+  const totalMembers = liveFactions
+    ? liveFactions.reduce((s, f) => s + f.member_count, 0)
+    : MOCK_FACTIONS.reduce((s, f) => s + f.member_count, 0);
+  const totalTerritories = liveFactions
+    ? liveFactions.reduce((s, f) => s + (f.territory_count ?? 0), 0)
+    : MOCK_FACTIONS.reduce((s, f) => s + f.territory_count, 0);
+  const totalGdp = liveFactions
+    ? liveFactions.reduce((s, f) => s + (f.total_gdp ?? 0), 0)
+    : MOCK_FACTIONS.reduce((s, f) => s + f.total_gdp, 0);
 
   const selectedDetail = selectedFaction ? MOCK_FACTION_DETAILS[selectedFaction.id] : null;
 
@@ -91,7 +106,7 @@ export default function FactionsPage() {
         </button>
       }
       stats={[
-        { label: tFaction('activeFactions'), value: String(MOCK_FACTIONS.length), color: SK.textPrimary, icon: Swords },
+        { label: tFaction('activeFactions'), value: String(factionCount), color: SK.textPrimary, icon: Swords },
         { label: tFaction('totalMembers'), value: String(totalMembers), color: SK.blue, icon: Users },
         { label: tFaction('territories'), value: String(totalTerritories), color: SK.green, icon: MapPin },
         { label: tFaction('combinedGdp'), value: `${(totalGdp / 1000).toFixed(0)}K`, color: SK.orange, icon: DollarSign },

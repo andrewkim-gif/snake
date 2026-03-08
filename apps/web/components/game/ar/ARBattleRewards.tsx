@@ -23,6 +23,8 @@ export function ARBattleRewardsOverlay({ rewards, onClose }: ARBattleRewardsProp
 
   return (
     <div
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
       style={{
         position: 'absolute',
         inset: 0,

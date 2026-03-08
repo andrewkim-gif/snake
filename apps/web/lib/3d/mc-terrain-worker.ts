@@ -67,6 +67,18 @@ export interface TerrainWorkerOutput {
 // ---------------------------------------------------------------------------
 const AIR_BYTE = 255 // Uint8Array에서 AIR(-1) 표현
 
+// 투명 블록 타입 (face culling에서 불투명 차단자로 취급하지 않음)
+const TRANSPARENT_TYPES = new Set<number>([
+  BlockType.leaf,   // 3
+  BlockType.glass,  // 10
+])
+
+/** 불투명(opaque) 블록인지 확인 — AIR와 투명 블록은 false */
+function isOpaque(byteVal: number): boolean {
+  if (byteVal === AIR_BYTE) return false
+  return !TRANSPARENT_TYPES.has(byteVal)
+}
+
 function denseIndex(lx: number, y: number, lz: number): number {
   return (lx * WORLD_HEIGHT * CHUNK_SIZE) + (y * CHUNK_SIZE) + lz
 }
@@ -291,12 +303,12 @@ self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
       const east = dense[denseRangeIndex(block.x + 1, wy, block.z)]
       const west = dense[denseRangeIndex(block.x - 1, wy, block.z)]
 
-      const topSolid = top !== AIR_BYTE
-      const bottomSolid = bottom !== AIR_BYTE
-      const northSolid = north !== AIR_BYTE
-      const southSolid = south !== AIR_BYTE
-      const eastSolid = east !== AIR_BYTE
-      const westSolid = west !== AIR_BYTE
+      const topSolid = isOpaque(top)
+      const bottomSolid = isOpaque(bottom)
+      const northSolid = isOpaque(north)
+      const southSolid = isOpaque(south)
+      const eastSolid = isOpaque(east)
+      const westSolid = isOpaque(west)
 
       // 6면 모두 불투명이면 숨김
       if (topSolid && bottomSolid && northSolid && southSolid && eastSolid && westSolid) {

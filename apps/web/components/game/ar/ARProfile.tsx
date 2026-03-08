@@ -40,6 +40,8 @@ export function ARProfile({ profile, onClose }: ARProfileProps) {
 
   return (
     <div
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
       style={{
         position: 'fixed',
         inset: 0,

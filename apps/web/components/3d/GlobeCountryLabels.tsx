@@ -21,6 +21,8 @@ import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToXYZ } from '@/lib/globe-utils';
 import { getCountryByISO3 } from '@/lib/country-data';
+import { getArchetypeForISO3 } from '@/lib/landmark-data';
+import { getArchetypeHeight } from '@/lib/landmark-geometries';
 import type { FlagAtlasResult } from '@/lib/flag-atlas';
 import type { CountryClientState } from '@/lib/globe-data';
 import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
@@ -52,10 +54,12 @@ const CAM_FADE_START = 320;
 /** 원거리에서 상위 N개국만 표시 */
 const FAR_TOP_N = 60;
 
-/** centroid 높이 오프셋 (구체 표면 위) */
-const LABEL_ALT = 3.5;
-/** 국가 이름(CountryLabels) 아래에 배치하기 위한 카메라-로컬 하향 오프셋 */
-const LABEL_DOWN_OFFSET = 2.8;
+/** 랜드마크 메시의 구면 위 기준 높이 (LandmarkMeshes.SURFACE_ALT) */
+const LANDMARK_SURFACE_ALT = 2.5;
+/** 국기+참여인원: 국가 이름과 같은 depth, 카메라 로컬 Y로 텍스트 위에 배치 */
+const LABEL_TOP_GAP = 1.0;
+/** 카메라 로컬 up 방향으로의 오프셋 (텍스트 위에 국기 배치) */
+const LABEL_UP_OFFSET = 1.8;
 
 /** 글로우 색상 */
 const GLOW_CYAN = '#00E5FF';
@@ -97,7 +101,7 @@ interface LabelEntry {
 const _obj = new THREE.Object3D();
 const _camDir = new THREE.Vector3();
 const _projVec = new THREE.Vector3();
-const _downVec = new THREE.Vector3();
+const _camUp = new THREE.Vector3();
 // ─── Shader ───
 
 const vertexShader = /* glsl */ `
@@ -147,13 +151,18 @@ export function GlobeCountryLabels({
   const prevLodRef = useRef(0);
 
   // 라벨 엔트리 빌드 (centroid가 변경될 때만)
+  // 각 국가의 랜드마크 높이에 맞춰 라벨을 꼭대기에 배치
   const entries = useMemo<LabelEntry[]>(() => {
     const result: LabelEntry[] = [];
-    const labelR = globeRadius + LABEL_ALT;
 
     countryCentroids.forEach(([lat, lng], iso3) => {
       const country = getCountryByISO3(iso3);
       if (!country) return;
+
+      // 랜드마크 꼭대기 바로 위 — getArchetypeHeight는 이미 LANDMARK_SCALE 포함
+      const archetype = getArchetypeForISO3(iso3);
+      const landmarkH = getArchetypeHeight(archetype);
+      const labelR = globeRadius + LANDMARK_SURFACE_ALT + landmarkH + LABEL_TOP_GAP;
 
       const pos = latLngToXYZ(lat, lng, labelR);
       const normal = pos.clone().normalize();
@@ -453,12 +462,10 @@ export function GlobeCountryLabels({
       // rowIndex 어트리뷰트 — stable entry index로 아틀라스 행 매핑
       rowIndexBuf[visibleIdx] = i;
 
-      // Billboard 위치 — CountryLabels(국가 이름) 아래에 배치
-      _obj.position.copy(entry.centroidPos);
+      // Billboard 위치 — 국가 이름과 같은 depth, 카메라 로컬 Y로 위에 배치
+      _camUp.set(0, 1, 0).applyQuaternion(camera.quaternion);
+      _obj.position.copy(entry.centroidPos).addScaledVector(_camUp, LABEL_UP_OFFSET);
       _obj.quaternion.copy(camera.quaternion);
-      // 카메라-로컬 하향 오프셋 (국가 이름 텍스트 아래로)
-      _downVec.set(0, -LABEL_DOWN_OFFSET, 0).applyQuaternion(camera.quaternion);
-      _obj.position.add(_downVec);
 
       // 거리 기반 스케일: 가까울수록 크게 (150→2.8x, 500→1.2x) — 2배 크기 + 거리 감쇠
       const distT = THREE.MathUtils.clamp((camDist - 150) / 350, 0, 1);

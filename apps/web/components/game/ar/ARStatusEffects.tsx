@@ -16,7 +16,8 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ARState, ARStatusEffect } from '@/lib/3d/ar-types';
 import type { AREvent } from '@/hooks/useSocket';
-import { drainAREvents } from '@/hooks/useSocket';
+import { MC_BASE_Y } from '@/lib/3d/mc-types';
+import { getArenaTerrainHeight } from '@/lib/3d/mc-noise';
 
 const MAX_EFFECTS = 100;
 
@@ -42,12 +43,29 @@ interface StatusEffectInstance {
 interface ARStatusEffectsProps {
   arStateRef: React.MutableRefObject<ARState | null>;
   arEventQueueRef: React.MutableRefObject<AREvent[]>;
+  /** 아레나 시드 (지형 높이 쿼리용) */
+  arenaSeed: number;
+  /** 지형 높이 편차 (기본 3) */
+  flattenVariance?: number;
 }
 
 const dummy = new THREE.Object3D();
 const tempColor = new THREE.Color();
 
-function ARStatusEffectsInner({ arStateRef, arEventQueueRef }: ARStatusEffectsProps) {
+// O(1) 위치 조회용 경량 Map
+const _posMap = {
+  _data: new Map<string, { x: number; z: number }>(),
+  clear() { this._data.clear(); },
+  set(id: string, x: number, z: number) {
+    let entry = this._data.get(id);
+    if (!entry) { entry = { x: 0, z: 0 }; this._data.set(id, entry); }
+    entry.x = x;
+    entry.z = z;
+  },
+  get(id: string) { return this._data.get(id) ?? null; },
+};
+
+function ARStatusEffectsInner({ arStateRef, arEventQueueRef, arenaSeed, flattenVariance = 3 }: ARStatusEffectsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const effectsRef = useRef<StatusEffectInstance[]>([]);
 
@@ -96,23 +114,33 @@ function ARStatusEffectsInner({ arStateRef, arEventQueueRef }: ARStatusEffectsPr
     for (const eff of effectsRef.current) {
       eff.age += delta;
     }
-    effectsRef.current = effectsRef.current
-      .filter((e) => e.age < e.duration)
-      .slice(0, MAX_EFFECTS);
+    // PERF-7: 인플레이스 필터 (새 배열 할당 제거)
+    let writeIdx = 0;
+    for (let i = 0; i < effectsRef.current.length && writeIdx < MAX_EFFECTS; i++) {
+      if (effectsRef.current[i].age < effectsRef.current[i].duration) {
+        effectsRef.current[writeIdx++] = effectsRef.current[i];
+      }
+    }
+    effectsRef.current.length = writeIdx;
 
-    // 현재 arState에서 적 위치 업데이트 (위치 동기화)
+    // PERF-7: Map 기반 O(1) 위치 조회 (O(N*M) find() → O(N+M))
     const arState = arStateRef.current;
-    if (arState) {
+    if (arState && effectsRef.current.length > 0) {
+      // 한 번 빌드, O(1) 조회
+      _posMap.clear();
+      for (let j = 0; j < arState.enemies.length; j++) {
+        const e = arState.enemies[j];
+        _posMap.set(e.id, e.x, e.z);
+      }
+      for (let j = 0; j < arState.players.length; j++) {
+        const p = arState.players[j];
+        _posMap.set(p.id, p.pos.x, p.pos.z);
+      }
       for (const eff of effectsRef.current) {
-        const enemy = arState.enemies.find((e) => e.id === eff.id);
-        if (enemy) {
-          eff.x = enemy.x;
-          eff.z = enemy.z;
-        }
-        const player = arState.players.find((p) => p.id === eff.id);
-        if (player) {
-          eff.x = player.pos.x;
-          eff.z = player.pos.z;
+        const pos = _posMap.get(eff.id);
+        if (pos) {
+          eff.x = pos.x;
+          eff.z = pos.z;
         }
       }
     }
@@ -128,7 +156,8 @@ function ARStatusEffectsInner({ arStateRef, arEventQueueRef }: ARStatusEffectsPr
       const ageRatio = eff.age / eff.duration;
       const fadeAlpha = ageRatio > 0.7 ? 1.0 - (ageRatio - 0.7) / 0.3 : 1.0;
 
-      dummy.position.set(eff.x, 0.1, eff.z);
+      const terrainY = getArenaTerrainHeight(eff.x, eff.z, arenaSeed, flattenVariance);
+      dummy.position.set(eff.x, terrainY - MC_BASE_Y + 0.1, eff.z);
       dummy.rotation.set(-Math.PI / 2, 0, 0);
       dummy.scale.set(1.5 * pulse, 1.5 * pulse, 1);
       dummy.updateMatrix();

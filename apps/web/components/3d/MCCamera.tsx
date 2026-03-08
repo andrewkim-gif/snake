@@ -86,6 +86,9 @@ export default function MCCamera({
   // ---------------------------------------------------------------------------
   // 블록 충돌 체크: 월드 좌표 (wx, wy, wz)에 solid 블록이 있는지
   // ---------------------------------------------------------------------------
+  // terrainIdMap에 데이터가 있는지 (Worker가 한 번이라도 결과를 반환했는지)
+  const hasTerrainData = Object.keys(terrainIdMap).length > 0
+
   const isSolidAt = useCallback(
     (wx: number, wy: number, wz: number): boolean => {
       const bx = Math.floor(wx)
@@ -99,14 +102,16 @@ export default function MCCamera({
         if (block && isSolidBlock(block.type)) return true
       }
 
-      // 노이즈 기반 지표면 체크 (terrainIdMap에 아직 로드되지 않은 청크 대비)
-      const noise = noiseRef.current
-      const surfaceY = MC_BASE_Y + noise.getSurfaceOffset(bx, bz)
-      if (by <= surfaceY) return true
+      // terrain 데이터가 아직 로드 안 됐을 때만 noise 폴백 사용
+      if (!hasTerrainData) {
+        const noise = noiseRef.current
+        const surfaceY = MC_BASE_Y + noise.getSurfaceOffset(bx, bz)
+        if (by <= surfaceY) return true
+      }
 
       return false
     },
-    [terrainBlocks, terrainIdMap]
+    [terrainBlocks, terrainIdMap, hasTerrainData]
   )
 
   // ---------------------------------------------------------------------------
@@ -327,24 +332,59 @@ export default function MCCamera({
         camera.position.z += moveZ
       }
 
-      // 중력 적용
+      // 수평 이동 후 grounded 상태에서 step-up/step-down 처리
+      // (지형 높이 변화에 부드럽게 따라감 — jitter 방지)
+      if (groundedRef.current && vel.y === 0 && (moveX !== 0 || moveZ !== 0)) {
+        const feetY = camera.position.y - EYE_HEIGHT
+        // 발 아래 블록이 있는지 확인
+        let groundY = -Infinity
+        for (const ox of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+          for (const oz of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+            // 현재 발 위치 아래로 1.2블록까지 스캔 (계단 내려가기)
+            for (let scanY = Math.floor(feetY); scanY >= Math.floor(feetY) - 1; scanY--) {
+              if (isSolidAt(camera.position.x + ox, scanY, camera.position.z + oz)) {
+                groundY = Math.max(groundY, scanY + 1) // 블록 윗면
+                break
+              }
+            }
+          }
+        }
+
+        if (groundY > -Infinity) {
+          const targetY = groundY + EYE_HEIGHT
+          const diff = targetY - camera.position.y
+          if (diff > 0 && diff <= 0.6) {
+            // step-up: 최대 0.6블록 높이까지 자동 올라감
+            camera.position.y = targetY
+          } else if (diff < 0 && diff >= -1.1) {
+            // step-down: 최대 1.1블록까지 자동 내려감
+            camera.position.y = targetY
+          } else if (diff < -1.1) {
+            // 큰 낙차: 낙하 시작
+            groundedRef.current = false
+          }
+        } else {
+          // 바닥 없음: 낙하
+          groundedRef.current = false
+        }
+      }
+
+      // 중력 적용 (공중에 있을 때만)
       if (!groundedRef.current) {
         vel.y -= GRAVITY * delta
         if (vel.y < -MAX_FALL_VELOCITY) vel.y = -MAX_FALL_VELOCITY
       }
 
-      // 수직 이동
+      // 수직 이동 (점프/낙하)
       const verticalDelta = vel.y * delta
       if (verticalDelta !== 0) {
         if (checkCollision(camera.position, 'y', verticalDelta)) {
-          // 충돌: 속도 0
           if (vel.y < 0) {
-            // 착지
+            // 착지 — 발을 블록 위에 정확히 스냅
             groundedRef.current = true
-            // 발을 블록 위에 정확히 맞춤
             const feetY = camera.position.y - EYE_HEIGHT
-            const snappedFeetY = Math.ceil(feetY) // 가장 가까운 블록 위
-            camera.position.y = snappedFeetY + EYE_HEIGHT
+            const blockTopY = Math.floor(feetY + 0.01) + 1
+            camera.position.y = blockTopY + EYE_HEIGHT
           }
           vel.y = 0
         } else {
@@ -353,10 +393,10 @@ export default function MCCamera({
         }
       }
 
-      // 바닥 아래에 블록이 없으면 낙하 시작
-      if (groundedRef.current) {
+      // 정지 상태에서 바닥 유실 체크 (수평 이동 없을 때)
+      if (groundedRef.current && vel.y === 0 && moveX === 0 && moveZ === 0) {
         const feetY = camera.position.y - EYE_HEIGHT
-        const belowFeetY = feetY - 0.1
+        const belowFeetY = feetY - 0.05
         let hasGround = false
         for (const ox of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
           for (const oz of [-COLLISION_MARGIN, COLLISION_MARGIN]) {

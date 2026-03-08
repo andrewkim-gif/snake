@@ -29,7 +29,9 @@ const TechTree = dynamic(() => import('@/components/faction/TechTree'), {
   ),
 });
 
-const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
+import { getServerUrl } from '@/lib/api-client';
+
+const SERVER_URL = getServerUrl();
 
 export default function FactionDetailPage() {
   const tFaction = useTranslations('faction');

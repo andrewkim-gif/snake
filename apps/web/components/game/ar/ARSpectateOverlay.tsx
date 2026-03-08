@@ -82,25 +82,26 @@ export function ARSpectateOverlay({
     });
   }, []);
 
-  // Keyboard handler
+  // Keyboard handler (v19: ESC는 PauseMenu에서 처리 → 여기서 제거)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'ArrowLeft') {
         switchTarget(-1);
       } else if (e.key === 'ArrowRight') {
         switchTarget(1);
-      } else if (e.key === 'Escape') {
-        onReturnToLobby();
       }
+      // ESC는 GameCanvas3D의 PauseMenu가 담당 (즉시 퇴장 방지)
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [switchTarget, onReturnToLobby]);
+  }, [switchTarget]);
 
   const aliveCount = alivePlayers.current.length;
 
   return (
     <div
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
       style={{
         position: 'absolute',
         inset: 0,

@@ -60,14 +60,44 @@ type ResourceBundle struct {
 	Influence int64 `json:"influence"`
 }
 
+// FactionStore is the persistence interface for factions (implemented by db.Store).
+type FactionStore interface {
+	UpsertFaction(id, name, tag, color, bannerURL, leaderID string, treasury []byte, prestige, memberCount int, createdAt time.Time) error
+	UpsertFactionMembers(factionID string, members []FactionMemberRow) error
+	DeleteFaction(factionID string) error
+	LoadFactions() ([]FactionDBRow, []FactionMemberRow, error)
+}
+
+// FactionDBRow is a DB-loaded faction record (mirrors db.FactionRow for decoupling).
+type FactionDBRow struct {
+	ID          string
+	Name        string
+	Tag         string
+	Color       string
+	BannerURL   string
+	LeaderID    string
+	Treasury    []byte // JSON
+	Prestige    int
+	MemberCount int
+	CreatedAt   time.Time
+}
+
+// FactionMemberRow mirrors a member record loaded from DB.
+type FactionMemberRow struct {
+	FactionID string
+	UserID    string
+	Role      string
+	JoinedAt  time.Time
+}
+
 // FactionManager manages faction CRUD and membership operations.
-// In Phase 0, this is an in-memory implementation.
-// Phase 1+ will integrate with PostgreSQL via the db package.
 type FactionManager struct {
 	mu       sync.RWMutex
 	factions map[string]*Faction        // factionID → Faction
 	members  map[string][]FactionMember // factionID → members
 	userFaction map[string]string        // userID → factionID
+
+	store FactionStore // optional persistence layer
 }
 
 // NewFactionManager creates a new FactionManager.
@@ -105,7 +135,14 @@ func (fm *FactionManager) CreateFaction(id, name, tag, color, leaderID string) (
 		Tag:         tag,
 		Color:       color,
 		LeaderID:    leaderID,
-		Treasury:    ResourceBundle{Gold: 0},
+		Treasury: ResourceBundle{
+			Gold:      5000,
+			Oil:       500,
+			Minerals:  500,
+			Food:      500,
+			Tech:      500,
+			Influence: 200,
+		},
 		Prestige:    0,
 		MemberCount: 1,
 		CreatedAt:   time.Now(),
@@ -120,6 +157,9 @@ func (fm *FactionManager) CreateFaction(id, name, tag, color, leaderID string) (
 	fm.userFaction[leaderID] = id
 
 	slog.Info("faction created", "id", id, "name", name, "leader", leaderID)
+
+	// Write-through to DB
+	go fm.persistFactionAsync(id)
 
 	return faction, nil
 }
@@ -175,13 +215,27 @@ func (fm *FactionManager) JoinFaction(factionID, userID string) error {
 		return fmt.Errorf("user %s already belongs to a faction", userID)
 	}
 
+	// Auto-promote to SupremeLeader if:
+	// 1. Faction has no members (clean state)
+	// 2. Faction has only 1 member (original creator now disconnected, sim restarted)
+	// 3. Joiner is the recorded leader (same userID reconnect)
+	// This handles agent reconnection after sim restart while server still holds faction state.
+	role := RoleMember
+	if len(fm.members[factionID]) <= 1 || faction.LeaderID == userID {
+		role = RoleSupremeLeader
+		faction.LeaderID = userID
+	}
+
 	fm.members[factionID] = append(fm.members[factionID], FactionMember{
 		UserID:   userID,
-		Role:     RoleMember,
+		Role:     role,
 		JoinedAt: time.Now(),
 	})
 	fm.userFaction[userID] = factionID
 	faction.MemberCount++
+
+	// Write-through to DB
+	go fm.persistFactionAsync(factionID)
 
 	return nil
 }
@@ -217,6 +271,9 @@ func (fm *FactionManager) LeaveFaction(userID string) error {
 
 	delete(fm.userFaction, userID)
 	faction.MemberCount--
+
+	// Write-through to DB
+	go fm.persistFactionAsync(factionID)
 
 	return nil
 }
@@ -370,6 +427,10 @@ func (fm *FactionManager) DepositToTreasury(factionID string, resources Resource
 	faction.Treasury.Influence += resources.Influence
 
 	slog.Info("treasury deposit", "faction", factionID, "gold", resources.Gold)
+
+	// Write-through to DB
+	go fm.persistFactionAsync(factionID)
+
 	return nil
 }
 
@@ -469,7 +530,125 @@ func (fm *FactionManager) DisbandFaction(factionID, leaderID string) error {
 	delete(fm.factions, factionID)
 
 	slog.Info("faction disbanded", "id", factionID, "name", faction.Name)
+
+	// Delete from DB
+	go fm.deleteFactionAsync(factionID)
+
 	return nil
+}
+
+// --- Persistence Layer ---
+
+// SetStore sets the optional persistence store.
+func (fm *FactionManager) SetStore(s FactionStore) {
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+	fm.store = s
+}
+
+// LoadFromDB loads all factions and members from the database into memory.
+func (fm *FactionManager) LoadFromDB() error {
+	if fm.store == nil {
+		return nil
+	}
+
+	factions, members, err := fm.store.LoadFactions()
+	if err != nil {
+		return fmt.Errorf("load factions from DB: %w", err)
+	}
+
+	fm.mu.Lock()
+	defer fm.mu.Unlock()
+
+	for _, f := range factions {
+		var treasury ResourceBundle
+		if len(f.Treasury) > 0 {
+			json.Unmarshal(f.Treasury, &treasury)
+		}
+
+		fm.factions[f.ID] = &Faction{
+			ID:          f.ID,
+			Name:        f.Name,
+			Tag:         f.Tag,
+			Color:       f.Color,
+			BannerURL:   f.BannerURL,
+			LeaderID:    f.LeaderID,
+			Treasury:    treasury,
+			Prestige:    f.Prestige,
+			MemberCount: f.MemberCount,
+			CreatedAt:   f.CreatedAt,
+		}
+		fm.members[f.ID] = []FactionMember{}
+	}
+
+	for _, m := range members {
+		fm.members[m.FactionID] = append(fm.members[m.FactionID], FactionMember{
+			UserID:   m.UserID,
+			Role:     FactionRole(m.Role),
+			JoinedAt: m.JoinedAt,
+		})
+		fm.userFaction[m.UserID] = m.FactionID
+	}
+
+	slog.Info("factions loaded from DB", "factions", len(factions), "members", len(members))
+	return nil
+}
+
+// persistFactionAsync writes a faction to the database in the background.
+func (fm *FactionManager) persistFactionAsync(factionID string) {
+	if fm.store == nil {
+		return
+	}
+
+	// Snapshot under lock
+	fm.mu.RLock()
+	faction, ok := fm.factions[factionID]
+	if !ok {
+		fm.mu.RUnlock()
+		return
+	}
+	fCopy := *faction
+	membersCopy := make([]FactionMember, len(fm.members[factionID]))
+	copy(membersCopy, fm.members[factionID])
+	fm.mu.RUnlock()
+
+	go func() {
+		treasuryJSON, _ := json.Marshal(fCopy.Treasury)
+
+		if err := fm.store.UpsertFaction(
+			fCopy.ID, fCopy.Name, fCopy.Tag, fCopy.Color, fCopy.BannerURL,
+			fCopy.LeaderID, treasuryJSON, fCopy.Prestige, fCopy.MemberCount, fCopy.CreatedAt,
+		); err != nil {
+			slog.Warn("persist faction failed", "id", fCopy.ID, "error", err)
+			return
+		}
+
+		dbMembers := make([]FactionMemberRow, len(membersCopy))
+		for i, m := range membersCopy {
+			dbMembers[i] = FactionMemberRow{
+				FactionID: factionID,
+				UserID:    m.UserID,
+				Role:      string(m.Role),
+				JoinedAt:  m.JoinedAt,
+			}
+		}
+
+		if err := fm.store.UpsertFactionMembers(factionID, dbMembers); err != nil {
+			slog.Warn("persist faction members failed", "id", factionID, "error", err)
+		}
+	}()
+}
+
+// deleteFactionAsync removes a faction from the database in the background.
+func (fm *FactionManager) deleteFactionAsync(factionID string) {
+	if fm.store == nil {
+		return
+	}
+	go func() {
+		if err := fm.store.DeleteFaction(factionID); err != nil {
+			slog.Warn("delete faction from DB failed", "id", factionID, "error", err)
+		}
+	}()
 }
 
 // --- HTTP API Handlers ---

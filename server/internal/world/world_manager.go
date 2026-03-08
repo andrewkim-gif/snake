@@ -856,6 +856,10 @@ func (wm *WorldManager) buildRoomConfig(state *CountryState) game.RoomConfig {
 			bots = 0
 		}
 	}
+	// Ensure at least 5 bots for every arena (auto-NPC)
+	if bots < 5 {
+		bots = 5
+	}
 	return game.RoomConfig{
 		MaxRooms:          1,
 		MaxPlayersPerRoom: state.MaxAgents,
@@ -865,7 +869,7 @@ func (wm *WorldManager) buildRoomConfig(state *CountryState) game.RoomConfig {
 		CountdownSec:      wm.config.CountdownSec,
 		EndingSec:         wm.config.EndingSec,
 		CooldownSec:       wm.config.BattleCooldownSec,
-		MinPlayersToStart: 1,
+		MinPlayersToStart: 0, // auto-start immediately with bots (no waiting)
 		TerrainTheme:      state.TerrainTheme,
 		// v19: Enable arena combat mode for all country arenas
 		CombatMode:  game.CombatModeArena,

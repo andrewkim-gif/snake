@@ -89,6 +89,9 @@ export function createARInterpolation(): ARInterpolationState {
 // Server State Update
 // ============================================================
 
+// PERF: 재사용 가능한 Set (매 tick new Set() 제거)
+const _activeIds = new Set<string>();
+
 /**
  * 서버 ar_state 수신 시 호출.
  * 이전 상태를 prev로 밀고, 새 상태를 curr에 저장한다.
@@ -100,42 +103,42 @@ export function onARStateReceived(
   const now = performance.now();
   interp.lastServerTime = now;
 
-  // Track active entity IDs to clean up stale entries
-  const activeIds = new Set<string>();
+  // Track active entity IDs to clean up stale entries (재사용 Set)
+  _activeIds.clear();
 
   // Update players
   for (const player of state.players) {
-    activeIds.add(player.id);
+    _activeIds.add(player.id);
     updateEntity(interp, player.id, player.pos.x, player.pos.z, player.rot, now);
   }
 
   // Update enemies
   for (const enemy of state.enemies) {
-    activeIds.add(enemy.id);
+    _activeIds.add(enemy.id);
     updateEntity(interp, enemy.id, enemy.x, enemy.z, 0, now);
   }
 
   // Update projectiles
   for (const proj of state.projectiles) {
-    activeIds.add(proj.id);
+    _activeIds.add(proj.id);
     updateEntity(interp, proj.id, proj.x, proj.z, 0, now);
   }
 
   // Update XP crystals
   for (const crystal of state.xpCrystals) {
-    activeIds.add(crystal.id);
+    _activeIds.add(crystal.id);
     updateEntity(interp, crystal.id, crystal.x, crystal.z, 0, now);
   }
 
   // Update field items
   for (const item of state.items) {
-    activeIds.add(item.id);
+    _activeIds.add(item.id);
     updateEntity(interp, item.id, item.x, item.z, 0, now);
   }
 
   // Remove stale entries (entities that no longer exist)
   for (const id of interp.entities.keys()) {
-    if (!activeIds.has(id)) {
+    if (!_activeIds.has(id)) {
       interp.entities.delete(id);
     }
   }
@@ -234,18 +237,24 @@ export function tickARInterpolation(interp: ARInterpolationState): void {
 /**
  * 특정 엔티티의 보간된 렌더 위치를 가져온다.
  * 없으면 null 반환.
+ *
+ * PERF: out 파라미터로 zero-alloc 버전 지원.
+ * out을 전달하면 새 객체를 생성하지 않고 out에 값을 기록한다.
  */
+const _defaultOut = { x: 0, z: 0, rot: 0 };
+
 export function getInterpolatedPos(
   interp: ARInterpolationState,
   id: string,
+  out?: { x: number; z: number; rot: number },
 ): { x: number; z: number; rot: number } | null {
   const entity = interp.entities.get(id);
   if (!entity) return null;
-  return {
-    x: entity.renderX,
-    z: entity.renderZ,
-    rot: entity.renderRot,
-  };
+  const target = out ?? _defaultOut;
+  target.x = entity.renderX;
+  target.z = entity.renderZ;
+  target.rot = entity.renderRot;
+  return target;
 }
 
 // ============================================================

@@ -16,6 +16,21 @@ WEB_PID_FILE="$PROJECT_ROOT/.web.pid"
 GO_PORT=9000
 WEB_PORT=9001
 
+# Load .env if present (DATABASE_URL, SUPABASE_*, etc.)
+# Uses grep+export to avoid shell interpretation of special chars
+if [ -f "$PROJECT_ROOT/.env" ]; then
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        # Skip comments and blank lines
+        [[ "$line" =~ ^#.*$ || -z "$line" ]] && continue
+        # Strip surrounding quotes if present
+        key="${line%%=*}"
+        val="${line#*=}"
+        val="${val%\'}" ; val="${val#\'}"
+        val="${val%\"}" ; val="${val#\"}"
+        export "$key=$val"
+    done < "$PROJECT_ROOT/.env"
+fi
+
 # Colors for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'

@@ -130,7 +130,7 @@ export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
   MYS: A.TWIN_TOWER,       // 페트로나스 타워
   PHL: A.TERRACED_FIELD,   // 바나웨 계단식 논
   VNM: A.PAGODA,           // 한기둥 사원
-  BGD: A.MOSQUE,           // 국회의사당 / 이슬람 문화
+  BGD: A.STUPA,            // 파하르푸르 불교 비하라 유적
   NOR: A.VIKING_SHIP,      // 바이킹 문화
   CHE: A.MOUNTAIN,         // 마터호른
   AUT: A.CATHEDRAL,        // 성 슈테판 대성당
@@ -180,11 +180,11 @@ export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
   BLR: A.FORTRESS,         // 미르 성
   GEO: A.ORTHODOX_CROSS,   // 성 삼위일체 대성당
   ARM: A.ORTHODOX_CROSS,   // 에치미아진 대성당
-  AZE: A.MOSQUE,           // 바쿠 모스크
+  AZE: A.TOWER,            // 바쿠 화염탑 (Flame Towers)
 
   // 중앙아시아
   UZB: A.MINARET,          // 칼란 미나렛
-  TKM: A.MOSQUE,           // 키프차크 모스크
+  TKM: A.YURT,             // 투르크메니스탄 유목 문화
   KGZ: A.YURT,             // 유르트 유목
   TJK: A.YURT,             // 유르트 유목
 
@@ -259,9 +259,9 @@ export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
   MRT: A.MINARET,          // 모리타니 미나렛
 
   // 중앙아프리카
-  GAB: A.FORT,             // 가봉 요새
-  COG: A.FORT,             // 콩고 요새
-  GNQ: A.FORT,             // 적도기니 요새
+  GAB: A.THATCHED_HUT,     // 가봉 전통 가옥
+  COG: A.THATCHED_HUT,     // 콩고 전통 가옥
+  GNQ: A.COLONIAL_CHURCH,  // 적도기니 식민지 성당
   CAF: A.THATCHED_HUT,     // 중앙아프리카 초가
 
   // 태평양
@@ -289,7 +289,7 @@ export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
   SMR: A.CASTLE,           // 산마리노 성
 
   // 동남아 소국
-  BRN: A.MOSQUE,           // 브루나이 모스크
+  BRN: A.MOSQUE,           // 오마르 알리 사이푸딘 모스크
   TLS: A.TIKI_HUT,         // 동티모르 전통 가옥
 
   // 남아시아 소국
@@ -312,10 +312,10 @@ export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
   VCT: A.LIGHTHOUSE,       // 세인트빈센트 등대
 
   // 아프리카 소국/도서
-  MUS: A.LIGHTHOUSE,       // 모리셔스 등대
+  MUS: A.CORAL_SHRINE,     // 모리셔스 산호 해안
   SYC: A.CORAL_SHRINE,     // 세이셸 산호
   COM: A.CORAL_SHRINE,     // 코모로 산호
-  CPV: A.LIGHTHOUSE,       // 카보베르데 등대
+  CPV: A.FORT,             // 카보베르데 포르투갈 요새
   STP: A.TIKI_HUT,         // 상투메프린시페
 
   // 서아프리카 소국
@@ -335,7 +335,7 @@ export const COUNTRY_ARCHETYPE: Record<string, LandmarkArchetype> = {
   KIR: A.CORAL_SHRINE,     // 키리바시 산호
 
   // 기타
-  PSE: A.MOSQUE,           // 팔레스타인 모스크
+  PSE: A.TEMPLE,           // 팔레스타인 알아크사 / 성지
   XKX: A.MOSQUE,           // 코소보 모스크
 };
 
@@ -365,7 +365,7 @@ function getTierForISO3(iso3: string): LandmarkTier {
   return LandmarkTier.TIER_3;
 }
 
-function getArchetypeForISO3(iso3: string): LandmarkArchetype {
+export function getArchetypeForISO3(iso3: string): LandmarkArchetype {
   return COUNTRY_ARCHETYPE[iso3] || LandmarkArchetype.STONE_RING;
 }
 

@@ -35,14 +35,17 @@ interface ARCameraProps {
   locked: boolean;
   /** 현재 yaw (라디안) — 외부에서 읽어 이동 방향 결정 */
   yawRef: React.MutableRefObject<number>;
+  /** useInputManager의 azimuthRef — WASD 방향 계산에 필요 */
+  inputAzimuthRef?: React.MutableRefObject<number>;
 }
 
-function ARCameraInner({ playerPosRef, locked, yawRef }: ARCameraProps) {
+function ARCameraInner({ playerPosRef, locked, yawRef, inputAzimuthRef }: ARCameraProps) {
   const { camera, gl } = useThree();
   const yaw = useRef(0);
   const pitch = useRef(DEFAULT_PITCH);
   const distance = useRef(CAM_DISTANCE);
   const targetPos = useRef(new THREE.Vector3());
+  const _tmpVec3 = useRef(new THREE.Vector3()); // 재사용 temp vector (PERF-1 fix)
 
   // 마우스 이벤트
   useEffect(() => {
@@ -54,6 +57,8 @@ function ARCameraInner({ playerPosRef, locked, yawRef }: ARCameraProps) {
       pitch.current += e.movementY * MOUSE_SENSITIVITY;
       pitch.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch.current));
       yawRef.current = yaw.current;
+      // WASD 방향 계산을 위해 inputManager.azimuthRef 동기화
+      if (inputAzimuthRef) inputAzimuthRef.current = yaw.current;
     };
 
     const onWheel = (e: WheelEvent) => {
@@ -69,29 +74,17 @@ function ARCameraInner({ playerPosRef, locked, yawRef }: ARCameraProps) {
       canvas.removeEventListener('mousemove', onMouseMove);
       canvas.removeEventListener('wheel', onWheel);
     };
-  }, [gl, locked, yawRef]);
+  }, [gl, locked, yawRef, inputAzimuthRef]);
 
-  // Pointer lock
-  useEffect(() => {
-    const canvas = gl.domElement;
-    const onClick = () => {
-      if (!document.pointerLockElement) {
-        canvas.requestPointerLock();
-      }
-    };
-    canvas.addEventListener('click', onClick);
-    return () => canvas.removeEventListener('click', onClick);
-  }, [gl]);
+  // v19 fix: pointer lock은 useInputManager가 단일 관리 (ARCamera 핸들러 삭제)
 
   // 카메라 업데이트 (매 프레임)
   useFrame((_, delta) => {
     const pp = playerPosRef.current;
 
-    // Lerp target position
-    targetPos.current.lerp(
-      new THREE.Vector3(pp.x, pp.y + 1, pp.z),
-      Math.min(1, TRACK_SMOOTH * delta)
-    );
+    // Lerp target position (PERF-1: 재사용 temp vector — zero alloc)
+    _tmpVec3.current.set(pp.x, pp.y + 1, pp.z);
+    targetPos.current.lerp(_tmpVec3.current, Math.min(1, TRACK_SMOOTH * delta));
 
     // Spherical offset from target
     const d = distance.current;

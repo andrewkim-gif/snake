@@ -1,24 +1,36 @@
 'use client';
 
 /**
- * ARDamageNumbers — 3D 플로팅 데미지 넘버
+ * ARDamageNumbers — 3D 플로팅 데미지 넘버 (PERF-8 최적화)
  *
- * 적이 피격될 때 데미지 숫자가 위로 떠오르며 사라진다.
- * - 일반 히트: 흰색 작은 텍스트
- * - 크리티컬: 빨간색 큰 텍스트 + 스케일 펀치
- * - 속성별 색상: fire=주황, frost=하늘, lightning=노랑, poison=초록
+ * v19 최적화:
+ * - Sprite 풀: 사전 할당 MAX_NUMBERS개 (useFrame 내 new 금지)
+ * - 텍스처 캐시: 동일 amount+crit+type → 캐시 히트
+ * - 인플레이스 업데이트: filter() 제거 → alive 카운트 관리
  */
 
-import { useRef, useMemo, useCallback, memo } from 'react';
+import { useRef, useCallback, memo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ARDamageType } from '@/lib/3d/ar-types';
 import { DAMAGE_TYPE_COLORS } from '@/lib/3d/ar-types';
 
-const MAX_NUMBERS = 64;
-const FLOAT_SPEED = 3; // units per second upward
-const LIFETIME = 1.0; // seconds
-const FADE_START = 0.5; // start fading at this fraction of lifetime
+const MAX_NUMBERS = 50;
+const FLOAT_SPEED = 3;
+const LIFETIME = 1.0;
+const FADE_START = 0.5;
+
+// 풀 슬롯 (사전 할당)
+interface DmgSlot {
+  active: boolean;
+  x: number;
+  z: number;
+  y: number;
+  amount: number;
+  critCount: number;
+  dmgType: ARDamageType;
+  age: number;
+}
 
 export interface DamageNumber {
   id: number;
@@ -36,12 +48,8 @@ interface ARDamageNumbersProps {
   numbersRef: React.MutableRefObject<DamageNumber[]>;
 }
 
-// 싱글톤 ID 카운터
 let nextDmgId = 0;
 
-/**
- * 외부에서 데미지 넘버를 추가하는 헬퍼 함수
- */
 export function addDamageNumber(
   numbersRef: React.MutableRefObject<DamageNumber[]>,
   x: number,
@@ -51,63 +59,97 @@ export function addDamageNumber(
   dmgType: ARDamageType
 ) {
   nextDmgId++;
-
-  // 위치 약간 랜덤 오프셋
   const ox = (Math.random() - 0.5) * 0.5;
   const oz = (Math.random() - 0.5) * 0.5;
 
-  const num: DamageNumber = {
+  numbersRef.current.push({
     id: nextDmgId,
     x: x + ox,
     z: z + oz,
-    y: 1.5, // 적 머리 위에서 시작
+    y: 1.5,
     amount,
     critCount,
     dmgType,
     age: 0,
     alive: true,
-  };
+  });
 
-  numbersRef.current.push(num);
-
-  // 최대 개수 넘으면 오래된 것 제거
+  // 인플레이스 제한
   if (numbersRef.current.length > MAX_NUMBERS) {
-    numbersRef.current = numbersRef.current.slice(-MAX_NUMBERS);
+    numbersRef.current.splice(0, numbersRef.current.length - MAX_NUMBERS);
   }
 }
 
-/**
- * ARDamageNumbers 컴포넌트
- * Billboard sprite 기반 데미지 숫자 렌더링
- */
 function ARDamageNumbersInner({ numbersRef }: ARDamageNumbersProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const spritesRef = useRef<THREE.Sprite[]>([]);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const textureMapRef = useRef<Map<string, THREE.Texture>>(new Map());
+  // 텍스처 캐시: "amount_crit_type" → Texture
+  const texCacheRef = useRef<Map<string, THREE.Texture>>(new Map());
+  // Sprite 풀
+  const poolRef = useRef<THREE.Sprite[]>([]);
+  const poolMatsRef = useRef<THREE.SpriteMaterial[]>([]);
+  const poolInited = useRef(false);
 
-  // Canvas for text rendering (reusable)
+  // 풀 초기화 (한 번만)
+  useEffect(() => {
+    if (poolInited.current) return;
+    poolInited.current = true;
+
+    const sprites: THREE.Sprite[] = [];
+    const mats: THREE.SpriteMaterial[] = [];
+    for (let i = 0; i < MAX_NUMBERS; i++) {
+      const mat = new THREE.SpriteMaterial({
+        transparent: true,
+        depthTest: false,
+        opacity: 0,
+      });
+      const sprite = new THREE.Sprite(mat);
+      sprite.visible = false;
+      sprite.scale.set(1, 0.5, 1);
+      sprites.push(sprite);
+      mats.push(mat);
+    }
+    poolRef.current = sprites;
+    poolMatsRef.current = mats;
+
+    // group에 추가
+    const group = groupRef.current;
+    if (group) {
+      for (const s of sprites) group.add(s);
+    }
+
+    return () => {
+      for (const m of mats) m.dispose();
+      // 텍스처 캐시 정리
+      for (const t of texCacheRef.current.values()) t.dispose();
+      texCacheRef.current.clear();
+    };
+  }, []);
+
   const getCanvas = useCallback(() => {
-    if (!canvasRef.current) {
-      if (typeof document !== 'undefined') {
-        canvasRef.current = document.createElement('canvas');
-        canvasRef.current.width = 128;
-        canvasRef.current.height = 64;
-      }
+    if (!canvasRef.current && typeof document !== 'undefined') {
+      canvasRef.current = document.createElement('canvas');
+      canvasRef.current.width = 128;
+      canvasRef.current.height = 64;
     }
     return canvasRef.current;
   }, []);
 
-  // Generate texture for a damage number
-  const getTexture = useCallback(
+  // 캐시된 텍스처 가져오기
+  const getCachedTexture = useCallback(
     (amount: number, critCount: number, dmgType: ARDamageType): THREE.Texture | null => {
+      const displayAmount = Math.round(amount);
+      const key = `${displayAmount}_${critCount}_${dmgType}`;
+
+      const cached = texCacheRef.current.get(key);
+      if (cached) return cached;
+
       const canvas = getCanvas();
       if (!canvas) return null;
 
       const ctx = canvas.getContext('2d');
       if (!ctx) return null;
 
-      const displayAmount = Math.round(amount);
       const isCrit = critCount > 0;
       const color = isCrit ? '#FF4444' : (DAMAGE_TYPE_COLORS[dmgType] || '#FFFFFF');
       const fontSize = isCrit ? (critCount > 1 ? 36 : 28) : 20;
@@ -117,89 +159,80 @@ function ARDamageNumbersInner({ numbersRef }: ARDamageNumbersProps) {
       ctx.font = `bold ${fontSize}px "Rajdhani", sans-serif`;
       ctx.textAlign = 'center';
       ctx.textBaseline = 'middle';
-
-      // Outline
       ctx.strokeStyle = '#000000';
       ctx.lineWidth = 3;
       ctx.strokeText(text, 64, 32);
-
-      // Fill
       ctx.fillStyle = color;
       ctx.fillText(text, 64, 32);
 
       const texture = new THREE.CanvasTexture(canvas);
       texture.needsUpdate = true;
+
+      // 캐시 크기 제한 (LRU 간단 구현: 200개 초과 시 절반 제거)
+      if (texCacheRef.current.size > 200) {
+        let count = 0;
+        for (const [k, t] of texCacheRef.current) {
+          if (count++ < 100) {
+            t.dispose();
+            texCacheRef.current.delete(k);
+          } else break;
+        }
+      }
+
+      texCacheRef.current.set(key, texture);
       return texture;
     },
     [getCanvas]
   );
 
-  // Per-frame update
   useFrame((_, delta) => {
     const numbers = numbersRef.current;
-    const group = groupRef.current;
-    if (!group) return;
+    const pool = poolRef.current;
+    const mats = poolMatsRef.current;
+    if (!groupRef.current || pool.length === 0) return;
 
-    // Remove expired numbers
-    numbersRef.current = numbers.filter((n) => n.alive);
-
-    // Update each number
-    for (const num of numbersRef.current) {
+    // 인플레이스 필터 + 업데이트 (새 배열 할당 제거)
+    let writeIdx = 0;
+    for (let i = 0; i < numbers.length; i++) {
+      const num = numbers[i];
       num.age += delta;
       num.y += FLOAT_SPEED * delta;
-
-      if (num.age >= LIFETIME) {
-        num.alive = false;
+      if (num.age < LIFETIME) {
+        numbers[writeIdx++] = num;
       }
     }
+    numbers.length = writeIdx;
 
-    // Update sprite positions (we use group children directly)
-    // Remove excess children
-    while (group.children.length > numbersRef.current.length) {
-      const child = group.children[group.children.length - 1];
-      group.remove(child);
-      if (child instanceof THREE.Sprite && child.material instanceof THREE.SpriteMaterial) {
-        child.material.dispose();
-        if (child.material.map) {
-          child.material.map.dispose();
+    // 풀 업데이트
+    for (let i = 0; i < MAX_NUMBERS; i++) {
+      const sprite = pool[i];
+      const mat = mats[i];
+
+      if (i < numbers.length) {
+        const num = numbers[i];
+        sprite.visible = true;
+        sprite.position.set(num.x, num.y, num.z);
+
+        // 텍스처 (한 번만 설정 — age < delta 이면 새 숫자)
+        if (num.age < delta * 2) {
+          const tex = getCachedTexture(num.amount, num.critCount, num.dmgType);
+          if (tex) mat.map = tex;
+          mat.needsUpdate = true;
         }
-      }
-    }
 
-    // Add/update sprites
-    for (let i = 0; i < numbersRef.current.length; i++) {
-      const num = numbersRef.current[i];
-      let sprite: THREE.Sprite;
+        // 스케일
+        const baseScale = num.critCount > 0 ? (num.critCount > 1 ? 2.0 : 1.5) : 1.0;
+        const ageRatio = num.age / LIFETIME;
+        const popScale = ageRatio < 0.1 ? 1.0 + (1.0 - ageRatio / 0.1) * 0.3 : 1.0;
+        const scale = baseScale * popScale;
+        sprite.scale.set(scale, scale * 0.5, 1);
 
-      if (i < group.children.length) {
-        sprite = group.children[i] as THREE.Sprite;
+        // 페이드
+        mat.opacity = ageRatio > FADE_START
+          ? Math.max(0, 1.0 - (ageRatio - FADE_START) / (1.0 - FADE_START))
+          : 1.0;
       } else {
-        // Create new sprite
-        const tex = getTexture(num.amount, num.critCount, num.dmgType);
-        const mat = new THREE.SpriteMaterial({
-          map: tex,
-          transparent: true,
-          depthTest: false,
-        });
-        sprite = new THREE.Sprite(mat);
-        group.add(sprite);
-      }
-
-      // Position
-      sprite.position.set(num.x, num.y, num.z);
-
-      // Scale: crits are larger
-      const baseScale = num.critCount > 0 ? (num.critCount > 1 ? 2.0 : 1.5) : 1.0;
-      // Pop effect: start big, shrink slightly
-      const ageRatio = num.age / LIFETIME;
-      const popScale = ageRatio < 0.1 ? 1.0 + (1.0 - ageRatio / 0.1) * 0.3 : 1.0;
-      const scale = baseScale * popScale;
-      sprite.scale.set(scale, scale * 0.5, 1);
-
-      // Fade out
-      if (sprite.material instanceof THREE.SpriteMaterial) {
-        const fadeRatio = ageRatio > FADE_START ? 1.0 - (ageRatio - FADE_START) / (1.0 - FADE_START) : 1.0;
-        sprite.material.opacity = Math.max(0, fadeRatio);
+        sprite.visible = false;
       }
     }
   });

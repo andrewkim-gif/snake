@@ -26,7 +26,7 @@ import type {
   BlockInstance,
 } from '@/lib/3d/mc-terrain-worker'
 
-const BLOCK_TYPE_COUNT = 12
+const BLOCK_TYPE_COUNT = 14 // BlockType: grass(0)~gravel(13)
 const blockGeo = new THREE.BoxGeometry(1, 1, 1)
 
 /** 아레나 모드 설정: 반경 내 정적 지형 */
@@ -77,6 +77,11 @@ export default function MCTerrain({
       )
 
       worker.onmessage = (e: MessageEvent<TerrainWorkerOutput>) => {
+        // Worker 타임아웃 해제
+        if (workerTimeoutRef.current) {
+          clearTimeout(workerTimeoutRef.current)
+          workerTimeoutRef.current = null
+        }
         const { blocks, idMap, visibleBlocks } = e.data
         blocksRef.current = blocks
         idMapRef.current = idMap
@@ -252,12 +257,21 @@ export default function MCTerrain({
     [seed, customBlocks, updateInstancedMeshes, onTerrainReady, arenaMode]
   )
 
+  // Worker 타임아웃 ref
+  const workerTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
   // 청크 변경 감지 + 생성 요청
   const requestGeneration = useCallback(
     (cx: number, cz: number) => {
       // 이미 생성 중이면 스킵 (중복 방지)
       if (isGeneratingRef.current) return
       isGeneratingRef.current = true
+
+      // 이전 타임아웃 해제
+      if (workerTimeoutRef.current) {
+        clearTimeout(workerTimeoutRef.current)
+        workerTimeoutRef.current = null
+      }
 
       if (workerRef.current) {
         const input: TerrainWorkerInput = {
@@ -275,6 +289,16 @@ export default function MCTerrain({
           } : undefined,
         }
         workerRef.current.postMessage(input)
+
+        // 5초 타임아웃: Worker 무응답 시 메인 스레드 폴백
+        workerTimeoutRef.current = setTimeout(() => {
+          if (isGeneratingRef.current) {
+            console.warn('Terrain worker timeout, falling back to main thread')
+            workerRef.current = null
+            isGeneratingRef.current = false
+            generateOnMainThread(cx, cz)
+          }
+        }, 5000)
       } else {
         // Worker 실패 시 메인 스레드 폴백
         generateOnMainThread(cx, cz)

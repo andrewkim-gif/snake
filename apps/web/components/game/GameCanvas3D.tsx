@@ -13,7 +13,7 @@
  *   3. 기타 시각 컴포넌트
  */
 
-import { useRef, useEffect, useCallback, useState } from 'react';
+import { useRef, useEffect, useCallback, useState, useMemo, memo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import type { Camera } from 'three';
 import type { GameData, UiState } from '@/hooks/useSocket';
@@ -36,6 +36,7 @@ import { ZoneTerrain } from '@/components/3d/ZoneTerrain';
 import { TerrainDeco } from '@/components/3d/TerrainDeco';
 import { HeightmapTerrain } from '@/components/3d/HeightmapTerrain';
 import MCTerrain from '@/components/3d/MCTerrain';
+import { MC_BASE_Y } from '@/lib/3d/mc-types';
 import { countryHash, MC_BLOCK_CONSTANTS } from '@/lib/3d/coordinate-utils';
 import { ObstacleInstances } from '@/components/3d/ObstacleInstances';
 import { ArenaBoundary } from '@/components/3d/ArenaBoundary';
@@ -87,12 +88,11 @@ import { ARInterpolationTick } from '@/components/game/ar/ARInterpolationTick';
 import { ARCamera } from '@/components/game/ar/ARCamera';
 import { ARPlayer } from '@/components/game/ar/ARPlayer';
 import { AREntities } from '@/components/game/ar/AREntities';
-import { ARTerrain } from '@/components/game/ar/ARTerrain';
 import { ARHUD } from '@/components/game/ar/ARHUD';
 import { ARMinimap } from '@/components/game/ar/ARMinimap';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
-import { getInterpolatedPos } from '@/lib/3d/ar-interpolation';
-import type { ARState, ARMinimapEntity, ARTerrainTheme, ARDamageEvent, ARPhase } from '@/lib/3d/ar-types';
+// getInterpolatedPos 제거 (ARPlayer가 직접 interpRef 읽음)
+import type { ARState, ARMinimapEntity, ARDamageEvent, ARPhase } from '@/lib/3d/ar-types';
 import type { ARUiState, AREvent } from '@/hooks/useSocket';
 import type { ARChoice } from '@/lib/3d/ar-types';
 
@@ -154,7 +154,7 @@ interface GameCanvas3DProps {
   sendARChoice?: (choice: ARChoice) => void;
 }
 
-export function GameCanvas3D({
+function GameCanvas3DInner({
   dataRef,
   uiState,
   sendInput,
@@ -208,6 +208,9 @@ export function GameCanvas3D({
   // v19 Phase 3: PvP kill feed state
   const [pvpKillFeed, setPvpKillFeed] = useState<Array<{ id: string; killerName: string; victimName: string; killerFaction: string; victimFaction: string; timestamp: number }>>([]);
 
+  // v19 PERF: 미니맵 엔티티 캐시 (인라인 buildMinimapEntities 호출 방지 → ARMinimap memo 유효)
+  const [minimapEntities, setMinimapEntities] = useState<ARMinimapEntity[]>([]);
+
   // v19 Phase 4: 게임 흐름 state
   const [charSelectDone, setCharSelectDone] = useState(false);
   const spectateTargetRef = useRef<string | null>(null);
@@ -218,7 +221,10 @@ export function GameCanvas3D({
   // v16: InputManager + TPSCamera refs
   const cameraRef = useRef<Camera | null>(null);
   const playerPosRef = useRef({ x: 0, z: 0 });
-  const inputManager = useInputManager(containerRef, cameraRef, playerPosRef, !menuOpen);
+  // v19: arena deploy/death 중에는 입력 비활성화 (pointer lock 방지)
+  const arGameActive = !menuOpen && !arenaLoading && charSelectDone && (arUiState?.alive ?? false);
+  const inputEnabled = isArenaMode ? arGameActive : !menuOpen;
+  const inputManager = useInputManager(containerRef, cameraRef, playerPosRef, inputEnabled);
 
   // v16 Phase 8: Killcam state
   const killcamRef = useRef<KillcamState>({
@@ -374,15 +380,26 @@ export function GameCanvas3D({
       }
 
       // 서버 게임 상태 수신 (70-100%)
-      const state = dataRef.current.latestState;
-      const pid = dataRef.current.playerId;
-      if (state && pid) {
+      // Arena mode: ar_state를 통해 상태 수신 (classic state.s가 아닌 arState 사용)
+      if (isArenaMode && arStateRef?.current) {
         progress += 15;
-        status = 'Receiving game data...';
-        if (state.s.find(a => a.i === pid)) {
+        status = 'Receiving arena data...';
+        if (arStateRef.current.players && arStateRef.current.players.length > 0) {
           progress = 100;
           status = 'Ready!';
           serverReadyRef.current = true;
+        }
+      } else {
+        const state = dataRef.current.latestState;
+        const pid = dataRef.current.playerId;
+        if (state && pid) {
+          progress += 15;
+          status = 'Receiving game data...';
+          if (state.s.find(a => a.i === pid)) {
+            progress = 100;
+            status = 'Ready!';
+            serverReadyRef.current = true;
+          }
         }
       }
 
@@ -725,6 +742,8 @@ export function GameCanvas3D({
     if (!isArenaMode || !arEventQueueRef) return;
     const interval = setInterval(() => {
       const queue = arEventQueueRef.current;
+      // v19 PERF: 이벤트 없으면 즉시 리턴 (불필요한 setState 방지)
+      if (queue.length === 0) return;
       const pvpEvents = queue.filter(e => e.type === 'pvp_kill');
       if (pvpEvents.length > 0) {
         const newEntries = pvpEvents.map(e => {
@@ -803,15 +822,28 @@ export function GameCanvas3D({
     prevPhaseRef.current = arUiState.phase;
   }, [isArenaMode, arUiState?.phase, soundEngine]);
 
-  // PvP kill feed 만료 (10초)
+  // PvP kill feed 만료 (10초) — v19 PERF: 변경 없으면 setState 스킵
   useEffect(() => {
     if (pvpKillFeed.length === 0) return;
     const timer = setInterval(() => {
       const now = Date.now();
-      setPvpKillFeed(prev => prev.filter(e => now - e.timestamp < 10000));
+      setPvpKillFeed(prev => {
+        const filtered = prev.filter(e => now - e.timestamp < 10000);
+        // 길이가 같으면 변경 없음 — 불필요한 re-render 방지
+        return filtered.length === prev.length ? prev : filtered;
+      });
     }, 1000);
     return () => clearInterval(timer);
   }, [pvpKillFeed.length]);
+
+  // v19 PERF: 미니맵 엔티티 주기적 갱신 (250ms) — 인라인 호출 제거
+  useEffect(() => {
+    if (!isArenaMode) return;
+    const interval = setInterval(() => {
+      setMinimapEntities(buildMinimapEntities(arStateRef?.current, dataRef.current.playerId));
+    }, 250);
+    return () => clearInterval(interval);
+  }, [isArenaMode, arStateRef, dataRef]);
 
   // ─── 오버레이 표시 조건 (v12: BattleResult + Spectator 추가) ───
   const showTimer = uiState.roomState === 'playing' && uiState.timeRemaining > 0;
@@ -838,9 +870,9 @@ export function GameCanvas3D({
       {/* ─── R3F Canvas ─── */}
       <Canvas
         flat={isArenaMode}
-        dpr={[1, 1.5]}
+        dpr={[1, 2]}
         gl={{ antialias: true, powerPreference: 'high-performance' }}
-        camera={{ fov: 50, near: 1, far: 5000, position: [0, 500, 400] }}
+        camera={{ fov: 50, near: 1, far: isArenaMode ? 200 : 5000, position: [0, 500, 400] }}
         style={{ display: 'block', width: '100%', height: '100%' }}
       >
         {/* 실행 순서: JSX 마운트 순서 = useFrame 실행 순서 (priority 0) */}
@@ -866,8 +898,9 @@ export function GameCanvas3D({
         {isArenaMode ? (
           <ARCamera
             playerPosRef={arPlayerPosRef}
-            locked={!menuOpen}
+            locked={arGameActive}
             yawRef={arYawRef}
+            inputAzimuthRef={inputManager.azimuthRef}
           />
         ) : (
           <TPSCamera
@@ -884,68 +917,63 @@ export function GameCanvas3D({
         {/* 3. Scene — 라이팅 + Fog + 분위기 변화 (테마별, v19: 아레나 모드 MC 조명) */}
         <Scene timeRemaining={uiState.timeRemaining} theme={terrainTheme} isArenaMode={isArenaMode} />
 
-        {/* 4. SkyBox — 하늘 돔 + 구름 */}
-        <SkyBox />
+        {/* 4. SkyBox — 하늘 돔 + 구름 (v19: 아레나 모드에서 드리프트 스킵) */}
+        <SkyBox isArenaMode={isArenaMode} />
 
         {/* 5. 캐릭터/엔티티 — 배타적 마운트 (Classic vs Arena) */}
         {isArenaMode ? (
-          <>
-            {/* v19 Phase 2: ARPlayer — 로컬 플레이어 복셀 캐릭터 */}
-            <ARPlayer
-              position={(() => {
-                if (!arInterpRef || !dataRef.current.playerId) return [0, 0, 0] as [number, number, number];
-                const pos = getInterpolatedPos(arInterpRef.current, dataRef.current.playerId);
-                return pos ? [pos.x, 0, pos.z] as [number, number, number] : [0, 0, 0] as [number, number, number];
-              })()}
-              rotation={(() => {
-                if (!arInterpRef || !dataRef.current.playerId) return 0;
-                const pos = getInterpolatedPos(arInterpRef.current, dataRef.current.playerId);
-                return pos?.rot ?? 0;
-              })()}
-              moving={(() => {
-                // 이동 여부는 보간된 position delta로 추론
-                if (!arInterpRef || !dataRef.current.playerId) return false;
-                const entity = arInterpRef.current.entities.get(dataRef.current.playerId);
-                if (!entity) return false;
-                const dx = entity.currX - entity.prevX;
-                const dz = entity.currZ - entity.prevZ;
-                return dx * dx + dz * dz > 0.001;
-              })()}
-              attackRange={3.0}
-              hpRatio={arUiState ? (arUiState.maxHp > 0 ? arUiState.hp / arUiState.maxHp : 0) : 0}
-              posRef={arPlayerPosRef}
-            />
+          /* v19 Phase 1: AR 엔티티를 MC_BASE_Y 높이로 올림 (AR Y=0 → MCTerrain Y=30) */
+          <group position={[0, MC_BASE_Y, 0]}>
+            {/* v19 Phase 2: ARPlayer — 보간 렌더 위치 + 지형 높이 추적 */}
+            {arInterpRef && dataRef.current.playerId && (
+              <ARPlayer
+                interpRef={arInterpRef}
+                playerId={dataRef.current.playerId}
+                attackRange={3.0}
+                hpRatio={arUiState ? (arUiState.maxHp > 0 ? arUiState.hp / arUiState.maxHp : 0) : 0}
+                posRef={arPlayerPosRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
+              />
+            )}
 
-            {/* v19 Phase 2: AREntities — 적 + XP 크리스탈 InstancedMesh */}
-            <AREntities
-              enemies={arStateRef?.current?.enemies ?? []}
-              xpCrystals={arStateRef?.current?.xpCrystals ?? []}
-              playerPos={arPlayerPosRef.current}
-            />
+            {/* v19 Phase 2: AREntities — 적 + XP 크리스탈 (ref 기반 + 지형 높이) */}
+            {arStateRef && (
+              <AREntities
+                arStateRef={arStateRef}
+                playerPos={arPlayerPosRef.current}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
+              />
+            )}
 
             {/* v19 Phase 3 Task 1: ARDamageNumbers — arEventQueue에서 ar_damage 소비 */}
             {arEventQueueRef && (
               <ARDamageNumbersBridge arEventQueueRef={arEventQueueRef} />
             )}
 
-            {/* v19 Phase 3 Task 2: ARNameTags — 팩션 이름태그 */}
+            {/* v19 Phase 3 Task 2: ARNameTags — 팩션 이름태그 + 지형 높이 */}
             {arStateRef?.current && arInterpRef && (
               <ARNameTags
                 players={arStateRef.current.players}
                 myId={dataRef.current.playerId ?? ''}
                 myFactionId={arUiState?.factionId ?? ''}
                 interpRef={arInterpRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
               />
             )}
 
-            {/* v19 Phase 3 Task 8: ARStatusEffects — 상태이상 비주얼 링 */}
+            {/* v19 Phase 3 Task 8: ARStatusEffects — 상태이상 비주얼 링 + 지형 높이 */}
             {arStateRef && arEventQueueRef && (
               <ARStatusEffects
                 arStateRef={arStateRef}
                 arEventQueueRef={arEventQueueRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
               />
             )}
-          </>
+          </group>
         ) : (
           <>
             {/* Classic: AgentInstances — MC 복셀 캐릭터 InstancedMesh 렌더링 */}
@@ -976,25 +1004,25 @@ export function GameCanvas3D({
           </>
         )}
 
-        {/* 6. Terrain — v19: 아레나 모드이면 ARTerrain + MCTerrain, 아니면 기존 HeightmapTerrain/ZoneTerrain */}
+        {/* 6. Terrain — v19 Phase 1: 아레나 모드이면 MCTerrain 단독 (ARTerrain 제거), 아니면 기존 */}
         {isArenaMode ? (
           <>
-            {/* v19 Phase 2: ARTerrain — 국가 테마별 바닥 + 장애물 (meter 단위) */}
-            <ARTerrain
-              theme={(arStateRef?.current?.terrain ?? 'urban') as ARTerrainTheme}
-              arenaRadius={arStateRef?.current?.arenaRadius ?? 40}
-            />
-            {/* MCTerrain — 복셀 지형 (기존 MC 블록 스타일 바닥) */}
+            {/* v19 Phase 1: MCTerrain 단독 — MC 블록 지형이 아레나 바닥 */}
             <MCTerrain
               seed={effectiveArenaSeed}
               customBlocks={[]}
               arenaMode={{
                 radius: arenaRadius,
-                flattenVariance: 5,
+                flattenVariance: 3,
                 seed: effectiveArenaSeed,
               }}
               onTerrainReady={handleTerrainReady}
             />
+            {/* v19 Phase 1: 아레나 경계 링 (ARTerrain에서 분리) */}
+            <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, MC_BASE_Y + 0.5, 0]}>
+              <ringGeometry args={[arenaRadius - 0.3, arenaRadius + 0.3, 64]} />
+              <meshBasicMaterial color="#ff3333" transparent opacity={0.5} side={2} />
+            </mesh>
           </>
         ) : (
           <>
@@ -1147,9 +1175,9 @@ export function GameCanvas3D({
             alive={arUiState.alive}
           />
 
-          {/* Phase 2: ARMinimap — 아레나 미니맵 */}
+          {/* Phase 2: ARMinimap — 아레나 미니맵 (v19 PERF: 캐시된 엔티티 사용) */}
           <ARMinimap
-            entities={buildMinimapEntities(arStateRef?.current, dataRef.current.playerId)}
+            entities={minimapEntities}
             playerX={arPlayerPosRef.current.x}
             playerZ={arPlayerPosRef.current.z}
             arenaRadius={arStateRef?.current?.arenaRadius ?? 40}
@@ -1639,6 +1667,8 @@ export function GameCanvas3D({
   );
 }
 
+export const GameCanvas3D = memo(GameCanvas3DInner);
+
 // ─── v19 Phase 2: AR Minimap entity builder ───
 
 /** AR state에서 미니맵 엔티티 목록을 구축한다 */
@@ -1819,44 +1849,57 @@ function MuteButton({ isMuted, onToggle }: { isMuted: boolean; onToggle: () => v
 
 function PauseMenu({ onResume, onExit }: { onResume: () => void; onExit: () => void }) {
   return (
-    <div style={{
-      position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
-      backgroundColor: 'rgba(245, 240, 232, 0.92)', zIndex: 50,
-    }}>
+    <div
+      onPointerDown={e => e.stopPropagation()}
+      onClick={e => e.stopPropagation()}
+      style={{
+        position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+        backgroundColor: 'rgba(9, 9, 11, 0.85)', zIndex: 50, backdropFilter: 'blur(4px)',
+      }}>
       <div style={{
-        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 16,
-        padding: '40px 48px', borderRadius: 0,
-        backgroundColor: 'rgba(245, 240, 232, 0.97)', border: '1.5px solid #6B5E52',
+        display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20,
+        padding: '48px 56px',
+        backgroundColor: 'rgba(9, 9, 11, 0.95)',
+        border: '1px solid rgba(239, 68, 68, 0.3)',
+        boxShadow: '0 0 40px rgba(239, 68, 68, 0.1), inset 0 1px 0 rgba(255,255,255,0.05)',
       }}>
         <h2 style={{
-          fontSize: 28, fontWeight: 700, color: '#3A3028', margin: 0,
-          fontFamily: '"Patrick Hand", "Inter", sans-serif',
-          position: 'relative',
+          fontSize: 32, fontWeight: 700, color: '#EF4444', margin: 0, letterSpacing: 6,
+          fontFamily: '"Chakra Petch", "Space Grotesk", monospace',
+          textTransform: 'uppercase',
+          textShadow: '0 0 20px rgba(239, 68, 68, 0.4)',
         }}>
           PAUSED
-          <span style={{
-            position: 'absolute', bottom: -2, left: '15%', width: '70%', height: 2,
-            backgroundColor: '#3A3028', opacity: 0.2,
-          }} />
         </h2>
         <p style={{
-          color: '#6B5E52', fontSize: 13, margin: 0,
-          fontFamily: '"Patrick Hand", "Inter", sans-serif',
+          color: 'rgba(255,255,255,0.4)', fontSize: 12, margin: 0, letterSpacing: 2,
+          fontFamily: '"Space Grotesk", monospace', textTransform: 'uppercase',
         }}>
           ESC to resume
         </p>
         <button onClick={onResume} style={{
-          width: 200, padding: '12px 0', minHeight: 48, fontSize: 17, fontWeight: 700,
-          backgroundColor: '#D4914A', color: '#F5F0E8', border: '2px solid #3A3028',
-          borderRadius: 0, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
-        }}>
+          width: 220, padding: '14px 0', minHeight: 48, fontSize: 15, fontWeight: 700,
+          backgroundColor: '#EF4444', color: '#FFFFFF', border: 'none',
+          cursor: 'pointer', letterSpacing: 3, textTransform: 'uppercase',
+          fontFamily: '"Chakra Petch", "Space Grotesk", monospace',
+          transition: 'background-color 0.2s, transform 0.1s',
+        }}
+        onMouseOver={e => { e.currentTarget.style.backgroundColor = '#DC2626'; e.currentTarget.style.transform = 'scale(1.02)'; }}
+        onMouseOut={e => { e.currentTarget.style.backgroundColor = '#EF4444'; e.currentTarget.style.transform = 'scale(1)'; }}
+        >
           RESUME
         </button>
         <button onClick={onExit} style={{
-          width: 200, padding: '12px 0', minHeight: 48, fontSize: 17, fontWeight: 700,
-          backgroundColor: 'transparent', color: '#C75B5B', border: '1.5px solid #C75B5B',
-          borderRadius: 0, cursor: 'pointer', fontFamily: '"Patrick Hand", "Inter", sans-serif',
-        }}>
+          width: 220, padding: '14px 0', minHeight: 48, fontSize: 15, fontWeight: 700,
+          backgroundColor: 'transparent', color: 'rgba(255,255,255,0.5)',
+          border: '1px solid rgba(255,255,255,0.15)',
+          cursor: 'pointer', letterSpacing: 3, textTransform: 'uppercase',
+          fontFamily: '"Chakra Petch", "Space Grotesk", monospace',
+          transition: 'border-color 0.2s, color 0.2s',
+        }}
+        onMouseOver={e => { e.currentTarget.style.borderColor = 'rgba(239,68,68,0.5)'; e.currentTarget.style.color = '#EF4444'; }}
+        onMouseOut={e => { e.currentTarget.style.borderColor = 'rgba(255,255,255,0.15)'; e.currentTarget.style.color = 'rgba(255,255,255,0.5)'; }}
+        >
           EXIT TO LOBBY
         </button>
       </div>

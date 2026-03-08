@@ -44,15 +44,25 @@ function generateCloudData(): CloudData[] {
 
 const _obj = new THREE.Object3D();
 
-export function SkyBox() {
+interface SkyBoxProps {
+  /** 아레나 모드에서는 구름 드리프트 스킵 (성능 절약) */
+  isArenaMode?: boolean;
+}
+
+export function SkyBox({ isArenaMode = false }: SkyBoxProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
   const cloudData = useMemo(generateCloudData, []);
   const elapsedRef = useRef(0);
+  const initializedRef = useRef(false);
 
   // 초기 배치 + 매 프레임 드리프트 업데이트
   // priority 0 (기본값) — auto-render 유지!
   useFrame((_, delta) => {
     if (!meshRef.current) return;
+
+    // v19: 아레나 모드에서는 초기 배치 후 업데이트 스킵 (MCTerrain이 하늘 대체)
+    if (isArenaMode && initializedRef.current) return;
+    if (isArenaMode) initializedRef.current = true;
 
     elapsedRef.current += delta;
     const drift = elapsedRef.current * DRIFT_SPEED;

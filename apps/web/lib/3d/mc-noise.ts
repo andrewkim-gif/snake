@@ -366,3 +366,29 @@ export class MCNoise {
     return this.get(x / this.leafGap, y / this.leafGap, z / this.leafGap + this.leafSeed) * this.leafAmp
   }
 }
+
+// ---------------------------------------------------------------------------
+// getArenaTerrainHeight — 아레나 지형 높이 쿼리 (캐시된 MCNoise 인스턴스)
+// MCTerrain worker와 동일한 공식: MC_BASE_Y + clamp(getSurfaceOffset, -fv, +fv)
+// ---------------------------------------------------------------------------
+const _noiseCache = new Map<number, MCNoise>()
+
+/**
+ * 아레나 모드에서 (x, z) 좌표의 지형 Y를 반환한다.
+ * MCTerrain이 생성한 블록 높이와 동일한 공식을 사용.
+ * O(1) per query, 시드당 MCNoise 인스턴스 캐시.
+ */
+export function getArenaTerrainHeight(
+  x: number,
+  z: number,
+  seed: number,
+  flattenVariance: number,
+): number {
+  let noise = _noiseCache.get(seed)
+  if (!noise) {
+    noise = new MCNoise(seed)
+    _noiseCache.set(seed, noise)
+  }
+  const offset = noise.getSurfaceOffset(Math.floor(x), Math.floor(z))
+  return MC_BASE_Y + Math.max(-flattenVariance, Math.min(flattenVariance, offset))
+}

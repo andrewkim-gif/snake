@@ -673,6 +673,7 @@ function EarthClouds() {
 function SunLight() {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const sunRef = useRef<THREE.Group>(null);
+  const flareRef = useRef<THREE.Sprite>(null);
 
   // 태양 코로나 — 중심이 밝고 급격히 감쇠하는 자연스러운 그래디언트
   const glowTexture = useMemo(() => {
@@ -693,6 +694,47 @@ function SunLight() {
     return new THREE.CanvasTexture(canvas);
   }, []);
 
+  // Phase 2 Task 1: 렌즈 플레어 텍스처 — 6개 광선 줄기 star burst 패턴
+  const flareTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 512;
+    canvas.height = 512;
+    const ctx = canvas.getContext('2d')!;
+    const cx = 256;
+    const cy = 256;
+    const numRays = 6;
+    for (let i = 0; i < numRays; i++) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((i / numRays) * Math.PI * 2);
+      const grad = ctx.createLinearGradient(0, 0, 256, 0);
+      grad.addColorStop(0, 'rgba(255,250,240,0.6)');
+      grad.addColorStop(0.3, 'rgba(255,230,180,0.15)');
+      grad.addColorStop(1, 'rgba(255,200,120,0)');
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, -2, 256, 4); // 얇은 줄기
+      ctx.restore();
+    }
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+
+  // Phase 2 Task 3: 디퓨전 헤일로 텍스처 — 매우 넓고 부드러운 radial gradient
+  const haloTexture = useMemo(() => {
+    const canvas = document.createElement('canvas');
+    canvas.width = 256;
+    canvas.height = 256;
+    const ctx = canvas.getContext('2d')!;
+    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    g.addColorStop(0, 'rgba(255,250,235,0.5)');
+    g.addColorStop(0.1, 'rgba(255,240,210,0.2)');
+    g.addColorStop(0.3, 'rgba(255,225,180,0.06)');
+    g.addColorStop(0.6, 'rgba(255,210,150,0.015)');
+    g.addColorStop(1, 'rgba(255,200,120,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, 256, 256);
+    return new THREE.CanvasTexture(canvas);
+  }, []);
+
   useFrame(() => {
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
@@ -706,6 +748,11 @@ function SunLight() {
     const z = d * Math.cos(decRad) * Math.sin(ha);
     lightRef.current?.position.set(x, y, z);
     sunRef.current?.position.set(x, y, z);
+
+    // Phase 2 Task 4: 플레어 느린 회전 애니메이션 (~10초에 1회전)
+    if (flareRef.current) {
+      flareRef.current.material.rotation += 0.003;
+    }
   });
 
   return (
@@ -734,6 +781,28 @@ function SunLight() {
             map={glowTexture}
             transparent
             opacity={0.5}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </sprite>
+        {/* Phase 2 Task 2: 렌즈 플레어 — 6줄기 star burst (회전 애니메이션) */}
+        <sprite ref={flareRef} scale={[120, 120, 1]}>
+          <spriteMaterial
+            map={flareTexture}
+            transparent
+            opacity={0.2}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </sprite>
+        {/* Phase 2 Task 3: 디퓨전 헤일로 — 매우 넓고 은은한 확산 글로우 */}
+        <sprite scale={[200, 200, 1]}>
+          <spriteMaterial
+            map={haloTexture}
+            transparent
+            opacity={0.08}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}

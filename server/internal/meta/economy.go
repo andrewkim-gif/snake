@@ -146,6 +146,12 @@ func SovereigntyLevelBonus(level int) float64 {
 	}
 }
 
+// EconomyStore is the persistence interface for economy data.
+type EconomyStore interface {
+	UpdateGDP(iso3 string, gdp int64) error
+	UpdateSovereignty(iso3 string, factionID *string, level, streak int) error
+}
+
 // EconomyEngine manages the global economy simulation.
 // Runs a background tick every hour to compute resource production,
 // apply policy effects, distribute wealth to factions, and update GDP.
@@ -168,6 +174,10 @@ type EconomyEngine struct {
 
 	// Tick counter
 	tickCount int64
+
+	// Persistence
+	store        EconomyStore
+	dirtyCountries map[string]bool // countries modified since last flush
 
 	// Lifecycle
 	cancel context.CancelFunc
@@ -194,6 +204,7 @@ func NewEconomyEngine(cfg EconomyConfig) *EconomyEngine {
 		},
 		battleParticipants: make(map[string][]string),
 		gdpHistory:         make(map[string][]GDPSnapshot),
+		dirtyCountries:     make(map[string]bool),
 	}
 }
 
@@ -390,12 +401,25 @@ func (ee *EconomyEngine) Stop() {
 
 // tickLoop runs the economy tick at configured intervals.
 func (ee *EconomyEngine) tickLoop(ctx context.Context) {
+	// Fire an immediate tick so resources start flowing right away
+	summary := ee.Tick()
+	slog.Info("economy initial tick completed",
+		"countries", summary.CountriesProcessed,
+		"totalGDP", summary.TotalGDP,
+	)
+
 	ticker := time.NewTicker(ee.config.TickInterval)
 	defer ticker.Stop()
+
+	// DB flush every 5 minutes
+	flushTicker := time.NewTicker(5 * time.Minute)
+	defer flushTicker.Stop()
 
 	for {
 		select {
 		case <-ctx.Done():
+			// Final flush on shutdown
+			ee.FlushDirtyCountries()
 			return
 		case <-ticker.C:
 			summary := ee.Tick()
@@ -404,6 +428,8 @@ func (ee *EconomyEngine) tickLoop(ctx context.Context) {
 				"totalGDP", summary.TotalGDP,
 				"tick", ee.tickCount,
 			)
+		case <-flushTicker.C:
+			ee.FlushDirtyCountries()
 		}
 	}
 }
@@ -424,6 +450,9 @@ func (ee *EconomyEngine) Tick() EconomyTickSummary {
 		result := ee.processCountryTick(iso, econ, now)
 		summary.Results = append(summary.Results, result)
 		summary.TotalGDP += econ.GDP
+		if econ.SovereignFaction != "" {
+			ee.dirtyCountries[iso] = true
+		}
 	}
 
 	summary.CountriesProcessed = len(ee.economies)
@@ -582,6 +611,43 @@ func (ee *EconomyEngine) processTributePayments() {
 			"gold", t.Resources.Gold,
 		)
 	}
+}
+
+// --- Persistence ---
+
+// SetStore sets the optional persistence store and starts the flush goroutine.
+func (ee *EconomyEngine) SetStore(s EconomyStore) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.store = s
+}
+
+// FlushDirtyCountries writes dirty GDP values to the database.
+func (ee *EconomyEngine) FlushDirtyCountries() {
+	if ee.store == nil {
+		return
+	}
+
+	ee.mu.Lock()
+	dirty := make(map[string]int64)
+	for iso := range ee.dirtyCountries {
+		if econ, ok := ee.economies[iso]; ok {
+			dirty[iso] = econ.GDP
+		}
+	}
+	ee.dirtyCountries = make(map[string]bool)
+	ee.mu.Unlock()
+
+	if len(dirty) == 0 {
+		return
+	}
+
+	for iso, gdp := range dirty {
+		if err := ee.store.UpdateGDP(iso, gdp); err != nil {
+			slog.Warn("flush GDP failed", "country", iso, "error", err)
+		}
+	}
+	slog.Info("economy batch flush complete", "countries", len(dirty))
 }
 
 // --- Queries ---

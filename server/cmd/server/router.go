@@ -12,6 +12,7 @@ import (
 	"github.com/andrewkim-gif/snake/server/config"
 	"github.com/andrewkim-gif/snake/server/internal/api"
 	"github.com/andrewkim-gif/snake/server/internal/auth"
+	"github.com/andrewkim-gif/snake/server/internal/db"
 	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/meta"
 	"github.com/andrewkim-gif/snake/server/internal/observability"
@@ -36,6 +37,7 @@ type healthResponse struct {
 	Players      int    `json:"players"`
 	Countries    int    `json:"countries"`
 	MetaModules  int    `json:"meta_modules"`
+	Database     string `json:"database"` // "connected" | "none"
 	Uptime       string `json:"uptime"`
 	Goroutines   int    `json:"goroutines"`
 }
@@ -85,6 +87,9 @@ type RouterDeps struct {
 	MercenaryMarket   *meta.MercenaryMarket
 	NewsManager       *meta.NewsManager
 	AgentManager      *meta.AgentManager
+
+	// v18 persistence
+	PgDB *db.DB
 
 	// Observability
 	Metrics *observability.Metrics
@@ -161,6 +166,14 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// Health check (enhanced for v11)
 	// ==============================================================
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
+		dbStatus := "none"
+		if d.PgDB != nil {
+			if err := d.PgDB.Ping(r.Context()); err == nil {
+				dbStatus = "connected"
+			} else {
+				dbStatus = "error"
+			}
+		}
 		resp := healthResponse{
 			Status:       "ok",
 			Version:      "11.0.0",
@@ -169,6 +182,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 			Players:      hub.ClientCount(),
 			Countries:    world.CountryCount(),
 			MetaModules:  16,
+			Database:     dbStatus,
 			Uptime:       time.Since(startTime).Truncate(time.Second).String(),
 			Goroutines:   runtime.NumGoroutine(),
 		}
@@ -627,6 +641,95 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 					"sovereignty_level": sovLevel,
 					"status":            "granted",
 				})
+			})
+		})
+	})
+
+	// ==============================================================
+	// v18 Frontend Compatibility Routes (/api/ aliases for /api/v11/)
+	// The frontend uses /api/X while the server defines /api/v11/X.
+	// These aliases allow the frontend to work without URL changes.
+	// ==============================================================
+	r.Route("/api", func(r chi.Router) {
+		r.Use(auth.DualAuth(apiKeyValidator))
+
+		// /api/factions → /api/v11/factions
+		if d.FactionManager != nil {
+			r.Mount("/factions", d.FactionManager.FactionRoutes())
+		}
+
+		// /api/diplomacy → /api/v11/diplomacy
+		if d.DiplomacyEngine != nil && d.FactionManager != nil {
+			r.Mount("/diplomacy", d.DiplomacyEngine.DiplomacyRoutes(d.FactionManager))
+		}
+
+		// /api/wars → /api/v11/war (frontend uses "wars", server has "war")
+		if d.WarManager != nil {
+			r.Mount("/wars", d.WarManager.WarRoutes())
+		}
+
+		// /api/economy/policy → /api/v11/policy
+		if d.PolicyEngine != nil {
+			r.Mount("/economy/policy", d.PolicyEngine.PolicyRoutes())
+		}
+
+		// /api/economy/trade → /api/v11/trade
+		if d.TradeEngine != nil && d.FactionManager != nil {
+			r.Mount("/economy/trade", d.TradeEngine.TradeRoutes(d.FactionManager))
+		}
+
+		// /api/tech → /api/v11/tech-tree (frontend uses "tech", server has "tech-tree")
+		if d.TechTreeManager != nil && d.FactionManager != nil {
+			r.Mount("/tech", d.TechTreeManager.TechTreeRoutes(d.FactionManager))
+		}
+
+		// /api/mercenaries → /api/v11/mercenary
+		if d.MercenaryMarket != nil && d.FactionManager != nil {
+			r.Mount("/mercenaries", d.MercenaryMarket.MercenaryRoutes(d.FactionManager))
+		}
+
+		// /api/hall-of-fame → /api/v11/hall-of-fame
+		if d.HallOfFameEngine != nil {
+			r.Mount("/hall-of-fame", d.HallOfFameEngine.HallOfFameRoutes())
+		}
+
+		// /api/achievements → /api/v11/achievements
+		if d.AchievementEngine != nil {
+			r.Mount("/achievements", d.AchievementEngine.AchievementRoutes())
+		}
+
+		// /api/council → /api/v11/council
+		if d.UNCouncil != nil && d.FactionManager != nil {
+			r.Mount("/council", d.UNCouncil.CouncilRoutes(d.FactionManager))
+		}
+
+		// /api/season → /api/v11/season
+		if d.SeasonEngine != nil {
+			r.Mount("/season", d.SeasonEngine.SeasonRoutes())
+		}
+
+		// /api/gdp → /api/v11/gdp
+		if d.GDPEngine != nil {
+			r.Mount("/gdp", d.GDPEngine.GDPRoutes())
+		}
+
+		// /api/intel → /api/v11/intel
+		if d.IntelSystem != nil && d.FactionManager != nil {
+			r.Mount("/intel", d.IntelSystem.IntelRoutes(d.FactionManager))
+		}
+
+		// /api/events → /api/v11/events
+		if d.EventEngine != nil {
+			r.Mount("/events", d.EventEngine.EventRoutes())
+		}
+
+		// /api/countries → /api/v11/countries
+		r.Get("/countries", func(w http.ResponseWriter, r *http.Request) {
+			countries := world.AllCountries
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(map[string]interface{}{
+				"count":     len(countries),
+				"countries": countries,
 			})
 		})
 	})

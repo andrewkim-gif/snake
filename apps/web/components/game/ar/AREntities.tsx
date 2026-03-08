@@ -17,8 +17,10 @@
 import { useRef, useMemo, memo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
-import type { AREnemyNet, ARCrystalNet } from '@/lib/3d/ar-types';
+import type { AREnemyNet, ARCrystalNet, ARState } from '@/lib/3d/ar-types';
 import { ENEMY_COLORS } from '@/lib/3d/ar-types';
+import { MC_BASE_Y } from '@/lib/3d/mc-types';
+import { getArenaTerrainHeight } from '@/lib/3d/mc-noise';
 
 const MAX_ENEMIES = 200;
 const MAX_CRYSTALS = 300;
@@ -44,13 +46,17 @@ const CRYSTAL_COLOR = new THREE.Color(0.3, 0.8, 1.0);
 const ELITE_GLOW_COLOR = new THREE.Color(1.0, 0.5, 0.0);
 
 interface AREntitiesProps {
-  enemies: AREnemyNet[];
-  xpCrystals: ARCrystalNet[];
+  /** AR state ref (useFrame에서 직접 읽기 — prop 배열 대신 ref 사용으로 memo 유효) */
+  arStateRef: React.MutableRefObject<ARState | null>;
   /** 플레이어 위치 (LOD 계산용) */
   playerPos?: { x: number; z: number };
+  /** 아레나 시드 (지형 높이 쿼리용) */
+  arenaSeed: number;
+  /** 지형 높이 편차 (기본 3) */
+  flattenVariance?: number;
 }
 
-function AREntitiesInner({ enemies, xpCrystals, playerPos }: AREntitiesProps) {
+function AREntitiesInner({ arStateRef, playerPos, arenaSeed, flattenVariance = 3 }: AREntitiesProps) {
   const enemyMeshRef = useRef<THREE.InstancedMesh>(null);
   const crystalMeshRef = useRef<THREE.InstancedMesh>(null);
   const { camera } = useThree();
@@ -75,113 +81,95 @@ function AREntitiesInner({ enemies, xpCrystals, playerPos }: AREntitiesProps) {
     []
   );
 
-  // 적 업데이트 (LOD 적용)
+  // PERF: 단일 useFrame으로 통합 (적 + 크리스탈) — ref에서 직접 읽기
   useFrame(() => {
-    if (!enemyMeshRef.current) return;
+    const arState = arStateRef.current;
+    if (!arState) return;
 
-    const mesh = enemyMeshRef.current;
+    const enemies = arState.enemies;
+    const xpCrystals = arState.xpCrystals;
     const px = playerPos?.x ?? camera.position.x;
     const pz = playerPos?.z ?? camera.position.z;
 
-    let visibleCount = 0;
-    const maxCount = Math.min(enemies.length, MAX_ENEMIES);
+    // ── 적 업데이트 (LOD 적용 + 지형 높이) ──
+    if (enemyMeshRef.current) {
+      const mesh = enemyMeshRef.current;
+      let visibleCount = 0;
+      const maxCount = Math.min(enemies.length, MAX_ENEMIES);
 
-    for (let i = 0; i < maxCount; i++) {
-      const e = enemies[i];
+      for (let i = 0; i < maxCount; i++) {
+        const e = enemies[i];
+        const dx = e.x - px;
+        const dz = e.z - pz;
+        const distSq = dx * dx + dz * dz;
 
-      // 플레이어로부터의 거리 계산
-      const dx = e.x - px;
-      const dz = e.z - pz;
-      const distSq = dx * dx + dz * dz;
+        if (distSq > LOD_CULL * LOD_CULL) continue;
 
-      // LOD 컬링: 너무 먼 적은 스킵
-      if (distSq > LOD_CULL * LOD_CULL) {
-        continue;
-      }
+        const dist = Math.sqrt(distSq);
+        const isElite = e.isElite || e.isMiniboss;
 
-      const dist = Math.sqrt(distSq);
-      const isElite = e.isElite || e.isMiniboss;
+        let lodScale: number;
+        if (dist < LOD_NEAR || isElite) lodScale = 1.0;
+        else if (dist < LOD_FAR) lodScale = 0.7;
+        else lodScale = 0.4;
 
-      // LOD 레벨 결정
-      let lodScale: number;
-      if (dist < LOD_NEAR || isElite) {
-        // 근거리 또는 엘리트: 풀 디테일
-        lodScale = 1.0;
-      } else if (dist < LOD_FAR) {
-        // 중거리: 약간 축소
-        lodScale = 0.7;
-      } else {
-        // 원거리: 빌보드 (작은 점)
-        lodScale = 0.4;
-      }
+        const baseScale = e.type === 'slime' ? 0.8 : e.type === 'spider' ? 0.6 : 1.0;
+        const finalScale = baseScale * (isElite ? 1.5 : 1.0) * lodScale;
 
-      const baseScale = e.type === 'slime' ? 0.8 : e.type === 'spider' ? 0.6 : 1.0;
-      const eliteScale = isElite ? 1.5 : 1.0;
-      const finalScale = baseScale * eliteScale * lodScale;
+        // 지형 높이 — 그룹이 MC_BASE_Y에 있으므로 로컬 Y = terrainY - MC_BASE_Y + 오프셋
+        const terrainY = getArenaTerrainHeight(e.x, e.z, arenaSeed, flattenVariance);
+        const localY = terrainY - MC_BASE_Y + finalScale * 0.5;
 
-      dummy.position.set(e.x, finalScale * 0.5, e.z);
-      dummy.scale.set(finalScale, finalScale, finalScale);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(visibleCount, dummy.matrix);
+        dummy.position.set(e.x, localY, e.z);
+        dummy.scale.set(finalScale, finalScale, finalScale);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(visibleCount, dummy.matrix);
 
-      // 색상
-      const color = ENEMY_COLOR_MAP[e.type] || ENEMY_COLOR_MAP.zombie;
-      if (isElite) {
-        tempColor.copy(ELITE_GLOW_COLOR);
-      } else {
-        tempColor.copy(color);
-        // 원거리 적은 약간 어둡게 (안개 효과)
-        if (dist > LOD_FAR) {
-          tempColor.multiplyScalar(0.6);
+        const color = ENEMY_COLOR_MAP[e.type] || ENEMY_COLOR_MAP.zombie;
+        if (isElite) {
+          tempColor.copy(ELITE_GLOW_COLOR);
+        } else {
+          tempColor.copy(color);
+          if (dist > LOD_FAR) tempColor.multiplyScalar(0.6);
         }
-      }
-      mesh.setColorAt(visibleCount, tempColor);
-
-      visibleCount++;
-    }
-
-    mesh.count = visibleCount;
-    mesh.instanceMatrix.needsUpdate = true;
-    if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
-  });
-
-  // XP 크리스탈 업데이트 (LOD 적용)
-  useFrame(() => {
-    if (!crystalMeshRef.current) return;
-
-    const mesh = crystalMeshRef.current;
-    const px = playerPos?.x ?? camera.position.x;
-    const pz = playerPos?.z ?? camera.position.z;
-
-    let visibleCount = 0;
-    const maxCount = Math.min(xpCrystals.length, MAX_CRYSTALS);
-    const t = performance.now() * 0.003;
-
-    for (let i = 0; i < maxCount; i++) {
-      const c = xpCrystals[i];
-
-      // 크리스탈 LOD 컬링 (30m 이상 스킵)
-      const dx = c.x - px;
-      const dz = c.z - pz;
-      if (dx * dx + dz * dz > 900) {
-        continue;
+        mesh.setColorAt(visibleCount, tempColor);
+        visibleCount++;
       }
 
-      // 부유 + 회전 효과
-      const floatY = 0.3 + Math.sin(t + i * 0.5) * 0.15;
-      const rotY = t + i * 0.7;
-
-      dummy.position.set(c.x, floatY, c.z);
-      dummy.rotation.set(0, rotY, Math.PI / 4);
-      dummy.scale.set(0.3, 0.3, 0.3);
-      dummy.updateMatrix();
-      mesh.setMatrixAt(visibleCount, dummy.matrix);
-
-      visibleCount++;
+      mesh.count = visibleCount;
+      mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
 
-    mesh.count = visibleCount;
-    mesh.instanceMatrix.needsUpdate = true;
+    // ── XP 크리스탈 업데이트 (LOD 적용 + 지형 높이) ──
+    if (crystalMeshRef.current) {
+      const mesh = crystalMeshRef.current;
+      let visibleCount = 0;
+      const maxCount = Math.min(xpCrystals.length, MAX_CRYSTALS);
+      const t = performance.now() * 0.003;
+
+      for (let i = 0; i < maxCount; i++) {
+        const c = xpCrystals[i];
+        const dx = c.x - px;
+        const dz = c.z - pz;
+        if (dx * dx + dz * dz > 900) continue;
+
+        // 지형 높이 + 부유 애니메이션
+        const terrainY = getArenaTerrainHeight(c.x, c.z, arenaSeed, flattenVariance);
+        const localY = terrainY - MC_BASE_Y + 0.3 + Math.sin(t + i * 0.5) * 0.15;
+        const rotY = t + i * 0.7;
+
+        dummy.position.set(c.x, localY, c.z);
+        dummy.rotation.set(0, rotY, Math.PI / 4);
+        dummy.scale.set(0.3, 0.3, 0.3);
+        dummy.updateMatrix();
+        mesh.setMatrixAt(visibleCount, dummy.matrix);
+        visibleCount++;
+      }
+
+      mesh.count = visibleCount;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
   });
 
   return (

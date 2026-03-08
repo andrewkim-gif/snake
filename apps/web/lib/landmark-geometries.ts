@@ -892,7 +892,51 @@ export function createArchetypeGeometry(archetype: LandmarkArchetype): THREE.Buf
   return geo;
 }
 
+// ─── EdgesGeometry 캐시 (MC 외곽선용) ───
+
+const edgeGeometryCache = new Map<LandmarkArchetype, THREE.EdgesGeometry>();
+
+export function createArchetypeEdgeGeometry(archetype: LandmarkArchetype): THREE.EdgesGeometry {
+  const cached = edgeGeometryCache.get(archetype);
+  if (cached) return cached;
+
+  const baseGeo = createArchetypeGeometry(archetype);
+  // thresholdAngle 1° → BoxGeometry의 90° 모서리만 추출 (곡면 아닌 직각 엣지만)
+  const edges = new THREE.EdgesGeometry(baseGeo, 1);
+  edgeGeometryCache.set(archetype, edges);
+  return edges;
+}
+
 export function disposeGeometryCache(): void {
   geometryCache.forEach(g => g.dispose());
   geometryCache.clear();
+  edgeGeometryCache.forEach(g => g.dispose());
+  edgeGeometryCache.clear();
+  heightCache.clear();
+}
+
+// ─── 아키타입별 높이 (로컬 Y축 최대값 × S) ───
+
+const heightCache = new Map<string, number>();
+
+/**
+ * 아키타입의 월드 공간 높이를 반환 (Y축 최대 — VoxelBox 데이터 기반).
+ * VoxelBox 데이터에 이미 S(=1.8)가 곱해져 있으므로 추가 S 곱셈 불필요.
+ * LANDMARK_SCALE(1.5)만 추가로 곱함 (LandmarkMeshes에서 적용하는 스케일).
+ */
+export function getArchetypeHeight(archetype: LandmarkArchetype): number {
+  const cached = heightCache.get(archetype);
+  if (cached !== undefined) return cached;
+
+  const voxels = ARCHETYPE_VOXELS[archetype] ?? STONE_RING_VOXELS;
+  let maxY = 0;
+  for (const v of voxels) {
+    // VoxelBox의 y, h에 이미 S가 곱해져 있음 (e.g. y: 2.9*S)
+    const top = v.y + v.h / 2;
+    if (top > maxY) maxY = top;
+  }
+  // LANDMARK_SCALE = 1.5 (LandmarkMeshes에서 적용)
+  const worldHeight = maxY * 1.5;
+  heightCache.set(archetype, worldHeight);
+  return worldHeight;
 }

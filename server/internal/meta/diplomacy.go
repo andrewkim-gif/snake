@@ -80,6 +80,44 @@ func DefaultDiplomacyConfig() DiplomacyConfig {
 	}
 }
 
+// DiplomacyDBRow is a DB-loaded treaty record.
+type DiplomacyDBRow struct {
+	ID         string
+	Type       string
+	FactionA   string
+	FactionB   string
+	Status     string
+	ProposedBy string
+	TermsJSON  []byte
+	StartedAt  *time.Time
+	ExpiresAt  *time.Time
+	BrokenAt   *time.Time
+	BrokenBy   *string
+	CreatedAt  time.Time
+}
+
+// WarDBRow is a DB-loaded war record.
+type WarDBRow struct {
+	ID         string
+	AttackerID string
+	DefenderID string
+	SeasonID   *string
+	Status     string
+	DeclaredAt time.Time
+	PrepEndsAt time.Time
+	EndedAt    *time.Time
+	TermsJSON  []byte
+	CreatedAt  time.Time
+}
+
+// DiplomacyStore is the persistence interface for diplomacy.
+type DiplomacyStore interface {
+	UpsertTreaty(d DiplomacyDBRow) error
+	UpsertWar(w WarDBRow) error
+	LoadActiveTreaties() ([]DiplomacyDBRow, error)
+	LoadActiveWars() ([]WarDBRow, error)
+}
+
 // DiplomacyEngine manages inter-faction relations: treaties, wars, sanctions.
 type DiplomacyEngine struct {
 	mu sync.RWMutex
@@ -90,6 +128,9 @@ type DiplomacyEngine struct {
 
 	// Relationship index: "factionA:factionB" → list of active treaty IDs
 	relations map[string][]string
+
+	// Persistence
+	store DiplomacyStore
 }
 
 // NewDiplomacyEngine creates a new diplomacy engine.
@@ -130,6 +171,8 @@ func (de *DiplomacyEngine) ProposeTreaty(id string, treatyType DiplomacyType, fa
 		"to", factionB,
 	)
 
+	go de.persistTreatyAsync(id)
+
 	return treaty, nil
 }
 
@@ -155,6 +198,8 @@ func (de *DiplomacyEngine) AcceptTreaty(treatyID string) error {
 	de.relations[key] = append(de.relations[key], treatyID)
 
 	slog.Info("treaty accepted", "id", treatyID, "type", treaty.Type)
+
+	go de.persistTreatyAsync(treatyID)
 
 	return nil
 }
@@ -227,6 +272,8 @@ func (de *DiplomacyEngine) DeclareWar(id, attackerID, defenderID string) (*War, 
 		"defender", defenderID,
 		"prepEnds", war.PrepEndsAt,
 	)
+
+	go de.persistWarAsync(id)
 
 	return war, nil
 }
@@ -583,6 +630,165 @@ func (de *DiplomacyEngine) GetAllActiveWars() []*War {
 		}
 	}
 	return result
+}
+
+// --- Persistence ---
+
+// SetStore sets the optional persistence store.
+func (de *DiplomacyEngine) SetStore(s DiplomacyStore) {
+	de.mu.Lock()
+	defer de.mu.Unlock()
+	de.store = s
+}
+
+// LoadFromDB loads active treaties and wars from the database.
+func (de *DiplomacyEngine) LoadFromDB() error {
+	if de.store == nil {
+		return nil
+	}
+
+	treaties, err := de.store.LoadActiveTreaties()
+	if err != nil {
+		return fmt.Errorf("load treaties from DB: %w", err)
+	}
+
+	wars, err := de.store.LoadActiveWars()
+	if err != nil {
+		return fmt.Errorf("load wars from DB: %w", err)
+	}
+
+	de.mu.Lock()
+	defer de.mu.Unlock()
+
+	for _, t := range treaties {
+		var terms map[string]interface{}
+		if len(t.TermsJSON) > 0 {
+			json.Unmarshal(t.TermsJSON, &terms)
+		}
+
+		treaty := &Treaty{
+			ID:         t.ID,
+			Type:       DiplomacyType(t.Type),
+			FactionA:   t.FactionA,
+			FactionB:   t.FactionB,
+			Status:     DiplomacyStatus(t.Status),
+			ProposedBy: t.ProposedBy,
+			Terms:      terms,
+			CreatedAt:  t.CreatedAt,
+		}
+		if t.StartedAt != nil {
+			treaty.StartedAt = *t.StartedAt
+		}
+		if t.ExpiresAt != nil {
+			treaty.ExpiresAt = *t.ExpiresAt
+		}
+		if t.BrokenAt != nil {
+			treaty.BrokenAt = *t.BrokenAt
+		}
+		if t.BrokenBy != nil {
+			treaty.BrokenBy = *t.BrokenBy
+		}
+
+		de.treaties[t.ID] = treaty
+
+		// Index active relations
+		if treaty.Status == StatusActive {
+			key := de.relationKey(treaty.FactionA, treaty.FactionB)
+			de.relations[key] = append(de.relations[key], treaty.ID)
+		}
+	}
+
+	for _, w := range wars {
+		war := &War{
+			ID:         w.ID,
+			AttackerID: w.AttackerID,
+			DefenderID: w.DefenderID,
+			Status:     w.Status,
+			DeclaredAt: w.DeclaredAt,
+			PrepEndsAt: w.PrepEndsAt,
+		}
+		if w.EndedAt != nil {
+			war.EndedAt = *w.EndedAt
+		}
+
+		de.wars[w.ID] = war
+	}
+
+	slog.Info("diplomacy loaded from DB", "treaties", len(treaties), "wars", len(wars))
+	return nil
+}
+
+// persistTreatyAsync writes a treaty to the database in the background.
+func (de *DiplomacyEngine) persistTreatyAsync(treatyID string) {
+	if de.store == nil {
+		return
+	}
+
+	de.mu.RLock()
+	treaty, ok := de.treaties[treatyID]
+	if !ok {
+		de.mu.RUnlock()
+		return
+	}
+	tCopy := *treaty
+	de.mu.RUnlock()
+
+	go func() {
+		termsJSON, _ := json.Marshal(tCopy.Terms)
+		row := DiplomacyDBRow{
+			ID: tCopy.ID, Type: string(tCopy.Type),
+			FactionA: tCopy.FactionA, FactionB: tCopy.FactionB,
+			Status: string(tCopy.Status), ProposedBy: tCopy.ProposedBy,
+			TermsJSON: termsJSON, CreatedAt: tCopy.CreatedAt,
+		}
+		if !tCopy.StartedAt.IsZero() {
+			row.StartedAt = &tCopy.StartedAt
+		}
+		if !tCopy.ExpiresAt.IsZero() {
+			row.ExpiresAt = &tCopy.ExpiresAt
+		}
+		if !tCopy.BrokenAt.IsZero() {
+			row.BrokenAt = &tCopy.BrokenAt
+		}
+		if tCopy.BrokenBy != "" {
+			row.BrokenBy = &tCopy.BrokenBy
+		}
+
+		if err := de.store.UpsertTreaty(row); err != nil {
+			slog.Warn("persist treaty failed", "id", tCopy.ID, "error", err)
+		}
+	}()
+}
+
+// persistWarAsync writes a war to the database in the background.
+func (de *DiplomacyEngine) persistWarAsync(warID string) {
+	if de.store == nil {
+		return
+	}
+
+	de.mu.RLock()
+	war, ok := de.wars[warID]
+	if !ok {
+		de.mu.RUnlock()
+		return
+	}
+	wCopy := *war
+	de.mu.RUnlock()
+
+	go func() {
+		row := WarDBRow{
+			ID: wCopy.ID, AttackerID: wCopy.AttackerID, DefenderID: wCopy.DefenderID,
+			Status: wCopy.Status, DeclaredAt: wCopy.DeclaredAt, PrepEndsAt: wCopy.PrepEndsAt,
+			CreatedAt: wCopy.DeclaredAt,
+		}
+		if !wCopy.EndedAt.IsZero() {
+			row.EndedAt = &wCopy.EndedAt
+		}
+
+		if err := de.store.UpsertWar(row); err != nil {
+			slog.Warn("persist war failed", "id", wCopy.ID, "error", err)
+		}
+	}()
 }
 
 // --- HTTP API ---
