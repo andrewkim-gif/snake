@@ -698,24 +698,23 @@ const atmoFragmentShader = /* glsl */ `
     vec3 N = normalize(vWorldNormal);
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
 
-    // 프레넬 (가장자리에서 강함)
+    // 프레넬 — 높은 지수로 극단적 가장자리(얇은 림)에서만 발광
     float fresnel = 1.0 - abs(dot(viewDir, N));
-    float rim = pow(fresnel, 3.5);
+    float rim = pow(fresnel, 5.5);
 
-    // 태양 정렬도: 태양을 향한 면이 더 밝은 산란
+    // 태양 정렬도: 태양을 향한 면만 산란 (밤 쪽은 거의 0)
     float sunAlign = max(dot(N, uSunDir), 0.0);
-    float sunScatter = pow(sunAlign, 0.6) * 0.8 + 0.2;
+    float sunScatter = pow(sunAlign, 1.2);
 
-    // 대기 색상: 태양 쪽은 밝은 시안/화이트, 반대편은 진한 블루
-    vec3 sunSideColor = vec3(0.5, 0.75, 1.0);
-    vec3 darkSideColor = vec3(0.08, 0.15, 0.4);
-    vec3 atmoColor = mix(darkSideColor, sunSideColor, sunAlign);
+    // 대기 색상: 태양 쪽 밝은 시안/화이트, 밤 쪽은 투명으로 소멸
+    vec3 sunSideColor = vec3(0.45, 0.7, 1.0);
+    vec3 atmoColor = sunSideColor;
 
-    // 터미네이터 부근 따뜻한 톤 (오렌지)
-    float terminator = 1.0 - smoothstep(-0.1, 0.3, abs(dot(N, uSunDir)));
-    atmoColor += vec3(0.8, 0.35, 0.1) * terminator * 0.4;
+    // 터미네이터 따뜻한 산란 (경계부 오렌지)
+    float terminator = 1.0 - smoothstep(-0.05, 0.25, abs(dot(N, uSunDir)));
+    atmoColor += vec3(0.8, 0.35, 0.1) * terminator * 0.3;
 
-    float alpha = rim * sunScatter * 0.65;
+    float alpha = rim * sunScatter * 0.45;
     gl_FragColor = vec4(atmoColor, alpha);
   }
 `;
@@ -739,7 +738,7 @@ function AtmosphereGlow() {
 
   return (
     <mesh renderOrder={48}>
-      <sphereGeometry args={[RADIUS * 1.04, 64, 64]} />
+      <sphereGeometry args={[RADIUS * 1.025, 64, 64]} />
       <shaderMaterial
         ref={matRef}
         vertexShader={atmoVertexShader}
@@ -845,10 +844,10 @@ function Starfield() {
   // v22 Phase 3: 밀키웨이 거리 감쇠 — 줌인(가까이)하면 어둡고, 줌아웃하면 자연스럽게 보임
   useFrame(() => {
     const dist = camera.position.length();
-    // smoothstep(150, 400, dist): 150 이하=0.15(어둡게), 400 이상=0.6(자연스럽게)
+    // smoothstep(150, 400, dist): 줌인=0.35(약간 어둡게), 줌아웃=0.7(자연스럽게)
     const t = THREE.MathUtils.clamp((dist - 150) / (400 - 150), 0, 1);
     const smooth = t * t * (3 - 2 * t); // smoothstep
-    scene.backgroundIntensity = 0.15 + smooth * (0.6 - 0.15);
+    scene.backgroundIntensity = 0.35 + smooth * (0.7 - 0.35);
   });
 
   // cleanup: 언마운트 시 배경 제거
