@@ -58,6 +58,18 @@ import { getArchetypeHeight } from '@/lib/landmark-geometries';
 // v17: Conflict indicators on globe
 import { GlobeConflictIndicators } from '@/components/3d/GlobeConflictIndicators';
 
+// v23 Phase 5: 신규 이벤트 이펙트 (동맹, 제재, 자원, 첩보, 핵)
+import { GlobeAllianceBeam } from '@/components/3d/GlobeAllianceBeam';
+import type { AllianceData } from '@/components/3d/GlobeAllianceBeam';
+import { GlobeSanctionBarrier } from '@/components/3d/GlobeSanctionBarrier';
+import type { SanctionData } from '@/components/3d/GlobeSanctionBarrier';
+import { GlobeResourceGlow } from '@/components/3d/GlobeResourceGlow';
+import type { ResourceData } from '@/components/3d/GlobeResourceGlow';
+import { GlobeSpyTrail } from '@/components/3d/GlobeSpyTrail';
+import type { SpyOpData } from '@/components/3d/GlobeSpyTrail';
+import { GlobeNukeEffect } from '@/components/3d/GlobeNukeEffect';
+import type { NukeData } from '@/components/3d/GlobeNukeEffect';
+
 interface GlobeViewProps {
   countryStates?: Map<string, CountryClientState>;
   selectedCountry?: string | null;
@@ -81,6 +93,16 @@ interface GlobeViewProps {
   onIntroComplete?: () => void;
   /** v17: ISO3 set of countries with active conflicts */
   activeConflictCountries?: Set<string>;
+  /** v23 Phase 5: 동맹 이벤트 */
+  alliances?: AllianceData[];
+  /** v23 Phase 5: 제재 이벤트 */
+  sanctions?: SanctionData[];
+  /** v23 Phase 5: 자원 채굴 이벤트 */
+  resources?: ResourceData[];
+  /** v23 Phase 5: 첩보 이벤트 */
+  spyOps?: SpyOpData[];
+  /** v23 Phase 5: 핵실험 이벤트 */
+  nukes?: NukeData[];
 }
 
 const BG = '#030305';
@@ -1553,6 +1575,11 @@ function GlobeScene({
   introActive,
   onIntroComplete,
   activeConflictCountries,
+  alliances,
+  sanctions,
+  resources,
+  spyOps,
+  nukes,
 }: {
   onCountryClick?: (iso3: string, name: string) => void;
   onHover?: (iso3: string | null, name: string | null) => void;
@@ -1564,6 +1591,11 @@ function GlobeScene({
   globalEvents: GlobalEventData[];
   introActive?: boolean;
   onIntroComplete?: () => void;
+  alliances: AllianceData[];
+  sanctions: SanctionData[];
+  resources: ResourceData[];
+  spyOps: SpyOpData[];
+  nukes: NukeData[];
 }) {
   const [countries, setCountries] = useState<CountryGeo[]>([]);
   const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
@@ -1764,6 +1796,51 @@ function GlobeScene({
         />
       )}
 
+      {/* v23 Phase 5: 동맹 빛줄기 (2국가 연결 파란 아크 빔) */}
+      {alliances.length > 0 && centroidsMap.size > 0 && (
+        <GlobeAllianceBeam
+          alliances={alliances}
+          centroidsMap={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
+      {/* v23 Phase 5: 제재 차단선 (빨간 X + 점선 아크) */}
+      {sanctions.length > 0 && centroidsMap.size > 0 && (
+        <GlobeSanctionBarrier
+          sanctions={sanctions}
+          centroidsMap={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
+      {/* v23 Phase 5: 자원 채굴 지표 이펙트 (금색 글로우 + 상승 파티클) */}
+      {resources.length > 0 && centroidsMap.size > 0 && (
+        <GlobeResourceGlow
+          resources={resources}
+          centroidsMap={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
+      {/* v23 Phase 5: 첩보 점선 트레일 (보라 점선 + 눈 아이콘) */}
+      {spyOps.length > 0 && centroidsMap.size > 0 && (
+        <GlobeSpyTrail
+          spyOps={spyOps}
+          centroidsMap={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
+      {/* v23 Phase 5: 핵실험 버섯구름 (충격파 + 파티클 + 기둥) */}
+      {nukes.length > 0 && centroidsMap.size > 0 && (
+        <GlobeNukeEffect
+          nukes={nukes}
+          centroidsMap={centroidsMap}
+          globeRadius={RADIUS}
+        />
+      )}
+
       {/* v21 Phase 4: Bloom 포스트프로세싱 */}
       {!isMobile && (
         <EffectComposer>
@@ -1795,6 +1872,11 @@ export function GlobeView({
   introActive,
   onIntroComplete,
   activeConflictCountries,
+  alliances,
+  sanctions,
+  resources,
+  spyOps,
+  nukes,
 }: GlobeViewProps) {
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
@@ -1804,6 +1886,12 @@ export function GlobeView({
   const tradeList = tradeRoutes ?? [];
   const eventList = globalEvents ?? [];
   const conflictSet = activeConflictCountries ?? new Set<string>();
+  // v23 Phase 5: fallback empty arrays
+  const allianceList = alliances ?? [];
+  const sanctionList = sanctions ?? [];
+  const resourceList = resources ?? [];
+  const spyOpList = spyOps ?? [];
+  const nukeList = nukes ?? [];
 
   // v17: 인트로 시 카메라 시작 위치 (멀리서 로고 정면)
   const cameraStartPos: [number, number, number] = introActive
@@ -1830,6 +1918,11 @@ export function GlobeView({
             introActive={introActive}
             onIntroComplete={onIntroComplete}
             activeConflictCountries={conflictSet}
+            alliances={allianceList}
+            sanctions={sanctionList}
+            resources={resourceList}
+            spyOps={spyOpList}
+            nukes={nukeList}
           />
         </SizeGate>
       </Canvas>

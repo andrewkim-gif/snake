@@ -32,6 +32,13 @@ import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 import type { TradeRouteData } from '@/hooks/useSocket';
 import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 
+// v23 Phase 5: 신규 이벤트 타입
+import type { AllianceData } from '@/components/3d/GlobeAllianceBeam';
+import type { SanctionData } from '@/components/3d/GlobeSanctionBarrier';
+import type { ResourceData } from '@/components/3d/GlobeResourceGlow';
+import type { SpyOpData } from '@/components/3d/GlobeSpyTrail';
+import type { NukeData } from '@/components/3d/GlobeNukeEffect';
+
 interface WorldViewProps {
   countryStates?: Map<string, CountryClientState>;
   onEnterArena?: (iso3: string) => void;
@@ -52,6 +59,16 @@ interface WorldViewProps {
   onIntroComplete?: () => void;
   /** v17: ISO3 set of countries with active conflicts */
   activeConflictCountries?: Set<string>;
+  /** v23 Phase 5: 동맹 이벤트 */
+  alliances?: AllianceData[];
+  /** v23 Phase 5: 제재 이벤트 */
+  sanctions?: SanctionData[];
+  /** v23 Phase 5: 자원 채굴 이벤트 */
+  resources?: ResourceData[];
+  /** v23 Phase 5: 첩보 이벤트 */
+  spyOps?: SpyOpData[];
+  /** v23 Phase 5: 핵실험 이벤트 */
+  nukes?: NukeData[];
 }
 
 export function WorldView({
@@ -67,6 +84,11 @@ export function WorldView({
   introActive,
   onIntroComplete,
   activeConflictCountries,
+  alliances,
+  sanctions,
+  resources,
+  spyOps,
+  nukes,
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -227,6 +249,11 @@ export function WorldView({
           introActive={introActive}
           onIntroComplete={onIntroComplete}
           activeConflictCountries={activeConflictCountries}
+          alliances={alliances}
+          sanctions={sanctions}
+          resources={resources}
+          spyOps={spyOps}
+          nukes={nukes}
         />
       </div>
 
