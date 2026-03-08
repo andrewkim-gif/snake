@@ -108,6 +108,9 @@ type Hub struct {
 	// allClients maps clientID → *Client for unicast lookups.
 	allClients map[string]*Client
 
+	// v26: citySubscribers maps iso3 → set of clients subscribed to city updates.
+	citySubscribers map[string]map[*Client]bool
+
 	// Channels for client lifecycle.
 	register   chan *Registration
 	unregister chan *Client
@@ -130,16 +133,17 @@ type Hub struct {
 // NewHub creates a new Hub instance.
 func NewHub() *Hub {
 	return &Hub{
-		rooms:      make(map[string]map[*Client]bool),
-		lobby:      make(map[*Client]bool),
-		allClients: make(map[string]*Client),
-		register:   make(chan *Registration, 1024),
-		unregister: make(chan *Client, 1024),
-		broadcast:  make(chan *BroadcastMsg, 1024),
-		roomcast:   make(chan *RoomcastMsg, 1024),
-		unicast:    make(chan *UnicastMsg, 1024),
-		done:       make(chan struct{}),
-		ConnLimit:  NewConnLimiter(5), // v17: max 5 connections per IP per second
+		rooms:           make(map[string]map[*Client]bool),
+		lobby:           make(map[*Client]bool),
+		allClients:      make(map[string]*Client),
+		citySubscribers: make(map[string]map[*Client]bool),
+		register:        make(chan *Registration, 1024),
+		unregister:      make(chan *Client, 1024),
+		broadcast:       make(chan *BroadcastMsg, 1024),
+		roomcast:        make(chan *RoomcastMsg, 1024),
+		unicast:         make(chan *UnicastMsg, 1024),
+		done:            make(chan struct{}),
+		ConnLimit:       NewConnLimiter(5), // v17: max 5 connections per IP per second
 	}
 }
 
@@ -290,6 +294,14 @@ func (h *Hub) handleUnregister(client *Client) {
 		return
 	}
 	delete(h.allClients, client.ID)
+
+	// v26: Remove from all city subscriptions
+	for iso3, subs := range h.citySubscribers {
+		delete(subs, client)
+		if len(subs) == 0 {
+			delete(h.citySubscribers, iso3)
+		}
+	}
 	h.mu.Unlock()
 
 	// Remove from lobby
@@ -368,6 +380,115 @@ func (h *Hub) removeFromAllRooms(client *Client) {
 		}
 	}
 	client.RoomID = ""
+}
+
+// --- v26: City subscription methods ---
+
+// SubscribeCity subscribes a client to city state updates for a country.
+func (h *Hub) SubscribeCity(clientID, iso3 string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	client, ok := h.allClients[clientID]
+	if !ok {
+		return
+	}
+
+	if h.citySubscribers[iso3] == nil {
+		h.citySubscribers[iso3] = make(map[*Client]bool)
+	}
+	h.citySubscribers[iso3][client] = true
+
+	slog.Info("client subscribed to city",
+		"clientId", clientID,
+		"iso3", iso3,
+	)
+}
+
+// UnsubscribeCity removes a client's subscription to a city.
+func (h *Hub) UnsubscribeCity(clientID, iso3 string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	client, ok := h.allClients[clientID]
+	if !ok {
+		return
+	}
+
+	if subs, ok := h.citySubscribers[iso3]; ok {
+		delete(subs, client)
+		if len(subs) == 0 {
+			delete(h.citySubscribers, iso3)
+		}
+	}
+
+	slog.Info("client unsubscribed from city",
+		"clientId", clientID,
+		"iso3", iso3,
+	)
+}
+
+// UnsubscribeAllCities removes all city subscriptions for a client.
+func (h *Hub) UnsubscribeAllCities(clientID string) {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+
+	client, ok := h.allClients[clientID]
+	if !ok {
+		return
+	}
+
+	for iso3, subs := range h.citySubscribers {
+		delete(subs, client)
+		if len(subs) == 0 {
+			delete(h.citySubscribers, iso3)
+		}
+	}
+}
+
+// BroadcastToCitySubscribers sends data to all clients subscribed to a city.
+func (h *Hub) BroadcastToCitySubscribers(iso3 string, data []byte) {
+	h.mu.RLock()
+	subs, ok := h.citySubscribers[iso3]
+	if !ok || len(subs) == 0 {
+		h.mu.RUnlock()
+		return
+	}
+	// Copy to avoid holding lock during send
+	clients := make([]*Client, 0, len(subs))
+	for c := range subs {
+		clients = append(clients, c)
+	}
+	h.mu.RUnlock()
+
+	for _, client := range clients {
+		select {
+		case client.send <- data:
+		default:
+			// Buffer full, skip this frame
+		}
+	}
+}
+
+// GetCitySubscriberCount returns how many clients are subscribed to a city.
+func (h *Hub) GetCitySubscriberCount(iso3 string) int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	return len(h.citySubscribers[iso3])
+}
+
+// GetSubscribedCities returns the list of ISO3 codes that have subscribers.
+func (h *Hub) GetSubscribedCities() []string {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	result := make([]string, 0, len(h.citySubscribers))
+	for iso3, subs := range h.citySubscribers {
+		if len(subs) > 0 {
+			result = append(result, iso3)
+		}
+	}
+	return result
 }
 
 // BuildFrame creates a JSON websocket frame: {"e":"event","d":data}

@@ -87,6 +87,15 @@ const (
 	// v15: Globe effects events (server → client)
 	EventDominationUpdate = "domination_update"
 	EventTradeRouteUpdate = "trade_route_update"
+
+	// v26: City simulation events (server → client)
+	EventCityState   = "city_state"   // 2Hz city state broadcast
+	EventCityEvent   = "city_event"   // city event notification (building complete, etc.)
+
+	// v26: City simulation events (client → server)
+	EventCityCommand   = "city_command"   // build/demolish/upgrade/toggle
+	EventCitySubscribe = "city_subscribe" // subscribe to a city's state updates
+	EventCityUnsubscribe = "city_unsubscribe" // unsubscribe from a city
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -278,6 +287,28 @@ type PongPayload struct {
 type ErrorPayload struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
+}
+
+// --- v26: City simulation payload types ---
+
+// CityCommandPayload is sent by the client to issue a city command.
+type CityCommandPayload struct {
+	ISO3       string `json:"iso3"`
+	Type       string `json:"type"`       // "build", "demolish", "upgrade", "toggle"
+	BuildingID string `json:"buildingId"` // for demolish/upgrade/toggle
+	DefID      string `json:"defId"`      // for build
+	TileX      int    `json:"tileX"`      // for build
+	TileY      int    `json:"tileY"`      // for build
+}
+
+// CitySubscribePayload is sent by the client to subscribe to a city.
+type CitySubscribePayload struct {
+	ISO3 string `json:"iso3"`
+}
+
+// CityUnsubscribePayload is sent by the client to unsubscribe from a city.
+type CityUnsubscribePayload struct {
+	ISO3 string `json:"iso3"`
 }
 
 // --- v15: Globe effects message structs ---

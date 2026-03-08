@@ -163,8 +163,12 @@ type EconomyEngine struct {
 	marketPrices map[ResourceType]float64   // resource type → gold price
 
 	// External references (set after construction)
-	factionManager *FactionManager
+	factionManager  *FactionManager
 	diplomacyEngine *DiplomacyEngine
+	techTreeManager *TechTreeManager
+	seasonEngine    *SeasonEngine
+	eventEngine     *EventEngine
+	unCouncil       *UNCouncil
 
 	// Battle participant tracking (countryISO → list of userIDs who participated in last battle)
 	battleParticipants map[string][]string
@@ -220,6 +224,34 @@ func (ee *EconomyEngine) SetDiplomacyEngine(de *DiplomacyEngine) {
 	ee.mu.Lock()
 	defer ee.mu.Unlock()
 	ee.diplomacyEngine = de
+}
+
+// SetTechTreeManager sets the tech tree reference for production bonuses.
+func (ee *EconomyEngine) SetTechTreeManager(ttm *TechTreeManager) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.techTreeManager = ttm
+}
+
+// SetSeasonEngine sets the season engine reference for era multipliers.
+func (ee *EconomyEngine) SetSeasonEngine(se *SeasonEngine) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.seasonEngine = se
+}
+
+// SetEventEngine sets the event engine reference for event multipliers.
+func (ee *EconomyEngine) SetEventEngine(ev *EventEngine) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.eventEngine = ev
+}
+
+// SetUNCouncil sets the UN council reference for climate accord effects.
+func (ee *EconomyEngine) SetUNCouncil(uc *UNCouncil) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.unCouncil = uc
 }
 
 // InitializeCountry sets up the economy for a country based on seed data.
@@ -335,24 +367,62 @@ func (ee *EconomyEngine) SetBattleParticipants(iso3 string, userIDs []string) {
 }
 
 // recalcEffectiveProduction recalculates a country's effective production
-// based on base production, tier multiplier, sovereignty level, and policies.
+// based on base production, tier multiplier, sovereignty level, policies,
+// tech tree bonuses, season era multiplier, world events, and UN council effects.
 // Must be called with write lock held.
 func (ee *EconomyEngine) recalcEffectiveProduction(econ *CountryEconomy) {
 	sovBonus := SovereigntyLevelBonus(econ.SovereigntyLevel)
 	tierMult := econ.TierMultiplier
 
 	// Tech investment bonus: each 1% tech invest = +1% tech production
-	techBonus := 1.0 + econ.TechInvest
+	techPolicyBonus := 1.0 + econ.TechInvest
 
 	// Military spend penalty: reduces non-military production
 	civilianPenalty := 1.0 - (econ.MilitarySpend * 0.5) // 50% military = -25% civilian
 
+	// --- Bonus systems (v25) ---
+
+	// Tech tree: resource_production_mult (+15% from Industrial Revolution)
+	techResourceMult := 1.0
+	techInfluenceMult := 1.0
+	if ee.techTreeManager != nil && econ.SovereignFaction != "" {
+		techResourceMult += ee.techTreeManager.GetFactionBonus(econ.SovereignFaction, "resource_production_mult")
+		techInfluenceMult += ee.techTreeManager.GetFactionBonus(econ.SovereignFaction, "influence_production_mult")
+	}
+
+	// Season era: ResourceMult (1.0 normal, 1.2 in Reckoning)
+	seasonMult := 1.0
+	if ee.seasonEngine != nil {
+		rules := ee.seasonEngine.GetActiveRules()
+		seasonMult = rules.ResourceMult
+	}
+
+	// World events: per-country resource multiplier
+	eventResourceMult := 1.0
+	eventTechMult := 1.0
+	if ee.eventEngine != nil {
+		eventResourceMult = ee.eventEngine.GetResourceMultiplier(econ.CountryISO, "")
+		eventTechMult = ee.eventEngine.GetTechMultiplier(econ.CountryISO)
+	}
+
+	// UN Council: climate accord (resources -10%, tech +20% when active)
+	councilResourceMult := 1.0
+	councilTechMult := 1.0
+	if ee.unCouncil != nil {
+		councilResourceMult, councilTechMult = ee.unCouncil.GetClimateAccordEffects()
+	}
+
+	// Combined multipliers
+	resourceMult := tierMult * sovBonus * civilianPenalty * techResourceMult * seasonMult * eventResourceMult * councilResourceMult
+	techMult := tierMult * sovBonus * techPolicyBonus * seasonMult * eventTechMult * councilTechMult
+	influenceMult := techInfluenceMult * seasonMult
+
 	econ.EffectiveProduction = ResourceBundle{
-		Oil:      capResource(int64(float64(econ.BaseProduction.Oil)*tierMult*sovBonus*civilianPenalty), econ.ResourceCap),
-		Minerals: capResource(int64(float64(econ.BaseProduction.Minerals)*tierMult*sovBonus*civilianPenalty), econ.ResourceCap),
-		Food:     capResource(int64(float64(econ.BaseProduction.Food)*tierMult*sovBonus*civilianPenalty), econ.ResourceCap),
-		Tech:     capResource(int64(float64(econ.BaseProduction.Tech)*tierMult*sovBonus*techBonus), econ.ResourceCap),
-		Influence: computeInfluenceProduction(econ.SovereigntyLevel, econ.Tier),
+		Oil:       capResource(int64(float64(econ.BaseProduction.Oil)*resourceMult), econ.ResourceCap),
+		Minerals:  capResource(int64(float64(econ.BaseProduction.Minerals)*resourceMult), econ.ResourceCap),
+		Food:      capResource(int64(float64(econ.BaseProduction.Food)*resourceMult), econ.ResourceCap),
+		Tech:      capResource(int64(float64(econ.BaseProduction.Tech)*techMult), econ.ResourceCap),
+		Influence: int64(float64(computeInfluenceProduction(econ.SovereigntyLevel, econ.Tier)) * influenceMult),
 	}
 }
 
@@ -524,8 +594,12 @@ func (ee *EconomyEngine) processCountryTick(iso string, econ *CountryEconomy, no
 		}
 	}
 
-	// Step 6: Apply tax as Gold income
-	taxGold := int64(float64(produced.Oil+produced.Minerals+produced.Food+produced.Tech) * econ.TaxRate)
+	// Step 6: Apply tax as Gold income (with event gold multiplier)
+	goldMult := 1.0
+	if ee.eventEngine != nil {
+		goldMult = ee.eventEngine.GetGoldMultiplier(iso)
+	}
+	taxGold := int64(float64(produced.Oil+produced.Minerals+produced.Food+produced.Tech) * econ.TaxRate * goldMult)
 	if ee.factionManager != nil && econ.SovereignFaction != "" {
 		_ = ee.factionManager.DepositToTreasury(econ.SovereignFaction, ResourceBundle{Gold: taxGold})
 	}
@@ -787,6 +861,65 @@ func (ee *EconomyEngine) GetTickCount() int64 {
 	ee.mu.RLock()
 	defer ee.mu.RUnlock()
 	return ee.tickCount
+}
+
+// --- ManualTick (v26: CitySimEngine integration) ---
+
+// ManualTick triggers an economy tick for a single country.
+// This is a public wrapper around processCountryTick, designed for
+// CitySimEngine to trigger individual country economy updates without
+// waiting for the global tick cycle.
+// IMPORTANT: This does NOT change the behavior of the global Tick() method.
+func (ee *EconomyEngine) ManualTick(iso3 string) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+
+	econ, ok := ee.economies[iso3]
+	if !ok {
+		slog.Debug("ManualTick: country not found", "iso3", iso3)
+		return
+	}
+
+	now := time.Now()
+	result := ee.processCountryTick(iso3, econ, now)
+
+	if econ.SovereignFaction != "" {
+		ee.dirtyCountries[iso3] = true
+	}
+
+	slog.Debug("ManualTick completed",
+		"iso3", iso3,
+		"gdpBefore", result.GDPBefore,
+		"gdpAfter", result.GDPAfter,
+	)
+}
+
+// GetResourcePriceByName returns the market price for a resource by string name.
+// Used by CitySimEngine's EconomySyncer interface.
+func (ee *EconomyEngine) GetResourcePriceByName(resource string) float64 {
+	ee.mu.RLock()
+	defer ee.mu.RUnlock()
+
+	rt := ResourceType(resource)
+	if price, ok := ee.marketPrices[rt]; ok {
+		return price
+	}
+	return 1.0 // default price
+}
+
+// GetGlobalTradeModifier returns the global trade modifier (1.0 = normal).
+// Used by CitySimEngine's EconomySyncer interface.
+func (ee *EconomyEngine) GetGlobalTradeModifier() float64 {
+	ee.mu.RLock()
+	defer ee.mu.RUnlock()
+
+	// Base modifier from season era
+	modifier := 1.0
+	if ee.seasonEngine != nil {
+		rules := ee.seasonEngine.GetActiveRules()
+		modifier = rules.ResourceMult
+	}
+	return modifier
 }
 
 // --- Helpers ---
