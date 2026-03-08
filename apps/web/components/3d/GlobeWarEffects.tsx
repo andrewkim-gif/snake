@@ -88,9 +88,8 @@ const EXPLOSION_TOTAL_DURATION = 1.6;     // auto cleanup after this
 const WINNER_FIREWORK_COLOR = new THREE.Color(0xffd700); // gold
 const LOSER_TRANSITION_DURATION = 5.0; // seconds
 
-// v15: War fog constants
-const WAR_FOG_PARTICLE_COUNT = 20;
-const WAR_FOG_COLOR = new THREE.Color(0xcc2222);
+// v23: Volumetric war fog constants (WarFog3D)
+const WAR_FOG_SPHERE_COUNT = 10;
 const WAR_FOG_SPREAD = 0.08; // spread relative to globe radius
 
 // v15: Camera shake constants
@@ -771,9 +770,123 @@ function VictoryFireworks({
 }
 
 /**
- * WarFog — v15: Red fog particles at midpoint between warring nations.
- * InstancedMesh 20 particles, slowly rotating, noise-based semi-transparent.
+ * WarFog (v23 WarFog3D) — Volumetric shader spheres replacing v15 billboard planes.
+ * InstancedMesh + SphereGeometry(2,12,12) with custom ShaderMaterial:
+ * - vertex: noise-based vertex displacement for organic deformation
+ * - fragment: semi-transparent red (0.6, 0.1, 0.05), noise-based density variation
+ * - time uniform for slow rotation/morphing animation
+ * - AdditiveBlending, opacity 0.3~0.5
  */
+
+// v23: volumetric fog vertex shader — noise-based displacement
+const warFogVertexShader = /* glsl */ `
+  uniform float uTime;
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+
+  // Simple 3D noise (hash-based)
+  vec3 hash33(vec3 p) {
+    p = vec3(
+      dot(p, vec3(127.1, 311.7, 74.7)),
+      dot(p, vec3(269.5, 183.3, 246.1)),
+      dot(p, vec3(113.5, 271.9, 124.6))
+    );
+    return fract(sin(p) * 43758.5453123) * 2.0 - 1.0;
+  }
+
+  float noise3D(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float n = mix(
+      mix(
+        mix(dot(hash33(i), f), dot(hash33(i + vec3(1,0,0)), f - vec3(1,0,0)), f.x),
+        mix(dot(hash33(i + vec3(0,1,0)), f - vec3(0,1,0)), dot(hash33(i + vec3(1,1,0)), f - vec3(1,1,0)), f.x),
+        f.y
+      ),
+      mix(
+        mix(dot(hash33(i + vec3(0,0,1)), f - vec3(0,0,1)), dot(hash33(i + vec3(1,0,1)), f - vec3(1,0,1)), f.x),
+        mix(dot(hash33(i + vec3(0,1,1)), f - vec3(0,1,1)), dot(hash33(i + vec3(1,1,1)), f - vec3(1,1,1)), f.x),
+        f.y
+      ),
+      f.z
+    );
+    return n * 0.5 + 0.5;
+  }
+
+  void main() {
+    vNormal = normalize(normalMatrix * normal);
+
+    // Noise-based vertex displacement for organic deformation
+    vec3 displaced = position;
+    float noiseVal = noise3D(position * 1.5 + uTime * 0.3);
+    displaced += normal * noiseVal * 0.4;
+
+    vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
+    vWorldPos = worldPos.xyz;
+    gl_Position = projectionMatrix * viewMatrix * worldPos;
+  }
+`;
+
+// v23: volumetric fog fragment shader — noise density variation
+const warFogFragmentShader = /* glsl */ `
+  uniform float uTime;
+  uniform float uOpacity;
+  varying vec3 vNormal;
+  varying vec3 vWorldPos;
+
+  vec3 hash33(vec3 p) {
+    p = vec3(
+      dot(p, vec3(127.1, 311.7, 74.7)),
+      dot(p, vec3(269.5, 183.3, 246.1)),
+      dot(p, vec3(113.5, 271.9, 124.6))
+    );
+    return fract(sin(p) * 43758.5453123) * 2.0 - 1.0;
+  }
+
+  float noise3D(vec3 p) {
+    vec3 i = floor(p);
+    vec3 f = fract(p);
+    f = f * f * (3.0 - 2.0 * f);
+    float n = mix(
+      mix(
+        mix(dot(hash33(i), f), dot(hash33(i + vec3(1,0,0)), f - vec3(1,0,0)), f.x),
+        mix(dot(hash33(i + vec3(0,1,0)), f - vec3(0,1,0)), dot(hash33(i + vec3(1,1,0)), f - vec3(1,1,0)), f.x),
+        f.y
+      ),
+      mix(
+        mix(dot(hash33(i + vec3(0,0,1)), f - vec3(0,0,1)), dot(hash33(i + vec3(1,0,1)), f - vec3(1,0,1)), f.x),
+        mix(dot(hash33(i + vec3(0,1,1)), f - vec3(0,1,1)), dot(hash33(i + vec3(1,1,1)), f - vec3(1,1,1)), f.x),
+        f.y
+      ),
+      f.z
+    );
+    return n * 0.5 + 0.5;
+  }
+
+  void main() {
+    // Base color: semi-transparent deep red
+    vec3 baseColor = vec3(0.6, 0.1, 0.05);
+
+    // Noise-based density variation (organic fog appearance)
+    float density = noise3D(vWorldPos * 0.5 + uTime * 0.2);
+    density = smoothstep(0.25, 0.75, density);
+
+    // Edge fade based on view angle (Fresnel-like)
+    float edgeFade = 1.0 - abs(dot(vNormal, vec3(0.0, 0.0, 1.0)));
+    edgeFade = smoothstep(0.0, 0.6, edgeFade);
+
+    // Combine: density modulates opacity, edge fade softens edges
+    float alpha = uOpacity * density * (0.6 + edgeFade * 0.4);
+    alpha = clamp(alpha, 0.0, uOpacity);
+
+    // Subtle color variation
+    vec3 finalColor = baseColor + vec3(0.1, 0.0, 0.0) * noise3D(vWorldPos * 0.8 - uTime * 0.1);
+
+    gl_FragColor = vec4(finalColor, alpha);
+  }
+`;
+
 function WarFog({
   center,
   globeRadius,
@@ -785,13 +898,12 @@ function WarFog({
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const timeRef = useRef(0);
-  const _dummy = useMemo(() => new THREE.Object3D(), []);
 
-  // Particle offsets (random positions around center, computed once)
+  // Sphere offsets (random positions around center, computed once)
   const offsets = useMemo(() => {
     const arr: THREE.Vector3[] = [];
     const spread = globeRadius * WAR_FOG_SPREAD;
-    for (let i = 0; i < WAR_FOG_PARTICLE_COUNT; i++) {
+    for (let i = 0; i < WAR_FOG_SPHERE_COUNT; i++) {
       arr.push(new THREE.Vector3(
         (Math.random() - 0.5) * spread * 2,
         (Math.random() - 0.5) * spread * 2,
@@ -801,43 +913,70 @@ function WarFog({
     return arr;
   }, [globeRadius]);
 
-  const fogGeometry = useMemo(() => new THREE.PlaneGeometry(3, 3), []);
+  // Per-sphere random scale factors (for variety)
+  const scaleFactors = useMemo(() => {
+    const arr: number[] = [];
+    for (let i = 0; i < WAR_FOG_SPHERE_COUNT; i++) {
+      arr.push(0.7 + Math.random() * 0.6); // 0.7 ~ 1.3
+    }
+    return arr;
+  }, []);
+
+  // v23: SphereGeometry for volumetric fog
+  const fogGeometry = useMemo(() => new THREE.SphereGeometry(2, 12, 12), []);
+
+  // v23: Custom ShaderMaterial for volumetric appearance
   const fogMaterial = useMemo(
-    () => new THREE.MeshBasicMaterial({
-      color: WAR_FOG_COLOR,
+    () => new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uOpacity: { value: 0.4 },
+      },
+      vertexShader: warFogVertexShader,
+      fragmentShader: warFogFragmentShader,
       transparent: true,
-      opacity: 0.15,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
       side: THREE.DoubleSide,
     }),
     [],
   );
 
-  useFrame((stateR3F, delta) => {
+  useFrame((_, delta) => {
     if (!meshRef.current || state !== 'active') return;
     timeRef.current += delta;
     const t = timeRef.current;
-    const cam = stateR3F.camera;
 
-    for (let i = 0; i < WAR_FOG_PARTICLE_COUNT; i++) {
+    // Update time uniform
+    fogMaterial.uniforms.uTime.value = t;
+
+    for (let i = 0; i < WAR_FOG_SPHERE_COUNT; i++) {
       const offset = offsets[i];
       // Slow orbital rotation around center
-      const angle = t * 0.15 + (i / WAR_FOG_PARTICLE_COUNT) * Math.PI * 2;
-      const rotatedOffset = new THREE.Vector3(
-        offset.x * Math.cos(angle) - offset.z * Math.sin(angle),
-        offset.y + Math.sin(t * 0.5 + i) * 0.5,
-        offset.x * Math.sin(angle) + offset.z * Math.cos(angle),
+      const angle = t * 0.12 + (i / WAR_FOG_SPHERE_COUNT) * Math.PI * 2;
+      const cosA = Math.cos(angle);
+      const sinA = Math.sin(angle);
+
+      _tempObj3D.position.set(
+        center.x + offset.x * cosA - offset.z * sinA,
+        center.y + offset.y + Math.sin(t * 0.4 + i * 1.2) * 0.5,
+        center.z + offset.x * sinA + offset.z * cosA,
       );
 
-      _dummy.position.copy(center).add(rotatedOffset);
-      // Billboard: face camera
-      _dummy.quaternion.copy(cam.quaternion);
-      // Pulse scale for organic feel
-      const scale = 1.0 + 0.3 * Math.sin(t * 0.8 + i * 1.5);
-      _dummy.scale.setScalar(scale);
-      _dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, _dummy.matrix);
+      // Slow rotation for organic morphing
+      _tempObj3D.rotation.set(
+        t * 0.1 + i * 0.5,
+        t * 0.15 + i * 0.3,
+        t * 0.08 + i * 0.7,
+      );
+
+      // Pulse scale for breathing effect
+      const baseScale = scaleFactors[i];
+      const pulseScale = baseScale * (1.0 + 0.2 * Math.sin(t * 0.6 + i * 1.8));
+      _tempObj3D.scale.setScalar(pulseScale);
+
+      _tempObj3D.updateMatrix();
+      meshRef.current.setMatrixAt(i, _tempObj3D.matrix);
     }
     meshRef.current.instanceMatrix.needsUpdate = true;
   });
@@ -854,7 +993,7 @@ function WarFog({
   return (
     <instancedMesh
       ref={meshRef}
-      args={[fogGeometry, fogMaterial, WAR_FOG_PARTICLE_COUNT]}
+      args={[fogGeometry, fogMaterial, WAR_FOG_SPHERE_COUNT]}
       frustumCulled={false}
     />
   );

@@ -1,11 +1,12 @@
 'use client';
 
 /**
- * GlobeTradeRoutes — v15 Phase 5
+ * GlobeTradeRoutes — v15 Phase 5 + v23 Phase 4
  * Trade route visualization on the 3D globe:
  * - Sea routes: blue dashed bezier curves
  * - Land routes: green solid bezier curves
- * - Moving cargo sprite dots along routes
+ * - v23: Resource-specific 3D cargo icons (oil tanker, tech plane, food container, metal ore)
+ * - Cargo oriented along route tangent direction
  * - Line width = trade volume (1~4)
  * - Opacity = trade frequency (0.3~1.0)
  */
@@ -40,11 +41,24 @@ const CARGO_SPEED = 0.3;        // 화물 이동 속도 (초당 t 진행)
 // 색상 팔레트
 const SEA_COLOR = new THREE.Color(0x3399ff);  // 해상: 파란색
 const LAND_COLOR = new THREE.Color(0x33cc66); // 육상: 초록색
-const CARGO_COLOR_SEA = new THREE.Color(0x66bbff);
-const CARGO_COLOR_LAND = new THREE.Color(0x66ee88);
+
+// v23: 자원별 화물 색상
+const CARGO_COLORS: Record<string, THREE.Color> = {
+  oil: new THREE.Color(0x44aaff),   // 밝은 파란색 (유조선)
+  tech: new THREE.Color(0xccccdd),  // 은색 (비행기)
+  food: new THREE.Color(0x44bb44),  // 녹색 (컨테이너)
+  metal: new THREE.Color(0xcc8833), // 갈색-주황 (광석)
+  default: new THREE.Color(0x88aacc), // 기본
+};
+
+// ─── GC-prevention temp objects (module scope) ───
+
+const _tempVec3A = new THREE.Vector3();
+const _tempVec3B = new THREE.Vector3();
+const _tempQuaternion = new THREE.Quaternion();
+const _upAxis = new THREE.Vector3(0, 1, 0);
 
 // ─── Helpers ───
-// latLngToVector3 → @/lib/globe-utils (v20 통합)
 
 /** 두 구면 점 사이의 베지어 곡선 포인트 배열 생성 */
 function createBezierArcPoints(
@@ -62,7 +76,7 @@ function createBezierArcPoints(
   for (let i = 0; i <= segments; i++) {
     const t = i / segments;
     const invT = 1 - t;
-    // 2차 베지어: B(t) = (1-t)²P₀ + 2(1-t)tP₁ + t²P₂
+    // 2차 베지어: B(t) = (1-t)^2 P0 + 2(1-t)t P1 + t^2 P2
     const p = new THREE.Vector3()
       .addScaledVector(start, invT * invT)
       .addScaledVector(mid, 2 * invT * t)
@@ -72,16 +86,62 @@ function createBezierArcPoints(
   return points;
 }
 
-/** trade volume → 라인 두께 (1~4) */
+/** trade volume -> 라인 두께 (1~4) */
 function volumeToWidth(volume: number): number {
   return THREE.MathUtils.clamp(1 + Math.log10(Math.max(volume, 1)) * 0.8, 1, 4);
 }
 
-/** route age → opacity (최신=1.0, 오래된=0.3) */
+/** route age -> opacity (최신=1.0, 오래된=0.3) */
 function ageToOpacity(timestamp: number, now: number): number {
   const ageSec = (now - timestamp) / 1000;
-  // 30초 수명: 0초=1.0 → 30초=0.3
+  // 30초 수명: 0초=1.0 -> 30초=0.3
   return THREE.MathUtils.clamp(1.0 - ageSec * (0.7 / 30), 0.3, 1.0);
+}
+
+// ─── v23: Resource-specific cargo geometry + material factories ───
+
+type ResourceType = 'oil' | 'tech' | 'food' | 'metal' | 'default';
+
+/** 자원 타입 문자열을 정규화 */
+function normalizeResource(resource: string): ResourceType {
+  const r = resource.toLowerCase();
+  if (r === 'oil' || r === 'petroleum' || r === 'energy') return 'oil';
+  if (r === 'tech' || r === 'technology' || r === 'electronics') return 'tech';
+  if (r === 'food' || r === 'grain' || r === 'agriculture') return 'food';
+  if (r === 'metal' || r === 'ore' || r === 'minerals' || r === 'steel') return 'metal';
+  return 'default';
+}
+
+/** 자원별 geometry 생성 (1회 공유) */
+function createCargoGeometry(type: ResourceType): THREE.BufferGeometry {
+  switch (type) {
+    case 'oil':
+      // 유조선: 납작한 박스 (탱커)
+      return new THREE.BoxGeometry(0.8, 0.3, 0.3);
+    case 'tech':
+      // 비행기: 원뿔 (4면체)
+      return new THREE.ConeGeometry(0.3, 0.8, 4);
+    case 'food':
+      // 컨테이너: 정육면체
+      return new THREE.BoxGeometry(0.5, 0.5, 0.5);
+    case 'metal':
+      // 광석: 팔면체
+      return new THREE.OctahedronGeometry(0.4);
+    default:
+      // 기본: 구체
+      return new THREE.SphereGeometry(0.4, 6, 6);
+  }
+}
+
+/** 자원별 material 생성 */
+function createCargoMaterial(type: ResourceType): THREE.MeshBasicMaterial {
+  const color = CARGO_COLORS[type] || CARGO_COLORS.default;
+  return new THREE.MeshBasicMaterial({
+    color: color.clone(),
+    transparent: true,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
 }
 
 // ─── Internal: single trade route line + cargo ───
@@ -89,6 +149,7 @@ function ageToOpacity(timestamp: number, now: number): number {
 interface RouteRenderData {
   points: THREE.Vector3[];
   type: 'sea' | 'land';
+  resource: ResourceType;
   volume: number;
   timestamp: number;
   key: string;
@@ -107,25 +168,29 @@ export function GlobeTradeRoutes({
   const cargosRef = useRef<THREE.Mesh[]>([]);
   const routeDataRef = useRef<RouteRenderData[]>([]);
   const materialsRef = useRef<THREE.ShaderMaterial[]>([]);
+  // v23: 자원별 cargo geometry + material 캐시 (생성된 것 추적하여 cleanup)
+  const cargoGeosRef = useRef<Map<ResourceType, THREE.BufferGeometry>>(new Map());
+  const cargoMatsRef = useRef<Map<ResourceType, THREE.MeshBasicMaterial>>(new Map());
 
-  // 화물 스프라이트용 구 geometry (공유, 1회 생성)
-  const cargoGeo = useMemo(() => new THREE.SphereGeometry(0.6, 6, 6), []);
+  /** 자원 타입별 geometry 획득 (캐시 사용) */
+  const getCargoGeo = (type: ResourceType): THREE.BufferGeometry => {
+    let geo = cargoGeosRef.current.get(type);
+    if (!geo) {
+      geo = createCargoGeometry(type);
+      cargoGeosRef.current.set(type, geo);
+    }
+    return geo;
+  };
 
-  // 화물 머티리얼 풀: sea/land 각 1개
-  const cargoMats = useMemo(() => ({
-    sea: new THREE.MeshBasicMaterial({
-      color: CARGO_COLOR_SEA,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    }),
-    land: new THREE.MeshBasicMaterial({
-      color: CARGO_COLOR_LAND,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    }),
-  }), []);
+  /** 자원 타입별 material 획득 (캐시 사용) */
+  const getCargoMat = (type: ResourceType): THREE.MeshBasicMaterial => {
+    let mat = cargoMatsRef.current.get(type);
+    if (!mat) {
+      mat = createCargoMaterial(type);
+      cargoMatsRef.current.set(type, mat);
+    }
+    return mat;
+  };
 
   // 라인 셰이더 머티리얼 (점선/실선 구분)
   const createLineMaterial = useMemo(() => (isSea: boolean) => {
@@ -171,7 +236,7 @@ export function GlobeTradeRoutes({
     });
   }, []);
 
-  // tradeRoutes → 렌더 데이터 변환
+  // tradeRoutes -> 렌더 데이터 변환
   useEffect(() => {
     if (!groupRef.current) return;
 
@@ -225,8 +290,11 @@ export function GlobeTradeRoutes({
       linesRef.current.push(line);
       groupRef.current.add(line);
 
-      // 화물 스프라이트 (각 루트에 1개 이동 점)
-      const cargo = new THREE.Mesh(cargoGeo, isSea ? cargoMats.sea : cargoMats.land);
+      // v23: 자원별 3D 화물 메시 (resource 필드 참조)
+      const resType = normalizeResource(route.resource || 'default');
+      const cargoGeo = getCargoGeo(resType);
+      const cargoMat = getCargoMat(resType);
+      const cargo = new THREE.Mesh(cargoGeo, cargoMat);
       cargo.renderOrder = 4;
       cargosRef.current.push(cargo);
       groupRef.current.add(cargo);
@@ -234,14 +302,16 @@ export function GlobeTradeRoutes({
       routeDataRef.current.push({
         points,
         type: route.type,
+        resource: resType,
         volume: route.volume,
         timestamp: route.timestamp,
         key: `${route.from}_${route.to}_${route.timestamp}`,
       });
     }
-  }, [tradeRoutes, countryCentroids, globeRadius, cargoGeo, cargoMats, createLineMaterial]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tradeRoutes, countryCentroids, globeRadius, createLineMaterial]);
 
-  // 매 프레임: opacity 업데이트 + 화물 이동
+  // 매 프레임: opacity 업데이트 + 화물 이동 + 접선 정렬
   useFrame(({ clock }) => {
     if (!visible) return;
 
@@ -260,14 +330,24 @@ export function GlobeTradeRoutes({
       mat.uniforms.uOpacity.value = opacity;
       mat.uniforms.uTime.value = elapsed;
 
-      // 화물 위치: 루트를 따라 이동하는 t (0→1 반복)
+      // 화물 위치: 루트를 따라 이동하는 t (0->1 반복)
       const ageSec = (now - routeData.timestamp) / 1000;
       const t = (ageSec * CARGO_SPEED) % 1;
-      const idx = Math.floor(t * (routeData.points.length - 1));
-      const frac = t * (routeData.points.length - 1) - idx;
-      const p0 = routeData.points[Math.min(idx, routeData.points.length - 1)];
-      const p1 = routeData.points[Math.min(idx + 1, routeData.points.length - 1)];
+      const ptsLen = routeData.points.length;
+      const idx = Math.floor(t * (ptsLen - 1));
+      const frac = t * (ptsLen - 1) - idx;
+      const p0 = routeData.points[Math.min(idx, ptsLen - 1)];
+      const p1 = routeData.points[Math.min(idx + 1, ptsLen - 1)];
       cargo.position.lerpVectors(p0, p1, frac);
+
+      // v23: 접선 방향 정렬 (화물이 진행 방향을 향하도록)
+      _tempVec3A.subVectors(p1, p0);
+      if (_tempVec3A.lengthSq() > 0.0001) {
+        _tempVec3A.normalize();
+        // lookAt 방향: cargo 위치에서 접선 방향으로 바라봄
+        _tempVec3B.copy(cargo.position).add(_tempVec3A);
+        cargo.lookAt(_tempVec3B);
+      }
 
       // 화물 크기: volume 기반
       const scale = volumeToWidth(routeData.volume) * 0.5;
@@ -283,11 +363,13 @@ export function GlobeTradeRoutes({
   useEffect(() => {
     return () => {
       for (const mat of materialsRef.current) mat.dispose();
-      cargoGeo.dispose();
-      cargoMats.sea.dispose();
-      cargoMats.land.dispose();
+      // v23: dispose cached cargo geometries & materials
+      for (const geo of cargoGeosRef.current.values()) geo.dispose();
+      for (const mat of cargoMatsRef.current.values()) mat.dispose();
+      cargoGeosRef.current.clear();
+      cargoMatsRef.current.clear();
     };
-  }, [cargoGeo, cargoMats]);
+  }, []);
 
   return <group ref={groupRef} visible={visible} />;
 }

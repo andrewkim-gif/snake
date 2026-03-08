@@ -124,6 +124,9 @@ type TechTreeManager struct {
 
 	// External references
 	factionManager *FactionManager
+
+	// v18: EventLog callback for live news feed
+	OnTechCompleted func(factionName, techName, nodeID string)
 }
 
 // NewTechTreeManager creates a new tech tree manager.
@@ -262,6 +265,12 @@ func (ttm *TechTreeManager) InvestTech(factionID, nodeID string, techAmount int6
 			"node", nodeID,
 			"name", def.Name,
 		)
+
+		// v18: Notify EventLog for live news feed
+		if ttm.OnTechCompleted != nil {
+			go ttm.OnTechCompleted(factionID, def.Name, nodeID)
+		}
+
 		return 1.0, true, nil
 	}
 

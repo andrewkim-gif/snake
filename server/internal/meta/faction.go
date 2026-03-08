@@ -98,6 +98,9 @@ type FactionManager struct {
 	userFaction map[string]string        // userID → factionID
 
 	store FactionStore // optional persistence layer
+
+	// v18: EventLog callback for live news feed
+	OnFactionCreated func(name, tag, countryISO string)
 }
 
 // NewFactionManager creates a new FactionManager.
@@ -160,6 +163,11 @@ func (fm *FactionManager) CreateFaction(id, name, tag, color, leaderID string) (
 
 	// Write-through to DB
 	go fm.persistFactionAsync(id)
+
+	// v18: Notify EventLog for live news feed
+	if fm.OnFactionCreated != nil {
+		go fm.OnFactionCreated(name, tag, "")
+	}
 
 	return faction, nil
 }

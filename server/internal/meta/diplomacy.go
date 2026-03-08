@@ -131,6 +131,10 @@ type DiplomacyEngine struct {
 
 	// Persistence
 	store DiplomacyStore
+
+	// v18: EventLog callbacks for live news feed
+	OnTreatySigned func(factionA, factionB, treatyType string)
+	OnTreatyBroken func(breaker, otherFaction, treatyType string)
 }
 
 // NewDiplomacyEngine creates a new diplomacy engine.
@@ -199,6 +203,11 @@ func (de *DiplomacyEngine) AcceptTreaty(treatyID string) error {
 
 	slog.Info("treaty accepted", "id", treatyID, "type", treaty.Type)
 
+	// v18: Notify EventLog for live news feed
+	if de.OnTreatySigned != nil {
+		go de.OnTreatySigned(treaty.FactionA, treaty.FactionB, string(treaty.Type))
+	}
+
 	go de.persistTreatyAsync(treatyID)
 
 	return nil
@@ -222,6 +231,15 @@ func (de *DiplomacyEngine) BreakTreaty(treatyID, brokenBy string) error {
 	treaty.BrokenBy = brokenBy
 
 	slog.Info("treaty broken", "id", treatyID, "by", brokenBy)
+
+	// v18: Notify EventLog for live news feed
+	if de.OnTreatyBroken != nil {
+		otherFaction := treaty.FactionA
+		if brokenBy == treaty.FactionA {
+			otherFaction = treaty.FactionB
+		}
+		go de.OnTreatyBroken(brokenBy, otherFaction, string(treaty.Type))
+	}
 
 	return nil
 }

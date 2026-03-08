@@ -24,7 +24,6 @@ const MIN_PITCH = -0.2;        // 위를 약간 볼 수 있음 (rad)
 const MAX_PITCH = 1.2;         // 거의 탑다운 (rad)
 const DEFAULT_PITCH = 0.4;     // 기본 각도
 const TRACK_SMOOTH = 8;        // 추적 lerp 속도
-const MOUSE_SENSITIVITY = 0.003;
 const MIN_DISTANCE = 4;
 const MAX_DISTANCE = 20;
 const ZOOM_SPEED = 1.0;

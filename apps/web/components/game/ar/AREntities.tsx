@@ -16,7 +16,7 @@
  * useFrame priority=0
  */
 
-import { useRef, useMemo, useState, useCallback, memo } from 'react';
+import { useRef, useMemo, useState, useEffect, memo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { AREnemyNet, ARCrystalNet, ARState, AREnemyType, ARMinibossType, AREliteAffix } from '@/lib/3d/ar-types';
@@ -24,6 +24,8 @@ import { ENEMY_COLORS } from '@/lib/3d/ar-types';
 import { MC_BASE_Y } from '@/lib/3d/mc-types';
 import { getArenaTerrainHeight } from '@/lib/3d/mc-noise';
 import { AREnemyModel } from './AREnemyModel';
+import { ARDeathEffect } from './ARDeathEffect';
+import type { DeathEventData } from './ARDeathEffect';
 
 const MAX_ENEMIES = 200;
 const MAX_CRYSTALS = 300;
@@ -165,6 +167,13 @@ function AREntitiesInner({ arStateRef, playerPos, arenaSeed, flattenVariance = 3
   // 근거리 적 ID 세트 (InstancedMesh에서 제외할 적)
   const nearEnemyIdsRef = useRef<Set<string>>(new Set());
 
+  // 사망 이펙트 큐
+  const deathQueueRef = useRef<DeathEventData[]>([]);
+  // 이전 프레임 적 ID 세트 (사망 감지용)
+  const prevEnemyIdsRef = useRef<Map<string, { x: number; z: number; type: AREnemyType }>>(new Map());
+  // 현재 프레임 적 ID 세트 (재사용 — per-frame alloc 방지)
+  const currentEnemyIdsRef = useRef<Set<string>>(new Set());
+
   // 적 머티리얼 (InstancedMesh에서 instanceColor 사용)
   const enemyMat = useMemo(
     () =>
@@ -184,6 +193,14 @@ function AREntitiesInner({ arStateRef, playerPos, arenaSeed, flattenVariance = 3
       }),
     [],
   );
+
+  // Dispose on unmount
+  useEffect(() => {
+    return () => {
+      enemyMat.dispose();
+      crystalMat.dispose();
+    };
+  }, [enemyMat, crystalMat]);
 
   // PERF: 단일 useFrame으로 통합 (적 LOD 분류 + InstancedMesh + 크리스탈)
   useFrame(() => {
@@ -282,6 +299,33 @@ function AREntitiesInner({ arStateRef, playerPos, arenaSeed, flattenVariance = 3
         const grp = slotGroups[i].current;
         if (grp) grp.visible = false;
       }
+    }
+
+    // ── 사망 감지: 이전 프레임에 있던 적이 사라졌으면 사망 이펙트 트리거 ──
+    const currentIds = currentEnemyIdsRef.current;
+    currentIds.clear(); // 재사용 (per-frame alloc 방지)
+    for (let i = 0; i < maxCount; i++) {
+      const e = enemies[i];
+      currentIds.add(e.id);
+    }
+    const prevMap = prevEnemyIdsRef.current;
+    for (const [id, data] of prevMap) {
+      if (!currentIds.has(id)) {
+        // 적이 사라짐 → 사망 이펙트
+        const terrainY = getArenaTerrainHeight(data.x, data.z, arenaSeed, flattenVariance);
+        deathQueueRef.current.push({
+          x: data.x,
+          y: terrainY - MC_BASE_Y + 0.5,
+          z: data.z,
+          enemyType: data.type,
+        });
+      }
+    }
+    // 현재 프레임 적 ID 저장
+    prevMap.clear();
+    for (let i = 0; i < maxCount; i++) {
+      const e = enemies[i];
+      prevMap.set(e.id, { x: e.x, z: e.z, type: e.type });
     }
 
     // ── 1Hz 리렌더 트리거 (슬롯 타입/속성 변경 반영) ──
@@ -421,6 +465,9 @@ function AREntitiesInner({ arStateRef, playerPos, arenaSeed, flattenVariance = 3
       >
         <octahedronGeometry args={[0.2, 0]} />
       </instancedMesh>
+
+      {/* 사망 파편 이펙트 */}
+      <ARDeathEffect deathQueueRef={deathQueueRef} />
     </>
   );
 }

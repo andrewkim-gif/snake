@@ -27,12 +27,23 @@ const SLASH_DURATION = 0.2; // 초
 // Slash 이펙트 데이터
 // ============================================================
 
+// 무기 타입별 슬래시 색상
+const SLASH_COLORS: Record<string, number> = {
+  fire: 0xff6600,
+  ice: 0x4fc3f7,
+  lightning: 0xffeb3b,
+  poison: 0x4caf50,
+  dark: 0x9c27b0,
+  default: 0xffffff,
+};
+
 interface SlashEffect {
   x: number;
   z: number;
   rot: number;       // 방향 (라디안)
   startTime: number;  // performance.now()
   active: boolean;
+  color: number;     // emissive 색상 (무기 타입별)
 }
 
 // ============================================================
@@ -63,7 +74,7 @@ function ARWeaponEffectsInner({
   // 슬래시 데이터 풀
   const slashesRef = useRef<SlashEffect[]>(
     Array.from({ length: MAX_SLASHES }, () => ({
-      x: 0, z: 0, rot: 0, startTime: 0, active: false,
+      x: 0, z: 0, rot: 0, startTime: 0, active: false, color: SLASH_COLORS.default,
     })),
   );
   const nextSlashIdx = useRef(0);
@@ -126,6 +137,11 @@ function ARWeaponEffectsInner({
       slash.rot = rot;
       slash.startTime = now;
       slash.active = true;
+      // 데미지 타입에서 슬래시 색상 결정
+      const dmgTypeToKey: Record<string, string> = {
+        physical: 'default', fire: 'fire', frost: 'ice', lightning: 'lightning', poison: 'poison', dark: 'dark',
+      };
+      slash.color = SLASH_COLORS[dmgTypeToKey[dmg.dmgType] ?? 'default'] ?? SLASH_COLORS.default;
       nextSlashIdx.current++;
     }
 
@@ -162,8 +178,9 @@ function ARWeaponEffectsInner({
       // 확대 애니메이션 (50% → 130% 크기)
       mesh.scale.setScalar(0.5 + progress * 0.8);
 
-      // 독립 opacity 페이드 아웃 (0.6 → 0)
+      // 독립 opacity 페이드 아웃 (0.6 → 0) + 무기 타입별 색상
       mat.opacity = 0.6 * (1 - progress);
+      mat.color.setHex(slash.color);
     }
   });
 

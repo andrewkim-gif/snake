@@ -97,6 +97,10 @@ type WarManager struct {
 	// External references (injected)
 	factionManager  *FactionManager
 	diplomacyEngine *DiplomacyEngine
+
+	// v18: EventLog callbacks for live news feed
+	OnWarDeclared func(attackerName, defenderName string)
+	OnWarEnded    func(winnerName, loserName, reason string)
 }
 
 // NewWarManager creates a new WarManager.
@@ -176,6 +180,11 @@ func (wm *WarManager) DeclareWar(attackerID, defenderID string) (*WarRecord, err
 		"defender", defenderID,
 		"prepEnds", war.PrepEndsAt,
 	)
+
+	// v18: Notify EventLog for live news feed
+	if wm.OnWarDeclared != nil {
+		go wm.OnWarDeclared(war.AttackerName, war.DefenderName)
+	}
 
 	return war, nil
 }
@@ -259,6 +268,15 @@ func (wm *WarManager) Surrender(warID, surrenderingFactionID string) error {
 		"winner", war.WinnerID,
 	)
 
+	// v18: Notify EventLog for live news feed
+	if wm.OnWarEnded != nil {
+		winnerName, loserName := war.AttackerName, war.DefenderName
+		if war.WinnerID == war.DefenderID {
+			winnerName, loserName = war.DefenderName, war.AttackerName
+		}
+		go wm.OnWarEnded(winnerName, loserName, string(WarEndSurrender))
+	}
+
 	return nil
 }
 
@@ -285,6 +303,12 @@ func (wm *WarManager) Ceasefire(warID, proposingFactionID string) error {
 	// No winner in ceasefire
 
 	slog.Info("war ended by ceasefire", "id", warID)
+
+	// v18: Notify EventLog for live news feed
+	if wm.OnWarEnded != nil {
+		go wm.OnWarEnded(war.AttackerName, war.DefenderName, string(WarEndCeasefire))
+	}
+
 	return nil
 }
 

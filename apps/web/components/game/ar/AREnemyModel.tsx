@@ -18,6 +18,8 @@ import { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { AREnemyType, ARMinibossType, AREliteAffix } from '@/lib/3d/ar-types';
+import { arenaTextureCache } from '@/lib/3d/ar-texture-loader';
+import type { MobTextureType, MinibossTextureType } from '@/lib/3d/ar-texture-loader';
 
 // ============================================================
 // 타입 정의
@@ -203,19 +205,42 @@ function computeMatProps(
 // 단일 파트 렌더러
 // ============================================================
 
-function EnemyPart({ pos, size, color, transparent, opacity, metalness, roughness, emissive, emissiveIntensity }: MobPart & Partial<MatProps>) {
+function EnemyPart({ pos, size, color, transparent, opacity, metalness, roughness, emissive, emissiveIntensity, map }: MobPart & Partial<MatProps> & { map?: THREE.Texture | null }) {
+  const needsStandard = (metalness ?? 0) > 0; // armored 어픽스: MeshStandardMaterial 필요
   return (
     <mesh position={pos}>
       <boxGeometry args={size} />
-      <meshStandardMaterial
-        color={color}
-        transparent={transparent ?? false}
-        opacity={opacity ?? 1}
-        metalness={metalness ?? 0}
-        roughness={roughness ?? 0.8}
-        emissive={emissive ?? '#000000'}
-        emissiveIntensity={emissiveIntensity ?? 0}
-      />
+      {needsStandard ? (
+        <meshStandardMaterial
+          map={map ?? undefined}
+          alphaTest={map ? 0.5 : undefined}
+          color={color}
+          transparent={transparent ?? false}
+          opacity={opacity ?? 1}
+          metalness={metalness ?? 0}
+          roughness={roughness ?? 0.8}
+          emissive={emissive ?? '#000000'}
+          emissiveIntensity={emissiveIntensity ?? 0}
+        />
+      ) : map ? (
+        <meshLambertMaterial
+          map={map}
+          alphaTest={0.5}
+          color={color}
+          transparent={transparent ?? false}
+          opacity={opacity ?? 1}
+          emissive={emissive ?? '#000000'}
+          emissiveIntensity={emissiveIntensity ?? 0}
+        />
+      ) : (
+        <meshLambertMaterial
+          color={color}
+          transparent={transparent ?? false}
+          opacity={opacity ?? 1}
+          emissive={emissive ?? '#000000'}
+          emissiveIntensity={emissiveIntensity ?? 0}
+        />
+      )}
     </mesh>
   );
 }
@@ -238,6 +263,21 @@ export function AREnemyModel({
   const shieldRef = useRef<THREE.Mesh>(null);
 
   const def = ENEMY_MOBS[type];
+
+  // 몬스터 텍스처 (프로시저럴 픽셀아트)
+  const faceTex = useMemo(() => {
+    if (isMiniboss && minibossType) {
+      return arenaTextureCache.getMiniboss(minibossType as MinibossTextureType);
+    }
+    return arenaTextureCache.getMobFace(type as MobTextureType);
+  }, [type, isMiniboss, minibossType]);
+
+  const bodyTex = useMemo(() => {
+    if (isMiniboss && minibossType) {
+      return arenaTextureCache.getMiniboss(minibossType as MinibossTextureType);
+    }
+    return arenaTextureCache.getMobBody(type as MobTextureType);
+  }, [type, isMiniboss, minibossType]);
 
   // 미니보스 스케일 오버라이드
   const finalScale = useMemo(() => {
@@ -290,46 +330,44 @@ export function AREnemyModel({
 
   return (
     <group ref={groupRef} position={position} scale={[finalScale, finalScale, finalScale]}>
-      {/* Body */}
-      <EnemyPart {...def.body} {...matBase} />
+      {/* Body — 텍스처 적용 */}
+      <EnemyPart {...def.body} {...matBase} map={bodyTex} />
 
-      {/* Head (with idle animation) */}
+      {/* Head (with idle animation) — 얼굴 텍스처 적용 */}
       {def.head && (
         <mesh ref={headRef} position={def.head.pos}>
           <boxGeometry args={def.head.size} />
-          <meshStandardMaterial
+          <meshLambertMaterial
+            map={faceTex}
+            alphaTest={0.5}
             color={colorOverride ?? def.head.color}
             transparent={matBase.transparent}
             opacity={matBase.opacity}
-            metalness={matBase.metalness}
-            roughness={matBase.roughness}
             emissive={matBase.emissive}
             emissiveIntensity={matBase.emissiveIntensity}
           />
         </mesh>
       )}
 
-      {/* Extras (arms, core, eyes 등) */}
+      {/* Extras (arms, core, eyes 등) — 몸통 텍스처 */}
       {def.extras.map((e, i) => (
         <EnemyPart
           key={`e${i}`}
           {...e}
-          metalness={matBase.metalness}
-          roughness={matBase.roughness}
           emissive={matBase.emissive}
           emissiveIntensity={matBase.emissiveIntensity}
+          map={bodyTex}
         />
       ))}
 
-      {/* Legs */}
+      {/* Legs — 몸통 텍스처 */}
       {def.legs.map((l, i) => (
         <EnemyPart
           key={`l${i}`}
           {...l}
-          metalness={matBase.metalness}
-          roughness={matBase.roughness}
           emissive={matBase.emissive}
           emissiveIntensity={matBase.emissiveIntensity}
+          map={bodyTex}
         />
       ))}
 
@@ -337,12 +375,10 @@ export function AREnemyModel({
       {showShield && (
         <mesh ref={shieldRef} position={[0, 0.5, 0]}>
           <sphereGeometry args={[0.8, 12, 8]} />
-          <meshStandardMaterial
+          <meshBasicMaterial
             color="#2196F3"
             transparent
             opacity={0.2}
-            emissive="#2196F3"
-            emissiveIntensity={0.3}
             side={THREE.DoubleSide}
           />
         </mesh>

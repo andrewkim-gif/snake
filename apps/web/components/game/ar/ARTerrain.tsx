@@ -12,6 +12,7 @@
  */
 
 import { useMemo, memo } from 'react';
+import { useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { ARTerrainTheme } from '@/lib/3d/ar-types';
 import { TERRAIN_VISUALS } from '@/lib/3d/ar-types';
@@ -22,13 +23,47 @@ interface ARTerrainProps {
   arenaRadius?: number;
 }
 
+// 테마별 바닥 텍스처 매핑
+const THEME_FLOOR_TEXTURES: Record<ARTerrainTheme, string> = {
+  urban: '/textures/blocks/cobblestone.png',
+  desert: '/textures/blocks/sand.png',
+  mountain: '/textures/blocks/stone.png',
+  forest: '/textures/blocks/grass_top_green.png',
+  arctic: '/textures/blocks/quartz_block_side.png',
+  island: '/textures/blocks/grass_block_side.png',
+};
+
+// 테마별 HemisphereLight 색온도
+const THEME_HEMISPHERE: Record<ARTerrainTheme, { sky: string; ground: string; intensity: number }> = {
+  urban: { sky: '#8899aa', ground: '#333333', intensity: 0.6 },
+  desert: { sky: '#FFD54F', ground: '#8B6914', intensity: 0.8 },
+  mountain: { sky: '#90CAF9', ground: '#5D4037', intensity: 0.5 },
+  forest: { sky: '#81C784', ground: '#33691E', intensity: 0.7 },
+  arctic: { sky: '#E3F2FD', ground: '#B0BEC5', intensity: 0.9 },
+  island: { sky: '#4FC3F7', ground: '#00796B', intensity: 0.7 },
+};
+
 function ARTerrainInner({ theme, arenaRadius = 40 }: ARTerrainProps) {
   const visual = TERRAIN_VISUALS[theme] || TERRAIN_VISUALS.urban;
   const ARENA_RADIUS = arenaRadius;
 
-  // 바닥 색상
+  // 바닥 MC 블록 텍스처 (RepeatWrapping 타일링)
+  const floorTexture = useLoader(THREE.TextureLoader, THEME_FLOOR_TEXTURES[theme] ?? THEME_FLOOR_TEXTURES.urban);
+  useMemo(() => {
+    floorTexture.wrapS = THREE.RepeatWrapping;
+    floorTexture.wrapT = THREE.RepeatWrapping;
+    floorTexture.repeat.set(ARENA_RADIUS * 0.8, ARENA_RADIUS * 0.8);
+    floorTexture.magFilter = THREE.NearestFilter;
+    floorTexture.minFilter = THREE.NearestFilter;
+    floorTexture.colorSpace = THREE.SRGBColorSpace;
+  }, [floorTexture, ARENA_RADIUS]);
+
+  // 바닥 색상 (폴백 및 틴트)
   const floorColor = useMemo(() => new THREE.Color(visual.floorColor), [visual.floorColor]);
   const fogColor = useMemo(() => new THREE.Color(visual.fogColor), [visual.fogColor]);
+
+  // HemisphereLight 설정
+  const hemiConfig = THEME_HEMISPHERE[theme] ?? THEME_HEMISPHERE.urban;
 
   // 장애물 생성 (결정론적 시드 기반)
   const obstacles = useMemo(() => {
@@ -50,7 +85,7 @@ function ARTerrainInner({ theme, arenaRadius = 40 }: ARTerrainProps) {
       obs.push({ x, z, w, h, d });
     }
     return obs;
-  }, [visual.obstacleCount, visual.obstacleType]);
+  }, [visual.obstacleCount, visual.obstacleType, ARENA_RADIUS]);
 
   // 장애물 색상
   const obstacleColor = useMemo(() => {
@@ -72,10 +107,10 @@ function ARTerrainInner({ theme, arenaRadius = 40 }: ARTerrainProps) {
 
   return (
     <group>
-      {/* 바닥 */}
+      {/* 바닥 — MC 블록 텍스처 타일링 */}
       <mesh rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[ARENA_RADIUS * 1.2, 64]} />
-        <meshLambertMaterial color={floorColor} />
+        <meshLambertMaterial map={floorTexture} color={floorColor} />
       </mesh>
 
       {/* 아레나 경계선 */}
@@ -122,8 +157,11 @@ function ARTerrainInner({ theme, arenaRadius = 40 }: ARTerrainProps) {
       {/* 안개 (R3F fog 대신 간단한 원형 페이드) */}
       <fog attach="fog" args={[fogColor, ARENA_RADIUS * 0.5, ARENA_RADIUS * 1.5]} />
 
-      {/* 환경광 */}
-      <ambientLight intensity={visual.ambientLight} />
+      {/* 환경광 — 테마별 HemisphereLight 색온도 */}
+      <hemisphereLight
+        args={[hemiConfig.sky, hemiConfig.ground, hemiConfig.intensity]}
+      />
+      <ambientLight intensity={visual.ambientLight * 0.4} />
       <directionalLight
         position={[20, 30, 10]}
         intensity={0.8}

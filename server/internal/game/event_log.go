@@ -25,6 +25,10 @@ const (
 	GEvtPolicyChanged     GlobalEventType = "policy_changed"
 	GEvtEpochComplete     GlobalEventType = "epoch_complete"
 	GEvtCapturePointTaken GlobalEventType = "capture_point_taken"
+	GEvtFactionCreated    GlobalEventType = "faction_created"
+	GEvtTechCompleted     GlobalEventType = "tech_completed"
+	GEvtTreatySigned      GlobalEventType = "treaty_signed"
+	GEvtTreatyBroken      GlobalEventType = "treaty_broken"
 )
 
 // GlobalEvent represents a single global news event for the ticker.
@@ -163,6 +167,43 @@ func (el *EventLog) LogCapturePointTaken(countryCode, countryName, nation, point
 		CountryCode: countryCode,
 		CountryName: countryName,
 		Nation:      nation,
+	})
+}
+
+// LogFactionCreated records a faction creation event.
+func (el *EventLog) LogFactionCreated(factionName, tag, countryCode string) {
+	el.addEvent(GlobalEvent{
+		Type:        GEvtFactionCreated,
+		Message:     fmt.Sprintf("[%s] %s faction established in %s", tag, factionName, countryCode),
+		CountryCode: countryCode,
+		Nation:      factionName,
+	})
+}
+
+// LogTechCompleted records a tech tree research completion event.
+func (el *EventLog) LogTechCompleted(factionName, techName, nodeID string) {
+	el.addEvent(GlobalEvent{
+		Type:    GEvtTechCompleted,
+		Message: fmt.Sprintf("%s completed research: %s", factionName, techName),
+		Nation:  factionName,
+	})
+}
+
+// LogTreatySigned records a treaty acceptance event.
+func (el *EventLog) LogTreatySigned(factionA, factionB, treatyType string) {
+	el.addEvent(GlobalEvent{
+		Type:    GEvtTreatySigned,
+		Message: fmt.Sprintf("%s signed %s treaty with %s", factionA, treatyType, factionB),
+		Nation:  factionA,
+	})
+}
+
+// LogTreatyBroken records a treaty violation event.
+func (el *EventLog) LogTreatyBroken(breaker, otherFaction, treatyType string) {
+	el.addEvent(GlobalEvent{
+		Type:    GEvtTreatyBroken,
+		Message: fmt.Sprintf("%s broke %s treaty with %s!", breaker, treatyType, otherFaction),
+		Nation:  breaker,
 	})
 }
 

@@ -28,6 +28,8 @@ import type { GameMode } from '@/providers/SocketProvider';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import type { MainTabKey } from '@/components/hub/PopupTabNav';
 import { ChevronRight, Minus, Settings, Globe } from 'lucide-react';
+import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
+import type { TradeRouteData } from '@/hooks/useSocket';
 
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
@@ -118,6 +120,65 @@ export default function Home() {
     respawn, chooseUpgrade, dismissSynergyPopup, setGameMode, switchArena,
     arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice,
   } = useSocketContext();
+
+  // ─── DEV: 테스트용 더미 전쟁/교역 이벤트 (1분 주기) ───
+  const [testWars, setTestWars] = useState<WarEffectData[]>([]);
+  const [testTrades, setTestTrades] = useState<TradeRouteData[]>([]);
+
+  useEffect(() => {
+    const SAMPLE_COUNTRIES = [
+      'USA', 'CHN', 'RUS', 'KOR', 'JPN', 'DEU', 'GBR', 'FRA', 'BRA', 'IND',
+      'AUS', 'CAN', 'MEX', 'ARG', 'EGY', 'NGA', 'ZAF', 'TUR', 'SAU', 'IDN',
+    ];
+    const pick = () => {
+      const a = SAMPLE_COUNTRIES[Math.floor(Math.random() * SAMPLE_COUNTRIES.length)];
+      let b = a;
+      while (b === a) b = SAMPLE_COUNTRIES[Math.floor(Math.random() * SAMPLE_COUNTRIES.length)];
+      return [a, b] as const;
+    };
+
+    const generate = () => {
+      // 1~2개 전쟁
+      const warCount = 1 + Math.floor(Math.random() * 2);
+      const wars: WarEffectData[] = [];
+      for (let i = 0; i < warCount; i++) {
+        const [att, def] = pick();
+        wars.push({
+          warId: `test-war-${Date.now()}-${i}`,
+          state: Math.random() > 0.3 ? 'active' : 'preparation',
+          attacker: att,
+          defender: def,
+          attackerScore: Math.floor(Math.random() * 100),
+          defenderScore: Math.floor(Math.random() * 100),
+        });
+      }
+      setTestWars(wars);
+
+      // 2~4개 교역 루트
+      const tradeCount = 2 + Math.floor(Math.random() * 3);
+      const trades: TradeRouteData[] = [];
+      for (let i = 0; i < tradeCount; i++) {
+        const [from, to] = pick();
+        trades.push({
+          from,
+          to,
+          type: Math.random() > 0.5 ? 'sea' : 'land',
+          volume: 10 + Math.floor(Math.random() * 90),
+          resource: ['oil', 'tech', 'food', 'metal'][Math.floor(Math.random() * 4)],
+          timestamp: Date.now(),
+        });
+      }
+      setTestTrades(trades);
+    };
+
+    generate(); // 즉시 1회 실행
+    const interval = setInterval(generate, 60_000); // 1분마다 갱신
+    return () => clearInterval(interval);
+  }, []);
+
+  // 서버 데이터가 있으면 서버 데이터, 없으면 테스트 데이터
+  const activeWars = uiState.wars.length > 0 ? uiState.wars : testWars;
+  const activeTrades = uiState.tradeRoutes.length > 0 ? uiState.tradeRoutes : testTrades;
 
   // 뉴스 피드 데이터 안정화 (매 렌더 .map() 재생성 방지)
   const newsItems = useMemo(() =>
@@ -330,8 +391,8 @@ export default function Home() {
         onSpectate={handleSpectate}
         bottomOffset={NEWS_FEED_HEIGHT}
         dominationStates={uiState.dominationStates}
-        wars={uiState.wars}
-        tradeRoutes={uiState.tradeRoutes}
+        wars={activeWars}
+        tradeRoutes={activeTrades}
         globalEvents={uiState.globalEvents}
         introActive={introActive}
         onIntroComplete={() => {}} // 카메라 완료는 GlobeIntroCamera가 처리

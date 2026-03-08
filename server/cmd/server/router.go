@@ -439,11 +439,13 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// ==============================================================
 	// Shared API Key Validator (Agent + Meta API DualAuth)
 	// ==============================================================
+	// API Key → deterministic UUID (v5) so DB UUID columns accept it
+	apiKeyNamespace := uuid.MustParse("a1b2c3d4-e5f6-7890-abcd-ef1234567890")
 	apiKeyValidator := func(_ context.Context, keyHash string) (string, error) {
 		if keyHash == "" {
 			return "", fmt.Errorf("empty key hash")
 		}
-		return "api_user_" + keyHash[:8], nil
+		return uuid.NewSHA1(apiKeyNamespace, []byte(keyHash)).String(), nil
 	}
 
 	// ==============================================================
@@ -651,7 +653,9 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// These aliases allow the frontend to work without URL changes.
 	// ==============================================================
 	r.Route("/api", func(r chi.Router) {
-		r.Use(auth.DualAuth(apiKeyValidator))
+		// NOTE: No DualAuth here — these are public read-only routes for the frontend.
+		// Write operations (POST/PUT/DELETE) on meta modules are already protected
+		// via /api/v11 DualAuth routes. Frontend only needs GET access.
 
 		// /api/factions → /api/v11/factions
 		if d.FactionManager != nil {

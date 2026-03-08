@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -422,6 +423,30 @@ func main() {
 			v14EventLog.LogWarEnded(winner, winner, loser, loser, event.Outcome)
 		}
 	}
+
+	// --- v18: Wire meta module EventLog callbacks for live news feed ---
+	factionManager.OnFactionCreated = func(name, tag, countryISO string) {
+		v14EventLog.LogFactionCreated(name, tag, countryISO)
+	}
+	diplomacyEngine.OnTreatySigned = func(factionA, factionB, treatyType string) {
+		v14EventLog.LogTreatySigned(factionA, factionB, treatyType)
+	}
+	diplomacyEngine.OnTreatyBroken = func(breaker, otherFaction, treatyType string) {
+		v14EventLog.LogTreatyBroken(breaker, otherFaction, treatyType)
+	}
+	techTreeManager.OnTechCompleted = func(factionName, techName, nodeID string) {
+		v14EventLog.LogTechCompleted(factionName, techName, nodeID)
+	}
+	warManager.OnWarDeclared = func(attackerName, defenderName string) {
+		v14EventLog.LogWarDeclared(attackerName, attackerName, defenderName, defenderName)
+	}
+	warManager.OnWarEnded = func(winnerName, loserName, reason string) {
+		v14EventLog.LogWarEnded(winnerName, winnerName, loserName, loserName, game.WarOutcomeTruce)
+	}
+	policyEngine.OnPolicyChanged = func(countryISO, factionID, policyCategory string, newValue float64) {
+		v14EventLog.LogPolicyChanged(countryISO, countryISO, factionID, policyCategory, fmt.Sprintf("%.2f", newValue))
+	}
+	slog.Info("v18 EventLog callbacks wired", "modules", []string{"faction", "diplomacy", "techTree", "war", "policy"})
 
 	// --- TokenRewardManager (blockchain token distribution) ---
 	// Initialize blockchain infra (optional, no-op if RPC unavailable)

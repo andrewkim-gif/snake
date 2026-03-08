@@ -16,7 +16,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MC_BASE_Y } from '@/lib/3d/mc-types';
 import { getArenaTerrainHeight } from '@/lib/3d/mc-noise';
-import { createHeadMaterials } from '@/lib/3d/cubeling-textures';
+import { createHeadMaterials, textureCacheManager } from '@/lib/3d/cubeling-textures';
 import { CHARACTER_APPEARANCE_MAP } from '@/lib/3d/ar-types';
 import type { ARCharacterType } from '@/lib/3d/ar-types';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
@@ -112,10 +112,30 @@ function ARPlayerInner({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [characterType]);
 
-  // 피부/옷 머티리얼
-  const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ color: appearance.bodyColor }), [characterType]); // eslint-disable-line react-hooks/exhaustive-deps
-  const limbMat = useMemo(() => new THREE.MeshLambertMaterial({ color: appearance.skinTone }), [characterType]); // eslint-disable-line react-hooks/exhaustive-deps -- 팔 = 피부톤
-  const legMat = useMemo(() => new THREE.MeshLambertMaterial({ color: appearance.legColor }), [characterType]); // eslint-disable-line react-hooks/exhaustive-deps
+  // 피부/옷 머티리얼 — body/arm/leg 패턴 텍스처 적용
+  const bodyPatternIdx = useMemo(() => {
+    // characterType → 패턴 인덱스 (0=solid, 1=striped, 2=dotted, 3=gradient, 4=checker, 5=camo, 6=zigzag, 7=heart)
+    const map: Record<string, number> = {
+      striker: 1, guardian: 4, pyro: 3, frost_mage: 2,
+      sniper: 5, gambler: 7, berserker: 6, shadow: 5,
+    };
+    return map[characterType ?? 'striker'] ?? 0;
+  }, [characterType]);
+
+  const bodyMat = useMemo(() => {
+    const tex = textureCacheManager.getBodyTexture(bodyPatternIdx);
+    return new THREE.MeshLambertMaterial({ map: tex, color: appearance.bodyColor });
+  }, [characterType, bodyPatternIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const limbMat = useMemo(() => {
+    const tex = textureCacheManager.getArmTexture(bodyPatternIdx);
+    return new THREE.MeshLambertMaterial({ map: tex, color: appearance.skinTone });
+  }, [characterType, bodyPatternIdx]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const legMat = useMemo(() => {
+    const tex = textureCacheManager.getLegTexture(bodyPatternIdx);
+    return new THREE.MeshLambertMaterial({ map: tex, color: appearance.legColor });
+  }, [characterType, bodyPatternIdx]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const auraMat = useMemo(
     () =>

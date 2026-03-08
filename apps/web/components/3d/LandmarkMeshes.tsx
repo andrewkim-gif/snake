@@ -72,28 +72,41 @@ const landmarkVertexShader = /* glsl */ `
 `;
 
 const landmarkFragmentShader = /* glsl */ `
-  uniform sampler2D uMap;   // atlas texture
+  uniform sampler2D uMap;   // atlas texture (sRGB)
   uniform vec3 uSunDir;     // 태양 방향 (정규화)
   varying vec3 vWorldNormal;
   varying vec2 vUv;
-  varying vec3 vColor;      // 면별 밝기
+  varying vec3 vColor;      // 면별 밝기 (AO)
 
   void main() {
     vec3 N = normalize(vWorldNormal);
     float NdotL = dot(N, uSunDir);
 
-    // 기본 디퓨즈 (태양 방향) — 낮면: 0.85~1.0, 밤면: ambient 0.15
-    float diffuse = max(NdotL, 0.0) * 0.85 + 0.15;
-
-    // 텍스처 + vertex color (면별 밝기)
+    // 텍스처 색상 (sRGB → 선형으로 근사 변환하여 라이팅 계산)
     vec4 texColor = texture2D(uMap, vUv);
-    vec3 color = texColor.rgb * vColor * diffuse;
+    vec3 albedo = pow(texColor.rgb, vec3(2.2));
 
-    // 야간 emissive: NdotL < 0 → 창문 불빛 (warm glow)
-    float nightFactor = smoothstep(0.1, -0.2, NdotL);
-    float windowLight = texColor.r * 0.3; // 밝은 텍셀만 발광
+    // 디퓨즈 라이팅 — 밝은 쪽 0.9, 어두운 쪽 ambient 0.25
+    float diffuse = max(NdotL, 0.0) * 0.65 + 0.25;
+
+    // 면별 AO (vertex color) — 부드럽게 적용 (0.5~1.0 → 0.7~1.0)
+    float ao = mix(0.7, 1.0, vColor.r);
+
+    // 최종 라이팅: 알베도 × 디퓨즈 × AO
+    vec3 color = albedo * diffuse * ao;
+
+    // 하늘빛 간접광 (태양 반대쪽에 은은한 파란 반사)
+    float skyFactor = max(-NdotL, 0.0) * 0.08;
+    color += albedo * vec3(0.5, 0.6, 0.9) * skyFactor;
+
+    // 야간 emissive: 밤면에서 창문 불빛 (따뜻한 글로우)
+    float nightFactor = smoothstep(0.1, -0.3, NdotL);
+    float windowLight = texColor.r * 0.25;
     vec3 emissive = vec3(1.0, 0.85, 0.5) * windowLight * nightFactor;
     color += emissive;
+
+    // 선형 → sRGB 변환 (감마 보정)
+    color = pow(color, vec3(1.0 / 2.2));
 
     gl_FragColor = vec4(color, texColor.a);
   }

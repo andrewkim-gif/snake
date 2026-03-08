@@ -1016,17 +1016,33 @@ export function useSocket() {
 
     // ─── v14: Global events (EventTicker / NewsFeed) ───
 
+    // v18: Batch global events with 500ms throttle to prevent UI jank
+    // (300-agent sim produces 2-3 events/sec → without throttle, 2-3 full React re-renders/sec)
+    let pendingEvents: Array<{ id: string; type: string; message: string; timestamp: number }> = [];
+    let flushTimer: ReturnType<typeof setTimeout> | null = null;
+    const FLUSH_INTERVAL = 500; // ms
+
+    const flushEvents = () => {
+      if (pendingEvents.length === 0) return;
+      const batch = pendingEvents;
+      pendingEvents = [];
+      flushTimer = null;
+      setUiState(prev => ({
+        ...prev,
+        globalEvents: [...prev.globalEvents, ...batch].slice(-50),
+      }));
+    };
+
     socket.on('global_event', (data: { type: string; message: string }) => {
-      const event = {
+      pendingEvents.push({
         id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         type: data.type,
         message: data.message,
         timestamp: Date.now(),
-      };
-      setUiState(prev => ({
-        ...prev,
-        globalEvents: [...prev.globalEvents, event].slice(-50), // 최근 50개만 유지
-      }));
+      });
+      if (!flushTimer) {
+        flushTimer = setTimeout(flushEvents, FLUSH_INTERVAL);
+      }
     });
 
     // ─── v14: Epoch scoreboard (전체 플레이어 데이터) ───
@@ -1039,6 +1055,9 @@ export function useSocket() {
     socket.connect(SERVER_URL);
 
     return () => {
+      // v18: Flush pending events and clear timer
+      if (flushTimer) clearTimeout(flushTimer);
+      flushEvents();
       socket.removeAllListeners();
       socket.disconnect();
       socketRef.current = null;

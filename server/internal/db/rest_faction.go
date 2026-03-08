@@ -83,7 +83,9 @@ func (r *RestFactionRepo) UpsertFactionMembers(ctx context.Context, factionID st
 		}
 	}
 
-	err = r.db.post(ctx, "/faction_members", payload, nil)
+	err = r.db.post(ctx, "/faction_members?on_conflict=faction_id,user_id", payload, map[string]string{
+		"Prefer": "resolution=merge-duplicates",
+	})
 	if err != nil {
 		return fmt.Errorf("insert members for %s: %w", factionID, err)
 	}

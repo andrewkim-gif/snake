@@ -168,11 +168,20 @@ export function WorldView({
   domStatesRef.current = dominationStates;
 
   // v14: Globe hover → GlobeHoverPanel data
+  // v25 fix: 동일 국가 재호버 시 setState 스킵 (무한 re-render 방지)
+  const lastHoverIsoRef = useRef<string | null>(null);
   const handleGlobeHover = useCallback((iso3: string | null, name: string | null) => {
     if (!iso3 || !name) {
-      setHoverVisible(false);
+      if (lastHoverIsoRef.current !== null) {
+        lastHoverIsoRef.current = null;
+        setHoverVisible(false);
+      }
       return;
     }
+    // 같은 국가면 setState 스킵
+    if (iso3 === lastHoverIsoRef.current) return;
+    lastHoverIsoRef.current = iso3;
+
     const cs = statesRef.current.get(iso3);
     const domState = domStatesRef.current?.get(iso3);
     setHoverData({

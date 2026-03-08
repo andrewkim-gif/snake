@@ -120,6 +120,9 @@ type PolicyEngine struct {
 	// Audit log of recent policy changes (ring buffer)
 	changeLog []PolicyChangeRecord
 	maxLog    int
+
+	// v18: EventLog callback for live news feed
+	OnPolicyChanged func(countryISO, factionID, policyCategory string, newValue float64)
 }
 
 // NewPolicyEngine creates a new policy engine.
@@ -238,6 +241,11 @@ func (pe *PolicyEngine) UpdatePolicy(iso3, userID string, policy PolicyType, val
 		"new", value,
 		"by", userID,
 	)
+
+	// v18: Notify EventLog for live news feed
+	if pe.OnPolicyChanged != nil {
+		go pe.OnPolicyChanged(iso3, factionID, string(policy), value)
+	}
 
 	return nil
 }

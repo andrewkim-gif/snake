@@ -110,6 +110,10 @@ import { ARStatusEffects } from '@/components/game/ar/ARStatusEffects';
 import { ARProjectiles } from '@/components/game/ar/ARProjectiles';
 import { ARWeaponEffects } from '@/components/game/ar/ARWeaponEffects';
 import { ARFieldItems } from '@/components/game/ar/ARFieldItems';
+// v25: 환경 파티클 + 투사체 트레일
+import { AREnvironmentFX } from '@/components/game/ar/AREnvironmentFX';
+import { ARProjectileTrails } from '@/components/game/ar/ARProjectileTrails';
+import type { ARTerrainTheme } from '@/lib/3d/ar-types';
 
 // v19 Phase 4: 게임 흐름 AR 컴포넌트
 import { ARCharacterSelect } from '@/components/game/ar/ARCharacterSelect';
@@ -203,6 +207,14 @@ function GameCanvas3DInner({
 
   // v19 Phase 2: AR-specific refs
   const arPlayerPosRef = useRef({ x: 0, y: 0, z: 0 });
+
+  // v25: 아레나 텍스처 프리로드
+  useEffect(() => {
+    if (!isArenaMode) return;
+    import('@/lib/3d/ar-texture-loader').then(({ arenaTextureCache }) => {
+      arenaTextureCache.preloadAll();
+    });
+  }, [isArenaMode]);
   // v24 Phase 3: 마지막 공격 시각 (공격 애니메이션 트리거용)
   const lastAttackTimeRef = useRef(0);
 
@@ -1013,6 +1025,21 @@ function GameCanvas3DInner({
                 flattenVariance={3}
               />
             )}
+
+            {/* v25: 투사체 트레일 (잔상 이펙트) */}
+            {arStateRef && (
+              <ARProjectileTrails
+                arStateRef={arStateRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
+              />
+            )}
+
+            {/* v25: 테마별 환경 파티클 (낙엽/눈/모래/물방울) */}
+            <AREnvironmentFX
+              theme={terrainTheme as ARTerrainTheme}
+              arenaRadius={arenaRadius}
+            />
           </group>
         ) : (
           <>
