@@ -3,6 +3,7 @@ package city
 import (
 	"fmt"
 	"log/slog"
+	"math/rand"
 	"sync"
 	"time"
 )
@@ -46,22 +47,25 @@ type CityCommand struct {
 
 // CityState is the serializable state sent to clients.
 type CityState struct {
-	ISO3       string              `json:"iso3"`
-	Tier       string              `json:"tier"`
-	Mode       ControlMode         `json:"mode"`
-	Buildings  []*Building         `json:"buildings"`
-	Resources  map[string]float64  `json:"resources"` // resource type → quantity
-	Treasury   float64             `json:"treasury"`
-	GDP        float64             `json:"gdp"`
-	Population int                 `json:"population"`
-	Happiness  float64             `json:"happiness"`
-	Military   float64             `json:"military"`
-	PowerGen   float64             `json:"powerGen"`
-	PowerUse   float64             `json:"powerUse"`
-	TaxRate    float64             `json:"taxRate"`
-	TickCount  uint64              `json:"tickCount"`
-	AtWar      bool                `json:"atWar"`
-	TradeRoutes []*TradeRoute      `json:"tradeRoutes"`
+	ISO3        string              `json:"iso3"`
+	Tier        string              `json:"tier"`
+	Mode        ControlMode         `json:"mode"`
+	Buildings   []*Building         `json:"buildings"`
+	Citizens    []CitizenSnapshot   `json:"citizens"`
+	Resources   map[string]float64  `json:"resources"` // resource type → quantity
+	Treasury    float64             `json:"treasury"`
+	GDP         float64             `json:"gdp"`
+	Population  int                 `json:"population"`
+	Happiness   float64             `json:"happiness"`
+	Military    float64             `json:"military"`
+	PowerGen    float64             `json:"powerGen"`
+	PowerUse    float64             `json:"powerUse"`
+	TaxRate     float64             `json:"taxRate"`
+	TickCount   uint64              `json:"tickCount"`
+	AtWar       bool                `json:"atWar"`
+	TradeRoutes []*TradeRoute       `json:"tradeRoutes"`
+	Employed    int                 `json:"employed"`
+	Unemployed  int                 `json:"unemployed"`
 }
 
 // CitySimEngine manages the simulation for a single country's city.
@@ -73,12 +77,13 @@ type CitySimEngine struct {
 	managingUser string // client ID when mode==ModePlayerManaged
 
 	// Core state
-	buildings   map[string]*Building
-	stockpile   Stockpile
-	treasury    float64
-	taxRate     float64
+	buildings    map[string]*Building
+	citizens     []*CitizenAgent
+	stockpile    Stockpile
+	treasury     float64
+	taxRate      float64
 	citizenCount int
-	happiness   float64
+	happiness    float64
 
 	// Sub-engines
 	production  *ProductionEngine
@@ -94,6 +99,7 @@ type CitySimEngine struct {
 	tickInterval time.Duration
 	lastTick     time.Time
 	lastStats    CityEconomyStats
+	rng          *rand.Rand
 
 	// Computed stats for Globe sync
 	gdp           float64
@@ -103,36 +109,54 @@ type CitySimEngine struct {
 
 // NewCitySimEngine creates a new city simulation engine for a country.
 func NewCitySimEngine(iso3, tier string) *CitySimEngine {
+	// Seed RNG from iso3 for reproducibility
+	seed := int64(0)
+	for _, c := range iso3 {
+		seed = seed*31 + int64(c)
+	}
+	rng := rand.New(rand.NewSource(seed))
+
+	citizenTarget := InitialCitizenCount(tier)
+	mapSize := mapSizeForTier(tier)
+
+	// Initialize citizens
+	citizens := make([]*CitizenAgent, citizenTarget)
+	for i := 0; i < citizenTarget; i++ {
+		citizens[i] = NewCitizen(rng, mapSize)
+	}
+
 	return &CitySimEngine{
 		iso3:         iso3,
 		tier:         tier,
 		mode:         ModeAI,
 		buildings:    make(map[string]*Building),
+		citizens:     citizens,
 		stockpile:    NewStockpile(),
 		treasury:     10000, // starting treasury
 		taxRate:      0.10,  // 10% default tax
-		citizenCount: initialPopulation(tier),
+		citizenCount: citizenTarget,
 		happiness:    70.0, // 0-100
 		production:   NewProductionEngine(),
 		tradeRoutes:  make([]*TradeRoute, 0),
 		tickInterval: 10 * time.Second,
 		lastTick:     time.Now(),
+		rng:          rng,
 	}
 }
 
-// initialPopulation returns starting population based on country tier.
-func initialPopulation(tier string) int {
+// mapSizeForTier returns the tilemap size for the tier.
+func mapSizeForTier(tier string) int {
 	switch tier {
 	case "S":
-		return 200
+		return 80
 	case "A":
-		return 150
+		return 60
 	case "B":
-		return 100
+		return 40
 	case "C":
-		return 75
+		return 30
 	default:
-		return 50
+		return 20
 	}
 }
 
@@ -176,7 +200,10 @@ func (e *CitySimEngine) FullTick() {
 	e.tickCount++
 	now := time.Now()
 
-	// Run the economy tick
+	// Step 1: Employment assignment (before economy tick so worker counts are accurate)
+	AssignCitizensToWorkplaces(e.citizens, e.buildings)
+
+	// Step 2: Run the economy tick
 	stats := RunEconomyTick(
 		e.buildings,
 		e.stockpile,
@@ -189,11 +216,21 @@ func (e *CitySimEngine) FullTick() {
 	e.lastStats = stats
 	e.gdp = stats.GDP
 
-	// Update happiness based on food satisfaction and services
-	e.updateHappiness(stats.FoodSatisfaction)
+	// Step 3: Citizen FSM tick — advance each citizen's behavior state
+	atWar := e.warMgr != nil && e.warMgr.IsAtWar(e.iso3)
+	for _, citizen := range e.citizens {
+		citizen.TickCitizen(e.buildings, e.rng)
+		citizen.ComputeHappiness(e.buildings, stats.FoodSatisfaction, atWar)
+	}
 
-	// Calculate military power from military buildings
+	// Step 4: Update city-level happiness from citizen average
+	e.updateHappinessFromCitizens()
+
+	// Step 5: Calculate military power from military buildings
 	e.militaryPower = e.computeMilitaryPower()
+
+	// Step 6: Pay citizen savings (salary → savings each tick)
+	e.payCitizenSalaries()
 
 	// Sync to world manager
 	if e.worldMgr != nil {
@@ -213,6 +250,7 @@ func (e *CitySimEngine) FullTick() {
 		"gdp", e.gdp,
 		"treasury", e.treasury,
 		"population", e.citizenCount,
+		"citizens", len(e.citizens),
 	)
 }
 
@@ -368,6 +406,16 @@ func (e *CitySimEngine) GetCityState() CityState {
 		buildings = append(buildings, b)
 	}
 
+	// Citizen snapshots for client rendering
+	citizenSnapshots := make([]CitizenSnapshot, len(e.citizens))
+	employed := 0
+	for i, c := range e.citizens {
+		citizenSnapshots[i] = c.Snapshot()
+		if c.IsEmployed() {
+			employed++
+		}
+	}
+
 	resources := make(map[string]float64, len(e.stockpile))
 	for k, v := range e.stockpile {
 		resources[string(k)] = v
@@ -385,6 +433,7 @@ func (e *CitySimEngine) GetCityState() CityState {
 		Tier:        e.tier,
 		Mode:        e.mode,
 		Buildings:   buildings,
+		Citizens:    citizenSnapshots,
 		Resources:   resources,
 		Treasury:    e.treasury,
 		GDP:         e.gdp,
@@ -397,10 +446,44 @@ func (e *CitySimEngine) GetCityState() CityState {
 		TickCount:   e.tickCount,
 		AtWar:       atWar,
 		TradeRoutes: e.tradeRoutes,
+		Employed:    employed,
+		Unemployed:  len(e.citizens) - employed,
+	}
+}
+
+// updateHappinessFromCitizens computes city-level happiness from citizen averages.
+func (e *CitySimEngine) updateHappinessFromCitizens() {
+	if len(e.citizens) == 0 {
+		return
+	}
+
+	var totalHappiness float64
+	for _, c := range e.citizens {
+		totalHappiness += c.OverallHappiness
+	}
+	newHappiness := totalHappiness / float64(len(e.citizens))
+
+	// Smooth transition: 30% new + 70% old (faster response than before)
+	e.happiness = e.happiness*0.7 + newHappiness*0.3
+	e.avgHappiness = e.happiness
+}
+
+// payCitizenSalaries transfers salary to citizen savings each tick.
+func (e *CitySimEngine) payCitizenSalaries() {
+	for _, c := range e.citizens {
+		if c.IsEmployed() {
+			c.Savings += c.Salary
+		}
+		// Citizens spend from savings (basic cost of living)
+		c.Savings -= 1.0
+		if c.Savings < 0 {
+			c.Savings = 0
+		}
 	}
 }
 
 // updateHappiness adjusts happiness based on food, services, and war status.
+// LEGACY: kept for LightTick (inactive cities without citizen FSM).
 func (e *CitySimEngine) updateHappiness(foodSatisfaction float64) {
 	// Base happiness from food satisfaction (0-40 points)
 	foodHappy := foodSatisfaction * 40

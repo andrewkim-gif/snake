@@ -14,6 +14,7 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { Application } from 'pixi.js';
 import { IsoTilemap } from './IsoTilemap';
+import { IsoCitizenLayer } from './IsoCitizenLayer';
 import {
   BUILDING_DEFS,
   TILE_DEFS,
@@ -21,6 +22,7 @@ import {
   type BuildingDef,
   type TileCoord,
 } from './types';
+import type { CitizenSnapshot } from '@agent-survivor/shared/types/city';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 
 // ─── Props ───
@@ -34,6 +36,8 @@ interface IsoCanvasProps {
   mapTier?: MapTier;
   /** Globe 복귀 콜백 */
   onBackToGlobe: () => void;
+  /** 시민 스냅샷 (city_state에서 2Hz로 수신) */
+  citizens?: CitizenSnapshot[];
 }
 
 export function IsoCanvas({
@@ -41,10 +45,12 @@ export function IsoCanvas({
   countryName,
   mapTier = 'C',
   onBackToGlobe,
+  citizens,
 }: IsoCanvasProps) {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
   const tilemapRef = useRef<IsoTilemap | null>(null);
+  const citizenLayerRef = useRef<IsoCitizenLayer | null>(null);
   const [selectedBuilding, setSelectedBuilding] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<{ tileX: number; tileY: number; tileType: string } | null>(null);
 
@@ -83,13 +89,21 @@ export function IsoCanvas({
       tilemapRef.current = tilemap;
       app.stage.addChild(tilemap.container);
 
+      // 시민 레이어 생성
+      const citizenLayer = new IsoCitizenLayer();
+      citizenLayerRef.current = citizenLayer;
+      tilemap.container.addChild(citizenLayer.container);
+
       // 초기 카메라 적용
       tilemap.applyCamera(app.screen.width, app.screen.height);
 
-      // 게임 루프: 카메라 업데이트
+      // 게임 루프: 카메라 + 시민 보간 업데이트
       app.ticker.add(() => {
         if (tilemapRef.current) {
           tilemapRef.current.applyCamera(app.screen.width, app.screen.height);
+        }
+        if (citizenLayerRef.current) {
+          citizenLayerRef.current.tick();
         }
       });
     };
@@ -98,6 +112,10 @@ export function IsoCanvas({
 
     return () => {
       destroyed = true;
+      if (citizenLayerRef.current) {
+        citizenLayerRef.current.destroy();
+        citizenLayerRef.current = null;
+      }
       if (tilemapRef.current) {
         tilemapRef.current.destroy();
         tilemapRef.current = null;
@@ -108,6 +126,13 @@ export function IsoCanvas({
       }
     };
   }, [countryIso3, mapTier]);
+
+  // ─── 시민 스냅샷 업데이트 (2Hz) ───
+  useEffect(() => {
+    if (citizenLayerRef.current && citizens && citizens.length > 0) {
+      citizenLayerRef.current.updateFromSnapshot(citizens);
+    }
+  }, [citizens]);
 
   // ─── 마우스 이벤트 핸들러 ───
 

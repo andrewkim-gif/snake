@@ -80,6 +80,40 @@ export interface TradeRoute {
   active: boolean;
 }
 
+// --- Citizen Types ---
+
+/** Citizen FSM states */
+export type CitizenFSMState =
+  | "idle"
+  | "commuting"
+  | "working"
+  | "shopping"
+  | "resting"
+  | "protesting";
+
+/** Citizen education levels */
+export type CitizenEducation = "uneducated" | "highschool" | "college";
+
+/** Lightweight citizen snapshot sent to clients via city_state (2Hz) */
+export interface CitizenSnapshot {
+  id: string;
+  tileX: number;
+  tileY: number;
+  state: CitizenFSMState;
+  education: CitizenEducation;
+  employed: boolean;
+}
+
+/** FSM state → color mapping for client rendering */
+export const CITIZEN_STATE_COLORS: Record<CitizenFSMState, number> = {
+  working:    0x3388ff, // blue
+  commuting:  0xffcc00, // yellow
+  shopping:   0x33cc33, // green
+  resting:    0x999999, // gray
+  protesting: 0xff3333, // red
+  idle:       0xffffff, // white
+};
+
 // --- City State (Server → Client, 2Hz) ---
 
 export type ControlMode = 0 | 1 | 2; // 0=AI, 1=PlayerManaged, 2=Spectated
@@ -89,6 +123,7 @@ export interface CityClientState {
   tier: string;
   mode: ControlMode;
   buildings: Building[];
+  citizens: CitizenSnapshot[];
   resources: Record<string, number>;
   treasury: number;
   gdp: number;
@@ -101,6 +136,8 @@ export interface CityClientState {
   tickCount: number;
   atWar: boolean;
   tradeRoutes: TradeRoute[];
+  employed: number;
+  unemployed: number;
 }
 
 // --- City Commands (Client → Server) ---
