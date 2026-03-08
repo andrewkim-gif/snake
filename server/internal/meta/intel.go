@@ -51,21 +51,21 @@ func DefaultMissionConfigs() map[MissionType]MissionConfig {
 		MissionScout: {
 			GoldCost:        50,
 			OilCost:         20,
-			Cooldown:        1 * time.Hour,
+			Cooldown:        5 * time.Minute,
 			BaseAccuracy:    0.80,
 			DetectionChance: 0.10,
 		},
 		MissionSabotage: {
 			GoldCost:        200,
 			OilCost:         50,
-			Cooldown:        4 * time.Hour,
+			Cooldown:        15 * time.Minute,
 			BaseAccuracy:    0.70,
 			DetectionChance: 0.30,
 			Duration:        5 * time.Minute, // affects next battle
 		},
 		MissionCounterIntel: {
 			TechCost: 100,
-			Cooldown: 6 * time.Hour,
+			Cooldown: 30 * time.Minute,
 			Duration: 24 * time.Hour,
 		},
 	}

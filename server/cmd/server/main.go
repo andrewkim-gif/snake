@@ -533,6 +533,37 @@ func main() {
 	tradeEngine.SetBroadcaster(&tradeBroadcasterAdapter{hub: hub})
 
 	// ================================================================
+	// 7d. v17 Phase 2: Economy engine dependency wiring
+	// ================================================================
+	// TradeEngine ← FactionManager, EconomyEngine, DiplomacyEngine
+	tradeEngine.SetFactionManager(factionManager)
+	slog.Info("wired", "engine", "TradeEngine.FactionManager")
+	tradeEngine.SetEconomyEngine(economyEngine)
+	slog.Info("wired", "engine", "TradeEngine.EconomyEngine")
+	tradeEngine.SetDiplomacyEngine(diplomacyEngine)
+	slog.Info("wired", "engine", "TradeEngine.DiplomacyEngine")
+
+	// EconomyEngine ← FactionManager, DiplomacyEngine
+	economyEngine.SetFactionManager(factionManager)
+	slog.Info("wired", "engine", "EconomyEngine.FactionManager")
+	economyEngine.SetDiplomacyEngine(diplomacyEngine)
+	slog.Info("wired", "engine", "EconomyEngine.DiplomacyEngine")
+
+	// IntelSystem ← FactionManager, TechTreeManager
+	intelSystem.SetFactionManager(factionManager)
+	slog.Info("wired", "engine", "IntelSystem.FactionManager")
+	intelSystem.SetTechTreeManager(techTreeManager)
+	slog.Info("wired", "engine", "IntelSystem.TechTreeManager")
+
+	// TechTreeManager ← FactionManager
+	techTreeManager.SetFactionManager(factionManager)
+	slog.Info("wired", "engine", "TechTreeManager.FactionManager")
+
+	// MercenaryMarket ← FactionManager
+	mercenaryMarket.SetFactionManager(factionManager)
+	slog.Info("wired", "engine", "MercenaryMarket.FactionManager")
+
+	// ================================================================
 	// 7b. Auto-initialize Season 1 if no season active (S45)
 	// ================================================================
 	if seasonEngine.GetCurrentSeason() == nil {
@@ -666,6 +697,26 @@ func main() {
 		slog.Info("v11 EconomyEngine starting")
 		economyEngine.Start(gCtx)
 		return nil
+	})
+
+	// --- v17 Economy maintenance (trade expiry + GDP rankings, every 5 minutes) ---
+	g.Go(func() error {
+		slog.Info("v17 economy maintenance starting (5m interval)")
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				expired := tradeEngine.ExpireOldOrders()
+				if expired > 0 {
+					slog.Info("trade orders expired", "count", expired)
+				}
+				gdpEngine.UpdateRankings()
+				slog.Debug("GDP rankings updated")
+			}
+		}
 	})
 
 	// --- v11 Season Engine (era transitions) ---
