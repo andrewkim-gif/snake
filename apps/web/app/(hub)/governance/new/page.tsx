@@ -2,16 +2,18 @@
 
 /**
  * /governance/new — 새 제안 작성 페이지
- * DashboardPage(maxWidth 700) + mock data 모듈 사용
+ * DashboardPage(maxWidth 700) + API 연동
  */
 
-import { Suspense, useCallback, useState } from 'react';
+import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { DashboardPage } from '@/components/hub';
-import { GOVERNANCE_COUNTRIES } from '@/lib/mock-data';
+import { fetchCountries, postCouncilProposal, CountryEconomy } from '@/lib/api-client';
+import { useApiData } from '@/hooks/useApiData';
+import { ServerRequired } from '@/components/ui/ServerRequired';
 import { Plus } from 'lucide-react';
 import type { ProposalType } from '@/components/governance/types';
 
@@ -20,25 +22,58 @@ const ProposalForm = dynamic(
   { ssr: false }
 );
 
+/** CountryEconomy -> country selection item */
+interface CountryItem {
+  iso3: string;
+  name: string;
+  symbol: string;
+}
+
+function toCountryItem(c: CountryEconomy): CountryItem {
+  return {
+    iso3: c.iso3,
+    name: c.iso3, // API에서 name이 없으므로 iso3 사용
+    symbol: `$${c.iso3}`,
+  };
+}
+
 function NewProposalPageInner() {
   const tGov = useTranslations('governance');
   const searchParams = useSearchParams();
   const router = useRouter();
   const countryParam = searchParams.get('country')?.toUpperCase() ?? '';
 
-  const [selectedCountry, setSelectedCountry] = useState(
-    GOVERNANCE_COUNTRIES.find((c) => c.iso3 === countryParam) ?? null
-  );
+  const { data: rawCountries, loading } = useApiData(() => fetchCountries());
+
+  const countries = useMemo(() => (rawCountries || []).map(toCountryItem), [rawCountries]);
+
+  const [selectedCountry, setSelectedCountry] = useState<CountryItem | null>(null);
   const [submitted, setSubmitted] = useState(false);
 
+  // countryParam이 있으면 countries 로드 후 자동 선택
+  useMemo(() => {
+    if (countryParam && countries.length > 0 && !selectedCountry) {
+      const found = countries.find((c) => c.iso3 === countryParam);
+      if (found) setSelectedCountry(found);
+    }
+  }, [countryParam, countries, selectedCountry]);
+
   const handleSubmit = useCallback(
-    (data: {
+    async (data: {
       iso3: string;
       title: string;
       description: string;
       proposalType: ProposalType;
     }) => {
-      console.log('[Governance] New proposal submitted:', data);
+      await postCouncilProposal({
+        iso3: data.iso3,
+        proposer: '', // 서버에서 세션 기반 할당
+        title: data.title,
+        description: data.description,
+        proposalType: data.proposalType,
+        startTime: new Date().toISOString(),
+        endTime: new Date(Date.now() + 86400 * 3 * 1000).toISOString(),
+      });
       setSubmitted(true);
       setTimeout(() => {
         router.push(`/governance?country=${data.iso3}`);
@@ -100,6 +135,14 @@ function NewProposalPageInner() {
     );
   }
 
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
+        Loading countries...
+      </div>
+    );
+  }
+
   return (
     <DashboardPage
       icon={Plus}
@@ -141,7 +184,7 @@ function NewProposalPageInner() {
               gap: '8px',
             }}
           >
-            {GOVERNANCE_COUNTRIES.map((country) => (
+            {countries.map((country) => (
               <button
                 key={country.iso3}
                 onClick={() => setSelectedCountry(country)}
@@ -234,21 +277,23 @@ function NewProposalPageInner() {
 
 export default function NewProposalPage() {
   return (
-    <Suspense
-      fallback={
-        <div
-          style={{
-            padding: '40px',
-            textAlign: 'center',
-            color: SK.textSecondary,
-            fontFamily: bodyFont,
-          }}
-        >
-          …
-        </div>
-      }
-    >
-      <NewProposalPageInner />
-    </Suspense>
+    <ServerRequired>
+      <Suspense
+        fallback={
+          <div
+            style={{
+              padding: '40px',
+              textAlign: 'center',
+              color: SK.textSecondary,
+              fontFamily: bodyFont,
+            }}
+          >
+            ...
+          </div>
+        }
+      >
+        <NewProposalPageInner />
+      </Suspense>
+    </ServerRequired>
   );
 }

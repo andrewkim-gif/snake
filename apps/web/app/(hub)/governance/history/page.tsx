@@ -2,7 +2,7 @@
 
 /**
  * /governance/history — 투표 이력 페이지
- * DashboardPage + FilterBar + mock data 모듈 사용
+ * DashboardPage + FilterBar + API 연동
  */
 
 import { useState, useMemo, Suspense } from 'react';
@@ -11,8 +11,11 @@ import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { DashboardPage, FilterBar, CountryFilterBadge } from '@/components/hub';
-import { MOCK_VOTE_HISTORY } from '@/lib/mock-data';
+import { fetchCouncilVotes, VoteRecord } from '@/lib/api-client';
+import { useApiData } from '@/hooks/useApiData';
+import { ServerRequired } from '@/components/ui/ServerRequired';
 import { History, ThumbsUp, ThumbsDown, Coins } from 'lucide-react';
+import type { VoteHistoryEntry } from '@/components/governance/types';
 
 const VoteHistory = dynamic(
   () => import('@/components/governance/VoteHistory'),
@@ -21,15 +24,34 @@ const VoteHistory = dynamic(
 
 type VoteFilter = 'all' | 'for' | 'against';
 
+/** API VoteRecord -> local VoteHistoryEntry 타입 변환 */
+function toVoteHistoryEntry(vr: VoteRecord): VoteHistoryEntry {
+  return {
+    proposalId: Number(vr.proposalId) || 0,
+    title: vr.title ?? '',
+    iso3: vr.iso3 ?? '',
+    support: vr.support ?? false,
+    quadraticWeight: vr.quadraticWeight ?? 0,
+    tokensUsed: String(vr.tokensUsed ?? 0),
+    timestamp: vr.timestamp ? Math.floor(new Date(vr.timestamp).getTime() / 1000) : 0,
+  };
+}
+
 function VoteHistoryPageInner() {
   const tGov = useTranslations('governance');
   const searchParams = useSearchParams();
   const countryCode = searchParams.get('country');
 
+  const { data: rawVotes, loading } = useApiData(
+    () => fetchCouncilVotes(countryCode?.toUpperCase()),
+  );
+
+  const voteHistory = useMemo(() => (rawVotes || []).map(toVoteHistoryEntry), [rawVotes]);
+
   const [voteFilter, setVoteFilter] = useState<VoteFilter>('all');
 
   const filteredEntries = useMemo(() => {
-    let list = MOCK_VOTE_HISTORY;
+    let list = voteHistory;
     if (countryCode) {
       list = list.filter((e) => e.iso3 === countryCode.toUpperCase());
     }
@@ -39,23 +61,31 @@ function VoteHistoryPageInner() {
       list = list.filter((e) => !e.support);
     }
     return list;
-  }, [countryCode, voteFilter]);
+  }, [voteHistory, countryCode, voteFilter]);
 
   const stats = useMemo(() => {
     const all = countryCode
-      ? MOCK_VOTE_HISTORY.filter((e) => e.iso3 === countryCode.toUpperCase())
-      : MOCK_VOTE_HISTORY;
+      ? voteHistory.filter((e) => e.iso3 === countryCode.toUpperCase())
+      : voteHistory;
     const forCount = all.filter((e) => e.support).length;
     const againstCount = all.filter((e) => !e.support).length;
     const totalTokens = all.reduce((sum, e) => sum + Number(e.tokensUsed), 0);
     return { total: all.length, forCount, againstCount, totalTokens };
-  }, [countryCode]);
+  }, [voteHistory, countryCode]);
 
   const filterOptions: Array<{ key: VoteFilter; label: string }> = [
     { key: 'all', label: tGov('all') },
     { key: 'for', label: tGov('for') },
     { key: 'against', label: tGov('against') },
   ];
+
+  if (loading) {
+    return (
+      <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
+        Loading vote history...
+      </div>
+    );
+  }
 
   return (
     <DashboardPage
@@ -103,14 +133,16 @@ function VoteHistoryPageInner() {
 
 export default function VoteHistoryPage() {
   return (
-    <Suspense
-      fallback={
-        <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
-          …
-        </div>
-      }
-    >
-      <VoteHistoryPageInner />
-    </Suspense>
+    <ServerRequired>
+      <Suspense
+        fallback={
+          <div style={{ padding: '40px', textAlign: 'center', color: SK.textSecondary, fontFamily: bodyFont }}>
+            ...
+          </div>
+        }
+      >
+        <VoteHistoryPageInner />
+      </Suspense>
+    </ServerRequired>
   );
 }
