@@ -86,9 +86,8 @@ export function WorldView({
     return () => window.removeEventListener('mousemove', handleMouseMove);
   }, []);
 
-  // 서버 데이터 없으면 GeoJSON에서 fallback 국가 데이터 생성
+  // GeoJSON에서 기본 국가 데이터 항상 로드 (이름, 좌표, 리소스 등 정적 필드)
   useEffect(() => {
-    if (countryStates && countryStates.size > 0) return;
     loadGeoJSON().then((data) => {
       const map = new Map<string, CountryClientState>();
       data.features
@@ -101,12 +100,41 @@ export function WorldView({
         });
       setFallbackStates(map);
     }).catch(console.error);
-  }, [countryStates]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  const states = useMemo(
-    () => (countryStates && countryStates.size > 0) ? countryStates : fallbackStates,
-    [countryStates, fallbackStates],
-  );
+  // GeoJSON 기반 + 서버 동적 데이터 병합
+  const states = useMemo(() => {
+    // fallback이 아직 로드 안 됐으면 서버 데이터라도 사용
+    if (fallbackStates.size === 0) {
+      return countryStates ?? new Map<string, CountryClientState>();
+    }
+    // 서버 데이터가 없으면 fallback만 사용
+    if (!countryStates || countryStates.size === 0) {
+      return fallbackStates;
+    }
+    // 병합: GeoJSON 정적 데이터 기반 + 서버 동적 필드 덮어쓰기
+    const merged = new Map(fallbackStates);
+    for (const [iso3, serverState] of countryStates) {
+      const base = merged.get(iso3);
+      if (base) {
+        // 정적 필드(name, continent, resources, lat/lng 등)는 GeoJSON 유지
+        // 동적 필드(battleStatus, activeAgents, sovereignFaction 등)만 서버에서 업데이트
+        merged.set(iso3, {
+          ...base,
+          battleStatus: serverState.battleStatus,
+          activeAgents: serverState.activeAgents,
+          sovereignFaction: serverState.sovereignFaction,
+          sovereigntyLevel: serverState.sovereigntyLevel,
+          maxAgents: serverState.maxAgents || base.maxAgents,
+          population: serverState.population || base.population,
+        });
+      } else {
+        merged.set(iso3, serverState);
+      }
+    }
+    return merged;
+  }, [countryStates, fallbackStates]);
 
   const handleCountryClick = useCallback((iso3: string, _name: string) => {
     setSelectedCountry(iso3);

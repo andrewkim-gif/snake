@@ -787,7 +787,7 @@ func (te *TradeEngine) TradeRoutes(fm *FactionManager) chi.Router {
 
 	// Authenticated: orders
 	r.Group(func(r chi.Router) {
-		r.Use(auth.JWTAuth)
+		r.Use(auth.RequireAuth)
 		r.Post("/orders", te.handlePlaceOrder(fm))
 		r.Delete("/orders/{orderID}", te.handleCancelOrder(fm))
 		r.Get("/orders/my", te.handleGetMyOrders(fm))

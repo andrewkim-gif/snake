@@ -328,7 +328,7 @@ func (ttm *TechTreeManager) TechTreeRoutes(fm *FactionManager) chi.Router {
 
 	// Authenticated
 	r.Group(func(r chi.Router) {
-		r.Use(auth.JWTAuth)
+		r.Use(auth.RequireAuth)
 		r.Get("/research/{factionID}", ttm.handleGetResearch)
 		r.Post("/invest", ttm.handleInvest(fm))
 	})

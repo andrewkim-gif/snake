@@ -797,6 +797,7 @@ func TickProjectiles(
 				Amount:    finalDmg,
 				CritCount: critCount,
 				DmgType:   p.DmgType,
+				SourceID:  p.OwnerID,
 				X:         e.Pos.X,
 				Z:         e.Pos.Z,
 			}
@@ -866,6 +867,7 @@ func projectileAOEHit(
 			Amount:    finalDmg,
 			CritCount: critCount,
 			DmgType:   p.DmgType,
+			SourceID:  p.OwnerID,
 			X:         e.Pos.X,
 			Z:         e.Pos.Z,
 		}

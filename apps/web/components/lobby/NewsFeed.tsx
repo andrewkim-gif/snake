@@ -6,7 +6,7 @@
  * i18n: next-intl 기반 다국어 지원
  */
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 
@@ -143,85 +143,92 @@ export function NewsFeed({
   onToggleExpand,
 }: NewsFeedProps) {
   const tNews = useTranslations('news');
-  const [internalNews, setInternalNews] = useState<NewsItem[]>([]);
   const tickerRef = useRef<HTMLDivElement>(null);
+  const offsetRef = useRef(0);
+  const demoInitRef = useRef(false);
+  const [internalNews, setInternalNews] = useState<NewsItem[]>([]);
 
-  // 뉴스 소스 결정 (외부 또는 데모)
-  const allNews = externalNews && externalNews.length > 0 ? externalNews : internalNews;
+  // 외부 뉴스가 실제로 있는지 안정적으로 판단 (빈 배열 ≠ 유효 데이터)
+  const hasExternalNews = !!(externalNews && externalNews.length > 0);
+  const allNews = hasExternalNews ? externalNews : internalNews;
 
-  // 데모 뉴스 초기화 (i18n 적용)
+  // 데모 뉴스 초기화 — 한 번만 실행 (tNews 변경에 재실행 안 함)
   useEffect(() => {
-    if (!externalNews || externalNews.length === 0) {
-      const now = Date.now();
-      setInternalNews([
-        {
-          id: 'demo-1',
-          type: 'sovereignty_change',
-          headline: tNews('demoSovereignty'),
-          countryISO: 'KOR',
-          factionName: 'Phoenix Coalition',
-          timestamp: now - 120000,
-        },
-        {
-          id: 'demo-2',
-          type: 'battle_start',
-          headline: tNews('demoBattleStart'),
-          countryISO: 'DEU',
-          timestamp: now - 240000,
-        },
-        {
-          id: 'demo-3',
-          type: 'war_declared',
-          headline: tNews('demoWarDeclared'),
-          factionName: 'Iron Wolves',
-          timestamp: now - 480000,
-        },
-        {
-          id: 'demo-4',
-          type: 'economy_event',
-          headline: tNews('demoEconomySurge'),
-          countryISO: 'SAU',
-          timestamp: now - 600000,
-        },
-        {
-          id: 'demo-5',
-          type: 'treaty_signed',
-          headline: tNews('demoTreatySigned'),
-          timestamp: now - 900000,
-        },
-        {
-          id: 'demo-6',
-          type: 'battle_end',
-          headline: tNews('demoBattleWon'),
-          countryISO: 'JPN',
-          factionName: 'Phoenix Coalition',
-          timestamp: now - 1200000,
-        },
-      ]);
-    }
-  }, [externalNews, tNews]);
+    if (hasExternalNews || demoInitRef.current) return;
+    demoInitRef.current = true;
+    const now = Date.now();
+    setInternalNews([
+      {
+        id: 'demo-1',
+        type: 'sovereignty_change',
+        headline: tNews('demoSovereignty'),
+        countryISO: 'KOR',
+        factionName: 'Phoenix Coalition',
+        timestamp: now - 120000,
+      },
+      {
+        id: 'demo-2',
+        type: 'battle_start',
+        headline: tNews('demoBattleStart'),
+        countryISO: 'DEU',
+        timestamp: now - 240000,
+      },
+      {
+        id: 'demo-3',
+        type: 'war_declared',
+        headline: tNews('demoWarDeclared'),
+        factionName: 'Iron Wolves',
+        timestamp: now - 480000,
+      },
+      {
+        id: 'demo-4',
+        type: 'economy_event',
+        headline: tNews('demoEconomySurge'),
+        countryISO: 'SAU',
+        timestamp: now - 600000,
+      },
+      {
+        id: 'demo-5',
+        type: 'treaty_signed',
+        headline: tNews('demoTreatySigned'),
+        timestamp: now - 900000,
+      },
+      {
+        id: 'demo-6',
+        type: 'battle_end',
+        headline: tNews('demoBattleWon'),
+        countryISO: 'JPN',
+        factionName: 'Phoenix Coalition',
+        timestamp: now - 1200000,
+      },
+    ]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hasExternalNews]);
 
-  // 티커 스크롤 애니메이션
+  // 뉴스 아이템 개수 (effect 의존성 안정화용)
+  const newsCount = allNews.length;
+
+  // 티커 스크롤 애니메이션 — offset을 ref로 유지하여 재시작 방지
   useEffect(() => {
-    if (!tickerRef.current || expanded) return;
+    if (!tickerRef.current || expanded || newsCount === 0) return;
 
     const el = tickerRef.current;
     let animFrame: number;
-    let offset = 0;
     const speed = 0.5; // px per frame
 
     const animate = () => {
-      offset += speed;
-      if (offset >= el.scrollWidth / 2) {
-        offset = 0;
+      offsetRef.current += speed;
+      const halfWidth = el.scrollWidth / 2;
+      if (halfWidth > 0 && offsetRef.current >= halfWidth) {
+        offsetRef.current = 0;
       }
-      el.style.transform = `translateX(-${offset}px)`;
+      el.style.transform = `translateX(-${offsetRef.current}px)`;
       animFrame = requestAnimationFrame(animate);
     };
 
     animFrame = requestAnimationFrame(animate);
     return () => cancelAnimationFrame(animFrame);
-  }, [allNews, expanded]);
+  }, [newsCount, expanded]);
 
   // 확장 뷰 (아카이브)
   if (expanded) {

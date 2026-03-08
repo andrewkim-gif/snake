@@ -11,7 +11,7 @@
  * useFrame priority=0 (auto-render 유지)
  */
 
-import { useRef, useMemo, memo } from 'react';
+import { useRef, useMemo, memo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
@@ -81,6 +81,18 @@ function ARPlayerInner({
 
   // 오라 지오메트리
   const auraGeo = useMemo(() => new THREE.RingGeometry(0, attackRange, 64), [attackRange]);
+
+  // v19 Phase 5: Dispose geometry/material on unmount (메모리 누수 방지)
+  useEffect(() => {
+    return () => {
+      headMat.dispose();
+      bodyMat.dispose();
+      limbMat.dispose();
+      legMat.dispose();
+      auraMat.dispose();
+      auraGeo.dispose();
+    };
+  }, [headMat, bodyMat, limbMat, legMat, auraMat, auraGeo]);
 
   // 애니메이션
   useFrame((_, delta) => {

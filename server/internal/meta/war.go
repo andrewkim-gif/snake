@@ -481,7 +481,7 @@ func (wm *WarManager) GetActiveSiegesForWar(warID string) []*SiegeRecord {
 // WarRoutes returns a chi.Router with war HTTP endpoints.
 func (wm *WarManager) WarRoutes() chi.Router {
 	r := chi.NewRouter()
-	r.Use(auth.JWTAuth)
+	r.Use(auth.RequireAuth)
 
 	r.Post("/declare", wm.handleDeclareWar)
 	r.Post("/{warID}/surrender", wm.handleSurrender)

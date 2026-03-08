@@ -191,6 +191,7 @@ export interface ARState {
   wave: number;
   terrain?: ARTerrainTheme;
   tier?: ARCountryTier;
+  arenaRadius: number;  // v19: current arena radius for client rendering
   players: ARPlayerNet[];
   enemies: AREnemyNet[];
   xpCrystals: ARCrystalNet[];

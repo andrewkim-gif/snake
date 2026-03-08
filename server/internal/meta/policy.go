@@ -305,7 +305,7 @@ func (pe *PolicyEngine) PolicyRoutes() chi.Router {
 
 	// Authenticated: set policy
 	r.Group(func(r chi.Router) {
-		r.Use(auth.JWTAuth)
+		r.Use(auth.RequireAuth)
 		r.Put("/{countryISO}", pe.handleSetPolicy)
 		r.Patch("/{countryISO}", pe.handleUpdateSinglePolicy)
 	})

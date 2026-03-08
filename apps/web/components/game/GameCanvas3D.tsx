@@ -92,7 +92,7 @@ import { ARHUD } from '@/components/game/ar/ARHUD';
 import { ARMinimap } from '@/components/game/ar/ARMinimap';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
 import { getInterpolatedPos } from '@/lib/3d/ar-interpolation';
-import type { ARState, ARMinimapEntity, ARTerrainTheme } from '@/lib/3d/ar-types';
+import type { ARState, ARMinimapEntity, ARTerrainTheme, ARDamageEvent, ARPhase } from '@/lib/3d/ar-types';
 import type { ARUiState, AREvent } from '@/hooks/useSocket';
 import type { ARChoice } from '@/lib/3d/ar-types';
 
@@ -110,6 +110,18 @@ import { ARStatusEffects } from '@/components/game/ar/ARStatusEffects';
 import { ARCharacterSelect } from '@/components/game/ar/ARCharacterSelect';
 import { ARSpectateOverlay } from '@/components/game/ar/ARSpectateOverlay';
 import { ARBattleRewardsOverlay } from '@/components/game/ar/ARBattleRewards';
+
+// v19 Phase 5: 메타게임 AR 컴포넌트
+import { ARProfile } from '@/components/game/ar/ARProfile';
+import { ARQuestPanel } from '@/components/game/ar/ARQuestPanel';
+import { ARSeasonPassView } from '@/components/game/ar/ARSeasonPass';
+import type {
+  ARPlayerProfile,
+  ARQuest,
+  ARSeasonPass as ARSeasonPassType,
+  ARSeasonReward,
+  ARSeasonEra,
+} from '@/lib/3d/ar-types';
 
 interface GameCanvas3DProps {
   dataRef: React.MutableRefObject<GameData>;
@@ -199,6 +211,9 @@ export function GameCanvas3D({
   // v19 Phase 4: 게임 흐름 state
   const [charSelectDone, setCharSelectDone] = useState(false);
   const spectateTargetRef = useRef<string | null>(null);
+
+  // v19 Phase 5: 메타게임 패널 토글
+  const [metagamePanel, setMetagamePanel] = useState<'profile' | 'quests' | 'seasonpass' | null>(null);
 
   // v16: InputManager + TPSCamera refs
   const cameraRef = useRef<Camera | null>(null);
@@ -733,6 +748,61 @@ export function GameCanvas3D({
     return () => clearInterval(interval);
   }, [isArenaMode, arEventQueueRef, arStateRef]);
 
+  // ─── v19 Phase 5: AR event → SoundEngine 연동 ───
+  useEffect(() => {
+    if (!isArenaMode || !arEventQueueRef) return;
+    const interval = setInterval(() => {
+      const queue = arEventQueueRef.current;
+      for (const evt of queue) {
+        switch (evt.type) {
+          case 'damage': {
+            const dmg = (evt.data as ARDamageEvent);
+            // 로컬 플레이어에 대한 데미지만 사운드
+            if (dmg.targetId === dataRef.current.playerId) {
+              soundEngine.playCombat(dmg.amount > 50 ? 'hit_heavy' : 'hit_light');
+            }
+            break;
+          }
+          case 'kill':
+            if ((evt.data as { killerId: string }).killerId === dataRef.current.playerId) {
+              soundEngine.playCombat('kill_confirm');
+            }
+            break;
+          case 'boss_spawn':
+            soundEngine.playUI('war_start');
+            break;
+          case 'boss_defeated':
+            soundEngine.playUI('epoch_transition');
+            break;
+          case 'elite_explosion':
+            soundEngine.playCombat('hit_critical');
+            break;
+        }
+      }
+    }, 100);
+    return () => clearInterval(interval);
+  }, [isArenaMode, arEventQueueRef, dataRef, soundEngine]);
+
+  // v19 Phase 5: AR level-up SFX
+  useEffect(() => {
+    if (!isArenaMode || !arUiState?.levelUpChoices) return;
+    soundEngine.playUI('levelup');
+  }, [isArenaMode, arUiState?.levelUpChoices, soundEngine]);
+
+  // v19 Phase 5: AR phase change SFX
+  const prevPhaseRef = useRef<ARPhase | null>(null);
+  useEffect(() => {
+    if (!isArenaMode || !arUiState) return;
+    if (prevPhaseRef.current !== null && prevPhaseRef.current !== arUiState.phase) {
+      if (arUiState.phase === 'pvp' || arUiState.phase === 'pvp_warning') {
+        soundEngine.playUI('war_start');
+      } else if (arUiState.phase === 'settlement') {
+        soundEngine.playUI('epoch_transition');
+      }
+    }
+    prevPhaseRef.current = arUiState.phase;
+  }, [isArenaMode, arUiState?.phase, soundEngine]);
+
   // PvP kill feed 만료 (10초)
   useEffect(() => {
     if (pvpKillFeed.length === 0) return;
@@ -1207,6 +1277,126 @@ export function GameCanvas3D({
             <ARBattleRewardsOverlay
               rewards={arUiState.battleEnd}
               onClose={handleExitToLobby}
+            />
+          )}
+
+          {/* ─── v19 Phase 5: 메타게임 토글 버튼 (우하단) ─── */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 16,
+              right: 16,
+              display: 'flex',
+              gap: 6,
+              zIndex: 55,
+              pointerEvents: 'auto',
+            }}
+          >
+            {([
+              { key: 'profile' as const, label: 'Profile', icon: '\u{1F464}' },
+              { key: 'quests' as const, label: 'Quests', icon: '\u{1F4CB}' },
+              { key: 'seasonpass' as const, label: 'Pass', icon: '\u{2B50}' },
+            ]).map(btn => (
+              <button
+                key={btn.key}
+                onClick={() => setMetagamePanel(prev => prev === btn.key ? null : btn.key)}
+                style={{
+                  background: metagamePanel === btn.key ? 'rgba(255,215,0,0.2)' : 'rgba(0,0,0,0.6)',
+                  border: `1px solid ${metagamePanel === btn.key ? 'rgba(255,215,0,0.5)' : 'rgba(255,255,255,0.15)'}`,
+                  color: metagamePanel === btn.key ? '#FFD700' : '#E8E0D4',
+                  padding: '6px 10px',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  fontSize: 11,
+                  fontFamily: '"Rajdhani", sans-serif',
+                  fontWeight: 600,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                }}
+              >
+                <span style={{ fontSize: 14 }}>{btn.icon}</span>
+                {btn.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Phase 5 Task 1: ARProfile — 프로필 패널 */}
+          {metagamePanel === 'profile' && (
+            <ARProfile
+              profile={{
+                playerId: dataRef.current.playerId ?? 'unknown',
+                username: playerName,
+                profileLevel: arUiState.level,
+                profileXp: arUiState.xp,
+                profileXpMax: arUiState.xpToNext || 100,
+                preferredChar: 'striker',
+                unlockedChars: ['striker', 'sniper'],
+                unlockedWeapons: [],
+                achievements: [],
+                stats: {
+                  totalBattles: arUiState.kills > 0 ? 1 : 0,
+                  totalWins: 0,
+                  totalKills: arUiState.kills,
+                  totalPvpKills: 0,
+                  totalDeaths: 0,
+                  totalEliteKills: 0,
+                  totalBossKills: 0,
+                  highestLevel: arUiState.level,
+                  longestSurvival: Math.floor(arUiState.timer),
+                  bestRank: 0,
+                  totalSurvivalSec: Math.floor(arUiState.timer),
+                  factionWins: 0,
+                  uniqueCountries: 1,
+                },
+                awwBalance: 0,
+                seasonPassLevel: 1,
+                hasPremiumPass: false,
+              }}
+              onClose={() => setMetagamePanel(null)}
+            />
+          )}
+
+          {/* Phase 5 Task 2: ARQuestPanel — 퀘스트 패널 */}
+          {metagamePanel === 'quests' && (
+            <ARQuestPanel
+              dailyQuests={[
+                { id: 'q1', templateId: 'kill_10', name: 'Kill 10 enemies', desc: 'Defeat 10 enemies in battle', progress: Math.min(arUiState.kills, 10), target: 10, completed: arUiState.kills >= 10, category: 'kill', period: 'daily', rewardType: 'xp', rewardAmount: 50, expiresAt: '' },
+                { id: 'q2', templateId: 'level_5', name: 'Reach Level 5', desc: 'Reach level 5 in a single battle', progress: Math.min(arUiState.level, 5), target: 5, completed: arUiState.level >= 5, category: 'build', period: 'daily', rewardType: 'token', rewardAmount: 100, expiresAt: '' },
+              ]}
+              weeklyQuests={[
+                { id: 'q3', templateId: 'win_3', name: 'Win 3 battles', desc: 'Win 3 arena battles', progress: 0, target: 3, completed: false, category: 'kill', period: 'weekly', rewardType: 'token', rewardAmount: 500, expiresAt: '' },
+              ]}
+              seasonQuests={[
+                { id: 'q4', templateId: 'level_20', name: 'Reach Level 20', desc: 'Reach level 20 in a single battle', progress: Math.min(arUiState.level, 20), target: 20, completed: arUiState.level >= 20, category: 'challenge', period: 'season', rewardType: 'cosmetic', rewardAmount: 1, expiresAt: '' },
+              ]}
+              onClose={() => setMetagamePanel(null)}
+            />
+          )}
+
+          {/* Phase 5 Task 3: ARSeasonPass — 시즌패스 패널 */}
+          {metagamePanel === 'seasonpass' && (
+            <ARSeasonPassView
+              pass={{
+                playerId: dataRef.current.playerId ?? 'unknown',
+                seasonId: 'season-1',
+                level: 1,
+                xp: arUiState.xp,
+                xpToNext: arUiState.xpToNext || 100,
+                isPremium: false,
+                claimedFree: [],
+                claimedPremium: [],
+              }}
+              rewards={[
+                { level: 1, track: 'free', rewardType: 'token', description: '100 $AWW Tokens' },
+                { level: 1, track: 'premium', rewardType: 'cosmetic', description: 'Gold Striker Skin' },
+                { level: 2, track: 'free', rewardType: 'xp_boost', description: '2x XP Boost (1hr)' },
+                { level: 2, track: 'premium', rewardType: 'token', description: '250 $AWW Tokens' },
+                { level: 3, track: 'free', rewardType: 'token', description: '150 $AWW Tokens' },
+                { level: 3, track: 'premium', rewardType: 'cosmetic', description: 'Elite Sniper Skin' },
+              ]}
+              currentEra={'discovery' as ARSeasonEra}
+              onClose={() => setMetagamePanel(null)}
             />
           )}
         </>

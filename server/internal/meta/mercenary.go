@@ -438,7 +438,7 @@ func (mm *MercenaryMarket) MercenaryRoutes(fm *FactionManager) chi.Router {
 
 	// Authenticated
 	r.Group(func(r chi.Router) {
-		r.Use(auth.JWTAuth)
+		r.Use(auth.RequireAuth)
 		r.Post("/hire", mm.handleHire(fm))
 		r.Post("/deploy", mm.handleDeploy(fm))
 		r.Post("/dismiss", mm.handleDismiss(fm))

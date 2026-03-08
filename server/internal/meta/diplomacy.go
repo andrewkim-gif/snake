@@ -591,7 +591,7 @@ func (de *DiplomacyEngine) GetAllActiveWars() []*War {
 // Requires a FactionManager reference for permission and reputation checks.
 func (de *DiplomacyEngine) DiplomacyRoutes(fm *FactionManager) chi.Router {
 	r := chi.NewRouter()
-	r.Use(auth.JWTAuth)
+	r.Use(auth.RequireAuth)
 
 	r.Post("/propose", de.handlePropose(fm))
 	r.Post("/accept", de.handleAccept(fm))

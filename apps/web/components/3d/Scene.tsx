@@ -123,15 +123,17 @@ export function Scene({ timeRemaining, theme = 'forest', isArenaMode }: ScenePro
     }
   });
 
-  // v19: 아레나 모드 → MCScene 스타일 조명 (포인트 라이트 + 환경광)
+  // v19: 아레나 모드 → MC 스타일 조명 (reference: minecraft-threejs/src/core/index.ts)
+  // Canvas flat={true} → NoToneMapping 이므로 reference와 동일한 밝기 보장
   if (isArenaMode) {
     return (
       <>
-        {/* MC 스타일 환경광 */}
+        {/* MC reference: AmbientLight(0x404040) — NoToneMapping에서 충분한 기본 조명 */}
         <ambientLight color={0x404040} intensity={1} />
-        {/* MC 스타일 포인트 라이트 (태양 역할) */}
-        <pointLight position={[500, 500, 500]} intensity={0.5} />
-        <pointLight position={[-500, 500, -500]} intensity={0.2} />
+        {/* MC reference: PointLight(0xffffff, 0.5) at (500,500,500) — 태양 역할 */}
+        <pointLight position={[500, 500, 500]} intensity={0.5} color={0xffffff} />
+        {/* MC reference: PointLight(0xffffff, 0.2) at (-500,500,-500) — 보조광 */}
+        <pointLight position={[-500, 500, -500]} intensity={0.2} color={0xffffff} />
       </>
     );
   }

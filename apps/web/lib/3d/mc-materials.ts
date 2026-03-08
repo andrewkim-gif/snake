@@ -20,12 +20,14 @@ function loadTex(name: string): THREE.Texture {
 // 캐시된 머티리얼
 const materialCache = new Map<BlockType, THREE.Material>()
 
-function makeMat(name: string, transparent = false): THREE.MeshLambertMaterial {
-  return new THREE.MeshLambertMaterial({
+function makeMat(name: string, transparent = false): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
     map: loadTex(name),
     transparent,
     opacity: transparent ? 0.8 : 1.0,
     side: transparent ? THREE.DoubleSide : THREE.FrontSide,
+    roughness: 1.0,
+    metalness: 0,
   })
 }
 
@@ -34,7 +36,7 @@ export function getSixFaceMaterial(
   side: string,
   top: string,
   bottom: string
-): THREE.MeshLambertMaterial[] {
+): THREE.MeshStandardMaterial[] {
   return [
     makeMat(side),   // +x
     makeMat(side),   // -x
@@ -53,7 +55,7 @@ export function getBlockMaterial(type: BlockType): THREE.Material {
 
   switch (type) {
     case BlockType.grass:
-      mat = makeMat('grass_block_side') // 잔디 측면이 가장 인식 가능
+      mat = makeMat('grass_top_green') // TPS 카메라에서 상단면이 가장 잘 보임
       break
     case BlockType.tree:
       mat = makeMat('oak_log')

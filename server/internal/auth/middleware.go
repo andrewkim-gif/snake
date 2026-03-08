@@ -109,6 +109,24 @@ func APIKeyAuth(validator APIKeyValidator) func(http.Handler) http.Handler {
 	}
 }
 
+// --- RequireAuth Middleware (checks parent-set context) ---
+
+// RequireAuth checks if the request is already authenticated (by a parent middleware
+// like DualAuth). If UserID is already in the context, passes through. Otherwise
+// falls back to JWTAuth behavior. Use this instead of JWTAuth in sub-routers that
+// are mounted under a DualAuth parent, to support both JWT and API Key auth.
+func RequireAuth(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Already authenticated by parent DualAuth?
+		if GetUserID(r.Context()) != "" {
+			next.ServeHTTP(w, r)
+			return
+		}
+		// Fallback: try JWT
+		JWTAuth(next).ServeHTTP(w, r)
+	})
+}
+
 // --- Dual Auth Middleware (JWT or API Key) ---
 
 // DualAuth accepts either JWT or API Key authentication.

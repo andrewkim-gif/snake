@@ -337,7 +337,7 @@ export default function MCTerrain({
   )
 }
 
-// 구름 컴포넌트
+// 구름 컴포넌트 (reference: minecraft-threejs 스타일 — 큰 박스 지오메트리)
 function MCClouds({ seed }: { seed: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useMemo(() => new THREE.Object3D(), [])
@@ -347,24 +347,21 @@ function MCClouds({ seed }: { seed: number }) {
     const mesh = meshRef.current
     let idx = 0
 
-    // 여러 구름 클러스터 생성
-    for (let c = 0; c < 8; c++) {
-      const cx = (Math.sin(seed * (c + 1) * 3.7) * 200) | 0
-      const cz = (Math.cos(seed * (c + 1) * 2.3) * 200) | 0
-      const cy = MC_CLOUD_HEIGHT + ((Math.sin(seed * c) * 15) | 0)
+    // 구름 클러스터 생성 (reference: 20x5x14 scale per cloud chunk)
+    for (let c = 0; c < 12; c++) {
+      const cx = (Math.sin(seed * (c + 1) * 3.7) * 150) | 0
+      const cz = (Math.cos(seed * (c + 1) * 2.3) * 150) | 0
+      const cy = MC_CLOUD_HEIGHT + ((Math.sin(seed * c) * 10) | 0)
 
-      // 각 구름: 20x5x14 범위
-      for (let x = 0; x < 20; x++) {
-        for (let y = 0; y < 5; y++) {
-          for (let z = 0; z < 14; z++) {
-            if (Math.random() > 0.2) continue // 20% 밀도
-            if (idx >= mesh.count) break
-            dummy.position.set(cx + x, cy + y, cz + z)
-            dummy.updateMatrix()
-            mesh.setMatrixAt(idx++, dummy.matrix)
-          }
-        }
-      }
+      if (idx >= mesh.count) break
+      // 각 구름은 하나의 큰 인스턴스 (20x5x14 geometry로 렌더)
+      dummy.position.set(cx, cy, cz)
+      // 약간의 랜덤 스케일 변화
+      const sx = 0.8 + Math.abs(Math.sin(seed * (c + 3))) * 0.6
+      const sz = 0.8 + Math.abs(Math.cos(seed * (c + 5))) * 0.6
+      dummy.scale.set(sx, 1, sz)
+      dummy.updateMatrix()
+      mesh.setMatrixAt(idx++, dummy.matrix)
     }
 
     // 나머지 숨기기
@@ -383,15 +380,18 @@ function MCClouds({ seed }: { seed: number }) {
       new THREE.MeshBasicMaterial({
         color: 0xffffff,
         transparent: true,
-        opacity: 0.4,
+        opacity: 0.35,
       }),
     []
   )
 
+  // reference 스타일: 큰 박스 지오메트리 (20x5x14)
+  const cloudGeo = useMemo(() => new THREE.BoxGeometry(20, 5, 14), [])
+
   return (
     <instancedMesh
       ref={meshRef}
-      args={[new THREE.BoxGeometry(1, 1, 1), cloudMat, 12000]}
+      args={[cloudGeo, cloudMat, 50]}
       frustumCulled={false}
     />
   )

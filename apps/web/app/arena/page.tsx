@@ -42,7 +42,15 @@ export default function ArenaTestPage() {
     respawn, chooseUpgrade, dismissSynergyPopup, connected,
     // v19 Phase 2: AR data pipeline
     arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice,
+    // v19 Phase 5: Classic bridge skip
+    arBridgeSkipRef,
   } = useSocketContext();
+
+  // v19 Phase 5: Skip classic bridge in AR mode (AR components render directly)
+  useEffect(() => {
+    arBridgeSkipRef.current = true;
+    return () => { arBridgeSkipRef.current = false; };
+  }, [arBridgeSkipRef]);
 
   // 소켓 연결 감지 → 자동 아레나 입장
   useEffect(() => {

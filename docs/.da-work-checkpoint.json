@@ -2,24 +2,18 @@
   "pipeline": "da:work",
   "execution_mode": "plan",
   "pipeline_mode": "turbo",
-  "plan_file": "docs/designs/v19-arena-integration-plan.md",
-  "roadmap_file": null,
-  "ref_docs": ["docs/designs/v18-arena-report.md", "docs/designs/v19-arena-integration-architecture.md"],
+  "plan_file": "docs/designs/v17-simulation-improvement-plan.md",
   "project_type": "GAME",
   "current_stage": 3,
   "current_phase": 2,
-  "current_step": null,
-  "total_phases": 6,
-  "total_steps": 0,
+  "total_phases": 5,
   "phases": [
-    {"name": "MCTerrain을 GameCanvas3D에 적용", "design_needed": false, "status": "done", "tasks": ["MCTerrain에 아레나 모드 추가", "좌표 시스템 마이그레이션", "HeightmapTerrain을 MCTerrain으로 교체", "클라이언트 사이드 에이전트 높이 샘플링", "씬 조명/안개 업데이트", "ArenaBoundary 적응"]},
-    {"name": "v18 전투를 서버에 연결 (5개 통합 갭)", "design_needed": false, "status": "done", "tasks": ["갭1: JoinCountryArena CombatMode 설정", "갭2: startRound() CombatMode 분기", "갭3: tickPlaying() TickArenaCombat 호출", "갭4: ar_input/ar_choose 소켓 이벤트 등록", "갭5: main.go ar_room_integration 임포트", "전투 상태 WebSocket 브로드캐스트", "MC 좌표 웨이브 스폰", "서버 사이드 자동 공격"]},
-    {"name": "클라이언트 전투 렌더링", "design_needed": true, "status": "pending", "tasks": ["MC 지형 위 적 렌더링", "XP 크리스탈 렌더링", "BuildHUD를 서버 상태에 연결", "자동 공격 시각적 피드백", "레벨업 UI", "HUD 적응", "아레나 모드 클래식 전투 시각 비활성화"]},
-    {"name": "캐릭터 선택 + Tome + 시너지", "design_needed": true, "status": "pending", "tasks": ["아레나 진입 전 캐릭터 선택", "Tome 시스템 통합", "시너지 감지", "무기 진화"]},
-    {"name": "PvP 페이즈 + 지구본 진입 수정 + 기능 마이그레이션", "design_needed": false, "status": "pending", "tasks": ["에폭 시스템을 5페이즈 전투로 교체", "팩션 PvP", "MC 지형 아레나 수축", "지구본→아레나 진입 흐름 수정", "독립 /arena 페이지 삭제", "기능 중복 정리", "모바일 컨트롤 병합"]},
-    {"name": "폴리시 + 메타 시스템", "design_needed": false, "status": "pending", "tasks": ["토큰 보상", "퀘스트 시스템", "시즌패스", "사운드 이펙트", "모바일 컨트롤"]}
+    {"name": "서버 안정성", "status": "done"},
+    {"name": "경제 엔진 와이어링", "status": "pending"},
+    {"name": "외교 플로우 완성", "status": "pending"},
+    {"name": "에이전트 지능 강화", "status": "pending"},
+    {"name": "옵저버 + 검증", "status": "pending"}
   ],
-  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
-  "last_skill": "turbo_phase2_done",
-  "last_update": "2026-03-08T00:22:00Z"
+  "last_skill": "turbo_phase1_done",
+  "last_update": "2026-03-08T14:30:00+09:00"
 }

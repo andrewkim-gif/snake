@@ -29,7 +29,8 @@ export type UISFX =
   | 'countdown_go'
   | 'ability_ready'
   | 'epoch_transition'
-  | 'war_start';
+  | 'war_start'
+  | 'levelup';
 
 export type AmbienceBiome = 'forest' | 'desert' | 'mountain' | 'urban' | 'arctic' | 'island';
 
@@ -461,6 +462,23 @@ export function synthUISFX(
         osc.start(t);
         osc.stop(t + 0.08);
       }
+      break;
+    }
+    case 'levelup': {
+      // 레벨업: 상승 아르페지오 (C5→E5→G5→C6)
+      const notes = [523, 659, 784, 1047];
+      notes.forEach((freq, i) => {
+        const osc = ctx.createOscillator();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        const g = ctx.createGain();
+        const t = now + i * 0.08;
+        g.gain.setValueAtTime(volume * 1.0, t);
+        g.gain.exponentialRampToValueAtTime(0.001, t + 0.2);
+        osc.connect(g).connect(dest);
+        osc.start(t);
+        osc.stop(t + 0.25);
+      });
       break;
     }
   }

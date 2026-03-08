@@ -516,6 +516,7 @@ type ARState struct {
 	WaveNumber    int                    `json:"wave"`
 	Terrain       ARTerrainTheme         `json:"terrain,omitempty"`
 	Tier          string                 `json:"tier,omitempty"`
+	ArenaRadius   float64                `json:"arenaRadius"`             // v19: current arena radius for client rendering
 	Players       []*ARPlayer            `json:"players"`
 	Enemies       []AREnemyNet           `json:"enemies"`
 	XPCrystals    []ARCrystalNet         `json:"xpCrystals"`
@@ -539,6 +540,7 @@ type ARDamageEvent struct {
 	CritCount int          `json:"critCount"`
 	DmgType   ARDamageType `json:"dmgType"`
 	StatusFX  string       `json:"statusFx,omitempty"` // status effect applied
+	SourceID  string       `json:"sourceId,omitempty"` // v19: player who dealt this damage (for kill credit)
 	X         float64      `json:"x"`
 	Z         float64      `json:"z"`
 }

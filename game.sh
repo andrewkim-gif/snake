@@ -162,6 +162,15 @@ run_loadtest() {
     "$BIN_DIR/loadtest" "$@"
 }
 
+# Run AI agent simulation
+run_sim() {
+    local SIM_DIR="$PROJECT_ROOT/aww-agent-skill"
+    echo -e "${GREEN}Running AI agent simulation...${NC}"
+    echo ""
+    cd "$SIM_DIR"
+    npx tsx src/sim/run.ts "$@"
+}
+
 # Print help
 print_help() {
     print_header
@@ -173,6 +182,7 @@ print_help() {
     echo -e "  ${GREEN}build${NC}       Build all Go binaries (server, balance, loadtest)"
     echo -e "  ${GREEN}balance${NC}     Run balance simulation (pass -rounds=N -bots=N)"
     echo -e "  ${GREEN}loadtest${NC}    Run load test (pass -clients=N -duration=N -url=...)"
+    echo -e "  ${GREEN}sim${NC}         Run AI agent simulation (pass --config <file> or --agents N)"
     echo -e "  ${GREEN}stop${NC}        Stop all running processes"
     echo -e "  ${GREEN}help${NC}        Show this help message"
     echo ""
@@ -180,6 +190,8 @@ print_help() {
     echo "  ./game.sh dev                          # Start both servers"
     echo "  ./game.sh balance -rounds=20 -bots=50  # Run 20 rounds with 50 bots"
     echo "  ./game.sh loadtest -clients=200         # Load test with 200 clients"
+    echo "  ./game.sh sim --config sim-configs/cold-war.json  # Run cold war simulation"
+    echo "  ./game.sh sim --agents 5 --duration 60  # Quick sim with 5 agents"
     echo "  ./game.sh stop                          # Stop all processes"
 }
 
@@ -223,6 +235,11 @@ case "${1:-dev}" in
         print_header
         shift
         run_loadtest "$@"
+        ;;
+    sim)
+        print_header
+        shift
+        run_sim "$@"
         ;;
     stop)
         print_header

@@ -16,14 +16,15 @@ import * as THREE from 'three';
 import type { ARTerrainTheme } from '@/lib/3d/ar-types';
 import { TERRAIN_VISUALS } from '@/lib/3d/ar-types';
 
-const ARENA_RADIUS = 40;
-
 interface ARTerrainProps {
   theme: ARTerrainTheme;
+  /** 아레나 반경 (meter, 서버 arState.arenaRadius) */
+  arenaRadius?: number;
 }
 
-function ARTerrainInner({ theme }: ARTerrainProps) {
+function ARTerrainInner({ theme, arenaRadius = 40 }: ARTerrainProps) {
   const visual = TERRAIN_VISUALS[theme] || TERRAIN_VISUALS.urban;
+  const ARENA_RADIUS = arenaRadius;
 
   // 바닥 색상
   const floorColor = useMemo(() => new THREE.Color(visual.floorColor), [visual.floorColor]);

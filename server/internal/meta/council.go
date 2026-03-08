@@ -524,7 +524,7 @@ func (uc *UNCouncil) CouncilRoutes(fm *FactionManager) chi.Router {
 
 	// Authenticated
 	r.Group(func(r chi.Router) {
-		r.Use(auth.JWTAuth)
+		r.Use(auth.RequireAuth)
 		r.Post("/propose", uc.handlePropose(fm))
 		r.Post("/vote", uc.handleVote(fm))
 	})

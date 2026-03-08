@@ -74,6 +74,8 @@ export interface SocketContextValue extends SocketStableContextValue {
   arEventQueueRef: React.MutableRefObject<AREvent[]>;
   arUiState: ARUiState;
   sendARChoice: (choice: ARChoice) => void;
+  // v19 Phase 5: Classic bridge skip control
+  arBridgeSkipRef: React.MutableRefObject<boolean>;
 }
 
 // ─── Context 생성 ───
@@ -109,6 +111,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     arEventQueueRef,
     arUiState,
     sendARChoice,
+    // v19 Phase 5: Classic bridge skip control
+    arBridgeSkipRef,
   } = useSocket();
 
   // ─── 게임 모드 상태 (전역화) ───
@@ -203,8 +207,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       arEventQueueRef,
       arUiState,
       sendARChoice,
+      // v19 Phase 5: Classic bridge skip control
+      arBridgeSkipRef,
     }),
-    [stableValue, dataRef, uiState, arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice],
+    [stableValue, dataRef, uiState, arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice, arBridgeSkipRef],
   );
 
   return (

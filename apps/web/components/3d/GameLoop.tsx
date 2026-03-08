@@ -18,6 +18,7 @@ import { interpolateAgents, applyClientPrediction } from '@/lib/interpolation';
 import type { GameData } from '@/hooks/useSocket';
 import type { AgentNetworkData } from '@agent-survivor/shared';
 import type { InputState } from '@/hooks/useInputManager';
+import { SERVER_TO_BLOCK_SCALE } from '@/lib/3d/coordinate-utils';
 
 interface GameLoopProps {
   /** 서버 데이터 ref (useSocket에서 제공) */
@@ -30,9 +31,11 @@ interface GameLoopProps {
   boostRef: React.MutableRefObject<boolean>;
   /** v16: InputManager 상태 ref (moveAngle/aimAngle 분리 예측) */
   inputStateRef?: React.MutableRefObject<InputState>;
+  /** v19: 아레나 모드 — 서버 좌표를 MC 블록 좌표로 스케일링 */
+  isArenaMode?: boolean;
 }
 
-export function GameLoop({ dataRef, agentsRef, angleRef, inputStateRef }: GameLoopProps) {
+export function GameLoop({ dataRef, agentsRef, angleRef, inputStateRef, isArenaMode }: GameLoopProps) {
   const fpsRef = useRef({ frames: 0, lastTime: 0, value: 60 });
 
   // priority 0 (기본값) — auto-render 유지!
@@ -74,6 +77,17 @@ export function GameLoop({ dataRef, agentsRef, angleRef, inputStateRef }: GameLo
         ? applyClientPrediction(myAgent, angleRef.current, delta, inp.moveAngle, inp.aimAngle)
         : applyClientPrediction(myAgent, angleRef.current, delta);
       agents = agents.map(a => a.i === data.playerId ? predicted : a);
+    }
+
+    // ─── v19: 아레나 모드 좌표 스케일링 (서버 px → MC 블록) ───
+    if (isArenaMode) {
+      const s = SERVER_TO_BLOCK_SCALE;
+      agents = agents.map(a => ({
+        ...a,
+        x: a.x * s,
+        y: a.y * s,
+        // z (높이)는 서버에서 0이거나 하이트맵 값 — 별도 처리
+      }));
     }
 
     // ─── 보간 결과를 ref에 반영 (다른 컴포넌트에서 참조) ───

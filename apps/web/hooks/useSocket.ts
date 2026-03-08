@@ -38,6 +38,11 @@ import type {
   ARPvPKillEvent,
   ARLevelUpEvent,
 } from '@/lib/3d/ar-types';
+import {
+  createARInterpolation,
+  onARStateReceived,
+  type ARInterpolationState,
+} from '@/lib/3d/ar-interpolation';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
 
@@ -267,6 +272,10 @@ export function useSocket() {
   const [arUiState, setArUiState] = useState<ARUiState>(INITIAL_AR_UI_STATE);
   // v19: Throttle tracker for arUiState updates
   const arUiThrottleRef = useRef(0);
+  // v19: AR interpolation state (20Hz → 60fps smooth positions)
+  const arInterpRef = useRef<ARInterpolationState>(createARInterpolation());
+  // v19 Phase 5: Skip classic bridge when AR components render directly
+  const arBridgeSkipRef = useRef(false);
 
   const [uiState, setUiState] = useState<UiState>({
     connected: false,
@@ -417,6 +426,8 @@ export function useSocket() {
       arStateRef.current = data;
       // Also keep on dataRef for backward compat
       dataRef.current.arState = data;
+      // v19 Phase 2: Feed interpolation system (20Hz → 60fps smooth)
+      onARStateReceived(arInterpRef.current, data);
 
       // Channel 2: Throttled React state update for HTML HUD overlays (4Hz)
       if (now - arUiThrottleRef.current >= AR_UI_THROTTLE_MS) {
@@ -444,38 +455,42 @@ export function useSocket() {
         }
       }
 
-      // Bridge: ARPlayerNet[] → AgentNetworkData[]
-      const agents: AgentNetworkData[] = data.players.map((p: ARPlayerNet) => ({
-        i: p.id,
-        n: p.name,
-        x: p.pos.x,
-        y: p.pos.z,       // server Z (horizontal) → client Y
-        z: p.pos.y,        // server Y (vertical) → client Z (height)
-        h: p.rot,          // rotation → heading
-        f: p.rot,          // same as heading (no separate aim in AR)
-        m: 15,             // v19 fix: fixed mass (HP→mass caused agents to appear giant)
-        b: false,          // no boost in arena
-        a: p.alive,
-        k: 0,              // skin placeholder
-        lv: p.level,
-        bot: false,
-        ks: p.kills,
-        hr: 15,            // default hitbox radius
-        nat: p.factionId,  // faction → nationality for flag display
-      }));
+      // v19 Phase 5: Skip classic bridge when AR components render directly
+      // (saves ~O(N) allocation per 20Hz tick when AR mode is active)
+      if (!arBridgeSkipRef.current) {
+        // Bridge: ARPlayerNet[] → AgentNetworkData[]
+        const agents: AgentNetworkData[] = data.players.map((p: ARPlayerNet) => ({
+          i: p.id,
+          n: p.name,
+          x: p.pos.x,
+          y: p.pos.z,       // server Z (horizontal) → client Y
+          z: p.pos.y,        // server Y (vertical) → client Z (height)
+          h: p.rot,          // rotation → heading
+          f: p.rot,          // same as heading (no separate aim in AR)
+          m: 15,             // v19 fix: fixed mass (HP→mass caused agents to appear giant)
+          b: false,          // no boost in arena
+          a: p.alive,
+          k: 0,              // skin placeholder
+          lv: p.level,
+          bot: false,
+          ks: p.kills,
+          hr: 15,            // default hitbox radius
+          nat: p.factionId,  // faction → nationality for flag display
+        }));
 
-      // Create synthetic StatePayload
-      const syntheticState: StatePayload = {
-        t: Date.now(),
-        s: agents,
-        o: [],             // no orbs in arena (enemies/crystals rendered separately)
-      };
+        // Create synthetic StatePayload
+        const syntheticState: StatePayload = {
+          t: Date.now(),
+          s: agents,
+          o: [],             // no orbs in arena (enemies/crystals rendered separately)
+        };
 
-      // Write to same dataRef fields as classic state handler
-      dataRef.current.prevState = dataRef.current.latestState;
-      dataRef.current.prevStateTimestamp = dataRef.current.stateTimestamp;
-      dataRef.current.latestState = syntheticState;
-      dataRef.current.stateTimestamp = now;
+        // Write to same dataRef fields as classic state handler
+        dataRef.current.prevState = dataRef.current.latestState;
+        dataRef.current.prevStateTimestamp = dataRef.current.stateTimestamp;
+        dataRef.current.latestState = syntheticState;
+        dataRef.current.stateTimestamp = now;
+      }
 
       // Track local player alive state from ar_state
       const myId = dataRef.current.playerId;
@@ -1052,6 +1067,7 @@ export function useSocket() {
     dataRef.current.arState = null;
     // v19: Clear AR pipeline on leave
     arStateRef.current = null;
+    arInterpRef.current = createARInterpolation();
     arEventQueueRef.current = [];
     setArUiState(INITIAL_AR_UI_STATE);
     setUiState(prev => ({
@@ -1244,8 +1260,11 @@ export function useSocket() {
     switchArena,
     // v19: AR data pipeline
     arStateRef,
+    arInterpRef,
     arEventQueueRef,
     arUiState,
     sendARChoice,
+    // v19 Phase 5: Classic bridge skip control
+    arBridgeSkipRef,
   };
 }

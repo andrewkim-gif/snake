@@ -433,7 +433,7 @@ func (is *IntelSystem) CleanExpiredEffects() {
 // IntelRoutes returns a chi.Router with intelligence endpoints.
 func (is *IntelSystem) IntelRoutes(fm *FactionManager) chi.Router {
 	r := chi.NewRouter()
-	r.Use(auth.JWTAuth)
+	r.Use(auth.RequireAuth)
 
 	r.Post("/mission", is.handleLaunchMission(fm))
 	r.Get("/missions/{factionID}", is.handleGetMissions(fm))

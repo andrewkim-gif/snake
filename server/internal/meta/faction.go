@@ -484,7 +484,7 @@ func (fm *FactionManager) FactionRoutes() chi.Router {
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
-		r.Use(auth.JWTAuth)
+		r.Use(auth.RequireAuth)
 		r.Post("/", fm.handleCreateFaction)
 		r.Post("/{factionID}/join", fm.handleJoinFaction)
 		r.Post("/{factionID}/leave", fm.handleLeaveFaction)

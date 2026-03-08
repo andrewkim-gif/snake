@@ -155,6 +155,20 @@ func main() {
 	economyCfg := meta.DefaultEconomyConfig()
 	economyEngine := meta.NewEconomyEngine(economyCfg)
 
+	// Initialize economy for all 195 countries from seed data
+	for _, seed := range world.AllCountries {
+		economyEngine.InitializeCountry(
+			seed.ISO3,
+			string(seed.Tier),
+			seed.Resources.Oil,
+			seed.Resources.Minerals,
+			seed.Resources.Food,
+			seed.Resources.Tech,
+			seed.Resources.Manpower,
+		)
+	}
+	slog.Info("economy initialized", "countries", len(world.AllCountries))
+
 	// --- Trade ---
 	tradeCfg := meta.DefaultTradeConfig()
 	tradeEngine := meta.NewTradeEngine(tradeCfg)

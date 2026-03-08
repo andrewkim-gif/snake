@@ -2,16 +2,30 @@
 // three.js ImprovedNoise 기반 Perlin 노이즈
 
 // ImprovedNoise 포팅 (three/examples/jsm/math/ImprovedNoise)
+// 결정적 시드 기반 — 동일 시드 = 동일 터레인 (모든 클라이언트에서 일관)
+
+/** 시드 기반 결정적 PRNG (Mulberry32) */
+function mulberry32(seed: number): () => number {
+  let s = seed | 0
+  return () => {
+    s = (s + 0x6D2B79F5) | 0
+    let t = Math.imul(s ^ (s >>> 15), 1 | s)
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
 class ImprovedNoise {
   private p: number[]
 
-  constructor() {
+  constructor(seed = 0) {
+    const rng = mulberry32(seed)
     const p = []
     for (let i = 0; i < 256; i++) p[i] = i
 
-    // Shuffle using Fisher-Yates
+    // Shuffle using Fisher-Yates with deterministic RNG
     for (let i = 255; i > 0; i--) {
-      const j = Math.floor((i + 1) * Math.random())
+      const j = Math.floor((i + 1) * rng())
       ;[p[i], p[j]] = [p[j], p[i]]
     }
 
@@ -76,7 +90,7 @@ function grad(hash: number, x: number, y: number, z: number): number {
 }
 
 export class MCNoise {
-  private noise = new ImprovedNoise()
+  private noise: ImprovedNoise
   seed: number
 
   // 지표면 파라미터
@@ -109,7 +123,8 @@ export class MCNoise {
   leafThreshold = -0.03
 
   constructor(seed?: number) {
-    this.seed = seed ?? Math.random()
+    this.seed = seed ?? Math.floor(Math.random() * 100000)
+    this.noise = new ImprovedNoise(this.seed)
     this.stoneSeed = this.seed * 0.4
     this.coalSeed = this.seed * 0.5
     this.treeSeed = this.seed * 0.7

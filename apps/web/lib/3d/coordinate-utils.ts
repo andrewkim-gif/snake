@@ -56,6 +56,9 @@ export function getHitboxRadius(mass: number): number {
 
 // ─── v19: MC 블록 좌표 변환 유틸 (ADR-005) ───
 
+/** 서버 아레나 반경 (픽셀 단위) — server/internal/game/constants.go ArenaRadius */
+export const SERVER_ARENA_RADIUS_PX = 3000;
+
 /** MC 블록 좌표 상수 */
 export const MC_BLOCK_CONSTANTS = {
   /** 아레나 기본 반경 (블록 단위) */
@@ -67,6 +70,25 @@ export const MC_BLOCK_CONSTANTS = {
   /** 스폰 반경 마진 (블록) */
   SPAWN_MARGIN_BLOCKS: 5,
 } as const;
+
+/**
+ * 서버 픽셀 좌표 → MC 블록 좌표 스케일 팩터
+ * server radius = 3000px, client radius = 80 blocks → factor = 80/3000
+ */
+export const SERVER_TO_BLOCK_SCALE = MC_BLOCK_CONSTANTS.ARENA_RADIUS_BLOCKS / SERVER_ARENA_RADIUS_PX;
+
+/**
+ * 서버 좌표(px)를 MC 블록 좌표로 변환
+ * @param serverX - 서버 X 좌표 (px)
+ * @param serverY - 서버 Y 좌표 (px)
+ * @returns [blockX, blockZ] MC 블록 좌표
+ */
+export function serverToBlock(serverX: number, serverY: number): [number, number] {
+  return [
+    serverX * SERVER_TO_BLOCK_SCALE,
+    serverY * SERVER_TO_BLOCK_SCALE,
+  ];
+}
 
 /**
  * 연속 부동소수점 게임 좌표를 MC 블록 정수 좌표로 변환

@@ -8,7 +8,7 @@
  * v14 S36: ESC 키 → 인게임→로비 복귀, 글로브 클릭 → 아레나 즉시 입장 (소켓 유지)
  */
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -117,6 +117,17 @@ export default function Home() {
     dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput, sendInputV16,
     respawn, chooseUpgrade, dismissSynergyPopup, setGameMode, switchArena,
   } = useSocketContext();
+
+  // 뉴스 피드 데이터 안정화 (매 렌더 .map() 재생성 방지)
+  const newsItems = useMemo(() =>
+    uiState.globalEvents.map(evt => ({
+      id: evt.id,
+      type: (evt.type as NewsEventType) || 'global_event',
+      headline: evt.message,
+      timestamp: evt.timestamp,
+    })),
+    [uiState.globalEvents],
+  );
 
   // v13: 로컬 mode ↔ 전역 gameMode 동기화
   useEffect(() => {
@@ -294,6 +305,7 @@ export default function Home() {
         onExit={handleExitToLobby}
         chooseUpgrade={chooseUpgrade}
         dismissSynergyPopup={dismissSynergyPopup}
+        isArenaMode={true}
       />
     );
   }
@@ -678,12 +690,7 @@ export default function Home() {
         transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.3s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.3s',
       }}>
         <NewsFeed
-          news={uiState.globalEvents.map(evt => ({
-            id: evt.id,
-            type: (evt.type as NewsEventType) || 'global_event',
-            headline: evt.message,
-            timestamp: evt.timestamp,
-          }))}
+          news={newsItems}
           expanded={newsExpanded}
           onToggleExpand={() => setNewsExpanded(prev => !prev)}
         />

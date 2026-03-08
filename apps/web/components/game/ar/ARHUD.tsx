@@ -159,6 +159,7 @@ function ARHUDInner({
         {/* HP 바 */}
         <div
           style={{
+            position: 'relative',
             width: '100%',
             height: 16,
             backgroundColor: 'rgba(0,0,0,0.6)',

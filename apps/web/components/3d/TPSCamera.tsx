@@ -269,6 +269,23 @@ export function TPSCamera({
     const playerId = dataRef.current.playerId;
     const agents = agentsRef.current;
 
+    const myAgent = playerId ? agents.find(a => a.i === playerId) : undefined;
+
+    // 플레이어 에이전트가 없으면 대기 카메라 (마우스 delta 소비하지 않음 → 스핀 방지)
+    if (!playerId || !myAgent) {
+      // 마우스 delta/스크롤 드레인 (축적 방지)
+      const md = inputManager.cameraDeltaRef.current;
+      md.dx = 0;
+      md.dy = 0;
+      inputManager.scrollDeltaRef.current = 0;
+      // 정적 오버헤드 뷰 (MC 터레인 크기에 적합)
+      if (!initialized.current) {
+        camera.position.set(0, 80, 60);
+        camera.lookAt(0, 0, 0);
+      }
+      return;
+    }
+
     // 마우스 delta 소비 → yaw/pitch (InputManager에서 포인터 락 처리)
     const md = inputManager.cameraDeltaRef.current;
     if (md.dx !== 0 || md.dy !== 0) {
@@ -290,22 +307,6 @@ export function TPSCamera({
     inputManager.azimuthRef.current = yaw.current;
     inputManager.pitchRef.current = pitch.current;
     inputManager.zoomRef.current = dist.current;
-
-    // 플레이어 없으면 기본 위치
-    if (!playerId) {
-      camera.position.set(0, 300, 300);
-      camera.lookAt(0, 0, 0);
-      return;
-    }
-
-    const myAgent = agents.find(a => a.i === playerId);
-    if (!myAgent) {
-      if (!initialized.current) {
-        camera.position.set(0, 300, 300);
-        camera.lookAt(0, 0, 0);
-      }
-      return;
-    }
 
     // 플레이어 월드 좌표 (서버 x,y → Three.js x,height,z)
     const px = myAgent.x;
