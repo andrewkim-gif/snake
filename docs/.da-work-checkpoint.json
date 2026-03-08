@@ -2,18 +2,18 @@
   "pipeline": "da:work",
   "execution_mode": "plan",
   "pipeline_mode": "turbo",
-  "plan_file": "docs/designs/v17-simulation-improvement-plan.md",
+  "plan_file": "PLAN.md (minecraft plan in context)",
   "project_type": "GAME",
   "current_stage": 3,
-  "current_phase": 2,
-  "total_phases": 5,
+  "current_phase": 1,
+  "total_phases": 4,
   "phases": [
-    {"name": "서버 안정성", "status": "done"},
-    {"name": "경제 엔진 와이어링", "status": "pending"},
-    {"name": "외교 플로우 완성", "status": "pending"},
-    {"name": "에이전트 지능 강화", "status": "pending"},
-    {"name": "옵저버 + 검증", "status": "pending"}
+    {"name": "Assets + Core Modules", "design_needed": false, "status": "done"},
+    {"name": "Terrain + Camera + Scene", "design_needed": false, "status": "pending"},
+    {"name": "Block Interaction + UI", "design_needed": false, "status": "pending"},
+    {"name": "Page Wiring + Polish", "design_needed": false, "status": "pending"}
   ],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
   "last_skill": "turbo_phase1_done",
-  "last_update": "2026-03-08T14:30:00+09:00"
+  "last_update": "2026-03-08T16:30:00+09:00"
 }
