@@ -825,3 +825,74 @@ export const ERA_INFO: Record<ARSeasonEra, { name: string; icon: string; color: 
   empires: { name: 'Empires', icon: '⚔️', color: '#FF9800', desc: 'Full warfare, sovereignty battles' },
   reckoning: { name: 'Reckoning', icon: '💀', color: '#F44336', desc: '2x sovereignty rewards, finals' },
 };
+
+// ============================================================
+// Phase 4 (v24): Weapon → Trajectory Type 매핑
+// ARProjectileNet.type은 weapon ID → ARProjectileType으로 변환 필요
+// ============================================================
+
+export const WEAPON_TRAJECTORY_MAP: Record<ARWeaponID, ARProjectileType> = {
+  // Straight (직선 투사체): 화살, 총알 계열
+  bow: 'straight',
+  sniper_rifle: 'straight',
+  revolver: 'straight',
+  shotgun: 'straight',
+  storm_bow: 'straight',
+
+  // Homing (추적 투사체): 마법, 자동추적 계열
+  lightning_staff: 'homing',
+  wireless_dagger: 'homing',
+
+  // Pierce (관통 투사체): 근접 관통 계열
+  katana: 'pierce',
+  dexecutioner: 'pierce',
+
+  // AOE (범위 공격): 폭발, 장판, 화염 계열
+  fire_staff: 'aoe',
+  black_hole: 'aoe',
+  axe: 'aoe',
+  poison_flask: 'aoe',
+  landmine: 'aoe',
+  frostwalker: 'aoe',
+  flamewalker: 'aoe',
+  inferno: 'aoe',
+  dragon_breath: 'aoe',
+  pandemic: 'aoe',
+
+  // 기본값: straight (방어형/특수형)
+  aegis: 'straight',
+  dice: 'straight',
+};
+
+// 투사체 타입별 색상 (비주얼 구분용)
+export const PROJECTILE_TYPE_COLORS: Record<ARProjectileType, string> = {
+  straight: '#FFD54F',  // 황금색 화살
+  homing: '#4FC3F7',    // 파란 추적 구
+  pierce: '#FF6B35',    // 주황 관통 빔
+  aoe: '#FF5722',       // 빨강 범위 링
+};
+
+// ============================================================
+// Phase 3 (v24): Character Appearance Map
+// ============================================================
+
+export interface ARCharacterAppearance {
+  eyeStyle: number;
+  mouthStyle: number;
+  hairStyle: number;
+  skinTone: string;    // hex color for head/arms
+  hairColor: string;   // hex color for hair tint
+  bodyColor: string;   // hex color for body
+  legColor: string;    // hex color for legs
+}
+
+export const CHARACTER_APPEARANCE_MAP: Record<ARCharacterType, ARCharacterAppearance> = {
+  striker:     { eyeStyle: 0, mouthStyle: 0, hairStyle: 1,  skinTone: '#ffe0bd', hairColor: '#3A3028', bodyColor: '#CC3333', legColor: '#444444' },
+  guardian:    { eyeStyle: 2, mouthStyle: 1, hairStyle: 10, skinTone: '#f5c5a3', hairColor: '#5C4033', bodyColor: '#607D8B', legColor: '#37474F' },
+  pyro:       { eyeStyle: 5, mouthStyle: 3, hairStyle: 5,  skinTone: '#ffe0bd', hairColor: '#CC3333', bodyColor: '#FF5722', legColor: '#BF360C' },
+  frost_mage: { eyeStyle: 8, mouthStyle: 2, hairStyle: 3,  skinTone: '#f0e0d0', hairColor: '#B0C4DE', bodyColor: '#4FC3F7', legColor: '#0277BD' },
+  sniper:     { eyeStyle: 3, mouthStyle: 0, hairStyle: 2,  skinTone: '#d4a37a', hairColor: '#2C1608', bodyColor: '#4CAF50', legColor: '#2E7D32' },
+  gambler:    { eyeStyle: 4, mouthStyle: 4, hairStyle: 7,  skinTone: '#ffe0bd', hairColor: '#FFD700', bodyColor: '#9C27B0', legColor: '#4A148C' },
+  berserker:  { eyeStyle: 7, mouthStyle: 5, hairStyle: 0,  skinTone: '#c68642', hairColor: '#1A1A1A', bodyColor: '#F44336', legColor: '#B71C1C' },
+  shadow:     { eyeStyle: 9, mouthStyle: 6, hairStyle: 9,  skinTone: '#e8d5c0', hairColor: '#1A1A2E', bodyColor: '#212121', legColor: '#111111' },
+};

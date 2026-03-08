@@ -12,9 +12,10 @@
  * useFrame priority=0 (auto-render 유지)
  */
 
-import { useRef, useEffect, useCallback, memo } from 'react';
+import { useRef, memo } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import type { InputManagerReturn } from '@/hooks/useInputManager';
 
 // 카메라 설정
 const CAM_DISTANCE = 8;       // 캐릭터 뒤 거리 (m)
@@ -31,55 +32,40 @@ const ZOOM_SPEED = 1.0;
 interface ARCameraProps {
   /** 플레이어 월드 위치 ref */
   playerPosRef: React.MutableRefObject<{ x: number; y: number; z: number }>;
-  /** 포인터 락 활성화 여부 */
-  locked: boolean;
-  /** 현재 yaw (라디안) — 외부에서 읽어 이동 방향 결정 */
-  yawRef: React.MutableRefObject<number>;
-  /** useInputManager의 azimuthRef — WASD 방향 계산에 필요 */
-  inputAzimuthRef?: React.MutableRefObject<number>;
+  /** InputManager — cameraDeltaRef/scrollDeltaRef 소비, azimuthRef 동기화 */
+  inputManager: InputManagerReturn;
 }
 
-function ARCameraInner({ playerPosRef, locked, yawRef, inputAzimuthRef }: ARCameraProps) {
-  const { camera, gl } = useThree();
+function ARCameraInner({ playerPosRef, inputManager }: ARCameraProps) {
+  const { camera } = useThree();
   const yaw = useRef(0);
   const pitch = useRef(DEFAULT_PITCH);
   const distance = useRef(CAM_DISTANCE);
   const targetPos = useRef(new THREE.Vector3());
   const _tmpVec3 = useRef(new THREE.Vector3()); // 재사용 temp vector (PERF-1 fix)
 
-  // 마우스 이벤트
-  useEffect(() => {
-    const canvas = gl.domElement;
-
-    const onMouseMove = (e: MouseEvent) => {
-      if (!locked) return;
-      yaw.current -= e.movementX * MOUSE_SENSITIVITY;
-      pitch.current += e.movementY * MOUSE_SENSITIVITY;
-      pitch.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch.current));
-      yawRef.current = yaw.current;
-      // WASD 방향 계산을 위해 inputManager.azimuthRef 동기화
-      if (inputAzimuthRef) inputAzimuthRef.current = yaw.current;
-    };
-
-    const onWheel = (e: WheelEvent) => {
-      e.preventDefault();
-      distance.current += e.deltaY * 0.01 * ZOOM_SPEED;
-      distance.current = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE, distance.current));
-    };
-
-    canvas.addEventListener('mousemove', onMouseMove);
-    canvas.addEventListener('wheel', onWheel, { passive: false });
-
-    return () => {
-      canvas.removeEventListener('mousemove', onMouseMove);
-      canvas.removeEventListener('wheel', onWheel);
-    };
-  }, [gl, locked, yawRef, inputAzimuthRef]);
-
-  // v19 fix: pointer lock은 useInputManager가 단일 관리 (ARCamera 핸들러 삭제)
-
-  // 카메라 업데이트 (매 프레임)
+  // 카메라 업데이트 (매 프레임) — cameraDeltaRef/scrollDeltaRef 소비 (TPSCamera 패턴)
   useFrame((_, delta) => {
+    // 마우스 delta 소비 → yaw/pitch (InputManager에서 포인터 락 처리)
+    const md = inputManager.cameraDeltaRef.current;
+    if (md.dx !== 0 || md.dy !== 0) {
+      yaw.current -= md.dx;
+      pitch.current = Math.max(MIN_PITCH, Math.min(MAX_PITCH, pitch.current + md.dy));
+      md.dx = 0;
+      md.dy = 0;
+    }
+
+    // 스크롤 → 줌
+    const sd = inputManager.scrollDeltaRef.current;
+    if (sd !== 0) {
+      distance.current += sd * 0.01 * ZOOM_SPEED;
+      distance.current = Math.max(MIN_DISTANCE, Math.min(MAX_DISTANCE, distance.current));
+      inputManager.scrollDeltaRef.current = 0;
+    }
+
+    // InputManager에 카메라 상태 동기화
+    inputManager.azimuthRef.current = yaw.current;
+
     const pp = playerPosRef.current;
 
     // Lerp target position (PERF-1: 재사용 temp vector — zero alloc)

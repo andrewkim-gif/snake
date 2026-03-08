@@ -6,6 +6,8 @@
  * v19 PERF-2 리팩토링: position/rotation/moving을 props 대신 interpRef에서 useFrame 내 직접 읽음
  * → IIFE 제거, memo 유효, zero-alloc per frame
  *
+ * v24 Phase 3: 캐릭터 타입별 외형 (cubeling-textures 6면 머리 텍스처 + 피부/옷 색상 + 공격 애니메이션)
+ *
  * useFrame priority=0 (auto-render 유지)
  */
 
@@ -14,6 +16,9 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MC_BASE_Y } from '@/lib/3d/mc-types';
 import { getArenaTerrainHeight } from '@/lib/3d/mc-noise';
+import { createHeadMaterials } from '@/lib/3d/cubeling-textures';
+import { CHARACTER_APPEARANCE_MAP } from '@/lib/3d/ar-types';
+import type { ARCharacterType } from '@/lib/3d/ar-types';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
 
 // 큐블링 프로포션 (24u -> 1.5 world units)
@@ -36,6 +41,9 @@ const AURA_COLOR = new THREE.Color(0.2, 0.8, 1.0);
 // 이동 감지 임계값 (제곱 거리)
 const MOVE_THRESHOLD_SQ = 0.001;
 
+// 공격 애니메이션 지속 시간 (초)
+const ATTACK_ANIM_DURATION = 0.3;
+
 interface ARPlayerProps {
   /** 보간 상태 ref */
   interpRef: React.MutableRefObject<ARInterpolationState>;
@@ -51,6 +59,10 @@ interface ARPlayerProps {
   arenaSeed: number;
   /** 지형 높이 편차 (기본 3) */
   flattenVariance?: number;
+  /** 캐릭터 타입 (외형 결정) */
+  characterType?: ARCharacterType;
+  /** 마지막 공격 시각 ref (공격 애니메이션 트리거) */
+  lastAttackTimeRef?: React.MutableRefObject<number>;
 }
 
 function ARPlayerInner({
@@ -61,6 +73,8 @@ function ARPlayerInner({
   posRef,
   arenaSeed,
   flattenVariance = 3,
+  characterType,
+  lastAttackTimeRef,
 }: ARPlayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const leftArmRef = useRef<THREE.Mesh>(null);
@@ -74,11 +88,35 @@ function ARPlayerInner({
   // HP 바 색상 캐시
   const lastHpColorRef = useRef(-1);
 
-  // 머티리얼
-  const headMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0xffe0bd }), []);
-  const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0x3366cc }), []);
-  const limbMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0x2244aa }), []);
-  const legMat = useMemo(() => new THREE.MeshLambertMaterial({ color: 0x444444 }), []);
+  // characterType에서 appearance 결정
+  const appearance = CHARACTER_APPEARANCE_MAP[characterType ?? 'striker'];
+
+  // 6면 머리 material (useMemo — characterType 변경 시만 재생성)
+  const headMaterials = useMemo(() => {
+    const mats = createHeadMaterials(
+      appearance.eyeStyle,
+      appearance.mouthStyle,
+      0, // marking
+      appearance.hairStyle,
+    );
+    // skinTone 틴트 적용: 정면(4)과 하단(3)은 피부톤, 나머지는 머리카락색
+    const skinColor = new THREE.Color(appearance.skinTone);
+    const hairColorObj = new THREE.Color(appearance.hairColor);
+    mats[0].color.copy(hairColorObj); // +X right side (hair)
+    mats[1].color.copy(hairColorObj); // -X left side (hair)
+    mats[2].color.copy(hairColorObj); // +Y top (hair)
+    mats[3].color.copy(skinColor);    // -Y bottom (chin/skin)
+    mats[4].color.copy(skinColor);    // +Z front (face/skin)
+    mats[5].color.copy(hairColorObj); // -Z back (hair)
+    return mats;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [characterType]);
+
+  // 피부/옷 머티리얼
+  const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ color: appearance.bodyColor }), [characterType]); // eslint-disable-line react-hooks/exhaustive-deps
+  const limbMat = useMemo(() => new THREE.MeshLambertMaterial({ color: appearance.skinTone }), [characterType]); // eslint-disable-line react-hooks/exhaustive-deps -- 팔 = 피부톤
+  const legMat = useMemo(() => new THREE.MeshLambertMaterial({ color: appearance.legColor }), [characterType]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const auraMat = useMemo(
     () =>
       new THREE.MeshBasicMaterial({
@@ -103,7 +141,11 @@ function ARPlayerInner({
   // v19: Dispose geometry/material on unmount
   useEffect(() => {
     return () => {
-      headMat.dispose();
+      // headMaterials 배열 dispose
+      for (const mat of headMaterials) {
+        if (mat.map) mat.map.dispose();
+        mat.dispose();
+      }
       bodyMat.dispose();
       limbMat.dispose();
       legMat.dispose();
@@ -111,7 +153,7 @@ function ARPlayerInner({
       hpMat.dispose();
       auraGeo.dispose();
     };
-  }, [headMat, bodyMat, limbMat, legMat, auraMat, hpMat, auraGeo]);
+  }, [headMaterials, bodyMat, limbMat, legMat, auraMat, hpMat, auraGeo]);
 
   // 애니메이션 + 위치 업데이트 (zero-alloc)
   useFrame(() => {
@@ -146,9 +188,23 @@ function ARPlayerInner({
     const swingAmp = moving ? 0.6 : 0.1;
     const swingSpeed = moving ? 1.0 : 0.3;
 
+    // 공격 애니메이션 (ARDamageEvent 기반)
+    let rightArmAttackOverride = false;
+    if (lastAttackTimeRef && rightArmRef.current) {
+      const timeSinceAttack = (performance.now() - lastAttackTimeRef.current) / 1000;
+      if (timeSinceAttack < ATTACK_ANIM_DURATION) {
+        // 공격 중: 오른팔 전방 스윙
+        const attackProgress = timeSinceAttack / ATTACK_ANIM_DURATION;
+        rightArmRef.current.rotation.x = -Math.PI / 2 * (1 - attackProgress);
+        rightArmAttackOverride = true;
+      }
+    }
+
     if (leftArmRef.current && rightArmRef.current) {
       leftArmRef.current.rotation.x = Math.sin(t * swingSpeed) * swingAmp;
-      rightArmRef.current.rotation.x = -Math.sin(t * swingSpeed) * swingAmp;
+      if (!rightArmAttackOverride) {
+        rightArmRef.current.rotation.x = -Math.sin(t * swingSpeed) * swingAmp;
+      }
     }
     if (leftLegRef.current && rightLegRef.current) {
       leftLegRef.current.rotation.x = -Math.sin(t * swingSpeed) * swingAmp * 0.8;
@@ -178,8 +234,8 @@ function ARPlayerInner({
 
   return (
     <group ref={groupRef}>
-      {/* 머리 */}
-      <mesh position={[0, HEAD_CENTER_Y, 0]} material={headMat}>
+      {/* 머리 — 6면 cubeling 텍스처 (눈/입/머리카락) */}
+      <mesh position={[0, HEAD_CENTER_Y, 0]} material={headMaterials}>
         <boxGeometry args={[HEAD_SIZE, HEAD_SIZE, HEAD_SIZE]} />
       </mesh>
 

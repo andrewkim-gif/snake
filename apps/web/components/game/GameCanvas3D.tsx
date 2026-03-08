@@ -92,7 +92,7 @@ import { ARHUD } from '@/components/game/ar/ARHUD';
 import { ARMinimap } from '@/components/game/ar/ARMinimap';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
 // getInterpolatedPos 제거 (ARPlayer가 직접 interpRef 읽음)
-import type { ARState, ARMinimapEntity, ARDamageEvent, ARPhase } from '@/lib/3d/ar-types';
+import type { ARState, ARMinimapEntity, ARDamageEvent, ARPhase, ARCharacterType } from '@/lib/3d/ar-types';
 import type { ARUiState, AREvent } from '@/hooks/useSocket';
 import type { ARChoice } from '@/lib/3d/ar-types';
 
@@ -105,6 +105,11 @@ import { ARMobileControls, isTouchDevice } from '@/components/game/ar/ARMobileCo
 import { ARWeaponEvolutionToast } from '@/components/game/ar/ARWeaponEvolutionToast';
 import { ARSynergyBar } from '@/components/game/ar/ARSynergyBar';
 import { ARStatusEffects } from '@/components/game/ar/ARStatusEffects';
+
+// v24 Phase 4: 전투 이펙트 AR 컴포넌트
+import { ARProjectiles } from '@/components/game/ar/ARProjectiles';
+import { ARWeaponEffects } from '@/components/game/ar/ARWeaponEffects';
+import { ARFieldItems } from '@/components/game/ar/ARFieldItems';
 
 // v19 Phase 4: 게임 흐름 AR 컴포넌트
 import { ARCharacterSelect } from '@/components/game/ar/ARCharacterSelect';
@@ -198,7 +203,9 @@ function GameCanvas3DInner({
 
   // v19 Phase 2: AR-specific refs
   const arPlayerPosRef = useRef({ x: 0, y: 0, z: 0 });
-  const arYawRef = useRef(0);
+  // v24 Phase 3: 마지막 공격 시각 (공격 애니메이션 트리거용)
+  const lastAttackTimeRef = useRef(0);
+
 
   // v19 Phase 3: Weapon evolution toast state
   const [weaponToasts, setWeaponToasts] = useState<Array<{ id: number; weaponId: string; timestamp: number }>>([]);
@@ -672,12 +679,12 @@ function GameCanvas3DInner({
     // 조이스틱 X,Z를 moveAngle로 변환
     const mag = Math.sqrt(dirX * dirX + dirZ * dirZ);
     if (mag > 0.1) {
-      inp.moveAngle = Math.atan2(dirX, -dirZ) + arYawRef.current;
+      inp.moveAngle = Math.atan2(dirX, -dirZ) + inputManager.azimuthRef.current;
       inp.boost = mag > 0.8; // 강하게 밀면 부스트
     } else {
       inp.moveAngle = null;
     }
-  }, [isArenaMode, inputManager, arYawRef]);
+  }, [isArenaMode, inputManager]);
 
   const handleARMobileCameraRotate = useCallback((deltaYaw: number, deltaPitch: number) => {
     // 모바일 터치 → ARCamera yaw 직접 조정
@@ -779,6 +786,9 @@ function GameCanvas3DInner({
             // 로컬 플레이어에 대한 데미지만 사운드
             if (dmg.targetId === dataRef.current.playerId) {
               soundEngine.playCombat(dmg.amount > 50 ? 'hit_heavy' : 'hit_light');
+            } else {
+              // v24 Phase 3: 로컬 플레이어가 공격한 경우 → 공격 애니메이션 트리거
+              lastAttackTimeRef.current = performance.now();
             }
             break;
           }
@@ -898,9 +908,7 @@ function GameCanvas3DInner({
         {isArenaMode ? (
           <ARCamera
             playerPosRef={arPlayerPosRef}
-            locked={arGameActive}
-            yawRef={arYawRef}
-            inputAzimuthRef={inputManager.azimuthRef}
+            inputManager={inputManager}
           />
         ) : (
           <TPSCamera
@@ -934,6 +942,8 @@ function GameCanvas3DInner({
                 posRef={arPlayerPosRef}
                 arenaSeed={effectiveArenaSeed}
                 flattenVariance={3}
+                characterType={arStateRef?.current?.players.find(p => p.id === dataRef.current.playerId)?.character}
+                lastAttackTimeRef={lastAttackTimeRef}
               />
             )}
 
@@ -969,6 +979,36 @@ function GameCanvas3DInner({
               <ARStatusEffects
                 arStateRef={arStateRef}
                 arEventQueueRef={arEventQueueRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
+              />
+            )}
+
+            {/* v24 Phase 4: 투사체 렌더링 (InstancedMesh) */}
+            {arStateRef && (
+              <ARProjectiles
+                arStateRef={arStateRef}
+                playerPos={arPlayerPosRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
+              />
+            )}
+
+            {/* v24 Phase 4: 근접 공격 슬래시 이펙트 */}
+            {arEventQueueRef && dataRef.current.playerId && (
+              <ARWeaponEffects
+                arEventQueueRef={arEventQueueRef}
+                playerId={dataRef.current.playerId}
+                playerPos={arPlayerPosRef}
+                arenaSeed={effectiveArenaSeed}
+                flattenVariance={3}
+              />
+            )}
+
+            {/* v24 Phase 4: 필드 아이템 렌더링 (InstancedMesh) */}
+            {arStateRef && (
+              <ARFieldItems
+                arStateRef={arStateRef}
                 arenaSeed={effectiveArenaSeed}
                 flattenVariance={3}
               />
