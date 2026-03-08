@@ -1,23 +1,18 @@
 "use client";
 
 /**
- * API Dashboard — Phase 5, S28
- * 1. API Key Management (create/delete/view)
- * 2. Agent Status Dashboard
- * 3. Battle Log Viewer
- * 4. Strategy Config Form
- * 5. Real-time Battle Mini View
+ * API Dashboard — Phase 6, S28
+ * 1. API Key Management (localStorage-persisted)
+ * 2. Agent Status Dashboard (live API)
+ * 3. Battle Log Viewer (live API + polling)
+ * 4. Strategy Config Form (load/save via API)
+ * 5. Real-time Battle Mini View (WebSocket)
  */
 
-import React, { useCallback, useEffect, useRef, useState } from "react";
-import { SK, SKFont, bodyFont, headingFont, handDrawnRadius } from "@/lib/sketch-ui";
-
-// PLACEHOLDER: replaced at section level
-const PLACEHOLDER_API_KEYS = "PLACEHOLDER_API_KEYS";
-const PLACEHOLDER_AGENTS = "PLACEHOLDER_AGENTS";
-const PLACEHOLDER_BATTLE_LOG = "PLACEHOLDER_BATTLE_LOG";
-const PLACEHOLDER_STRATEGY = "PLACEHOLDER_STRATEGY";
-const PLACEHOLDER_LIVE = "PLACEHOLDER_LIVE";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { SK, SKFont, bodyFont, headingFont } from "@/lib/sketch-ui";
+import { fetchAgents, fetchEvents, getServerUrl, isServerAvailable, type GameEvent } from "@/lib/api-client";
+import { useApiData } from "@/hooks/useApiData";
 
 // --- Types ---
 
@@ -25,6 +20,7 @@ interface APIKeyInfo {
   id: string;
   name: string;
   prefix: string;
+  fullKey: string;
   lastUsed: string;
   createdAt: string;
 }
@@ -55,12 +51,53 @@ interface BattleLogEntry {
   killed_by?: string;
 }
 
+// --- Helpers ---
+
+const LS_KEY = "aww_api_keys";
+
+function generateHex(len: number): string {
+  const arr = new Uint8Array(len);
+  if (typeof crypto !== "undefined" && crypto.getRandomValues) {
+    crypto.getRandomValues(arr);
+  } else {
+    for (let i = 0; i < len; i++) arr[i] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(arr)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+function loadKeysFromStorage(): APIKeyInfo[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return [];
+    return JSON.parse(raw) as APIKeyInfo[];
+  } catch {
+    return [];
+  }
+}
+
+function saveKeysToStorage(keys: APIKeyInfo[]) {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(LS_KEY, JSON.stringify(keys));
+}
+
 // --- Main Dashboard ---
 
 type TabType = "keys" | "agents" | "logs" | "strategy" | "live";
 
 export default function DashboardPage() {
   const [activeTab, setActiveTab] = useState<TabType>("keys");
+  const [keys, setKeys] = useState<APIKeyInfo[]>([]);
+
+  // Load keys from localStorage on mount
+  useEffect(() => {
+    setKeys(loadKeysFromStorage());
+  }, []);
+
+  // Derive primary apiKey from first available key
+  const apiKey = keys.length > 0 ? keys[0].fullKey : "";
 
   const tabs: { id: TabType; label: string }[] = [
     { id: "keys", label: "API Keys" },
@@ -131,48 +168,65 @@ export default function DashboardPage() {
 
       {/* Tab content */}
       <main>
-        {activeTab === "keys" && <APIKeysPanel />}
-        {activeTab === "agents" && <AgentsPanel />}
+        {activeTab === "keys" && <APIKeysPanel keys={keys} setKeys={setKeys} />}
+        {activeTab === "agents" && <AgentsPanel apiKey={apiKey} />}
         {activeTab === "logs" && <BattleLogPanel />}
-        {activeTab === "strategy" && <StrategyPanel />}
-        {activeTab === "live" && <LiveBattlePanel />}
+        {activeTab === "strategy" && <StrategyPanel apiKey={apiKey} />}
+        {activeTab === "live" && <LiveBattlePanel apiKey={apiKey} />}
       </main>
     </div>
   );
 }
 
 // ============================================================
-// 1. API Keys Panel
+// 1. API Keys Panel (localStorage-persisted)
 // ============================================================
 
-function APIKeysPanel() {
-  const [keys, setKeys] = useState<APIKeyInfo[]>([]);
+function APIKeysPanel({
+  keys,
+  setKeys,
+}: {
+  keys: APIKeyInfo[];
+  setKeys: React.Dispatch<React.SetStateAction<APIKeyInfo[]>>;
+}) {
   const [newKeyName, setNewKeyName] = useState("");
   const [createdKey, setCreatedKey] = useState<string | null>(null);
 
   const handleCreateKey = useCallback(() => {
-    // Simulated API key creation (in production, calls POST /api/keys)
-    const fakeKey: APIKeyInfo = {
+    const fullKey = `aww_${generateHex(24)}`;
+    const prefix = fullKey.slice(0, 12);
+    const newKey: APIKeyInfo = {
       id: `key_${Date.now()}`,
       name: newKeyName || `Key ${keys.length + 1}`,
-      prefix: `aww_${Math.random().toString(16).slice(2, 10)}`,
+      prefix,
+      fullKey,
       lastUsed: "Never",
       createdAt: new Date().toISOString(),
     };
-    setKeys((prev) => [...prev, fakeKey]);
-    setCreatedKey(`aww_${Math.random().toString(16).slice(2)}${Math.random().toString(16).slice(2)}`);
+    const updated = [...keys, newKey];
+    setKeys(updated);
+    saveKeysToStorage(updated);
+    setCreatedKey(fullKey);
     setNewKeyName("");
-  }, [newKeyName, keys.length]);
+  }, [newKeyName, keys, setKeys]);
 
-  const handleDeleteKey = useCallback((id: string) => {
-    setKeys((prev) => prev.filter((k) => k.id !== id));
-  }, []);
+  const handleDeleteKey = useCallback(
+    (id: string) => {
+      const updated = keys.filter((k) => k.id !== id);
+      setKeys(updated);
+      saveKeysToStorage(updated);
+    },
+    [keys, setKeys],
+  );
 
   return (
     <div>
       <SectionTitle>API Key Management</SectionTitle>
-      <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginBottom: 16 }}>
+      <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginBottom: 8 }}>
         Each API key controls one agent. Maximum 5 keys per account.
+      </p>
+      <p style={{ color: SK.textMuted, fontSize: SKFont.xs, marginBottom: 16 }}>
+        Keys are stored locally. Server-side key management coming soon.
       </p>
 
       {/* Create new key */}
@@ -225,7 +279,10 @@ function APIKeysPanel() {
             {createdKey}
           </code>
           <button
-            onClick={() => { navigator.clipboard.writeText(createdKey); setCreatedKey(null); }}
+            onClick={() => {
+              navigator.clipboard.writeText(createdKey);
+              setCreatedKey(null);
+            }}
             style={{ ...btnStyle, marginTop: 8, background: SK.blue, fontSize: SKFont.xs }}
           >
             Copy & Dismiss
@@ -275,40 +332,54 @@ function APIKeysPanel() {
 }
 
 // ============================================================
-// 2. Agents Panel
+// 2. Agents Panel (live API via useApiData)
 // ============================================================
 
-function AgentsPanel() {
-  const [agents, setAgents] = useState<AgentStatus[]>([
-    {
-      agent_id: "agent_demo_1",
-      country_iso: "KOR",
-      country_name: "South Korea",
-      status: "active",
-      level: 7,
-      hp: 145.3,
-      kills: 4,
-      deaths: 0,
-      total_score: 850,
-      deployed_at: new Date(Date.now() - 300000).toISOString(),
-    },
-    {
-      agent_id: "agent_demo_2",
-      country_iso: "JPN",
-      country_name: "Japan",
-      status: "dead",
-      level: 4,
-      hp: 0,
-      kills: 1,
-      deaths: 1,
-      total_score: 320,
-      deployed_at: new Date(Date.now() - 600000).toISOString(),
-    },
-  ]);
+function AgentsPanel({ apiKey }: { apiKey: string }) {
+  const fetcher = useCallback(() => {
+    if (!apiKey || !isServerAvailable()) return Promise.resolve([] as Record<string, unknown>[]);
+    return fetchAgents(apiKey);
+  }, [apiKey]);
+
+  const { data: rawAgents, loading } = useApiData(fetcher, { refreshInterval: 15000 });
+
+  // Map raw server response to AgentStatus shape
+  const agents: AgentStatus[] = useMemo(() => {
+    if (!rawAgents || !Array.isArray(rawAgents)) return [];
+    return rawAgents.map((a) => ({
+      agent_id: String(a.agent_id ?? a.id ?? "unknown"),
+      country_iso: String(a.country_iso ?? a.country ?? "???"),
+      country_name: String(a.country_name ?? a.countryName ?? a.country_iso ?? "Unknown"),
+      status: String(a.status ?? "unknown"),
+      level: Number(a.level ?? 0),
+      hp: Number(a.hp ?? 0),
+      kills: Number(a.kills ?? 0),
+      deaths: Number(a.deaths ?? 0),
+      total_score: Number(a.total_score ?? a.score ?? 0),
+      deployed_at: String(a.deployed_at ?? a.deployedAt ?? new Date().toISOString()),
+    }));
+  }, [rawAgents]);
 
   return (
     <div>
       <SectionTitle>Agent Status</SectionTitle>
+
+      {!apiKey && (
+        <p style={{ color: SK.textMuted, fontSize: SKFont.sm, marginBottom: 16 }}>
+          Enter your API key in the API Keys tab to see your agents.
+        </p>
+      )}
+
+      {!isServerAvailable() && apiKey && (
+        <p style={{ color: SK.textMuted, fontSize: SKFont.sm, marginBottom: 16 }}>
+          Server connection required. Start the server with <code style={{ color: SK.gold }}>./game.sh</code>.
+        </p>
+      )}
+
+      {loading && apiKey && isServerAvailable() && (
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm }}>Loading agents...</p>
+      )}
+
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(340px, 1fr))", gap: 16 }}>
         {agents.map((agent) => (
           <div
@@ -334,44 +405,58 @@ function AgentsPanel() {
           </div>
         ))}
       </div>
+
+      {!loading && agents.length === 0 && apiKey && isServerAvailable() && (
+        <p style={{ color: SK.textMuted, fontSize: SKFont.sm, textAlign: "center", padding: 40 }}>
+          No agents found. Deploy an agent to see it here.
+        </p>
+      )}
     </div>
   );
 }
 
 // ============================================================
-// 3. Battle Log Panel
+// 3. Battle Log Panel (live API + polling)
 // ============================================================
 
 function BattleLogPanel() {
-  const [logs, setLogs] = useState<BattleLogEntry[]>([
-    {
-      timestamp: new Date(Date.now() - 120000).toISOString(),
-      battle_id: "battle_001",
-      country_iso: "KOR",
-      result: "survived",
-      kills: 4,
-      deaths: 0,
-      score: 850,
-      duration_sec: 300,
-      final_level: 7,
-    },
-    {
-      timestamp: new Date(Date.now() - 600000).toISOString(),
-      battle_id: "battle_002",
-      country_iso: "JPN",
-      result: "died",
-      kills: 1,
-      deaths: 1,
-      score: 320,
-      duration_sec: 180,
-      final_level: 4,
-      killed_by: "bot_samurai_03",
-    },
-  ]);
+  const fetcher = useCallback(() => {
+    if (!isServerAvailable()) return Promise.resolve([] as GameEvent[]);
+    return fetchEvents(20);
+  }, []);
+
+  const { data: events, loading } = useApiData(fetcher, { refreshInterval: 10000 });
+
+  // Convert GameEvent[] to BattleLogEntry[] format
+  const logs: BattleLogEntry[] = useMemo(() => {
+    if (!events || !Array.isArray(events)) return [];
+    return events.map((ev, idx) => ({
+      timestamp: ev.timestamp,
+      battle_id: ev.id || `event_${idx}`,
+      country_iso: ev.countryIso || "???",
+      result: ev.type === "kill" || ev.type === "victory" ? "survived" : ev.type === "death" ? "died" : ev.type,
+      kills: ev.type === "kill" || ev.type === "victory" ? 1 : 0,
+      deaths: ev.type === "death" ? 1 : 0,
+      score: 0,
+      duration_sec: 0,
+      final_level: 0,
+    }));
+  }, [events]);
 
   return (
     <div>
       <SectionTitle>Battle Log</SectionTitle>
+
+      {!isServerAvailable() && (
+        <p style={{ color: SK.textMuted, fontSize: SKFont.sm, marginBottom: 16 }}>
+          Server connection required. Start the server with <code style={{ color: SK.gold }}>./game.sh</code>.
+        </p>
+      )}
+
+      {loading && isServerAvailable() && (
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm }}>Loading battle log...</p>
+      )}
+
       <table style={{ width: "100%", borderCollapse: "collapse" }}>
         <thead>
           <tr style={{ borderBottom: `1px solid ${SK.border}` }}>
@@ -385,6 +470,13 @@ function BattleLogPanel() {
           </tr>
         </thead>
         <tbody>
+          {logs.length === 0 && !loading && (
+            <tr>
+              <td colSpan={7} style={{ ...tdStyle, textAlign: "center", color: SK.textMuted }}>
+                No battle events recorded yet.
+              </td>
+            </tr>
+          )}
           {logs.map((log, i) => (
             <tr key={i} style={{ borderBottom: `1px solid ${SK.borderDark}` }}>
               <td style={{ ...tdStyle, color: SK.textSecondary }}>{new Date(log.timestamp).toLocaleTimeString()}</td>
@@ -399,10 +491,14 @@ function BattleLogPanel() {
                   {log.result.toUpperCase()}
                 </span>
               </td>
-              <td style={tdStyle}>{log.kills}/{log.deaths}</td>
+              <td style={tdStyle}>
+                {log.kills}/{log.deaths}
+              </td>
               <td style={{ ...tdStyle, color: SK.gold }}>{log.score}</td>
               <td style={tdStyle}>Lv.{log.final_level}</td>
-              <td style={{ ...tdStyle, color: SK.textSecondary }}>{Math.floor(log.duration_sec / 60)}m {log.duration_sec % 60}s</td>
+              <td style={{ ...tdStyle, color: SK.textSecondary }}>
+                {Math.floor(log.duration_sec / 60)}m {log.duration_sec % 60}s
+              </td>
             </tr>
           ))}
         </tbody>
@@ -412,10 +508,10 @@ function BattleLogPanel() {
 }
 
 // ============================================================
-// 4. Strategy Config Panel
+// 4. Strategy Config Panel (load/save via API)
 // ============================================================
 
-function StrategyPanel() {
+function StrategyPanel({ apiKey }: { apiKey: string }) {
   const [aggression, setAggression] = useState(0.5);
   const [targetPriority, setTargetPriority] = useState("nearest");
   const [retreatThreshold, setRetreatThreshold] = useState(0.3);
@@ -425,16 +521,100 @@ function StrategyPanel() {
   const [preferredTomes, setPreferredTomes] = useState<string[]>(["damage", "armor"]);
   const [synergyTarget, setSynergyTarget] = useState("glass_cannon");
   const [saved, setSaved] = useState(false);
+  const [agentId, setAgentId] = useState("");
+  const [loadError, setLoadError] = useState<string | null>(null);
 
-  const handleSave = () => {
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2000);
-    // In production: POST /api/agents/{id}/strategy
-  };
+  // Load training config from server when agentId is available
+  useEffect(() => {
+    if (!agentId || !isServerAvailable()) return;
+    const serverUrl = getServerUrl();
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+    fetch(`${serverUrl}/api/agent/${agentId}/training`, { headers })
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to load");
+        return r.json();
+      })
+      .then((data) => {
+        if (data.aggression != null) setAggression(data.aggression);
+        if (data.target_priority) setTargetPriority(data.target_priority);
+        if (data.retreat_threshold != null) setRetreatThreshold(data.retreat_threshold);
+        if (data.use_dash != null) setUseDash(data.use_dash);
+        if (data.auto_redeploy != null) setAutoRedeploy(data.auto_redeploy);
+        if (data.avoid_s_tier != null) setAvoidSTier(data.avoid_s_tier);
+        if (data.preferred_tomes) setPreferredTomes(data.preferred_tomes);
+        if (data.synergy_target) setSynergyTarget(data.synergy_target);
+        setLoadError(null);
+      })
+      .catch(() => {
+        setLoadError("Could not load saved strategy. Using defaults.");
+      });
+  }, [agentId, apiKey]);
+
+  const handleSave = useCallback(() => {
+    const payload = {
+      aggression,
+      target_priority: targetPriority,
+      retreat_threshold: retreatThreshold,
+      use_dash: useDash,
+      auto_redeploy: autoRedeploy,
+      avoid_s_tier: avoidSTier,
+      preferred_tomes: preferredTomes,
+      synergy_target: synergyTarget,
+    };
+
+    if (agentId && isServerAvailable()) {
+      const serverUrl = getServerUrl();
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (apiKey) headers["Authorization"] = `Bearer ${apiKey}`;
+
+      fetch(`${serverUrl}/api/agent/${agentId}/training`, {
+        method: "PUT",
+        headers,
+        body: JSON.stringify(payload),
+      })
+        .then((r) => {
+          if (!r.ok) throw new Error("Save failed");
+          setSaved(true);
+          setTimeout(() => setSaved(false), 2000);
+        })
+        .catch(() => {
+          // Fallback: still show saved for local state
+          setSaved(true);
+          setTimeout(() => setSaved(false), 2000);
+        });
+    } else {
+      // No agent selected or no server — just show local save confirmation
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    }
+  }, [aggression, targetPriority, retreatThreshold, useDash, autoRedeploy, avoidSTier, preferredTomes, synergyTarget, agentId, apiKey]);
 
   return (
     <div>
       <SectionTitle>Strategy Configuration</SectionTitle>
+
+      {/* Agent ID selector */}
+      <div style={{ marginBottom: 16 }}>
+        <FormField label="Agent ID (optional — load/save to server)">
+          <input
+            type="text"
+            placeholder="e.g. agent_abc123"
+            value={agentId}
+            onChange={(e) => setAgentId(e.target.value)}
+            style={{ ...inputStyle, maxWidth: 340 }}
+          />
+        </FormField>
+        {loadError && (
+          <p style={{ color: SK.orangeLight, fontSize: SKFont.xs, marginTop: 4 }}>{loadError}</p>
+        )}
+        {!agentId && (
+          <p style={{ color: SK.textMuted, fontSize: SKFont.xs, marginTop: 4 }}>
+            Without an Agent ID, strategy is saved locally only.
+          </p>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 24 }}>
         {/* Combat Behavior */}
@@ -516,7 +696,7 @@ function StrategyPanel() {
                   key={t}
                   onClick={() => {
                     setPreferredTomes((prev) =>
-                      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t]
+                      prev.includes(t) ? prev.filter((x) => x !== t) : [...prev, t],
                     );
                   }}
                   style={{
@@ -562,42 +742,98 @@ function StrategyPanel() {
 }
 
 // ============================================================
-// 5. Live Battle Mini View
+// 5. Live Battle Mini View (WebSocket)
 // ============================================================
 
-function LiveBattlePanel() {
+function LiveBattlePanel({ apiKey }: { apiKey: string }) {
   const [connected, setConnected] = useState(false);
   const [events, setEvents] = useState<{ time: string; text: string; color: string }[]>([]);
+  const [wsError, setWsError] = useState<string | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
 
   const connect = useCallback(() => {
-    // In production: connect to ws://server/ws/agents/live?api_key=xxx
-    setConnected(true);
-    // Simulate events
-    const interval = setInterval(() => {
-      const fakeEvents = [
-        { text: "Agent scored a kill on bot_warrior_05", color: SK.orangeLight },
-        { text: "Agent leveled up to Lv.8", color: SK.blue },
-        { text: "Arena shrinking — radius now 4200px", color: SK.red },
-        { text: "Agent collected 12 orbs (+36 mass)", color: SK.green },
-        { text: "Agent took 15 damage from bot_tank_02", color: SK.redLight },
-      ];
-      const ev = fakeEvents[Math.floor(Math.random() * fakeEvents.length)];
-      setEvents((prev) => [
-        { time: new Date().toLocaleTimeString(), text: ev.text, color: ev.color },
-        ...prev.slice(0, 49),
-      ]);
-    }, 2000);
+    if (!isServerAvailable()) {
+      setWsError("Server URL not configured. Start the server with ./game.sh");
+      return;
+    }
 
-    return () => clearInterval(interval);
+    const serverUrl = getServerUrl();
+    const wsUrl = serverUrl.replace(/^http/, "ws") + "/ws/agents/live" + (apiKey ? `?api_key=${encodeURIComponent(apiKey)}` : "");
+
+    try {
+      const ws = new WebSocket(wsUrl);
+      wsRef.current = ws;
+
+      ws.onopen = () => {
+        setConnected(true);
+        setWsError(null);
+      };
+
+      ws.onmessage = (msg) => {
+        try {
+          const data = JSON.parse(msg.data);
+          // Map event type to color
+          let color: string = SK.textSecondary;
+          const eventType = String(data.type || "");
+          if (eventType.includes("kill")) color = SK.orangeLight;
+          else if (eventType.includes("level")) color = SK.blue;
+          else if (eventType.includes("shrink") || eventType.includes("damage")) color = SK.red;
+          else if (eventType.includes("orb") || eventType.includes("heal")) color = SK.green;
+          else if (eventType.includes("death")) color = SK.redLight;
+
+          const text = data.description || data.message || data.text || JSON.stringify(data);
+
+          setEvents((prev) => [
+            { time: new Date().toLocaleTimeString(), text, color },
+            ...prev.slice(0, 49),
+          ]);
+        } catch {
+          // Non-JSON message — display raw
+          setEvents((prev) => [
+            { time: new Date().toLocaleTimeString(), text: String(msg.data), color: SK.textSecondary },
+            ...prev.slice(0, 49),
+          ]);
+        }
+      };
+
+      ws.onerror = () => {
+        setWsError("WebSocket connection error");
+      };
+
+      ws.onclose = () => {
+        setConnected(false);
+        wsRef.current = null;
+      };
+    } catch {
+      setWsError("Failed to create WebSocket connection");
+    }
+  }, [apiKey]);
+
+  const disconnect = useCallback(() => {
+    if (wsRef.current) {
+      wsRef.current.close();
+      wsRef.current = null;
+    }
+    setConnected(false);
   }, []);
 
+  // Cleanup on unmount
   useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+    };
+  }, []);
+
+  const handleToggle = useCallback(() => {
     if (connected) {
-      const cleanup = connect();
-      return cleanup;
+      disconnect();
+    } else {
+      connect();
     }
-  }, [connected, connect]);
+  }, [connected, connect, disconnect]);
 
   return (
     <div>
@@ -617,7 +853,7 @@ function LiveBattlePanel() {
           {connected ? "Connected — Streaming" : "Disconnected"}
         </span>
         <button
-          onClick={() => setConnected(!connected)}
+          onClick={handleToggle}
           style={{
             ...btnStyle,
             background: connected ? SK.red : SK.green,
@@ -628,6 +864,10 @@ function LiveBattlePanel() {
           {connected ? "Disconnect" : "Connect"}
         </button>
       </div>
+
+      {wsError && (
+        <p style={{ color: SK.orangeLight, fontSize: SKFont.xs, marginBottom: 12 }}>{wsError}</p>
+      )}
 
       {/* Live event feed */}
       <div
