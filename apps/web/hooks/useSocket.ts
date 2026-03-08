@@ -32,8 +32,82 @@ import type { CountryDominationState } from '@/components/3d/GlobeDominationLaye
 import type { CountryClientState } from '@/lib/globe-data';
 import { decodeHeightmap } from '@/lib/heightmap-decoder';
 import { decodeBiomeGrid, decodeObstacleGrid } from '@/lib/biome-decoder';
+import type {
+  ARState, ARPlayerNet, ARPhase, ARDamageEvent, ARTomeOffer,
+  ARBattleRewards, ARFactionPvPScoreNet, ARSynergyID, ARChoice,
+  ARPvPKillEvent,
+  ARLevelUpEvent,
+} from '@/lib/3d/ar-types';
 
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:8000';
+
+// ─── v19: AR Event Queue Types ───
+
+export type AREvent =
+  | { type: 'damage'; data: ARDamageEvent }
+  | { type: 'kill'; data: { killerId: string; victimId: string; xp: number } }
+  | { type: 'pvp_kill'; data: ARPvPKillEvent }
+  | { type: 'boss_spawn'; data: { bossType: string } }
+  | { type: 'boss_defeated'; data: { bossType: string; factionId: string } }
+  | { type: 'miniboss_death'; data: { minibossType: string; x: number; z: number } }
+  | { type: 'elite_explosion'; data: { x: number; z: number; radius: number } };
+
+const AR_EVENT_QUEUE_MAX = 256;
+
+/** Drain up to maxPerFrame events from the AR event queue (oldest first). */
+export function drainAREvents(
+  queue: React.MutableRefObject<AREvent[]>,
+  maxPerFrame: number = 64,
+): AREvent[] {
+  if (queue.current.length === 0) return [];
+  return queue.current.splice(0, maxPerFrame);
+}
+
+// ─── v19: AR UI State (React state for HTML overlays, 250ms throttle) ───
+
+export interface ARUiState {
+  hp: number;
+  maxHp: number;
+  xp: number;
+  xpToNext: number;
+  level: number;
+  phase: ARPhase;
+  timer: number;
+  wave: number;
+  kills: number;
+  alive: boolean;
+  factionId: string;
+  // Level-up choices (set by ar_level_up event)
+  levelUpChoices: ARTomeOffer[] | null;
+  // Battle end data
+  battleEnd: ARBattleRewards | null;
+  // PvP data
+  pvpRadius: number;
+  factionScores: ARFactionPvPScoreNet[];
+  // Synergies (from local player in arState)
+  synergies: ARSynergyID[];
+}
+
+const INITIAL_AR_UI_STATE: ARUiState = {
+  hp: 0,
+  maxHp: 0,
+  xp: 0,
+  xpToNext: 0,
+  level: 0,
+  phase: 'deploy',
+  timer: 0,
+  wave: 0,
+  kills: 0,
+  alive: false,
+  factionId: '',
+  levelUpChoices: null,
+  battleEnd: null,
+  pvpRadius: 0,
+  factionScores: [],
+  synergies: [],
+};
+
+const AR_UI_THROTTLE_MS = 250;
 
 // Coach message from server (Phase 5)
 export interface CoachMessageData {
@@ -65,6 +139,8 @@ export interface GameData {
   levelUp: LevelUpPayload | null;
   arenaShrink: ArenaShrinkPayload | null;
   synergyPopups: SynergyActivatedPayload[];
+  // v19: Raw AR state for arena combat HUD/enemy rendering
+  arState: ARState | null;
 }
 
 function createInitialData(): GameData {
@@ -87,6 +163,7 @@ function createInitialData(): GameData {
     levelUp: null,
     arenaShrink: null,
     synergyPopups: [],
+    arState: null,
   };
 }
 
@@ -181,6 +258,15 @@ export interface UiState {
 export function useSocket() {
   const socketRef = useRef<GameSocket | null>(null);
   const dataRef = useRef<GameData>(createInitialData());
+
+  // v19: AR state ref (raw 20Hz ar_state — for 3D components via useFrame)
+  const arStateRef = useRef<ARState | null>(null);
+  // v19: AR event queue ref (pushed by event handlers, drained by useFrame consumers)
+  const arEventQueueRef = useRef<AREvent[]>([]);
+  // v19: AR UI state (250ms throttle — for HTML overlay components)
+  const [arUiState, setArUiState] = useState<ARUiState>(INITIAL_AR_UI_STATE);
+  // v19: Throttle tracker for arUiState updates
+  const arUiThrottleRef = useRef(0);
 
   const [uiState, setUiState] = useState<UiState>({
     connected: false,
@@ -322,6 +408,146 @@ export function useSocket() {
       }
     });
 
+    // v19: Arena combat state — bridge ARState → synthetic StatePayload
+    // Server sends ar_state (not state) in CombatModeArena
+    socket.on('ar_state', (data: ARState) => {
+      const now = performance.now();
+
+      // Channel 1: Store raw AR state in ref (for 3D useFrame consumers)
+      arStateRef.current = data;
+      // Also keep on dataRef for backward compat
+      dataRef.current.arState = data;
+
+      // Channel 2: Throttled React state update for HTML HUD overlays (4Hz)
+      if (now - arUiThrottleRef.current >= AR_UI_THROTTLE_MS) {
+        arUiThrottleRef.current = now;
+        const myId = dataRef.current.playerId;
+        const me = myId ? data.players.find(p => p.id === myId) : null;
+        if (me) {
+          setArUiState(prev => ({
+            ...prev,
+            hp: me.hp,
+            maxHp: me.maxHp,
+            xp: me.xp,
+            xpToNext: me.xpToNext,
+            level: me.level,
+            phase: data.phase,
+            timer: data.timer,
+            wave: data.wave,
+            kills: me.kills,
+            alive: me.alive,
+            factionId: me.factionId,
+            pvpRadius: data.pvpRadius ?? 0,
+            factionScores: data.factionScores ?? [],
+            synergies: me.synergies ?? [],
+          }));
+        }
+      }
+
+      // Bridge: ARPlayerNet[] → AgentNetworkData[]
+      const agents: AgentNetworkData[] = data.players.map((p: ARPlayerNet) => ({
+        i: p.id,
+        n: p.name,
+        x: p.pos.x,
+        y: p.pos.z,       // server Z (horizontal) → client Y
+        z: p.pos.y,        // server Y (vertical) → client Z (height)
+        h: p.rot,          // rotation → heading
+        f: p.rot,          // same as heading (no separate aim in AR)
+        m: 15,             // v19 fix: fixed mass (HP→mass caused agents to appear giant)
+        b: false,          // no boost in arena
+        a: p.alive,
+        k: 0,              // skin placeholder
+        lv: p.level,
+        bot: false,
+        ks: p.kills,
+        hr: 15,            // default hitbox radius
+        nat: p.factionId,  // faction → nationality for flag display
+      }));
+
+      // Create synthetic StatePayload
+      const syntheticState: StatePayload = {
+        t: Date.now(),
+        s: agents,
+        o: [],             // no orbs in arena (enemies/crystals rendered separately)
+      };
+
+      // Write to same dataRef fields as classic state handler
+      dataRef.current.prevState = dataRef.current.latestState;
+      dataRef.current.prevStateTimestamp = dataRef.current.stateTimestamp;
+      dataRef.current.latestState = syntheticState;
+      dataRef.current.stateTimestamp = now;
+
+      // Track local player alive state from ar_state
+      const myId = dataRef.current.playerId;
+      if (myId) {
+        const me = data.players.find(p => p.id === myId);
+        if (me && !me.alive && dataRef.current.alive) {
+          dataRef.current.alive = false;
+          setUiState(prev => ({ ...prev, alive: false, isSpectating: true }));
+        } else if (me && me.alive && !dataRef.current.alive) {
+          dataRef.current.alive = true;
+          setUiState(prev => ({ ...prev, alive: true, isSpectating: false }));
+        }
+      }
+    });
+
+    // ─── v19: 10 AR Event Listeners (Channel 3: event queue + direct state) ───
+
+    socket.on('ar_damage', (data: ARDamageEvent) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'damage', data });
+      }
+    });
+
+    socket.on('ar_level_up', (data: ARLevelUpEvent) => {
+      // Direct state update — no throttle (immediate UI needed)
+      setArUiState(prev => ({ ...prev, levelUpChoices: data.choices }));
+    });
+
+    socket.on('ar_kill', (data: { killerId: string; victimId: string; xp: number }) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'kill', data });
+      }
+    });
+
+    socket.on('ar_phase_change', (data: { phase: ARPhase }) => {
+      setArUiState(prev => ({ ...prev, phase: data.phase }));
+    });
+
+    socket.on('ar_battle_end', (data: ARBattleRewards) => {
+      setArUiState(prev => ({ ...prev, battleEnd: data }));
+    });
+
+    socket.on('ar_miniboss_death', (data: { minibossType: string; x: number; z: number }) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'miniboss_death', data });
+      }
+    });
+
+    socket.on('ar_elite_explosion', (data: { x: number; z: number; radius: number }) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'elite_explosion', data });
+      }
+    });
+
+    socket.on('ar_pvp_kill', (data: ARPvPKillEvent) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'pvp_kill', data });
+      }
+    });
+
+    socket.on('ar_boss_spawn', (data: { bossType: string }) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'boss_spawn', data });
+      }
+    });
+
+    socket.on('ar_boss_defeated', (data: { bossType: string; factionId: string }) => {
+      if (arEventQueueRef.current.length < AR_EVENT_QUEUE_MAX) {
+        arEventQueueRef.current.push({ type: 'boss_defeated', data });
+      }
+    });
+
     socket.on('death', (data: DeathPayload) => {
       dataRef.current.alive = false;
       dataRef.current.deathInfo = data;
@@ -428,7 +654,21 @@ export function useSocket() {
             });
           }
         }
-        return { ...prev, countryStates: next };
+        // v17: countries_state에서 activeConflictCountries 추출
+        const conflicts = new Set<string>();
+        for (const cs of data) {
+          if (cs.battleStatus === 'in_battle' || cs.battleStatus === 'preparing') {
+            conflicts.add(cs.iso3);
+          }
+        }
+        // 기존 countryStates에서도 활성 전투 국가 포함
+        for (const [iso3, state] of next) {
+          if (state.battleStatus === 'in_battle' || state.battleStatus === 'preparing') {
+            conflicts.add(iso3);
+          }
+        }
+
+        return { ...prev, countryStates: next, activeConflictCountries: conflicts };
       });
     });
 
@@ -809,6 +1049,11 @@ export function useSocket() {
     dataRef.current.levelUp = null;
     dataRef.current.arenaShrink = null;
     dataRef.current.synergyPopups = [];
+    dataRef.current.arState = null;
+    // v19: Clear AR pipeline on leave
+    arStateRef.current = null;
+    arEventQueueRef.current = [];
+    setArUiState(INITIAL_AR_UI_STATE);
     setUiState(prev => ({
       ...prev,
       currentRoomId: null,
@@ -974,6 +1219,13 @@ export function useSocket() {
     }));
   }, []);
 
+  /** v19: AR 토메/무기 선택 (레벨업 시 ar_choose emit) */
+  const sendARChoice = useCallback((choice: ARChoice) => {
+    socketRef.current?.emit('ar_choose', choice);
+    // Clear level-up choices after selection
+    setArUiState(prev => ({ ...prev, levelUpChoices: null }));
+  }, []);
+
   return {
     dataRef,
     uiState,
@@ -990,5 +1242,10 @@ export function useSocket() {
     joinCountryArena,
     dismissEpochResult,
     switchArena,
+    // v19: AR data pipeline
+    arStateRef,
+    arEventQueueRef,
+    arUiState,
+    sendARChoice,
   };
 }

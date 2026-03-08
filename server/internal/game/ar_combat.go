@@ -23,8 +23,9 @@ type ArenaCombat struct {
 	fieldItems  []*ARFieldItem
 
 	// Subsystems
-	levelSystem *ARLevelSystem
-	itemSystem  *ARItemSystem
+	levelSystem     *ARLevelSystem
+	itemSystem      *ARItemSystem
+	spectateManager *ARSpectateManager
 
 	// Phase tracking
 	phase      ARPhase
@@ -73,6 +74,7 @@ func (ac *ArenaCombat) Init(cfg CombatModeConfig) {
 	ac.waveTimer = ARWaveInterval
 	ac.minibossTimer = ac.tierMinibossInterval()
 	ac.minibossIndex = 0
+	ac.spectateManager = NewARSpectateManager()
 }
 
 // OnTick implements CombatMode.OnTick.
@@ -977,30 +979,19 @@ func (ac *ArenaCombat) tickProjectiles(delta float64) []CombatEvent {
 	ac.projectiles = alive
 
 	for _, evt := range dmgEvents {
-		// Find owner player for kill credit
-		ownerID := ""
-		for _, p := range ac.projectiles {
-			// Already processed; we need to track owner from the event
-			_ = p
-		}
-
 		events = append(events, CombatEvent{
 			Type: "ar_damage",
 			Data: evt,
 		})
 
-		// Check for kills
+		// Check for kills — use SourceID from damage event for proper kill credit
 		for _, e := range ac.enemies {
 			if e.ID == evt.TargetID && e.HP <= 0 && e.Alive {
 				e.Alive = false
-				// Find owner
-				for _, p := range ac.players {
-					if p.ID == ownerID || ownerID == "" {
-						// Try to match via damage event sourceID
-						p.Kills++
-						ac.handleEnemyDeath(p, e, &events)
-						break
-					}
+				ownerID := evt.SourceID
+				if owner, ok := ac.players[ownerID]; ok {
+					owner.Kills++
+					ac.handleEnemyDeath(owner, e, &events)
 				}
 			}
 		}
@@ -1216,9 +1207,13 @@ func (ac *ArenaCombat) cleanupDead(events *[]CombatEvent) {
 	}
 	ac.fieldItems = itemsAlive
 
-	// Check for dead players
+	// Check for dead players — start spectating on death
 	for _, p := range ac.players {
 		if !p.Alive && p.HP <= 0 {
+			// Start spectating if not already (idempotent: OnPlayerDeath checks internally)
+			if ac.spectateManager != nil && !ac.spectateManager.IsSpectating(p.ID) {
+				ac.spectateManager.OnPlayerDeath(p.ID, ac.players)
+			}
 			*events = append(*events, CombatEvent{
 				Type:     "death",
 				TargetID: p.ID,
@@ -1228,6 +1223,11 @@ func (ac *ArenaCombat) cleanupDead(events *[]CombatEvent) {
 				},
 			})
 		}
+	}
+
+	// Validate spectate targets after death cleanup
+	if ac.spectateManager != nil {
+		ac.spectateManager.ValidateTargets(ac.players)
 	}
 }
 
@@ -1290,6 +1290,9 @@ func (ac *ArenaCombat) OnPlayerJoin(info *PlayerInfo) {
 
 // OnPlayerLeave implements CombatMode.OnPlayerLeave.
 func (ac *ArenaCombat) OnPlayerLeave(clientID string) {
+	if ac.spectateManager != nil {
+		ac.spectateManager.RemoveSpectator(clientID)
+	}
 	delete(ac.players, clientID)
 }
 
@@ -1451,12 +1454,23 @@ func (ac *ArenaCombat) GetState() interface{} {
 		})
 	}
 
+	// Determine effective arena radius
+	arenaRadius := ac.config.ArenaRadius
+	if arenaRadius <= 0 {
+		arenaRadius = ARDefaultArenaRadius
+	}
+	// During PvP, use the shrinking PvP radius
+	if ac.phase == ARPhasePvP && ac.pvpArenaRadius > 0 {
+		arenaRadius = ac.pvpArenaRadius
+	}
+
 	return &ARState{
 		Phase:         ac.phase,
 		Timer:         ac.phaseTimer,
 		WaveNumber:    ac.waveNumber,
 		Terrain:       ARTerrainTheme(ac.config.TerrainTheme),
 		Tier:          ac.config.Tier,
+		ArenaRadius:   arenaRadius,
 		Players:       playerList,
 		Enemies:       enemyNet,
 		XPCrystals:    crystalNet,
