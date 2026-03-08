@@ -138,11 +138,13 @@ export interface CityClientState {
   tradeRoutes: TradeRoute[];
   employed: number;
   unemployed: number;
+  /** Phase 5: Politics state */
+  politics?: PoliticsClientState;
 }
 
 // --- City Commands (Client → Server) ---
 
-export type CityCommandType = "build" | "demolish" | "upgrade" | "toggle";
+export type CityCommandType = "build" | "demolish" | "upgrade" | "toggle" | "issue_edict" | "revoke_edict";
 
 export interface CityCommand {
   iso3: string;
@@ -151,6 +153,7 @@ export interface CityCommand {
   defId?: string;      // for build
   tileX?: number;      // for build
   tileY?: number;      // for build
+  edictId?: string;    // for issue_edict/revoke_edict
 }
 
 // --- City Events (Server → Client) ---
@@ -173,4 +176,107 @@ export interface CityEconomyStats {
   gdp: number;
   foodSatisfaction: number;
   powerSurplus: number;
+}
+
+// --- Phase 5: Politics & Faction Types ---
+
+/** 4-axis political spectrum (each -1.0 to +1.0) */
+export interface FactionAxes {
+  /** Capitalist (+1) vs Communist (-1) */
+  economic: number;
+  /** Industrialist (+1) vs Environmentalist (-1) */
+  environment: number;
+  /** Militarist (+1) vs Religious (-1) */
+  governance: number;
+  /** Progressive (+1) vs Conservative (-1) */
+  social: number;
+}
+
+/** Faction axis label (used as key) */
+export type FactionAxisKey = keyof FactionAxes;
+
+/** Faction axis display names */
+export const FACTION_AXIS_LABELS: Record<FactionAxisKey, [string, string]> = {
+  economic:     ['Communist', 'Capitalist'],
+  environment:  ['Environmentalist', 'Industrialist'],
+  governance:   ['Religious', 'Militarist'],
+  social:       ['Conservative', 'Progressive'],
+};
+
+/** Faction axis colors: [negative side color, positive side color] */
+export const FACTION_AXIS_COLORS: Record<FactionAxisKey, [string, string]> = {
+  economic:     ['#EF4444', '#F59E0B'],  // red ↔ gold
+  environment:  ['#10B981', '#6B7280'],  // green ↔ gray
+  governance:   ['#A855F7', '#84CC16'],  // purple ↔ olive
+  social:       ['#3B82F6', '#F97316'],  // blue ↔ orange
+};
+
+/** Faction support snapshot (per axis: average citizen affinity) */
+export interface FactionSnapshot {
+  /** Average citizen affinities per axis (-1~+1) */
+  axes: FactionAxes;
+  /** Overall approval rating (0~100) */
+  approval: number;
+  /** Dissatisfaction level (0~100, >=80 triggers ultimatum) */
+  dissatisfaction: number;
+}
+
+/** Edict/Decree category */
+export type EdictCategory = 'economic' | 'social' | 'military' | 'environmental';
+
+/** Edict definition (available edicts) */
+export interface EdictDef {
+  id: string;
+  name: string;
+  description: string;
+  category: EdictCategory;
+  /** Effect on faction axes (additive per tick) */
+  factionEffect: Partial<FactionAxes>;
+  /** Effect on happiness factors */
+  happinessEffect: Partial<{
+    food: number;
+    healthcare: number;
+    entertainment: number;
+    faith: number;
+    housing: number;
+    job: number;
+    liberty: number;
+    safety: number;
+  }>;
+  /** Treasury cost per tick */
+  costPerTick: number;
+  /** Minimum treasury to enact */
+  minTreasury: number;
+}
+
+/** Active edict instance */
+export interface ActiveEdict {
+  edictId: string;
+  enactedTick: number;
+  active: boolean;
+}
+
+/** Political event type */
+export type PoliticalEventType =
+  | 'protest'
+  | 'strike'
+  | 'coup_attempt'
+  | 'faction_shift'
+  | 'edict_enacted'
+  | 'edict_revoked';
+
+/** Political event (server → client notification) */
+export interface PoliticalEvent {
+  type: PoliticalEventType;
+  message: string;
+  severity: 'info' | 'warning' | 'critical';
+  tick: number;
+}
+
+/** Politics state included in CityClientState */
+export interface PoliticsClientState {
+  factions: FactionSnapshot;
+  activeEdicts: ActiveEdict[];
+  availableEdicts: EdictDef[];
+  recentEvents: PoliticalEvent[];
 }

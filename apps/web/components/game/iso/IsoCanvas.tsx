@@ -23,12 +23,13 @@ import type { CitizenSnapshot, Building } from '@agent-survivor/shared/types/cit
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { useCityStore } from '@/stores/cityStore';
 
-// Phase 4 UI 컴포넌트
+// Phase 4+5 UI 컴포넌트
 import { ResourceHUD } from './ui/ResourceHUD';
 import { BuildingInfoPanel } from './ui/BuildingInfoPanel';
 import { ConstructionPanel } from './ui/ConstructionPanel';
 import { EconomyDashboard } from './ui/EconomyDashboard';
 import { ProductionChainOverlay } from './ui/ProductionChainOverlay';
+import { PoliticsPanel } from './ui/PoliticsPanel';
 
 // ─── Props ───
 
@@ -69,6 +70,8 @@ export function IsoCanvas({
   const showProductionChain = useCityStore(s => s.showProductionChain);
   const toggleProductionChain = useCityStore(s => s.toggleProductionChain);
   const serverBuildings = useCityStore(s => s.serverBuildings);
+  const showPoliticsPanel = useCityStore(s => s.showPoliticsPanel);
+  const togglePoliticsPanel = useCityStore(s => s.togglePoliticsPanel);
 
   // 선택된 건물 인스턴스 조회
   const selectedBuilding: Building | null = selectedBuildingId
@@ -274,12 +277,17 @@ export function IsoCanvas({
           setPlacingDefId(null);
           return;
         }
-        // 2순위: 경제 대시보드 닫기
+        // 2순위: 정치 패널 닫기
+        if (showPoliticsPanel) {
+          togglePoliticsPanel();
+          return;
+        }
+        // 3순위: 경제 대시보드 닫기
         if (showEconomyDashboard) {
           toggleEconomyDashboard();
           return;
         }
-        // 3순위: 건물 정보 패널 닫기
+        // 4순위: 건물 정보 패널 닫기
         if (selectedBuildingId) {
           selectBuilding(null);
           return;
@@ -293,17 +301,20 @@ export function IsoCanvas({
         onBackToGlobe();
       }
 
-      // 단축키: E = Economy, B = Build
+      // 단축키: E = Economy, B = Build, P = Politics
       if (e.key === 'e' || e.key === 'E') {
         toggleEconomyDashboard();
       }
       if (e.key === 'b' || e.key === 'B') {
         toggleConstructionPanel();
       }
+      if (e.key === 'p' || e.key === 'P') {
+        togglePoliticsPanel();
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel]);
+  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, showPoliticsPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel, togglePoliticsPanel]);
 
   return (
     <div style={{
@@ -410,6 +421,25 @@ export function IsoCanvas({
           >
             ECONOMY [E]
           </button>
+          {/* 정치 패널 토글 */}
+          <button
+            onClick={togglePoliticsPanel}
+            style={{
+              fontFamily: bodyFont,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: showPoliticsPanel ? SK.accent : SK.textSecondary,
+              backgroundColor: showPoliticsPanel ? 'rgba(239, 68, 68, 0.12)' : 'rgba(9,9,11,0.88)',
+              border: `1px solid ${showPoliticsPanel ? 'rgba(239, 68, 68, 0.25)' : SK.glassBorder}`,
+              borderRadius: 0,
+              padding: '6px 10px',
+              cursor: 'pointer',
+              letterSpacing: '0.5px',
+              textTransform: 'uppercase',
+            }}
+          >
+            POLITICS [P]
+          </button>
 
           {/* 호버 타일 정보 */}
           {hoverInfo && (
@@ -470,6 +500,21 @@ export function IsoCanvas({
       {showEconomyDashboard && (
         <EconomyDashboard
           onClose={toggleEconomyDashboard}
+        />
+      )}
+
+      {/* ──── Phase 5: 정치 패널 (중앙 모달) ──── */}
+      {showPoliticsPanel && (
+        <PoliticsPanel
+          onClose={togglePoliticsPanel}
+          onIssueEdict={(edictId) => {
+            console.log('[IsoCanvas] issue edict:', edictId);
+            // city_command { type: 'issue_edict', edictId } 전송
+          }}
+          onRevokeEdict={(edictId) => {
+            console.log('[IsoCanvas] revoke edict:', edictId);
+            // city_command { type: 'revoke_edict', edictId } 전송
+          }}
         />
       )}
 

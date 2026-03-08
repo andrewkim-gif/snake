@@ -108,6 +108,11 @@ type CitizenAgent struct {
 	// Faction affiliations (max 4, one per axis)
 	Factions []string `json:"factions"`
 
+	// 4-axis faction affinities (-1.0 ~ +1.0 each)
+	// [0]=Economic (Capitalist+/Communist-), [1]=Environment (Industrial+/Green-)
+	// [2]=Governance (Militarist+/Religious-), [3]=Social (Progressive+/Conservative-)
+	FactionAffinities [NumAxes]float64 `json:"factionAffinities"`
+
 	// Happiness (8 factors, each 0~100)
 	Happiness        HappinessFactors `json:"happiness"`
 	OverallHappiness float64          `json:"overallHappiness"`
@@ -148,11 +153,18 @@ func NewCitizen(rng *rand.Rand, mapSize int) *CitizenAgent {
 	tileX := margin + rng.Intn(mapSize-2*margin)
 	tileY := margin + rng.Intn(mapSize-2*margin)
 
+	// Randomize faction affinities (-1.0 ~ +1.0)
+	var affinities [NumAxes]float64
+	for i := 0; i < NumAxes; i++ {
+		affinities[i] = (rng.Float64()*2 - 1) * 0.8 // -0.8 ~ +0.8 (moderate initial leanings)
+	}
+
 	return &CitizenAgent{
-		ID:        nextCitizenID(),
-		Age:       age,
-		Education: edu,
-		Factions:  make([]string, 0, 4),
+		ID:                nextCitizenID(),
+		Age:               age,
+		Education:         edu,
+		Factions:          make([]string, 0, 4),
+		FactionAffinities: affinities,
 		Happiness: HappinessFactors{
 			Food:          50,
 			Healthcare:    50,
@@ -241,8 +253,8 @@ func (c *CitizenAgent) TickCitizen(buildings map[string]*Building, rng *rand.Ran
 }
 
 // ComputeHappiness recalculates all 8 happiness factors based on
-// building accessibility and employment status.
-func (c *CitizenAgent) ComputeHappiness(buildings map[string]*Building, foodSatisfaction float64, atWar bool) {
+// building accessibility, employment status, and active edict modifiers.
+func (c *CitizenAgent) ComputeHappiness(buildings map[string]*Building, foodSatisfaction float64, atWar bool, edictMods *HappinessModifiers) {
 	// Food: based on food satisfaction ratio (from economy tick)
 	c.Happiness.Food = foodSatisfaction * 100
 
@@ -276,8 +288,34 @@ func (c *CitizenAgent) ComputeHappiness(buildings map[string]*Building, foodSati
 		c.Happiness.Safety = math.Max(0, c.Happiness.Safety-30)
 	}
 
+	// Phase 5: Apply edict happiness modifiers (weighted by citizen's faction alignment)
+	if edictMods != nil {
+		c.applyEdictHappinessModifiers(edictMods)
+	}
+
 	c.Happiness.Clamp()
 	c.OverallHappiness = c.Happiness.Average()
+}
+
+// applyEdictHappinessModifiers adjusts happiness factors based on active edicts.
+// Citizens whose faction affinities align with the edict feel stronger effects.
+func (c *CitizenAgent) applyEdictHappinessModifiers(mods *HappinessModifiers) {
+	// Affinity multiplier: average absolute affinity (0.5~1.5 range)
+	avgAffinity := 0.0
+	for i := 0; i < NumAxes; i++ {
+		avgAffinity += math.Abs(c.FactionAffinities[i])
+	}
+	avgAffinity = avgAffinity / float64(NumAxes)
+	multiplier := 0.5 + avgAffinity // 0.5 to 1.5
+
+	c.Happiness.Food += mods.Food * multiplier
+	c.Happiness.Healthcare += mods.Healthcare * multiplier
+	c.Happiness.Entertainment += mods.Entertainment * multiplier
+	c.Happiness.Faith += mods.Faith * multiplier
+	c.Happiness.Housing += mods.Housing * multiplier
+	c.Happiness.Job += mods.Job * multiplier
+	c.Happiness.Liberty += mods.Liberty * multiplier
+	c.Happiness.Safety += mods.Safety * multiplier
 }
 
 // computeBuildingAccessFactor returns 0~100 based on proximity to specified building types.

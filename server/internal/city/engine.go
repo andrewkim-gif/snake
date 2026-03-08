@@ -38,11 +38,12 @@ type WarEventReceiver interface {
 
 // CityCommand represents a player command to the city engine.
 type CityCommand struct {
-	Type       string `json:"type"`       // "build", "demolish", "upgrade", "toggle"
+	Type       string `json:"type"`       // "build", "demolish", "upgrade", "toggle", "issue_edict", "revoke_edict"
 	BuildingID string `json:"buildingId"` // for demolish/upgrade/toggle
 	DefID      string `json:"defId"`      // for build
 	TileX      int    `json:"tileX"`      // for build
 	TileY      int    `json:"tileY"`      // for build
+	EdictID    string `json:"edictId"`    // for issue_edict/revoke_edict
 }
 
 // CityState is the serializable state sent to clients.
@@ -66,6 +67,7 @@ type CityState struct {
 	TradeRoutes []*TradeRoute       `json:"tradeRoutes"`
 	Employed    int                 `json:"employed"`
 	Unemployed  int                 `json:"unemployed"`
+	Politics    *PoliticsSnapshot   `json:"politics,omitempty"`
 }
 
 // CitySimEngine manages the simulation for a single country's city.
@@ -87,6 +89,7 @@ type CitySimEngine struct {
 
 	// Sub-engines
 	production  *ProductionEngine
+	politics    *PoliticsEngine
 	tradeRoutes []*TradeRoute
 
 	// External references (interfaces for decoupling)
@@ -137,6 +140,7 @@ func NewCitySimEngine(iso3, tier string) *CitySimEngine {
 		citizenCount: citizenTarget,
 		happiness:    70.0, // 0-100
 		production:   NewProductionEngine(),
+		politics:     NewPoliticsEngine(),
 		tradeRoutes:  make([]*TradeRoute, 0),
 		tickInterval: 10 * time.Second,
 		lastTick:     time.Now(),
@@ -218,9 +222,10 @@ func (e *CitySimEngine) FullTick() {
 
 	// Step 3: Citizen FSM tick — advance each citizen's behavior state
 	atWar := e.warMgr != nil && e.warMgr.IsAtWar(e.iso3)
+	edictMods := e.politics.GetActiveEdictHappinessModifiers()
 	for _, citizen := range e.citizens {
 		citizen.TickCitizen(e.buildings, e.rng)
-		citizen.ComputeHappiness(e.buildings, stats.FoodSatisfaction, atWar)
+		citizen.ComputeHappiness(e.buildings, stats.FoodSatisfaction, atWar, &edictMods)
 	}
 
 	// Step 4: Update city-level happiness from citizen average
@@ -228,6 +233,14 @@ func (e *CitySimEngine) FullTick() {
 
 	// Step 5: Calculate military power from military buildings
 	e.militaryPower = e.computeMilitaryPower()
+
+	// Step 5.5: Politics tick — faction aggregation, approval, edict costs, events
+	edictCost := e.politics.TickPolitics(e.citizens, e.tickCount, e.rng)
+	if e.treasury >= edictCost {
+		e.treasury -= edictCost
+	} else {
+		e.treasury = 0
+	}
 
 	// Step 6: Pay citizen savings (salary → savings each tick)
 	e.payCitizenSalaries()
@@ -286,6 +299,10 @@ func (e *CitySimEngine) HandleCommand(cmd CityCommand) error {
 		return e.handleUpgrade(cmd)
 	case "toggle":
 		return e.handleToggle(cmd)
+	case "issue_edict":
+		return e.handleIssueEdict(cmd)
+	case "revoke_edict":
+		return e.handleRevokeEdict(cmd)
 	default:
 		return fmt.Errorf("unknown command type: %s", cmd.Type)
 	}
@@ -396,6 +413,22 @@ func (e *CitySimEngine) handleToggle(cmd CityCommand) error {
 	return nil
 }
 
+// handleIssueEdict enacts a new edict.
+func (e *CitySimEngine) handleIssueEdict(cmd CityCommand) error {
+	if e.politics == nil {
+		return fmt.Errorf("politics engine not initialized")
+	}
+	return e.politics.IssueEdict(EdictID(cmd.EdictID), e.treasury, e.tickCount)
+}
+
+// handleRevokeEdict deactivates an active edict.
+func (e *CitySimEngine) handleRevokeEdict(cmd CityCommand) error {
+	if e.politics == nil {
+		return fmt.Errorf("politics engine not initialized")
+	}
+	return e.politics.RevokeEdict(EdictID(cmd.EdictID), e.tickCount)
+}
+
 // GetCityState returns the current city state for client serialization.
 func (e *CitySimEngine) GetCityState() CityState {
 	e.mu.RLock()
@@ -428,6 +461,13 @@ func (e *CitySimEngine) GetCityState() CityState {
 		atWar = e.warMgr.IsAtWar(e.iso3)
 	}
 
+	// Politics snapshot
+	var politicsSnap *PoliticsSnapshot
+	if e.politics != nil {
+		snap := e.politics.Snapshot(e.tickCount)
+		politicsSnap = &snap
+	}
+
 	return CityState{
 		ISO3:        e.iso3,
 		Tier:        e.tier,
@@ -448,6 +488,7 @@ func (e *CitySimEngine) GetCityState() CityState {
 		TradeRoutes: e.tradeRoutes,
 		Employed:    employed,
 		Unemployed:  len(e.citizens) - employed,
+		Politics:    politicsSnap,
 	}
 }
 

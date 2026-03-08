@@ -13,6 +13,8 @@ import type {
   CityResourceType,
   CityEconomyStats,
   TradeRoute,
+  PoliticsClientState,
+  PoliticalEvent,
 } from '@agent-survivor/shared/types/city';
 
 // ─── UI 상태 타입 ───
@@ -64,6 +66,12 @@ interface CityState {
   /** 경제 통계 (직전 틱) */
   economyStats: CityEconomyStats | null;
 
+  // ── Phase 5: 정치 시스템 상태 ──
+  /** 정치 상태 (서버에서 수신) */
+  politics: PoliticsClientState | null;
+  /** 최근 정치 이벤트 알림 큐 */
+  politicalEvents: PoliticalEvent[];
+
   // ── Phase 4: UI 상태 ──
   /** 선택된 건물 ID (건물 정보 패널용) */
   selectedBuildingId: string | null;
@@ -75,6 +83,8 @@ interface CityState {
   showProductionChain: boolean;
   /** 건설 패널 카테고리 필터 */
   constructionCategory: ConstructionCategory;
+  /** 정치 패널 표시 */
+  showPoliticsPanel: boolean;
 }
 
 // ─── Actions ───
@@ -110,6 +120,14 @@ interface CityActions {
   /** 경제 통계 업데이트 */
   setEconomyStats: (stats: CityEconomyStats) => void;
 
+  // ── Phase 5: 정치 액션 ──
+  /** 정치 상태 업데이트 (서버 city_state 수신 시) */
+  syncPolitics: (politics: PoliticsClientState | null) => void;
+  /** 정치 이벤트 추가 */
+  addPoliticalEvent: (event: PoliticalEvent) => void;
+  /** 정치 이벤트 클리어 */
+  clearPoliticalEvents: () => void;
+
   // ── Phase 4: UI 액션 ──
   /** 건물 선택 (정보 패널용) */
   selectBuilding: (buildingId: string | null) => void;
@@ -121,6 +139,8 @@ interface CityActions {
   toggleProductionChain: () => void;
   /** 건설 패널 카테고리 필터 변경 */
   setConstructionCategory: (cat: ConstructionCategory) => void;
+  /** 정치 패널 토글 */
+  togglePoliticsPanel: () => void;
 }
 
 // ─── Store ───
@@ -149,12 +169,17 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
   tradeRoutes: [],
   economyStats: null,
 
+  // 초기 상태 — Phase 5: 정치
+  politics: null,
+  politicalEvents: [],
+
   // 초기 상태 — Phase 4: UI
   selectedBuildingId: null,
   showEconomyDashboard: false,
   showConstructionPanel: false,
   showProductionChain: false,
   constructionCategory: 'all',
+  showPoliticsPanel: false,
 
   // ── Phase 1 액션 ──
   enterCountry: (iso3, name, tier = 'C') =>
@@ -184,6 +209,10 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
       showConstructionPanel: false,
       showProductionChain: false,
       constructionCategory: 'all',
+      // Phase 5 상태 초기화
+      politics: null,
+      politicalEvents: [],
+      showPoliticsPanel: false,
     }),
 
   leaveCountry: () =>
@@ -211,6 +240,10 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
       showConstructionPanel: false,
       showProductionChain: false,
       constructionCategory: 'all',
+      // Phase 5 상태 초기화
+      politics: null,
+      politicalEvents: [],
+      showPoliticsPanel: false,
     }),
 
   addBuilding: (building) =>
@@ -242,6 +275,18 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
   setEconomyStats: (stats) =>
     set({ economyStats: stats }),
 
+  // ── Phase 5: 정치 액션 ──
+  syncPolitics: (politics) =>
+    set({ politics }),
+
+  addPoliticalEvent: (event) =>
+    set((state) => ({
+      politicalEvents: [...state.politicalEvents.slice(-9), event],
+    })),
+
+  clearPoliticalEvents: () =>
+    set({ politicalEvents: [] }),
+
   // ── Phase 4: UI 액션 ──
   selectBuilding: (buildingId) =>
     set({ selectedBuildingId: buildingId, showProductionChain: buildingId !== null }),
@@ -257,4 +302,7 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
 
   setConstructionCategory: (cat) =>
     set({ constructionCategory: cat }),
+
+  togglePoliticsPanel: () =>
+    set((state) => ({ showPoliticsPanel: !state.showPoliticsPanel })),
 }));
