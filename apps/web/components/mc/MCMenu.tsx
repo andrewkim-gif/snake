@@ -1,8 +1,13 @@
 'use client'
 
 // Minecraft 메인 메뉴 / 일시정지 메뉴
+// - 시작 화면: MINECRAFT 타이틀 + Play 버튼
+// - 일시정지: Resume Game + Back to Lobby 버튼
+// - ESC로 포인터 잠금 해제 시 자동 표시
+// - Minecraft 스타일 다크 버튼 + 픽셀 미학
 
 import { useCallback, useEffect } from 'react'
+import { useRouter } from 'next/navigation'
 import { PlayerMode } from '@/lib/3d/mc-types'
 
 interface MCMenuProps {
@@ -22,6 +27,8 @@ export default function MCMenu({
   onPlay,
   onResume,
 }: MCMenuProps) {
+  const router = useRouter()
+
   // E키로 재개 (플레이 중 + 잠금해제 상태)
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -37,14 +44,18 @@ export default function MCMenu({
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [handleKeyDown])
 
+  // 로비로 돌아가기
+  const handleBackToLobby = useCallback(() => {
+    router.push('/')
+  }, [router])
+
   // 플레이 중이고 포인터 잠긴 상태면 메뉴 숨김
   if (isPlaying && locked) return null
 
-  // 일시정지 화면 (isPlaying && !locked): 클릭하면 재개
+  // 일시정지 화면 (isPlaying && !locked)
   if (isPlaying && !locked) {
     return (
       <div
-        onClick={onResume}
         style={{
           position: 'fixed',
           inset: 0,
@@ -52,54 +63,52 @@ export default function MCMenu({
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
-          background: 'rgba(0,0,0,0.6)',
+          background: 'rgba(0,0,0,0.65)',
           zIndex: 200,
-          cursor: 'pointer',
         }}
       >
+        {/* 타이틀 */}
         <h2
           style={{
             fontFamily: 'monospace',
-            fontSize: 24,
+            fontSize: 28,
+            fontWeight: 'bold',
             color: '#fff',
             textShadow: '2px 2px 0 #333',
-            marginBottom: 16,
+            marginBottom: 32,
+            letterSpacing: 2,
           }}
         >
           {hasEnteredGame ? 'Game Paused' : 'Ready'}
         </h2>
-        <p
+
+        {/* Resume Game 버튼 */}
+        <MenuButton onClick={onResume}>
+          {hasEnteredGame ? 'Resume Game' : 'Start Game'}
+        </MenuButton>
+
+        {/* Back to Lobby 버튼 */}
+        <div style={{ height: 8 }} />
+        <MenuButton onClick={handleBackToLobby} variant="secondary">
+          Back to Lobby
+        </MenuButton>
+
+        {/* 모드 표시 + 단축키 안내 */}
+        <div
           style={{
-            fontFamily: 'monospace',
-            fontSize: 16,
-            color: 'rgba(255,255,255,0.8)',
-            marginBottom: 8,
-            animation: 'pulse 2s ease-in-out infinite',
-          }}
-        >
-          Click anywhere to {hasEnteredGame ? 'resume' : 'start'}
-        </p>
-        {hasEnteredGame && (
-          <p
-            style={{
-              fontFamily: 'monospace',
-              fontSize: 12,
-              color: 'rgba(255,255,255,0.4)',
-            }}
-          >
-            Press E to resume | ESC to pause
-          </p>
-        )}
-        <p
-          style={{
+            marginTop: 24,
             fontFamily: 'monospace',
             fontSize: 12,
-            color: 'rgba(255,255,200,0.5)',
-            marginTop: 16,
+            color: 'rgba(255,255,255,0.4)',
+            textAlign: 'center',
+            lineHeight: 1.8,
           }}
         >
-          Mode: {mode.toUpperCase()}
-        </p>
+          <div>Press E or Click to resume | ESC to pause</div>
+          <div style={{ color: 'rgba(255,255,200,0.5)', marginTop: 4 }}>
+            Mode: {mode.toUpperCase()}
+          </div>
+        </div>
       </div>
     )
   }
@@ -119,16 +128,16 @@ export default function MCMenu({
         zIndex: 200,
       }}
     >
-      {/* 타이틀 */}
+      {/* MINECRAFT 타이틀 */}
       <h1
         style={{
           fontFamily: 'monospace',
-          fontSize: 48,
+          fontSize: 52,
           fontWeight: 'bold',
           color: '#fff',
-          textShadow: '3px 3px 0 #333',
+          textShadow: '3px 3px 0 #333, 4px 4px 0 rgba(0,0,0,0.2)',
           marginBottom: 8,
-          letterSpacing: 4,
+          letterSpacing: 6,
         }}
       >
         MINECRAFT
@@ -144,7 +153,14 @@ export default function MCMenu({
         R3F Edition
       </p>
 
+      {/* Play 버튼 */}
       <MenuButton onClick={onPlay}>Play</MenuButton>
+
+      {/* Back to Lobby 버튼 */}
+      <div style={{ height: 8 }} />
+      <MenuButton onClick={handleBackToLobby} variant="secondary">
+        Back to Lobby
+      </MenuButton>
 
       {/* 조작법 */}
       <div
@@ -167,36 +183,56 @@ export default function MCMenu({
   )
 }
 
+// ---------------------------------------------------------------------------
+// Minecraft 스타일 버튼 컴포넌트
+// ---------------------------------------------------------------------------
 function MenuButton({
   onClick,
   children,
+  variant = 'primary',
 }: {
   onClick: () => void
   children: React.ReactNode
+  variant?: 'primary' | 'secondary'
 }) {
+  const isPrimary = variant === 'primary'
+
   return (
     <button
       onClick={onClick}
       style={{
         fontFamily: 'monospace',
-        fontSize: 18,
+        fontSize: isPrimary ? 18 : 16,
         fontWeight: 'bold',
         color: '#fff',
-        background: 'rgba(0,0,0,0.5)',
-        border: '2px solid #555',
+        background: isPrimary
+          ? 'rgba(76, 175, 80, 0.7)'
+          : 'rgba(0,0,0,0.5)',
+        border: `2px solid ${isPrimary ? '#66BB6A' : '#555'}`,
         borderRadius: 4,
-        padding: '10px 48px',
+        padding: isPrimary ? '10px 48px' : '8px 48px',
         cursor: 'pointer',
         transition: 'all 0.15s',
         minWidth: 220,
+        textShadow: '1px 1px 0 rgba(0,0,0,0.5)',
       }}
       onMouseEnter={(e) => {
-        e.currentTarget.style.background = 'rgba(255,255,255,0.2)'
-        e.currentTarget.style.borderColor = '#fff'
+        if (isPrimary) {
+          e.currentTarget.style.background = 'rgba(76, 175, 80, 0.9)'
+          e.currentTarget.style.borderColor = '#81C784'
+        } else {
+          e.currentTarget.style.background = 'rgba(255,255,255,0.15)'
+          e.currentTarget.style.borderColor = '#aaa'
+        }
       }}
       onMouseLeave={(e) => {
-        e.currentTarget.style.background = 'rgba(0,0,0,0.5)'
-        e.currentTarget.style.borderColor = '#555'
+        if (isPrimary) {
+          e.currentTarget.style.background = 'rgba(76, 175, 80, 0.7)'
+          e.currentTarget.style.borderColor = '#66BB6A'
+        } else {
+          e.currentTarget.style.background = 'rgba(0,0,0,0.5)'
+          e.currentTarget.style.borderColor = '#555'
+        }
       }}
     >
       {children}
