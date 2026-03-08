@@ -43,6 +43,8 @@ interface GlobeHoverPanelProps {
   mouseY: number;
   visible: boolean;
   onClickEnter?: (countryCode: string) => void;
+  /** v26: Globe → Isometric 도시 관리 전환 */
+  onClickManage?: (countryCode: string) => void;
 }
 
 // ─── Constants ──
@@ -121,6 +123,7 @@ export function GlobeHoverPanel({
   mouseY,
   visible,
   onClickEnter,
+  onClickManage,
 }: GlobeHoverPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [position, setPosition] = useState({ x: 0, y: 0 });
@@ -158,6 +161,11 @@ export function GlobeHoverPanel({
     e.stopPropagation();
     if (data) onClickEnter?.(data.countryCode);
   }, [data, onClickEnter]);
+
+  const handleManageClick = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (data) onClickManage?.(data.countryCode);
+  }, [data, onClickManage]);
 
   if (!visible || !data) return null;
 
@@ -253,32 +261,62 @@ export function GlobeHoverPanel({
         <MiniStat label="Population" value={formatPopulation(data.population)} color="#FB923C" />
       </div>
 
-      {/* Enter Arena Button */}
-      <button
-        onClick={handleEnterClick}
-        style={{
-          width: '100%',
-          padding: '8px',
-          borderRadius: radius.md,
-          border: `1px solid ${SK.blue}60`,
-          background: `${SK.blue}20`,
-          color: SK.blue,
-          fontFamily: bodyFont,
-          fontSize: SKFont.xs,
-          fontWeight: 700,
-          cursor: 'pointer',
-          letterSpacing: '1px',
-          transition: 'all 150ms ease',
-        }}
-        onMouseEnter={(e) => {
-          (e.target as HTMLButtonElement).style.background = `${SK.blue}40`;
-        }}
-        onMouseLeave={(e) => {
-          (e.target as HTMLButtonElement).style.background = `${SK.blue}20`;
-        }}
-      >
-        CLICK TO ENTER ARENA
-      </button>
+      {/* Action Buttons */}
+      <div style={{ display: 'flex', gap: '6px' }}>
+        {/* Enter Arena Button */}
+        <button
+          onClick={handleEnterClick}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: radius.md,
+            border: `1px solid ${SK.blue}60`,
+            background: `${SK.blue}20`,
+            color: SK.blue,
+            fontFamily: bodyFont,
+            fontSize: SKFont.xs,
+            fontWeight: 700,
+            cursor: 'pointer',
+            letterSpacing: '1px',
+            transition: 'all 150ms ease',
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.background = `${SK.blue}40`;
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.background = `${SK.blue}20`;
+          }}
+        >
+          ENTER ARENA
+        </button>
+
+        {/* v26: Manage Country Button (Isometric) */}
+        <button
+          onClick={handleManageClick}
+          style={{
+            flex: 1,
+            padding: '8px',
+            borderRadius: radius.md,
+            border: `1px solid ${SK.gold}60`,
+            background: `${SK.gold}20`,
+            color: SK.gold,
+            fontFamily: bodyFont,
+            fontSize: SKFont.xs,
+            fontWeight: 700,
+            cursor: 'pointer',
+            letterSpacing: '1px',
+            transition: 'all 150ms ease',
+          }}
+          onMouseEnter={(e) => {
+            (e.target as HTMLButtonElement).style.background = `${SK.gold}40`;
+          }}
+          onMouseLeave={(e) => {
+            (e.target as HTMLButtonElement).style.background = `${SK.gold}20`;
+          }}
+        >
+          MANAGE
+        </button>
+      </div>
     </div>
   );
 }

@@ -43,6 +43,8 @@ interface WorldViewProps {
   countryStates?: Map<string, CountryClientState>;
   onEnterArena?: (iso3: string) => void;
   onSpectate?: (iso3: string) => void;
+  /** v26: Globe → Isometric 전환 콜백 */
+  onManageCountry?: (iso3: string, name: string) => void;
   bottomOffset?: number;
   style?: React.CSSProperties;
   /** v14: Domination state overlay for globe countries */
@@ -75,6 +77,7 @@ export function WorldView({
   countryStates,
   onEnterArena,
   onSpectate,
+  onManageCountry,
   bottomOffset = 0,
   style,
   dominationStates,
@@ -269,6 +272,11 @@ export function WorldView({
           setHoverVisible(false);
           onEnterArena?.(iso3);
         }}
+        onClickManage={(iso3) => {
+          setHoverVisible(false);
+          const cs = statesRef.current.get(iso3);
+          onManageCountry?.(iso3, cs?.name ?? iso3);
+        }}
       />
 
       {/* 국가 상세 패널 */}
@@ -278,6 +286,10 @@ export function WorldView({
         onClose={handleClosePanel}
         onEnterArena={onEnterArena}
         onSpectate={onSpectate}
+        onManageCountry={(iso3) => {
+          const cs = statesRef.current.get(iso3);
+          onManageCountry?.(iso3, cs?.name ?? iso3);
+        }}
       />
     </div>
   );

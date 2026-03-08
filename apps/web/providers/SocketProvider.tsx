@@ -29,7 +29,7 @@ import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
 import type { ARChoice } from '@/lib/3d/ar-types';
 
 // ─── 게임 모드 타입 ───
-export type GameMode = 'idle' | 'lobby' | 'transitioning' | 'playing';
+export type GameMode = 'idle' | 'lobby' | 'transitioning' | 'playing' | 'iso';
 
 // ─── Layer 1: Stable Context (변경 빈도 낮음 → re-render OK) ───
 export interface SocketStableContextValue {

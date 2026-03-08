@@ -45,6 +45,8 @@ interface CountryPanelProps {
   onClose: () => void;
   onEnterArena?: (iso3: string) => void;
   onSpectate?: (iso3: string) => void;
+  /** v26: Globe → Isometric 도시 관리 전환 */
+  onManageCountry?: (iso3: string) => void;
 }
 
 // ─── API Data Helpers ────────────────────────────────────
@@ -731,6 +733,7 @@ export function CountryPanel({
   onClose,
   onEnterArena,
   onSpectate,
+  onManageCountry,
 }: CountryPanelProps) {
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<CountryTab>('OVERVIEW');
@@ -939,6 +942,24 @@ export function CountryPanel({
         style={{ flex: 1, fontSize: SKFont.sm, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
       >
         <Eye size={14} strokeWidth={2} /> SPECTATE
+      </McButton>
+      {/* v26: Manage Country → Isometric 시뮬레이션 */}
+      <McButton
+        variant="default"
+        onClick={() => country?.iso3 && onManageCountry?.(country.iso3)}
+        disabled={!country}
+        style={{
+          flex: 1,
+          fontSize: SKFont.sm,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: '6px',
+          borderColor: 'rgba(204, 153, 51, 0.5)',
+          color: '#CC9933',
+        }}
+      >
+        <Building2 size={14} strokeWidth={2} /> MANAGE
       </McButton>
     </div>
   );

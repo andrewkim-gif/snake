@@ -44,13 +44,20 @@ const GameCanvas3D = dynamic(
   () => import('@/components/game/GameCanvas3D').then(m => ({ default: m.GameCanvas3D })),
   { ssr: false },
 );
+// v26: Isometric city canvas (PixiJS 8) — dynamic import, ssr: false
+const IsoCanvas = dynamic(
+  () => import('@/components/game/iso/IsoCanvas').then(m => ({ default: m.IsoCanvas })),
+  { ssr: false },
+);
 
 const NEWS_FEED_HEIGHT = 36;
 
 export default function Home() {
   const tLobby = useTranslations('lobby');
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing'>('lobby');
+  const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso'>('lobby');
+  // v26: 아이소메트릭 국가 관리 대상
+  const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string } | null>(null);
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
   const [appearance, setAppearance] = useState<CubelingAppearance>(createDefaultAppearance);
@@ -336,6 +343,26 @@ export default function Home() {
   // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
+  // v26: Globe → Isometric 전환 (Manage Country)
+  const handleManageCountry = useCallback((iso3: string, name: string) => {
+    setIsoCountry({ iso3, name });
+    setFadeOut(true);
+    setTimeout(() => {
+      setMode('iso');
+      setFadeOut(false);
+    }, 300);
+  }, []);
+
+  // v26: Iso → Globe 복귀
+  const handleBackToGlobe = useCallback(() => {
+    setFadeOut(true);
+    setTimeout(() => {
+      setMode('lobby');
+      setIsoCountry(null);
+      setFadeOut(false);
+    }, 300);
+  }, []);
+
   // v14 S36: 글로브에서 국가 클릭 시 아레나 즉시 입장 (소켓 유지 + 전환)
   const handleQuickEnterArena = useCallback((iso3: string) => {
     const name = playerName || `Agent${Math.floor(Math.random() * 9999)}`;
@@ -386,6 +413,24 @@ export default function Home() {
     const timer = setTimeout(() => setEpochSummary(null), 10_000);
     return () => clearTimeout(timer);
   }, [epochSummary]);
+
+  // --- v26: 아이소메트릭 국가 관리 화면 ---
+  if (mode === 'iso' && isoCountry) {
+    return (
+      <div style={{
+        width: '100vw',
+        height: '100vh',
+        opacity: fadeOut ? 0 : 1,
+        transition: 'opacity 300ms ease',
+      }}>
+        <IsoCanvas
+          countryIso3={isoCountry.iso3}
+          countryName={isoCountry.name}
+          onBackToGlobe={handleBackToGlobe}
+        />
+      </div>
+    );
+  }
 
   // --- 전환 화면 ---
   if (mode === 'transitioning') {
@@ -450,6 +495,7 @@ export default function Home() {
         countryStates={uiState.countryStates}
         onEnterArena={handleQuickEnterArena}
         onSpectate={handleSpectate}
+        onManageCountry={handleManageCountry}
         bottomOffset={NEWS_FEED_HEIGHT}
         dominationStates={uiState.dominationStates}
         wars={activeWars}

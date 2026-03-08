@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@agent-survivor/shared": "*",
+    "@pixi/tilemap": "^5.0.2",
     "@react-three/drei": "^10.7.7",
     "@react-three/fiber": "^9.5.0",
     "@react-three/postprocessing": "^3.0.4",
@@ -18,6 +19,7 @@
     "maplibre-gl": "^5.19.0",
     "next": "^15.1.0",
     "next-intl": "^4.8.3",
+    "pixi.js": "^8.16.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "three": "0.175.0"
