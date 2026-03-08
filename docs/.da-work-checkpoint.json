@@ -5,15 +5,15 @@
   "plan_file": "PLAN.md (minecraft plan in context)",
   "project_type": "GAME",
   "current_stage": 3,
-  "current_phase": 1,
+  "current_phase": 2,
   "total_phases": 4,
   "phases": [
     {"name": "Assets + Core Modules", "design_needed": false, "status": "done"},
-    {"name": "Terrain + Camera + Scene", "design_needed": false, "status": "pending"},
+    {"name": "Terrain + Camera + Scene", "design_needed": false, "status": "done"},
     {"name": "Block Interaction + UI", "design_needed": false, "status": "pending"},
     {"name": "Page Wiring + Polish", "design_needed": false, "status": "pending"}
   ],
   "iterations": {"arch": 0, "dev": 0, "e2e": 0},
-  "last_skill": "turbo_phase1_done",
-  "last_update": "2026-03-08T16:30:00+09:00"
+  "last_skill": "turbo_phase2_done",
+  "last_update": "2026-03-08T17:30:00+09:00"
 }

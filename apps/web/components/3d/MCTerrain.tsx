@@ -2,6 +2,7 @@
 
 // Minecraft 터레인 R3F 컴포넌트
 // InstancedMesh per block type, Web Worker 청크 생성
+// 면 제거 최적화: 6면 모두 불투명 블록에 둘러싸인 블록은 렌더하지 않음
 
 import { useRef, useEffect, useMemo, useCallback } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -32,7 +33,7 @@ const blockGeo = new THREE.BoxGeometry(1, 1, 1)
 export interface MCTerrainArenaMode {
   /** 아레나 반경 (블록 단위, 예: 80) */
   radius: number
-  /** 높이 편차 제한 ±N 블록 (예: 5) */
+  /** 높이 편차 제한 +/-N 블록 (예: 5) */
   flattenVariance: number
   /** 국가 해시 시드 */
   seed: number
@@ -45,7 +46,7 @@ interface MCTerrainProps {
     blocks: BlockInstance[]
     idMap: Record<string, number>
   }) => void
-  /** v19: 아레나 모드 — 반경 내 정적 지형, 청크 업데이트 스킵 */
+  /** v19: 아레나 모드 -- 반경 내 정적 지형, 청크 업데이트 스킵 */
   arenaMode?: MCTerrainArenaMode
 }
 
@@ -65,6 +66,7 @@ export default function MCTerrain({
   const blocksRef = useRef<BlockInstance[]>([])
   const idMapRef = useRef<Record<string, number>>({})
   const dummy = useMemo(() => new THREE.Object3D(), [])
+  const isGeneratingRef = useRef(false)
 
   // Worker 초기화
   useEffect(() => {
@@ -75,16 +77,20 @@ export default function MCTerrain({
       )
 
       worker.onmessage = (e: MessageEvent<TerrainWorkerOutput>) => {
-        const { blocks, idMap } = e.data
+        const { blocks, idMap, visibleBlocks } = e.data
         blocksRef.current = blocks
         idMapRef.current = idMap
-        updateInstancedMeshes(blocks)
+        // 면 제거 최적화: visibleBlocks가 있으면 가시 블록만 렌더
+        const renderBlocks = visibleBlocks ?? blocks
+        updateInstancedMeshes(renderBlocks)
         onTerrainReady?.({ blocks, idMap })
+        isGeneratingRef.current = false
       }
 
       worker.onerror = (e) => {
         console.warn('Terrain worker error, falling back to main thread:', e.message)
         workerRef.current = null
+        isGeneratingRef.current = false
       }
 
       workerRef.current = worker
@@ -241,6 +247,7 @@ export default function MCTerrain({
       idMapRef.current = idMap
       updateInstancedMeshes(blocks)
       onTerrainReady?.({ blocks, idMap })
+      isGeneratingRef.current = false
     },
     [seed, customBlocks, updateInstancedMeshes, onTerrainReady, arenaMode]
   )
@@ -248,6 +255,10 @@ export default function MCTerrain({
   // 청크 변경 감지 + 생성 요청
   const requestGeneration = useCallback(
     (cx: number, cz: number) => {
+      // 이미 생성 중이면 스킵 (중복 방지)
+      if (isGeneratingRef.current) return
+      isGeneratingRef.current = true
+
       if (workerRef.current) {
         const input: TerrainWorkerInput = {
           chunkX: cx,
@@ -285,7 +296,7 @@ export default function MCTerrain({
     }
   }, [camera, requestGeneration, arenaMode])
 
-  // 매 프레임 청크 변경 체크 (아레나 모드에서는 스킵 — 정적 지형)
+  // 매 프레임 청크 변경 체크 (아레나 모드에서는 스킵 -- 정적 지형)
   useFrame(() => {
     if (arenaMode) return // 아레나: 정적, 청크 업데이트 불필요
 
@@ -302,7 +313,7 @@ export default function MCTerrain({
   // 최대 인스턴스 수 계산 (아레나: 원형 면적 기반, 일반: 사각형 범위)
   const maxCount = useMemo(() => {
     if (arenaMode) {
-      // 원형 면적: π * r² + 여유분 (나무/잎 포함)
+      // 원형 면적: pi * r^2 + 여유분 (나무/잎 포함)
       const r = arenaMode.radius
       return Math.ceil(Math.PI * r * r) + 2000
     }
@@ -310,6 +321,19 @@ export default function MCTerrain({
       MC_RENDER_DISTANCE * MC_CHUNK_SIZE * 2 + MC_CHUNK_SIZE
     return range * range + 500
   }, [arenaMode])
+
+  // Geometry/Material dispose
+  useEffect(() => {
+    return () => {
+      // 언마운트 시 InstancedMesh geometry는 공유하므로 dispose하지 않음
+      // Material은 mc-materials.ts 캐시에서 관리
+      meshRefs.current.forEach((mesh) => {
+        if (mesh) {
+          mesh.dispose()
+        }
+      })
+    }
+  }, [])
 
   return (
     <group ref={groupRef}>
@@ -331,13 +355,13 @@ export default function MCTerrain({
         )
       })}
 
-      {/* 구름 (아레나 모드에서는 비활성 — 작은 영역이라 불필요) */}
+      {/* 구름 (아레나 모드에서는 비활성 -- 작은 영역이라 불필요) */}
       {!arenaMode && <MCClouds seed={seed} />}
     </group>
   )
 }
 
-// 구름 컴포넌트 (reference: minecraft-threejs 스타일 — 큰 박스 지오메트리)
+// 구름 컴포넌트 (reference: minecraft-threejs 스타일 -- 큰 박스 지오메트리)
 function MCClouds({ seed }: { seed: number }) {
   const meshRef = useRef<THREE.InstancedMesh>(null)
   const dummy = useMemo(() => new THREE.Object3D(), [])
@@ -388,6 +412,14 @@ function MCClouds({ seed }: { seed: number }) {
   // reference 스타일: 큰 박스 지오메트리 (20x5x14)
   const cloudGeo = useMemo(() => new THREE.BoxGeometry(20, 5, 14), [])
 
+  // dispose
+  useEffect(() => {
+    return () => {
+      cloudGeo.dispose()
+      cloudMat.dispose()
+    }
+  }, [cloudGeo, cloudMat])
+
   return (
     <instancedMesh
       ref={meshRef}
@@ -396,4 +428,3 @@ function MCClouds({ seed }: { seed: number }) {
     />
   )
 }
-

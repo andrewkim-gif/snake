@@ -2,6 +2,7 @@
 
 // Minecraft FPS 카메라 + 물리 + 충돌 감지
 // PointerLockControls + WASD + 중력 + 점프 + 비행 모드
+// 6방향 충돌 감지: front/back/left/right/up/down
 
 import { useRef, useEffect, useCallback } from 'react'
 import { useFrame, useThree } from '@react-three/fiber'
@@ -9,15 +10,33 @@ import * as THREE from 'three'
 import { PointerLockControls } from '@react-three/drei'
 import {
   PlayerMode,
-  PLAYER_SPEEDS,
   PLAYER_HEIGHT,
+  PLAYER_WIDTH,
   GRAVITY,
   JUMP_VELOCITY,
   MAX_FALL_VELOCITY,
   MC_BASE_Y,
+  blockKey,
+  isSolidBlock,
+  BlockType,
 } from '@/lib/3d/mc-types'
 import { MCNoise } from '@/lib/3d/mc-noise'
 import type { BlockInstance } from '@/lib/3d/mc-terrain-worker'
+
+// 이동 속도 (blocks/sec)
+const WALK_SPEED = 4.3
+const FLY_SPEED = 10.0
+const SNEAK_SPEED = 1.95
+const FLY_VERTICAL_SPEED = 6.0
+
+// 더블 Space 감지 시간 (ms)
+const DOUBLE_TAP_THRESHOLD = 300
+
+// 카메라 높이 (눈 높이 = 플레이어 위치 + 1.62)
+const EYE_HEIGHT = 1.62
+
+// 충돌 체크 오프셋 (몸통 반경)
+const COLLISION_MARGIN = 0.3
 
 interface MCCameraProps {
   seed: number
@@ -44,9 +63,15 @@ export default function MCCamera({
   const controlsRef = useRef<any>(null)
   const velocityRef = useRef(new THREE.Vector3())
   const keysRef = useRef<Set<string>>(new Set())
-  const groundedRef = useRef(true) // 바닥에 서 있는지
+  const groundedRef = useRef(true)
   const noiseRef = useRef(new MCNoise(seed))
   const prevTimeRef = useRef(performance.now())
+  const lastSpacePressRef = useRef(0) // 더블 Space 감지용
+
+  // 임시 벡터 (매 프레임 재사용)
+  const forwardVec = useRef(new THREE.Vector3())
+  const rightVec = useRef(new THREE.Vector3())
+  const moveVec = useRef(new THREE.Vector3())
 
   useEffect(() => {
     noiseRef.current = new MCNoise(seed)
@@ -54,38 +79,154 @@ export default function MCCamera({
 
   // 초기 위치: 지형 위에 스폰
   useEffect(() => {
-    const spawnY = MC_BASE_Y + noiseRef.current.getSurfaceOffset(8, 8) + 3
+    const spawnY = MC_BASE_Y + noiseRef.current.getSurfaceOffset(8, 8) + 1 + EYE_HEIGHT
     camera.position.set(8, spawnY, 8)
   }, [camera])
 
-  // 키보드 입력
+  // ---------------------------------------------------------------------------
+  // 블록 충돌 체크: 월드 좌표 (wx, wy, wz)에 solid 블록이 있는지
+  // ---------------------------------------------------------------------------
+  const isSolidAt = useCallback(
+    (wx: number, wy: number, wz: number): boolean => {
+      const bx = Math.floor(wx)
+      const by = Math.floor(wy)
+      const bz = Math.floor(wz)
+      const key = blockKey(bx, by, bz)
+
+      // terrainIdMap에서 블록 존재 확인
+      if (terrainIdMap[key] !== undefined) {
+        const block = terrainBlocks[terrainIdMap[key]]
+        if (block && isSolidBlock(block.type)) return true
+      }
+
+      // 노이즈 기반 지표면 체크 (terrainIdMap에 아직 로드되지 않은 청크 대비)
+      const noise = noiseRef.current
+      const surfaceY = MC_BASE_Y + noise.getSurfaceOffset(bx, bz)
+      if (by <= surfaceY) return true
+
+      return false
+    },
+    [terrainBlocks, terrainIdMap]
+  )
+
+  // ---------------------------------------------------------------------------
+  // 6방향 충돌 감지: 이동 방향에 solid 블록이 있으면 차단
+  // 플레이어 몸통: 폭 PLAYER_WIDTH, 높이 PLAYER_HEIGHT
+  // 눈 위치가 camera.position이므로, 발 위치 = camera.y - EYE_HEIGHT
+  // ---------------------------------------------------------------------------
+  const checkCollision = useCallback(
+    (pos: THREE.Vector3, dir: 'x' | 'y' | 'z', delta: number): boolean => {
+      const feetY = pos.y - EYE_HEIGHT
+      const headY = feetY + PLAYER_HEIGHT
+
+      if (dir === 'y') {
+        if (delta < 0) {
+          // 아래로 이동: 발 아래 블록 체크
+          const nextFeetY = feetY + delta
+          // 4개 코너 체크 (몸통 가장자리)
+          for (const ox of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+            for (const oz of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+              if (isSolidAt(pos.x + ox, nextFeetY, pos.z + oz)) return true
+            }
+          }
+        } else {
+          // 위로 이동: 머리 위 블록 체크
+          const nextHeadY = headY + delta
+          for (const ox of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+            for (const oz of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+              if (isSolidAt(pos.x + ox, nextHeadY, pos.z + oz)) return true
+            }
+          }
+        }
+        return false
+      }
+
+      // X/Z 방향: 몸통 전체 높이에서 체크 (발, 허리, 머리)
+      const checkHeights = [feetY + 0.1, feetY + 0.9, headY - 0.1]
+
+      if (dir === 'x') {
+        const nextX = pos.x + delta
+        const edgeX = delta > 0 ? nextX + COLLISION_MARGIN : nextX - COLLISION_MARGIN
+        for (const hy of checkHeights) {
+          for (const oz of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+            if (isSolidAt(edgeX, hy, pos.z + oz)) return true
+          }
+        }
+      } else {
+        // dir === 'z'
+        const nextZ = pos.z + delta
+        const edgeZ = delta > 0 ? nextZ + COLLISION_MARGIN : nextZ - COLLISION_MARGIN
+        for (const hy of checkHeights) {
+          for (const ox of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+            if (isSolidAt(pos.x + ox, hy, edgeZ)) return true
+          }
+        }
+      }
+
+      return false
+    },
+    [isSolidAt]
+  )
+
+  // ---------------------------------------------------------------------------
+  // 키보드 입력 핸들러
+  // ---------------------------------------------------------------------------
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
       keysRef.current.add(e.code)
 
+      // Q: 비행 모드 토글
       if (e.code === 'KeyQ') {
         const newMode =
           mode === PlayerMode.flying ? PlayerMode.walking : PlayerMode.flying
         onModeChange(newMode)
         velocityRef.current.y = 0
-        groundedRef.current = false
+        if (newMode === PlayerMode.walking) {
+          groundedRef.current = false // 비행 -> 걷기 전환 시 낙하 시작
+        }
       }
 
-      if (
-        e.code === 'Space' &&
-        mode === PlayerMode.walking &&
-        groundedRef.current
-      ) {
-        velocityRef.current.y = JUMP_VELOCITY
-        groundedRef.current = false
+      // Space: 점프 또는 더블 탭 비행 토글
+      if (e.code === 'Space') {
+        const now = performance.now()
+        const timeSinceLastSpace = now - lastSpacePressRef.current
+        lastSpacePressRef.current = now
+
+        // 더블 Space: 비행 모드 토글
+        if (timeSinceLastSpace < DOUBLE_TAP_THRESHOLD) {
+          const newMode =
+            mode === PlayerMode.flying ? PlayerMode.walking : PlayerMode.flying
+          onModeChange(newMode)
+          velocityRef.current.y = 0
+          if (newMode === PlayerMode.walking) {
+            groundedRef.current = false
+          }
+        } else if (mode === PlayerMode.walking && groundedRef.current) {
+          // 단일 Space: 점프 (바닥에 서 있을 때만)
+          velocityRef.current.y = JUMP_VELOCITY
+          groundedRef.current = false
+        }
+      }
+
+      // Shift: 웅크리기 모드 (걷기 중에만)
+      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && mode === PlayerMode.walking) {
+        onModeChange(PlayerMode.sneaking)
       }
     },
     [mode, onModeChange]
   )
 
-  const onKeyUp = useCallback((e: KeyboardEvent) => {
-    keysRef.current.delete(e.code)
-  }, [])
+  const onKeyUp = useCallback(
+    (e: KeyboardEvent) => {
+      keysRef.current.delete(e.code)
+
+      // Shift 해제: 웅크리기 -> 걷기
+      if ((e.code === 'ShiftLeft' || e.code === 'ShiftRight') && mode === PlayerMode.sneaking) {
+        onModeChange(PlayerMode.walking)
+      }
+    },
+    [mode, onModeChange]
+  )
 
   useEffect(() => {
     if (locked) {
@@ -100,48 +241,9 @@ export default function MCCamera({
     }
   }, [locked, onKeyDown, onKeyUp])
 
-  // 해당 위치의 지표면 Y (블록 위 = 서 있을 수 있는 높이) 계산
-  const getGroundY = useCallback(
-    (px: number, pz: number): number => {
-      const noise = noiseRef.current
-      const bx = Math.round(px)
-      const bz = Math.round(pz)
-      const surfaceY = MC_BASE_Y + noise.getSurfaceOffset(bx, bz)
-
-      // idMap에서 해당 x,z 칼럼의 가장 높은 블록 찾기
-      // 단순화: 노이즈 기반 지표면 + 나무 체크
-      let maxY = surfaceY
-
-      // 나무 체크 (trunk)
-      const treeOffset = noise.getTreeOffset(bx, bz)
-      const stoneOffset = noise.getStoneOffset(bx, bz)
-      const yOffset = noise.getSurfaceOffset(bx, bz)
-      if (
-        treeOffset > noise.treeThreshold &&
-        yOffset >= -3 &&
-        stoneOffset <= noise.stoneThreshold
-      ) {
-        // 나무가 있는 위치면 trunk 꼭대기가 ground
-        maxY = Math.max(maxY, surfaceY + 10) // MC_TREE_HEIGHT
-      }
-
-      // 커스텀 블록도 체크 (idMap에서 이 x,z 칼럼의 블록들)
-      // 현재 플레이어 발 아래의 블록만 체크
-      const feetY = Math.round(camera.position.y - PLAYER_HEIGHT)
-      for (let checkY = feetY; checkY >= feetY - 2; checkY--) {
-        const key = `${bx}_${checkY}_${bz}`
-        if (terrainIdMap[key] !== undefined) {
-          maxY = Math.max(maxY, checkY)
-          break
-        }
-      }
-
-      return maxY
-    },
-    [camera, terrainIdMap]
-  )
-
-  // 물리 업데이트
+  // ---------------------------------------------------------------------------
+  // 물리 업데이트 (매 프레임)
+  // ---------------------------------------------------------------------------
   useFrame(() => {
     if (!locked) return
 
@@ -151,114 +253,137 @@ export default function MCCamera({
 
     const keys = keysRef.current
     const vel = velocityRef.current
-    const speed = PLAYER_SPEEDS[mode]
 
-    let moveX = 0
-    let moveZ = 0
-    if (keys.has('KeyW')) moveX = 1
-    if (keys.has('KeyS')) moveX = -1
-    if (keys.has('KeyA')) moveZ = 1
-    if (keys.has('KeyD')) moveZ = -1
+    // 현재 모드에 따른 이동 속도
+    let speed: number
+    switch (mode) {
+      case PlayerMode.flying:
+        speed = FLY_SPEED
+        break
+      case PlayerMode.sneaking:
+        speed = SNEAK_SPEED
+        break
+      default:
+        speed = WALK_SPEED
+    }
+
+    // 카메라 방향 벡터 계산
+    camera.getWorldDirection(forwardVec.current)
+    forwardVec.current.y = 0
+    forwardVec.current.normalize()
+
+    rightVec.current.crossVectors(forwardVec.current, camera.up).normalize()
+
+    // WASD 입력 -> 이동 벡터
+    moveVec.current.set(0, 0, 0)
+    if (keys.has('KeyW')) moveVec.current.add(forwardVec.current)
+    if (keys.has('KeyS')) moveVec.current.sub(forwardVec.current)
+    if (keys.has('KeyA')) moveVec.current.sub(rightVec.current)
+    if (keys.has('KeyD')) moveVec.current.add(rightVec.current)
+
+    // 정규화 (대각선 이동 속도 보정)
+    if (moveVec.current.lengthSq() > 0) {
+      moveVec.current.normalize()
+    }
 
     if (mode === PlayerMode.flying) {
-      // 비행 모드: 중력 없음, 직접 이동
-      vel.x = moveX * speed
-      vel.z = moveZ * speed
-      vel.y = 0
-      if (keys.has('Space')) vel.y = speed * 0.5
-      if (keys.has('ShiftLeft') || keys.has('ShiftRight')) vel.y = -speed * 0.5
+      // === 비행 모드 ===
+      // 수평 이동
+      const moveX = moveVec.current.x * speed * delta
+      const moveZ = moveVec.current.z * speed * delta
 
-      const controls = controlsRef.current
-      if (controls) {
-        controls.moveForward(vel.x * delta)
-        controls.moveRight(-vel.z * delta)
+      // X 충돌 체크
+      if (moveX !== 0 && !checkCollision(camera.position, 'x', moveX)) {
+        camera.position.x += moveX
       }
-      camera.position.y += vel.y * delta
+      // Z 충돌 체크
+      if (moveZ !== 0 && !checkCollision(camera.position, 'z', moveZ)) {
+        camera.position.z += moveZ
+      }
+
+      // 수직 이동
+      let verticalMove = 0
+      if (keys.has('Space')) verticalMove += FLY_VERTICAL_SPEED * delta
+      if (keys.has('ShiftLeft') || keys.has('ShiftRight')) verticalMove -= FLY_VERTICAL_SPEED * delta
+
+      if (verticalMove !== 0 && !checkCollision(camera.position, 'y', verticalMove)) {
+        camera.position.y += verticalMove
+      }
+
       groundedRef.current = false
     } else {
-      // === 걷기 모드 ===
+      // === 걷기 / 웅크리기 모드 ===
 
-      // 현재 위치의 지표면 높이
-      const groundY = getGroundY(camera.position.x, camera.position.z)
-      // 플레이어 발이 있어야 할 높이 (블록 위 + 플레이어 키)
-      const standY = groundY + 1 + PLAYER_HEIGHT
+      // 수평 이동
+      const moveX = moveVec.current.x * speed * delta
+      const moveZ = moveVec.current.z * speed * delta
 
-      if (groundedRef.current) {
-        // --- 바닥에 서 있는 상태: 중력 없음, Y 고정 ---
-        vel.y = 0
-        camera.position.y = standY
+      // X 충돌 체크 후 이동
+      if (moveX !== 0 && !checkCollision(camera.position, 'x', moveX)) {
+        camera.position.x += moveX
+      }
+      // Z 충돌 체크 후 이동
+      if (moveZ !== 0 && !checkCollision(camera.position, 'z', moveZ)) {
+        camera.position.z += moveZ
+      }
 
-        // 수평 이동
-        const controls = controlsRef.current
-        if (controls) {
-          controls.moveForward(moveX * speed * delta)
-          controls.moveRight(-moveZ * speed * delta)
-        }
-
-        // 이동 후 새 위치의 지표면 체크
-        const newGroundY = getGroundY(camera.position.x, camera.position.z)
-        const newStandY = newGroundY + 1 + PLAYER_HEIGHT
-
-        // 높이 차이가 1블록 이내면 부드럽게 따라감 (경사/계단)
-        if (Math.abs(newStandY - camera.position.y) <= 1.2) {
-          camera.position.y = newStandY
-        } else if (newStandY < camera.position.y - 1.2) {
-          // 절벽: 공중으로 전환
-          groundedRef.current = false
-          vel.y = 0
-        } else if (newStandY > camera.position.y + 1.2) {
-          // 벽: 이동 취소 (간단한 벽 충돌)
-          controls?.moveForward(-moveX * speed * delta)
-          controls?.moveRight(moveZ * speed * delta)
-        }
-      } else {
-        // --- 공중 상태: 중력 적용 ---
+      // 중력 적용
+      if (!groundedRef.current) {
         vel.y -= GRAVITY * delta
         if (vel.y < -MAX_FALL_VELOCITY) vel.y = -MAX_FALL_VELOCITY
+      }
 
-        // 수평 이동 (공중에서도 조작 가능)
-        const controls = controlsRef.current
-        if (controls) {
-          controls.moveForward(moveX * speed * delta)
-          controls.moveRight(-moveZ * speed * delta)
-        }
-
-        // Y 이동
-        camera.position.y += vel.y * delta
-
-        // 착지 체크
-        if (camera.position.y <= standY) {
-          camera.position.y = standY
-          vel.y = 0
-          groundedRef.current = true
-        }
-
-        // 천장 충돌 (점프 중 머리 위 블록)
-        if (vel.y > 0) {
-          const headY = Math.round(camera.position.y + 0.2)
-          const headX = Math.round(camera.position.x)
-          const headZ = Math.round(camera.position.z)
-          const headKey = `${headX}_${headY}_${headZ}`
-          const noise = noiseRef.current
-          const headSurfaceY = MC_BASE_Y + noise.getSurfaceOffset(headX, headZ)
-          if (terrainIdMap[headKey] !== undefined || headY <= headSurfaceY) {
-            vel.y = 0
+      // 수직 이동
+      const verticalDelta = vel.y * delta
+      if (verticalDelta !== 0) {
+        if (checkCollision(camera.position, 'y', verticalDelta)) {
+          // 충돌: 속도 0
+          if (vel.y < 0) {
+            // 착지
+            groundedRef.current = true
+            // 발을 블록 위에 정확히 맞춤
+            const feetY = camera.position.y - EYE_HEIGHT
+            const snappedFeetY = Math.ceil(feetY) // 가장 가까운 블록 위
+            camera.position.y = snappedFeetY + EYE_HEIGHT
           }
-        }
-
-        // 안전장치: 너무 아래로 떨어지면 리스폰
-        if (camera.position.y < -50) {
-          const spawnY =
-            MC_BASE_Y +
-            noiseRef.current.getSurfaceOffset(
-              Math.round(camera.position.x),
-              Math.round(camera.position.z)
-            ) +
-            3
-          camera.position.y = spawnY
           vel.y = 0
+        } else {
+          camera.position.y += verticalDelta
+          if (vel.y < 0) groundedRef.current = false
+        }
+      }
+
+      // 바닥 아래에 블록이 없으면 낙하 시작
+      if (groundedRef.current) {
+        const feetY = camera.position.y - EYE_HEIGHT
+        const belowFeetY = feetY - 0.1
+        let hasGround = false
+        for (const ox of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+          for (const oz of [-COLLISION_MARGIN, COLLISION_MARGIN]) {
+            if (isSolidAt(camera.position.x + ox, belowFeetY, camera.position.z + oz)) {
+              hasGround = true
+              break
+            }
+          }
+          if (hasGround) break
+        }
+        if (!hasGround) {
           groundedRef.current = false
         }
+      }
+
+      // 안전장치: 너무 아래로 떨어지면 리스폰
+      if (camera.position.y < -50) {
+        const spawnX = Math.round(camera.position.x)
+        const spawnZ = Math.round(camera.position.z)
+        const spawnY =
+          MC_BASE_Y +
+          noiseRef.current.getSurfaceOffset(spawnX, spawnZ) +
+          1 +
+          EYE_HEIGHT
+        camera.position.set(spawnX, spawnY, spawnZ)
+        vel.y = 0
+        groundedRef.current = true
       }
     }
   })
