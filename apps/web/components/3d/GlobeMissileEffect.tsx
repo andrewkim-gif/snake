@@ -1,18 +1,18 @@
 'use client';
 
 /**
- * GlobeMissileEffect — v15 Phase 4
+ * GlobeMissileEffect — v23 Phase 2
  * Missile trajectories from attacker to defender on the 3D globe.
- * - Parabolic arc with procedural glow head + tail particles
- * - InstancedMesh for max 10 simultaneous missiles
+ * - Procedural 3D missile mesh (cone nose + cylinder body)
+ * - InstancedMesh for max 10 simultaneous missiles with tangent alignment
+ * - Smoke trail: InstancedMesh billboard PlaneGeometry particles
  * - Triggers shockwave callback on impact
- *
- * Style: Dark/Glow | Font: Ethnocentric (display), ITC Avant Garde Gothic (body)
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
+import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { latLngToVector3 } from '@/lib/globe-utils';
 
 // ─── Types ───
@@ -22,7 +22,7 @@ export interface MissileData {
   startPos: THREE.Vector3;
   endPos: THREE.Vector3;
   startTime: number;
-  duration: number;   // seconds for full flight
+  duration: number;
   active: boolean;
 }
 
@@ -37,54 +37,135 @@ export interface GlobeMissileEffectProps {
   globeRadius?: number;
   onImpact?: (position: THREE.Vector3, warId: string) => void;
   visible?: boolean;
-  /** v15 Phase 6: 모바일 LOD — 동시 미사일 최대 수 (기본 10) */
+  /** 모바일 LOD — 동시 미사일 최대 수 (기본 10) */
   maxMissiles?: number;
 }
 
 // ─── Constants ───
 
 const MAX_MISSILES = 10;
-const MISSILE_DURATION = 1.8;       // seconds per missile flight
-const MISSILE_LAUNCH_INTERVAL = 2.5; // seconds between launches per war
-const ARC_HEIGHT_FACTOR = 0.35;      // parabolic arc height
-const HEAD_COLOR = new THREE.Color(0xff4422);
-const TAIL_COLOR = new THREE.Color(0xff8800);
+const MISSILE_DURATION = 1.8;
+const MISSILE_LAUNCH_INTERVAL = 2.5;
+const ARC_HEIGHT_FACTOR = 0.35;
+const SMOKE_PARTICLES_PER_MISSILE = 7;
+const TOTAL_SMOKE = MAX_MISSILES * SMOKE_PARTICLES_PER_MISSILE;
 
-// ─── Helpers ───
-// latLngToVector3 → @/lib/globe-utils (v20 통합)
+// ─── Colors ───
 
-/** Quadratic bezier point along parabolic arc on the globe */
-function getArcPoint(
-  start: THREE.Vector3, end: THREE.Vector3,
-  t: number, arcHeight: number,
-): THREE.Vector3 {
-  const mid = new THREE.Vector3().addVectors(start, end).multiplyScalar(0.5);
-  const normal = mid.clone().normalize();
-  const controlPoint = mid.clone().add(normal.multiplyScalar(arcHeight));
-  const oneMinusT = 1 - t;
-  return new THREE.Vector3(
-    oneMinusT * oneMinusT * start.x + 2 * oneMinusT * t * controlPoint.x + t * t * end.x,
-    oneMinusT * oneMinusT * start.y + 2 * oneMinusT * t * controlPoint.y + t * t * end.y,
-    oneMinusT * oneMinusT * start.z + 2 * oneMinusT * t * controlPoint.z + t * t * end.z,
-  );
+const NOSE_COLOR = new THREE.Color(0xcc2222);   // 빨간 노즈콘
+const BODY_COLOR = new THREE.Color(0xcccccc);   // 밝은 회색 바디
+
+// ─── Module-scope temp objects (GC 방지, NFR-4) ───
+
+const _dummy = new THREE.Object3D();
+const _smokeDummy = new THREE.Object3D();
+const _tempVec = new THREE.Vector3();
+const _tempVec2 = new THREE.Vector3();
+const _tempVec3 = new THREE.Vector3();
+const _tempMid = new THREE.Vector3();
+const _tempNormal = new THREE.Vector3();
+const _tempControl = new THREE.Vector3();
+const _arcResult = new THREE.Vector3();
+const _forward = new THREE.Vector3();
+const _up = new THREE.Vector3(0, 1, 0);
+const _quat = new THREE.Quaternion();
+const _rotMatrix = new THREE.Matrix4();
+const _smokeColor = new THREE.Color();
+const _impactPos = new THREE.Vector3();
+
+// ─── Procedural Missile3D Geometry ───
+
+function createMissileGeometry(): THREE.BufferGeometry {
+  // 노즈콘: ConeGeometry (반지름 0.3, 높이 1.5, 8 세그먼트)
+  const nose = new THREE.ConeGeometry(0.3, 1.5, 8);
+  // 콘의 중심이 0이므로, 위로 이동하여 바디 위에 배치
+  // 바디 높이 0.8의 절반 = 0.4, 노즈 높이 1.5의 절반 = 0.75
+  nose.translate(0, 0.4 + 0.75, 0); // y = 1.15
+
+  // 바디: CylinderGeometry (반지름 0.15, 높이 0.8, 8 세그먼트)
+  const body = new THREE.CylinderGeometry(0.15, 0.15, 0.8, 8);
+  // 바디 중심은 0 (그대로)
+
+  // 색상 어트리뷰트 추가 (노즈=빨강, 바디=회색)
+  const noseColors = new Float32Array(nose.attributes.position.count * 3);
+  for (let i = 0; i < nose.attributes.position.count; i++) {
+    noseColors[i * 3] = NOSE_COLOR.r;
+    noseColors[i * 3 + 1] = NOSE_COLOR.g;
+    noseColors[i * 3 + 2] = NOSE_COLOR.b;
+  }
+  nose.setAttribute('color', new THREE.BufferAttribute(noseColors, 3));
+
+  const bodyColors = new Float32Array(body.attributes.position.count * 3);
+  for (let i = 0; i < body.attributes.position.count; i++) {
+    bodyColors[i * 3] = BODY_COLOR.r;
+    bodyColors[i * 3 + 1] = BODY_COLOR.g;
+    bodyColors[i * 3 + 2] = BODY_COLOR.b;
+  }
+  body.setAttribute('color', new THREE.BufferAttribute(bodyColors, 3));
+
+  // 두 지오메트리 합치기
+  const merged = mergeGeometries([nose, body], false);
+
+  // 정리
+  nose.dispose();
+  body.dispose();
+
+  if (!merged) {
+    // 폴백: 단순 콘
+    return new THREE.ConeGeometry(0.3, 2.0, 8);
+  }
+
+  // 미사일 기본 방향: Y+ (cone은 Y+를 향함)
+  // useFrame에서 lookAt 방향으로 회전시킴
+  return merged;
 }
 
-// ─── Procedural glow texture (radial gradient, no image file) ───
+// ─── Smoke Trail Texture (작은 원형 그라디언트) ───
 
-function createGlowTexture(): THREE.CanvasTexture {
-  const size = 64;
+function createSmokeTexture(): THREE.CanvasTexture {
+  const size = 32;
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const ctx = canvas.getContext('2d')!;
-  const gradient = ctx.createRadialGradient(size / 2, size / 2, 0, size / 2, size / 2, size / 2);
-  gradient.addColorStop(0, 'rgba(255, 200, 100, 1.0)');
-  gradient.addColorStop(0.3, 'rgba(255, 100, 50, 0.7)');
-  gradient.addColorStop(0.7, 'rgba(255, 50, 20, 0.2)');
-  gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+  const gradient = ctx.createRadialGradient(
+    size / 2, size / 2, 0,
+    size / 2, size / 2, size / 2,
+  );
+  gradient.addColorStop(0, 'rgba(200, 200, 200, 1.0)');
+  gradient.addColorStop(0.4, 'rgba(180, 180, 180, 0.6)');
+  gradient.addColorStop(0.7, 'rgba(150, 150, 150, 0.2)');
+  gradient.addColorStop(1, 'rgba(100, 100, 100, 0)');
   ctx.fillStyle = gradient;
   ctx.fillRect(0, 0, size, size);
   return new THREE.CanvasTexture(canvas);
+}
+
+// ─── Arc interpolation (GC-free) ───
+
+/** Quadratic bezier point along parabolic arc on the globe — GC-free version */
+function getArcPoint(
+  start: THREE.Vector3,
+  end: THREE.Vector3,
+  t: number,
+  arcHeight: number,
+  out: THREE.Vector3,
+): THREE.Vector3 {
+  _tempMid.addVectors(start, end).multiplyScalar(0.5);
+  _tempNormal.copy(_tempMid).normalize();
+  _tempControl.copy(_tempMid).addScaledVector(_tempNormal, arcHeight);
+
+  const oneMinusT = 1 - t;
+  const a = oneMinusT * oneMinusT;
+  const b = 2 * oneMinusT * t;
+  const c = t * t;
+
+  out.set(
+    a * start.x + b * _tempControl.x + c * end.x,
+    a * start.y + b * _tempControl.y + c * end.y,
+    a * start.z + b * _tempControl.z + c * end.z,
+  );
+  return out;
 }
 
 // ─── Missile state tracking ───
@@ -113,53 +194,47 @@ export function GlobeMissileEffect({
   const lastLaunchRef = useRef<Map<string, number>>(new Map());
   const missilesRef = useRef<MissileState[]>(
     Array.from({ length: MAX_MISSILES }, () => ({
-      active: false, warId: '', startPos: new THREE.Vector3(),
-      endPos: new THREE.Vector3(), startTime: 0, arcHeight: 0,
+      active: false,
+      warId: '',
+      startPos: new THREE.Vector3(),
+      endPos: new THREE.Vector3(),
+      startTime: 0,
+      arcHeight: 0,
     })),
   );
 
-  // InstancedMesh for missile heads (glowing spheres)
-  const headGeometry = useMemo(() => new THREE.SphereGeometry(0.8, 8, 8), []);
-  const glowTexture = useMemo(() => createGlowTexture(), []);
-  const headMaterial = useMemo(
+  // Camera reference for billboard smoke
+  const { camera } = useThree();
+
+  // ─── Missile head: Procedural 3D mesh ───
+  const missileGeometry = useMemo(() => createMissileGeometry(), []);
+  const missileMaterial = useMemo(
     () => new THREE.MeshBasicMaterial({
-      color: HEAD_COLOR,
+      vertexColors: true,
       transparent: true,
       opacity: 0.95,
-      blending: THREE.AdditiveBlending,
       depthWrite: false,
     }),
     [],
   );
 
-  // Tail particles (elongated trail behind each missile)
-  const TAIL_POINTS_PER_MISSILE = 8;
-  const tailGeometry = useMemo(() => {
-    const count = MAX_MISSILES * TAIL_POINTS_PER_MISSILE;
-    const positions = new Float32Array(count * 3);
-    const sizes = new Float32Array(count);
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    return geo;
-  }, []);
-  const tailMaterial = useMemo(
-    () => new THREE.PointsMaterial({
-      color: TAIL_COLOR,
-      size: 1.2,
-      map: glowTexture,
+  // ─── Smoke trail: InstancedMesh + PlaneGeometry billboard ───
+  const smokeGeometry = useMemo(() => new THREE.PlaneGeometry(0.5, 0.5), []);
+  const smokeTexture = useMemo(() => createSmokeTexture(), []);
+  const smokeMaterial = useMemo(
+    () => new THREE.MeshBasicMaterial({
+      map: smokeTexture,
       transparent: true,
-      opacity: 0.6,
-      blending: THREE.AdditiveBlending,
+      opacity: 1.0,
       depthWrite: false,
-      sizeAttenuation: true,
+      blending: THREE.NormalBlending,
+      side: THREE.DoubleSide,
     }),
-    [glowTexture],
+    [smokeTexture],
   );
 
   const headInstancedRef = useRef<THREE.InstancedMesh>(null);
-  const tailPointsRef = useRef<THREE.Points>(null);
-  const _dummy = useMemo(() => new THREE.Object3D(), []);
+  const smokeInstancedRef = useRef<THREE.InstancedMesh>(null);
 
   // Get position for country from centroids
   const getPos = useCallback(
@@ -171,23 +246,20 @@ export function GlobeMissileEffect({
     [countryCentroids, globeRadius],
   );
 
-  // Launch a new missile (v15 Phase 6: LOD-limited by maxMissiles prop)
+  // Launch a new missile (LOD-limited by maxMissiles prop)
   const launchMissile = useCallback(
     (warId: string, start: THREE.Vector3, end: THREE.Vector3, time: number) => {
       const missiles = missilesRef.current;
-      // LOD 제한: maxMissiles 이내의 슬롯만 사용
       const limit = Math.min(maxMissiles, MAX_MISSILES);
       for (let i = 0; i < limit; i++) {
         if (!missiles[i].active) {
           const dist = start.distanceTo(end);
-          missiles[i] = {
-            active: true,
-            warId,
-            startPos: start.clone(),
-            endPos: end.clone(),
-            startTime: time,
-            arcHeight: dist * ARC_HEIGHT_FACTOR,
-          };
+          missiles[i].active = true;
+          missiles[i].warId = warId;
+          missiles[i].startPos.copy(start);
+          missiles[i].endPos.copy(end);
+          missiles[i].startTime = time;
+          missiles[i].arcHeight = dist * ARC_HEIGHT_FACTOR;
           return;
         }
       }
@@ -199,10 +271,11 @@ export function GlobeMissileEffect({
     clockRef.current += delta;
     const now = clockRef.current;
     const missiles = missilesRef.current;
-    const instMesh = headInstancedRef.current;
-    if (!instMesh) return;
+    const headMesh = headInstancedRef.current;
+    const smokeMesh = smokeInstancedRef.current;
+    if (!headMesh || !smokeMesh) return;
 
-    // Launch missiles for active wars
+    // ─── Launch missiles for active wars ───
     for (const war of wars) {
       if (war.state !== 'active') continue;
       const lastLaunch = lastLaunchRef.current.get(war.warId) ?? -Infinity;
@@ -210,7 +283,6 @@ export function GlobeMissileEffect({
         const atkPos = getPos(war.attacker);
         const defPos = getPos(war.defender);
         if (atkPos && defPos) {
-          // Alternate direction for visual variety
           const dir = Math.random() > 0.5;
           launchMissile(war.warId, dir ? atkPos : defPos, dir ? defPos : atkPos, now);
           lastLaunchRef.current.set(war.warId, now);
@@ -218,23 +290,27 @@ export function GlobeMissileEffect({
       }
     }
 
-    // Update missile positions
-    const tailPositions = tailGeometry.attributes.position as THREE.BufferAttribute;
-    const tailSizes = tailGeometry.attributes.size as THREE.BufferAttribute;
-
+    // ─── Update missile positions + smoke trail ───
     for (let i = 0; i < MAX_MISSILES; i++) {
       const m = missiles[i];
+
       if (!m.active) {
-        // Hide this instance
+        // 미사일 숨기기
         _dummy.position.set(0, 0, -9999);
         _dummy.scale.setScalar(0);
         _dummy.updateMatrix();
-        instMesh.setMatrixAt(i, _dummy.matrix);
-        // Hide tail points
-        for (let j = 0; j < TAIL_POINTS_PER_MISSILE; j++) {
-          const idx = i * TAIL_POINTS_PER_MISSILE + j;
-          tailPositions.setXYZ(idx, 0, 0, -9999);
-          tailSizes.setX(idx, 0);
+        headMesh.setMatrixAt(i, _dummy.matrix);
+
+        // 연기 파티클 숨기기
+        for (let j = 0; j < SMOKE_PARTICLES_PER_MISSILE; j++) {
+          const sIdx = i * SMOKE_PARTICLES_PER_MISSILE + j;
+          _smokeDummy.position.set(0, 0, -9999);
+          _smokeDummy.scale.setScalar(0);
+          _smokeDummy.updateMatrix();
+          smokeMesh.setMatrixAt(sIdx, _smokeDummy.matrix);
+          // 투명하게
+          _smokeColor.setRGB(0, 0, 0);
+          smokeMesh.setColorAt(sIdx, _smokeColor);
         }
         continue;
       }
@@ -243,64 +319,106 @@ export function GlobeMissileEffect({
       const t = elapsed / MISSILE_DURATION;
 
       if (t >= 1.0) {
-        // Impact!
+        // 착탄!
         m.active = false;
-        onImpact?.(m.endPos.clone(), m.warId);
+        _impactPos.copy(m.endPos);
+        onImpact?.(_impactPos.clone(), m.warId);
+
         _dummy.position.set(0, 0, -9999);
         _dummy.scale.setScalar(0);
         _dummy.updateMatrix();
-        instMesh.setMatrixAt(i, _dummy.matrix);
+        headMesh.setMatrixAt(i, _dummy.matrix);
+
+        // 연기도 숨기기
+        for (let j = 0; j < SMOKE_PARTICLES_PER_MISSILE; j++) {
+          const sIdx = i * SMOKE_PARTICLES_PER_MISSILE + j;
+          _smokeDummy.position.set(0, 0, -9999);
+          _smokeDummy.scale.setScalar(0);
+          _smokeDummy.updateMatrix();
+          smokeMesh.setMatrixAt(sIdx, _smokeDummy.matrix);
+        }
         continue;
       }
 
-      // Missile head position on parabolic arc
-      const pos = getArcPoint(m.startPos, m.endPos, t, m.arcHeight);
-      _dummy.position.copy(pos);
-      // Scale pulsation for glow effect
-      const pulse = 1.0 + 0.3 * Math.sin(now * 15);
+      // ─── Missile head: 현재 위치 ───
+      getArcPoint(m.startPos, m.endPos, t, m.arcHeight, _tempVec);
+
+      // ─── Tangent 방향 계산 (다음 위치 - 현재 위치) ───
+      const tNext = Math.min(t + 0.02, 1.0);
+      getArcPoint(m.startPos, m.endPos, tNext, m.arcHeight, _tempVec2);
+      _forward.subVectors(_tempVec2, _tempVec).normalize();
+
+      // 미사일 방향 정렬: 기본 방향 Y+를 forward로 회전
+      _quat.setFromUnitVectors(_up, _forward);
+
+      _dummy.position.copy(_tempVec);
+      _dummy.quaternion.copy(_quat);
+      // 약간의 맥동 효과
+      const pulse = 1.0 + 0.15 * Math.sin(now * 12);
       _dummy.scale.setScalar(pulse);
       _dummy.updateMatrix();
-      instMesh.setMatrixAt(i, _dummy.matrix);
+      headMesh.setMatrixAt(i, _dummy.matrix);
 
-      // Tail trail: show previous positions along arc
-      for (let j = 0; j < TAIL_POINTS_PER_MISSILE; j++) {
-        const tailT = Math.max(0, t - (j + 1) * 0.04);
-        const tailPos = getArcPoint(m.startPos, m.endPos, tailT, m.arcHeight);
-        const idx = i * TAIL_POINTS_PER_MISSILE + j;
-        tailPositions.setXYZ(idx, tailPos.x, tailPos.y, tailPos.z);
-        // Fade tail sizes from front to back
-        tailSizes.setX(idx, Math.max(0.2, 1.0 - j * 0.12));
+      // ─── Smoke trail: 미사일 뒤에 빌보드 파티클 ───
+      for (let j = 0; j < SMOKE_PARTICLES_PER_MISSILE; j++) {
+        const sIdx = i * SMOKE_PARTICLES_PER_MISSILE + j;
+        const tailT = Math.max(0, t - (j + 1) * 0.035);
+
+        getArcPoint(m.startPos, m.endPos, tailT, m.arcHeight, _tempVec3);
+
+        // 크기: 뒤로 갈수록 증가 (0.3 → 0.8)
+        const sizeFactor = 0.3 + (j / (SMOKE_PARTICLES_PER_MISSILE - 1)) * 0.5;
+        // 투명도: 뒤로 갈수록 감소 (0.6 → 0.0)
+        const alpha = Math.max(0, 0.6 - (j / (SMOKE_PARTICLES_PER_MISSILE - 1)) * 0.6);
+
+        _smokeDummy.position.copy(_tempVec3);
+        // 빌보드: 카메라 방향을 향하도록 quaternion 복사
+        _smokeDummy.quaternion.copy(camera.quaternion);
+        _smokeDummy.scale.setScalar(sizeFactor);
+        _smokeDummy.updateMatrix();
+        smokeMesh.setMatrixAt(sIdx, _smokeDummy.matrix);
+
+        // 회색-흰색 컬러 (alpha는 color로 시뮬레이션 - 어두워지게)
+        const gray = 0.6 + 0.4 * alpha;
+        _smokeColor.setRGB(gray * alpha, gray * alpha, gray * alpha);
+        smokeMesh.setColorAt(sIdx, _smokeColor);
       }
     }
 
-    instMesh.instanceMatrix.needsUpdate = true;
-    tailPositions.needsUpdate = true;
-    tailSizes.needsUpdate = true;
+    headMesh.instanceMatrix.needsUpdate = true;
+    smokeMesh.instanceMatrix.needsUpdate = true;
+    if (smokeMesh.instanceColor) {
+      smokeMesh.instanceColor.needsUpdate = true;
+    }
   });
 
   // Cleanup
   useEffect(() => {
     return () => {
-      headGeometry.dispose();
-      headMaterial.dispose();
-      tailGeometry.dispose();
-      tailMaterial.dispose();
-      glowTexture.dispose();
+      missileGeometry.dispose();
+      missileMaterial.dispose();
+      smokeGeometry.dispose();
+      smokeMaterial.dispose();
+      smokeTexture.dispose();
     };
-  }, [headGeometry, headMaterial, tailGeometry, tailMaterial, glowTexture]);
+  }, [missileGeometry, missileMaterial, smokeGeometry, smokeMaterial, smokeTexture]);
 
   if (!visible) return null;
 
   return (
     <group ref={groupRef}>
-      {/* Missile heads — InstancedMesh */}
+      {/* 미사일 헤드 — 3D 원뿔+원기둥 InstancedMesh */}
       <instancedMesh
         ref={headInstancedRef}
-        args={[headGeometry, headMaterial, MAX_MISSILES]}
+        args={[missileGeometry, missileMaterial, MAX_MISSILES]}
         frustumCulled={false}
       />
-      {/* Missile tail particles */}
-      <points ref={tailPointsRef} geometry={tailGeometry} material={tailMaterial} />
+      {/* 연기 트레일 — 빌보드 PlaneGeometry InstancedMesh */}
+      <instancedMesh
+        ref={smokeInstancedRef}
+        args={[smokeGeometry, smokeMaterial, TOTAL_SMOKE]}
+        frustumCulled={false}
+      />
     </group>
   );
 }
