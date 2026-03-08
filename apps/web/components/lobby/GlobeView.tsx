@@ -49,7 +49,7 @@ import { geoToXYZ } from '@/lib/globe-utils';
 import { GlobeIntroCamera } from '@/components/3d/GlobeIntroCamera';
 
 // v21 Phase 4: Bloom post-processing
-import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
 // v20: Landmark sprites on globe surface
 import { GlobeLandmarks } from '@/components/3d/GlobeLandmarks';
@@ -353,106 +353,167 @@ function createBlackTexture(): THREE.DataTexture {
   return tex;
 }
 
-// v21: EarthSphere PBR vertex shader
+// v21: EarthSphere PBR vertex shader (TBN matrix for tangent-space normal mapping)
 const earthVertexShader = /* glsl */ `
   varying vec3 vWorldNormal;
   varying vec3 vWorldPos;
   varying vec2 vUv;
+  varying mat3 vTBN;
 
   void main() {
     vUv = uv;
-    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vec3 N = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vWorldNormal = N;
     vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+
+    // 구면 좌표계 탄젠트 계산 (구체 전용)
+    // theta 방향 탄젠트 (경도 방향)
+    vec3 T = normalize(cross(vec3(0.0, 1.0, 0.0), N));
+    // 극점 근처 보정
+    if (length(cross(vec3(0.0, 1.0, 0.0), N)) < 0.001) {
+      T = normalize(cross(vec3(1.0, 0.0, 0.0), N));
+    }
+    vec3 B = cross(N, T);
+    vTBN = mat3(T, B, N);
+
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
 
-// v21: EarthSphere PBR fragment shader (Three.js TSL Earth 예제 참고)
+// v21: EarthSphere PBR fragment shader (TBN normal map + specular + atmosphere)
 const earthFragmentShader = /* glsl */ `
   uniform sampler2D uDayMap;
   uniform sampler2D uNightMap;
+  uniform sampler2D uNormalMap;
+  uniform sampler2D uSpecularMap;
   uniform vec3 uSunDir;
+  uniform float uNormalScale;
 
   varying vec3 vWorldNormal;
   varying vec3 vWorldPos;
   varying vec2 vUv;
+  varying mat3 vTBN;
 
   void main() {
     vec3 N = normalize(vWorldNormal);
-    float sunOrientation = dot(N, uSunDir);
 
-    // 낮/밤 혼합 팩터 (Three.js TSL: smoothstep(-0.25, 0.5))
+    // TBN 노멀맵 적용 (tangent-space → world-space)
+    vec3 mapN = texture2D(uNormalMap, vUv).rgb * 2.0 - 1.0;
+    mapN.xy *= uNormalScale;
+    vec3 perturbedN = normalize(vTBN * mapN);
+
+    // 태양 방향
+    float sunOrientation = dot(N, uSunDir);           // 밤낮/대기 전환 (smooth normal)
+    float sunOrientBump = dot(perturbedN, uSunDir);    // 디퓨즈 라이팅 (perturbed normal)
+
+    // 낮/밤 혼합 팩터
     float dayStrength = smoothstep(-0.25, 0.5, sunOrientation);
 
-    // 낮: 디퓨즈 라이팅 (부드러운 Lambert)
+    // 낮: 디퓨즈 라이팅
     vec3 dayColor = texture2D(uDayMap, vUv).rgb;
-    float diffuse = max(sunOrientation, 0.0) * 0.7 + 0.3;
+    float diffuse = max(sunOrientBump, 0.0) * 0.92 + 0.08;
     dayColor *= diffuse;
 
-    // 밤: 도시 불빛 + 최소 앰비언트 (완전 검정 방지)
+    // 스페큘러: 바다 반사 (Blinn-Phong)
+    float specMask = texture2D(uSpecularMap, vUv).r;
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    vec3 halfDir = normalize(uSunDir + viewDir);
+    float specAngle = max(dot(perturbedN, halfDir), 0.0);
+    float specular = pow(specAngle, 48.0) * specMask * 1.2;
+    dayColor += vec3(1.0, 0.98, 0.95) * specular * dayStrength;
+
+    // 밤: 도시 불빛
     vec3 nightLights = texture2D(uNightMap, vUv).rgb;
-    // 텍스처가 검정(fallback)이면 아주 미세한 지구 윤곽 표시
     vec3 dayTex = texture2D(uDayMap, vUv).rgb;
-    float nightAmbient = 0.012;  // 최소 앰비언트 (완전 검정 방지)
+    float nightAmbient = 0.015;
     vec3 nightColor = nightLights * 1.5 + dayTex * nightAmbient;
 
-    // 대기 산란 프레넬 (지구 표면에 오버레이 — Three.js TSL fresnel 기법)
-    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    // 대기 프레넬 림 (가장자리 림)
     float fresnel = 1.0 - max(dot(viewDir, N), 0.0);
-    float atmosphereMix = smoothstep(-0.5, 1.0, sunOrientation) * pow(fresnel, 2.0);
-    atmosphereMix = clamp(atmosphereMix, 0.0, 1.0);
+    float atmosphereDayStrength = smoothstep(-0.25, 1.0, sunOrientation);
+    float rimGlow = pow(fresnel, 5.0) * atmosphereDayStrength;
 
-    // 대기 색상 (황혼 오렌지 → 낮 시안)
-    vec3 twilightColor = vec3(1.0, 0.4, 0.2);
-    vec3 dayAtmoColor = vec3(0.4, 0.7, 1.0);
+    // 대기 색상 (twilight ↔ day blue)
+    vec3 twilightColor = vec3(1.0, 0.45, 0.2);
+    vec3 dayAtmoColor = vec3(0.35, 0.6, 1.0);
     float atmoColorMix = smoothstep(-0.25, 0.75, sunOrientation);
     vec3 atmosphereColor = mix(twilightColor, dayAtmoColor, atmoColorMix);
 
-    // 최종 혼합: 밤↔낮 + 대기 오버레이
+    // 최종 혼합
     vec3 color = mix(nightColor, dayColor, dayStrength);
-    color = mix(color, atmosphereColor, atmosphereMix * 0.4);
+    color += atmosphereColor * rimGlow * 0.5;
 
     gl_FragColor = vec4(color, 1.0);
   }
 `;
 
+// 기본 노멀맵 (파란색 = 평면 노멀 [0.5, 0.5, 1.0])
+function createFlatNormalTexture(): THREE.DataTexture {
+  const data = new Uint8Array([128, 128, 255, 255]);
+  const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// 기본 스페큘러맵 (검정 = 반사 없음)
+function createBlackSpecularTexture(): THREE.DataTexture {
+  const data = new Uint8Array([0, 0, 0, 255]);
+  const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  return tex;
+}
+
 function EarthSphere() {
   const dayTexture = useLoader(THREE.TextureLoader, '/textures/earth-blue-marble.jpg');
   dayTexture.colorSpace = THREE.SRGBColorSpace;
 
-  // v21: 야간 텍스처 로드 (실패 시 검정 fallback)
+  // v21: 추가 텍스처 로드 (night, normal, specular — 비동기, fallback 포함)
   const nightTextureRef = useRef<THREE.Texture | null>(null);
-  const [nightLoaded, setNightLoaded] = useState(false);
+  const normalTextureRef = useRef<THREE.Texture | null>(null);
+  const specularTextureRef = useRef<THREE.Texture | null>(null);
+  const [texturesReady, setTexturesReady] = useState(0); // 로드 완료 카운터
 
   useEffect(() => {
     const loader = new THREE.TextureLoader();
-    loader.load(
-      '/textures/earth-night-lights.jpg',
-      (tex) => {
-        tex.colorSpace = THREE.SRGBColorSpace;
-        nightTextureRef.current = tex;
-        setNightLoaded(true);
-      },
+    let mounted = true;
+    const onLoad = () => { if (mounted) setTexturesReady(prev => prev + 1); };
+
+    // 야간 도시 불빛 (고해상도 2K)
+    loader.load('/textures/earth-night-lights.jpg',
+      (tex) => { tex.colorSpace = THREE.SRGBColorSpace; nightTextureRef.current = tex; onLoad(); },
       undefined,
-      () => {
-        // 로드 실패 → 검정 fallback (도시 불빛 없이 어두운 밤)
-        nightTextureRef.current = createBlackTexture();
-        setNightLoaded(true);
-      },
+      () => { nightTextureRef.current = createBlackTexture(); onLoad(); },
+    );
+    // 노멀맵 (산맥/지형 질감 — 8K solarsystemscope 5x enhanced)
+    loader.load('/textures/earth-normal-map.jpg',
+      (tex) => { tex.colorSpace = THREE.LinearSRGBColorSpace; normalTextureRef.current = tex; onLoad(); },
+      undefined,
+      () => { normalTextureRef.current = createFlatNormalTexture(); onLoad(); },
+    );
+    // 스페큘러맵 (바다 반사 / 육지 무광)
+    loader.load('/textures/earth-specular-map.jpg',
+      (tex) => { tex.colorSpace = THREE.LinearSRGBColorSpace; specularTextureRef.current = tex; onLoad(); },
+      undefined,
+      () => { specularTextureRef.current = createBlackSpecularTexture(); onLoad(); },
     );
     return () => {
+      mounted = false;
       nightTextureRef.current?.dispose();
+      normalTextureRef.current?.dispose();
+      specularTextureRef.current?.dispose();
     };
   }, []);
 
-  // v21: Custom ShaderMaterial (day/night 혼합 PBR)
+  // v21: Custom ShaderMaterial (day/night + normal + specular PBR)
   const earthMat = useMemo(() => {
-    const fallbackNight = createBlackTexture();
     return new THREE.ShaderMaterial({
       uniforms: {
         uDayMap: { value: dayTexture },
-        uNightMap: { value: fallbackNight },
+        uNightMap: { value: createBlackTexture() },
+        uNormalMap: { value: createFlatNormalTexture() },
+        uSpecularMap: { value: createBlackSpecularTexture() },
         uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+        uNormalScale: { value: 1.0 },
       },
       vertexShader: earthVertexShader,
       fragmentShader: earthFragmentShader,
@@ -460,13 +521,14 @@ function EarthSphere() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dayTexture]);
 
-  // 야간 텍스처 로드 완료 시 uniform 업데이트
+  // 텍스처 로드 완료 시 uniform 업데이트
   useEffect(() => {
-    if (nightLoaded && nightTextureRef.current) {
-      earthMat.uniforms.uNightMap.value = nightTextureRef.current;
-      earthMat.uniformsNeedUpdate = true;
-    }
-  }, [nightLoaded, earthMat]);
+    if (texturesReady < 3) return;
+    if (nightTextureRef.current) earthMat.uniforms.uNightMap.value = nightTextureRef.current;
+    if (normalTextureRef.current) earthMat.uniforms.uNormalMap.value = normalTextureRef.current;
+    if (specularTextureRef.current) earthMat.uniforms.uSpecularMap.value = specularTextureRef.current;
+    earthMat.uniformsNeedUpdate = true;
+  }, [texturesReady, earthMat]);
 
   // v21: useFrame에서 태양 방향 갱신 (UTC 기반 실시간 위치)
   useFrame(() => {
@@ -491,25 +553,143 @@ function EarthSphere() {
   );
 }
 
+// ─── R3F: 구름 레이어 (반투명 구체, 지구 위 약간 떠 있음) ───
+
+const cloudsVertexShader = /* glsl */ `
+  varying vec2 vUv;
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+
+  void main() {
+    vUv = uv;
+    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+const cloudsFragmentShader = /* glsl */ `
+  uniform sampler2D uCloudsMap;
+  uniform vec3 uSunDir;
+
+  varying vec2 vUv;
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+
+  void main() {
+    vec3 N = normalize(vWorldNormal);
+    float NdotL = dot(N, uSunDir);
+
+    // 구름 텍스처 (밝기 = 알파)
+    float cloudAlpha = texture2D(uCloudsMap, vUv).r;
+
+    // 낮/밤 팩터 — 밤 면은 완전 투명
+    float dayFactor = smoothstep(-0.1, 0.5, NdotL);
+
+    // 최종 알파: 텍스처 * 낮/밤 * 전체 투명도
+    float finalAlpha = cloudAlpha * dayFactor * 0.55;
+
+    // 거의 보이지 않는 프래그먼트는 discard (검은 잔여물 원천 차단)
+    if (finalAlpha < 0.005) discard;
+
+    // 구름 라이팅: 밝은 디퓨즈 조명 (밤 면은 이미 discard)
+    float diffuse = max(NdotL, 0.0) * 0.6 + 0.4;
+    vec3 cloudColor = vec3(diffuse);
+
+    gl_FragColor = vec4(cloudColor, finalAlpha);
+  }
+`;
+
+function EarthClouds() {
+  const cloudsTextureRef = useRef<THREE.Texture | null>(null);
+  const matRef = useRef<THREE.ShaderMaterial | null>(null);
+  const [ready, setReady] = useState(false);
+
+  useEffect(() => {
+    const loader = new THREE.TextureLoader();
+    let mounted = true;
+    loader.load('/textures/earth-clouds.jpg',
+      (tex) => {
+        tex.colorSpace = THREE.LinearSRGBColorSpace;
+        cloudsTextureRef.current = tex;
+        if (mounted) setReady(true);
+      },
+      undefined,
+      () => { if (mounted) setReady(false); },
+    );
+    return () => {
+      mounted = false;
+      cloudsTextureRef.current?.dispose();
+    };
+  }, []);
+
+  const cloudsMat = useMemo(() => {
+    const mat = new THREE.ShaderMaterial({
+      uniforms: {
+        uCloudsMap: { value: createBlackTexture() },
+        uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+      },
+      vertexShader: cloudsVertexShader,
+      fragmentShader: cloudsFragmentShader,
+      transparent: true,
+      depthWrite: false,
+    });
+    matRef.current = mat;
+    return mat;
+  }, []);
+
+  useEffect(() => {
+    if (ready && cloudsTextureRef.current && matRef.current) {
+      matRef.current.uniforms.uCloudsMap.value = cloudsTextureRef.current;
+      matRef.current.uniformsNeedUpdate = true;
+    }
+  }, [ready]);
+
+  // 태양 방향 동기화 + 느린 회전
+  useFrame((_state, delta) => {
+    if (!matRef.current) return;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
+    const ha = ((utcH - 12) / 24) * 2 * Math.PI;
+    const sx = Math.cos(decRad) * Math.cos(ha);
+    const sy = Math.sin(decRad);
+    const sz = Math.cos(decRad) * Math.sin(ha);
+    matRef.current.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+  });
+
+  // 구름: 지구 반경보다 살짝 큰 구체 (0.5% 위)
+  return (
+    <mesh material={cloudsMat} renderOrder={50}>
+      <sphereGeometry args={[RADIUS * 1.005, 64, 64]} />
+    </mesh>
+  );
+}
+
 // ─── R3F: 실시간 태양 (UTC 기반 위치 + 코로나 글로우) ───
 
 function SunLight() {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const sunRef = useRef<THREE.Group>(null);
 
-  // 태양 코로나 글로우 (캔버스 라디얼 그래디언트)
+  // 태양 코로나 — 중심이 밝고 급격히 감쇠하는 자연스러운 그래디언트
   const glowTexture = useMemo(() => {
     const canvas = document.createElement('canvas');
-    canvas.width = 128;
-    canvas.height = 128;
+    canvas.width = 256;
+    canvas.height = 256;
     const ctx = canvas.getContext('2d')!;
-    const g = ctx.createRadialGradient(64, 64, 0, 64, 64, 64);
-    g.addColorStop(0, 'rgba(255,250,230,1)');
-    g.addColorStop(0.15, 'rgba(255,240,200,0.6)');
-    g.addColorStop(0.4, 'rgba(255,220,150,0.12)');
-    g.addColorStop(1, 'rgba(255,200,100,0)');
+    const g = ctx.createRadialGradient(128, 128, 0, 128, 128, 128);
+    // 핵심: 중심은 매우 밝지만, 0.1 지점에서 이미 급감쇠
+    g.addColorStop(0, 'rgba(255,252,240,1.0)');
+    g.addColorStop(0.05, 'rgba(255,248,220,0.8)');
+    g.addColorStop(0.12, 'rgba(255,235,180,0.3)');
+    g.addColorStop(0.25, 'rgba(255,220,140,0.08)');
+    g.addColorStop(0.5, 'rgba(255,200,100,0.01)');
+    g.addColorStop(1, 'rgba(255,180,80,0)');
     ctx.fillStyle = g;
-    ctx.fillRect(0, 0, 128, 128);
+    ctx.fillRect(0, 0, 256, 256);
     return new THREE.CanvasTexture(canvas);
   }, []);
 
@@ -518,9 +698,7 @@ function SunLight() {
     const start = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
     const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-    // 태양 적위 (지축 23.44° 기울기)
     const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
-    // 시간각: UTC 12시 = 본초자오선(경도 0°) 정오
     const ha = ((utcH - 12) / 24) * 2 * Math.PI;
     const d = 500;
     const x = d * Math.cos(decRad) * Math.cos(ha);
@@ -534,28 +712,28 @@ function SunLight() {
     <>
       <directionalLight ref={lightRef} intensity={2.5} color="#FFF8F0" />
       <group ref={sunRef}>
-        {/* 태양 코어 */}
+        {/* 태양 코어 (작고 밝은 구체) */}
         <mesh>
-          <sphereGeometry args={[5, 16, 16]} />
+          <sphereGeometry args={[3, 16, 16]} />
           <meshBasicMaterial color="#FFF8E0" toneMapped={false} />
         </mesh>
-        {/* 태양 코로나 글로우 (외부) */}
-        <sprite scale={[160, 160, 1]}>
+        {/* 코로나 외부 — Bloom이 자연스럽게 확산 (크기 줄임, opacity 낮춤) */}
+        <sprite scale={[50, 50, 1]}>
           <spriteMaterial
             map={glowTexture}
             transparent
-            opacity={0.6}
+            opacity={0.35}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
           />
         </sprite>
-        {/* 태양 내부 글로우 레이어 */}
-        <sprite scale={[60, 60, 1]}>
+        {/* 코로나 내부 — 밝은 중심 글로우 */}
+        <sprite scale={[20, 20, 1]}>
           <spriteMaterial
             map={glowTexture}
             transparent
-            opacity={0.4}
+            opacity={0.5}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
@@ -566,159 +744,25 @@ function SunLight() {
   );
 }
 
-// ─── R3F: 배경 별 (셰이더 깜빡임 + 항성 스펙트럼 색상) ───
+// ─── R3F: Stars + Milky Way 배경 (8K equirectangular skybox) ───
 
 function Starfield() {
-  const COUNT = 4000;
-  const { geometry, material } = useMemo(() => {
-    const positions = new Float32Array(COUNT * 3);
-    const colors = new Float32Array(COUNT * 3);
-    const sizes = new Float32Array(COUNT);
-    const phases = new Float32Array(COUNT);
-    // 항성 스펙트럼 유형별 색상 (O/B 청백 → K 주황)
-    const starColors: [number, number, number][] = [
-      [0.7, 0.8, 1.0], [0.85, 0.9, 1.0], [1.0, 1.0, 1.0],
-      [1.0, 0.96, 0.85], [1.0, 0.88, 0.7],
-    ];
-    for (let i = 0; i < COUNT; i++) {
-      const theta = Math.random() * Math.PI * 2;
-      const phi = Math.acos(2 * Math.random() - 1);
-      const r = 650 + Math.random() * 250;
-      positions[i * 3] = r * Math.sin(phi) * Math.cos(theta);
-      positions[i * 3 + 1] = r * Math.sin(phi) * Math.sin(theta);
-      positions[i * 3 + 2] = r * Math.cos(phi);
-      // 밝기: 멱급수 분포 (대부분 어둡고, 소수만 밝음)
-      const brightness = Math.pow(Math.random(), 3);
-      sizes[i] = 0.6 + brightness * 3.5;
-      const c = starColors[Math.floor(Math.random() * starColors.length)];
-      const b = 0.4 + brightness * 0.6;
-      colors[i * 3] = c[0] * b;
-      colors[i * 3 + 1] = c[1] * b;
-      colors[i * 3 + 2] = c[2] * b;
-      phases[i] = Math.random() * Math.PI * 2;
-    }
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('aColor', new THREE.BufferAttribute(colors, 3));
-    geo.setAttribute('aSize', new THREE.BufferAttribute(sizes, 1));
-    geo.setAttribute('aPhase', new THREE.BufferAttribute(phases, 1));
-    const mat = new THREE.ShaderMaterial({
-      uniforms: { uTime: { value: 0 } },
-      vertexShader: `
-        attribute float aSize;
-        attribute float aPhase;
-        attribute vec3 aColor;
-        uniform float uTime;
-        varying vec3 vColor;
-        varying float vAlpha;
-        void main() {
-          vColor = aColor;
-          float twinkle = 0.6 + 0.4 * sin(uTime * (0.3 + aPhase * 0.8) + aPhase * 6.283);
-          vAlpha = twinkle;
-          vec4 mvPos = modelViewMatrix * vec4(position, 1.0);
-          gl_PointSize = aSize * (1.0 + 0.15 * sin(uTime * 0.5 + aPhase * 3.14));
-          gl_Position = projectionMatrix * mvPos;
-        }
-      `,
-      fragmentShader: `
-        varying vec3 vColor;
-        varying float vAlpha;
-        void main() {
-          float d = length(gl_PointCoord - vec2(0.5));
-          if (d > 0.5) discard;
-          float alpha = smoothstep(0.5, 0.15, d) * vAlpha;
-          gl_FragColor = vec4(vColor, alpha);
-        }
-      `,
-      transparent: true,
-      depthWrite: false,
-      blending: THREE.AdditiveBlending,
-    });
-    return { geometry: geo, material: mat };
-  }, []);
+  const { scene } = useThree();
+  const milkyWayTexture = useLoader(THREE.TextureLoader, '/textures/stars-milky-way.jpg');
 
-  useFrame(({ clock }) => {
-    material.uniforms.uTime.value = clock.getElapsedTime();
-  });
+  // scene.background로 equirectangular 텍스처 설정 — 메시 없이 완벽한 배경
+  useMemo(() => {
+    milkyWayTexture.colorSpace = THREE.SRGBColorSpace;
+    milkyWayTexture.mapping = THREE.EquirectangularReflectionMapping;
+    scene.background = milkyWayTexture;
+  }, [milkyWayTexture, scene]);
 
-  return <points geometry={geometry} material={material} />;
-}
+  // cleanup: 언마운트 시 배경 제거
+  useEffect(() => {
+    return () => { scene.background = null; };
+  }, [scene]);
 
-// ─── R3F: 대기 글로우 (림 라이트 효과) ───
-
-function AtmosphereGlow() {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  const material = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uSunDir: { value: new THREE.Vector3(1, 0, 0) },
-      },
-      vertexShader: `
-        varying vec3 vWorldNormal;
-        varying vec3 vViewDir;
-
-        void main() {
-          vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-          vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
-          vViewDir = normalize(cameraPosition - worldPos);
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }
-      `,
-      fragmentShader: `
-        uniform vec3 uSunDir;
-        varying vec3 vWorldNormal;
-        varying vec3 vViewDir;
-
-        void main() {
-          // 프레넬: 가장자리에서만 보이도록 (Three.js TSL 예제 참고)
-          // remap(0.73, 1.0) → 0.73 이하에서 완전 투명, 극단 가장자리에서만 보임
-          float fresnel = 1.0 - max(dot(vViewDir, vWorldNormal), 0.0);
-          float alpha = smoothstep(0.73, 1.0, fresnel);
-          alpha = pow(alpha, 3.0);
-
-          // 태양 방향 기반 밝기 (야간 쪽은 대기 거의 안 보임)
-          float sunOrientation = dot(vWorldNormal, uSunDir);
-          float atmosphereDayStrength = smoothstep(-0.5, 1.0, sunOrientation);
-          alpha *= atmosphereDayStrength;
-
-          // 대기 색상: 낮=밝은 시안, 황혼=오렌지/레드 (터미네이터 부근)
-          vec3 dayAtmoColor = vec3(0.4, 0.7, 1.0);
-          vec3 twilightColor = vec3(1.0, 0.4, 0.2);
-          float twilightMix = smoothstep(-0.25, 0.75, sunOrientation);
-          vec3 atmoColor = mix(twilightColor, dayAtmoColor, twilightMix);
-
-          gl_FragColor = vec4(atmoColor, alpha * 0.6);
-        }
-      `,
-      side: THREE.BackSide,
-      blending: THREE.AdditiveBlending,
-      transparent: true,
-      depthWrite: false,
-    });
-  }, []);
-
-  // UTC 기반 태양 방향 갱신 (EarthSphere와 동일한 계산)
-  useFrame(() => {
-    if (!meshRef.current) return;
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0);
-    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
-    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-    const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
-    const ha = ((utcH - 12) / 24) * 2 * Math.PI;
-    const sx = Math.cos(decRad) * Math.cos(ha);
-    const sy = Math.sin(decRad);
-    const sz = Math.cos(decRad) * Math.sin(ha);
-    const mat = meshRef.current.material as THREE.ShaderMaterial;
-    mat.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
-  });
-
-  return (
-    <mesh ref={meshRef} material={material}>
-      <sphereGeometry args={[RADIUS * 1.05, 32, 32]} />
-    </mesh>
-  );
+  return null;
 }
 
 // ─── R3F: 국가 경계선 (단일 배치 LineSegments) ───
@@ -854,7 +898,7 @@ function GlobeInteraction({ onCountryClick, onHover }: { onCountryClick?: (iso3:
       onPointerLeave={handlePointerLeave}
     >
       <sphereGeometry args={[RADIUS + 3, 64, 64]} />
-      <meshBasicMaterial transparent opacity={0} depthWrite={false} />
+      <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} colorWrite={false} />
     </mesh>
   );
 }
@@ -1430,7 +1474,7 @@ function GlobeScene({
       <group ref={globeGroupRef}>
         {/* 지구 텍스처 구체 + 대기 글로우 */}
         <EarthSphere />
-        <AtmosphereGlow />
+        <EarthClouds />
         {/* 글로브 위 3D 타이틀 */}
         <GlobeTitle />
         {/* 국가 경계선 + 라벨 + 인터랙션 */}
@@ -1538,18 +1582,16 @@ function GlobeScene({
         />
       )}
 
-      {/* v21 Phase 4: Bloom + Vignette 포스트프로세싱 */}
-      {/* 모바일에서는 성능을 위해 EffectComposer 전체 비활성화 */}
+      {/* v21 Phase 4: Bloom 포스트프로세싱 */}
       {!isMobile && (
         <EffectComposer>
           <Bloom
-            luminanceThreshold={0.8}
-            luminanceSmoothing={0.3}
-            intensity={0.5}
-            radius={0.6}
+            luminanceThreshold={0.92}
+            luminanceSmoothing={0.15}
+            intensity={0.3}
+            radius={0.4}
             mipmapBlur
           />
-          <Vignette offset={0.3} darkness={0.5} />
         </EffectComposer>
       )}
     </>
@@ -1590,7 +1632,7 @@ export function GlobeView({
     <div style={{ width: '100%', height: '100%', background: BG, position: 'relative', ...style }}>
       <Canvas
         camera={{ position: cameraStartPos, fov: 50, near: 1, far: 1000 }}
-        gl={{ antialias: true, alpha: false, toneMappingExposure: 1.2 }}
+        gl={{ antialias: true, alpha: false, toneMappingExposure: 1.0 }}
         dpr={[1, 2]}
         onCreated={({ gl }) => { gl.setClearColor(BG); }}
       >
