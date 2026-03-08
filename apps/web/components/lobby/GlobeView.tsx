@@ -48,8 +48,13 @@ import { geoToXYZ } from '@/lib/globe-utils';
 // v17: Intro camera animation
 import { GlobeIntroCamera } from '@/components/3d/GlobeIntroCamera';
 
+// v21 Phase 4: Bloom post-processing
+import { EffectComposer, Bloom, Vignette } from '@react-three/postprocessing';
+
 // v20: Landmark sprites on globe surface
 import { GlobeLandmarks } from '@/components/3d/GlobeLandmarks';
+import { getArchetypeForISO3 } from '@/lib/landmark-data';
+import { getArchetypeHeight } from '@/lib/landmark-geometries';
 // v17: Conflict indicators on globe
 import { GlobeConflictIndicators } from '@/components/3d/GlobeConflictIndicators';
 
@@ -338,65 +343,139 @@ function buildCountryGeometries(geoData: { features: any[] }): CountryGeo[] {
   return result;
 }
 
-// ─── R3F: 지구 텍스처 구체 ───
+// ─── R3F: 지구 PBR 셰이더 (day/night 혼합 + 터미네이터 잔사광) ───
+
+// v21: 야간 텍스처 로드 실패 시 검정 1x1 fallback 생성
+function createBlackTexture(): THREE.DataTexture {
+  const data = new Uint8Array([0, 0, 0, 255]);
+  const tex = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+  tex.needsUpdate = true;
+  return tex;
+}
+
+// v21: EarthSphere PBR vertex shader
+const earthVertexShader = /* glsl */ `
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+// v21: EarthSphere PBR fragment shader (day/night 혼합 + 터미네이터 오렌지 림)
+const earthFragmentShader = /* glsl */ `
+  uniform sampler2D uDayMap;
+  uniform sampler2D uNightMap;
+  uniform vec3 uSunDir;
+
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+
+  void main() {
+    vec3 N = normalize(vWorldNormal);
+    float NdotL = dot(N, uSunDir);
+
+    // 낮/밤 혼합 팩터 (터미네이터 부드러운 전환)
+    float dayFactor = smoothstep(-0.15, 0.25, NdotL);
+
+    // 낮: 디퓨즈 라이팅
+    vec3 dayColor = texture2D(uDayMap, vUv).rgb;
+    float diffuse = max(NdotL, 0.0) * 0.8 + 0.2;
+    dayColor *= diffuse;
+
+    // 밤: 도시 불빛 (emissive, 조명 무관)
+    vec3 nightColor = texture2D(uNightMap, vUv).rgb;
+    nightColor *= 1.5;
+
+    // 터미네이터 잔사광 (오렌지 림)
+    float terminator = 1.0 - smoothstep(-0.05, 0.15, abs(NdotL));
+    vec3 terminatorColor = vec3(1.0, 0.4, 0.1) * terminator * 0.3;
+
+    // 최종 혼합
+    vec3 color = mix(nightColor, dayColor, dayFactor) + terminatorColor;
+
+    gl_FragColor = vec4(color, 1.0);
+  }
+`;
 
 function EarthSphere() {
-  const texture = useLoader(THREE.TextureLoader, '/textures/earth-blue-marble.jpg');
-  texture.colorSpace = THREE.SRGBColorSpace;
-  const shadowRef = useRef<THREE.Mesh>(null);
+  const dayTexture = useLoader(THREE.TextureLoader, '/textures/earth-blue-marble.jpg');
+  dayTexture.colorSpace = THREE.SRGBColorSpace;
 
-  // 밤/낮 오버레이: 태양 반대편에 반투명 검정 반구를 씌움
-  const nightMat = useMemo(() => new THREE.ShaderMaterial({
-    uniforms: { uSunDir: { value: new THREE.Vector3(1, 0, 0) } },
-    vertexShader: `
-      varying vec3 vWorldNormal;
-      void main() {
-        vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
-        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-      }
-    `,
-    fragmentShader: `
-      uniform vec3 uSunDir;
-      varying vec3 vWorldNormal;
-      void main() {
-        float NdotL = dot(vWorldNormal, uSunDir);
-        // 부드러운 터미네이터: -0.1 ~ 0.3 구간에서 전환
-        float night = 1.0 - smoothstep(-0.1, 0.3, NdotL);
-        // 낮 면: 약간 어둡게 (0.25), 밤 면: 많이 어둡게 (0.7)
-        float darkness = mix(0.25, 0.7, night);
-        gl_FragColor = vec4(0.01, 0.02, 0.06, darkness);
-      }
-    `,
-    transparent: true,
-    depthWrite: false,
-  }), []);
+  // v21: 야간 텍스처 로드 (실패 시 검정 fallback)
+  const nightTextureRef = useRef<THREE.Texture | null>(null);
+  const [nightLoaded, setNightLoaded] = useState(false);
 
+  useEffect(() => {
+    const loader = new THREE.TextureLoader();
+    loader.load(
+      '/textures/earth-night-lights.jpg',
+      (tex) => {
+        tex.colorSpace = THREE.SRGBColorSpace;
+        nightTextureRef.current = tex;
+        setNightLoaded(true);
+      },
+      undefined,
+      () => {
+        // 로드 실패 → 검정 fallback (도시 불빛 없이 어두운 밤)
+        nightTextureRef.current = createBlackTexture();
+        setNightLoaded(true);
+      },
+    );
+    return () => {
+      nightTextureRef.current?.dispose();
+    };
+  }, []);
+
+  // v21: Custom ShaderMaterial (day/night 혼합 PBR)
+  const earthMat = useMemo(() => {
+    const fallbackNight = createBlackTexture();
+    return new THREE.ShaderMaterial({
+      uniforms: {
+        uDayMap: { value: dayTexture },
+        uNightMap: { value: fallbackNight },
+        uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+      },
+      vertexShader: earthVertexShader,
+      fragmentShader: earthFragmentShader,
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dayTexture]);
+
+  // 야간 텍스처 로드 완료 시 uniform 업데이트
+  useEffect(() => {
+    if (nightLoaded && nightTextureRef.current) {
+      earthMat.uniforms.uNightMap.value = nightTextureRef.current;
+      earthMat.uniformsNeedUpdate = true;
+    }
+  }, [nightLoaded, earthMat]);
+
+  // v21: useFrame에서 태양 방향 갱신 (UTC 기반 실시간 위치)
   useFrame(() => {
-    if (!shadowRef.current) return;
-    // SunLight와 동일한 태양 위치 계산
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
     const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
     const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    // 태양 적위 (지축 23.44도 기울기)
     const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
+    // 시간각: UTC 12시 = 본초자오선 정오
     const ha = ((utcH - 12) / 24) * 2 * Math.PI;
     const sx = Math.cos(decRad) * Math.cos(ha);
     const sy = Math.sin(decRad);
     const sz = Math.cos(decRad) * Math.sin(ha);
-    nightMat.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+    earthMat.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
   });
 
   return (
-    <group>
-      <mesh>
-        <sphereGeometry args={[RADIUS, 64, 64]} />
-        <meshBasicMaterial map={texture} />
-      </mesh>
-      {/* 밤/낮 셰도우 오버레이 (텍스처 위에 반투명 렌더링) */}
-      <mesh ref={shadowRef} material={nightMat}>
-        <sphereGeometry args={[RADIUS + 0.1, 64, 64]} />
-      </mesh>
-    </group>
+    <mesh material={earthMat}>
+      <sphereGeometry args={[RADIUS, 64, 64]} />
+    </mesh>
   );
 }
 
@@ -441,19 +520,30 @@ function SunLight() {
 
   return (
     <>
-      <directionalLight ref={lightRef} intensity={1.15} color="#FFF8F0" />
+      <directionalLight ref={lightRef} intensity={2.5} color="#FFF8F0" />
       <group ref={sunRef}>
         {/* 태양 코어 */}
         <mesh>
           <sphereGeometry args={[5, 16, 16]} />
           <meshBasicMaterial color="#FFF8E0" toneMapped={false} />
         </mesh>
-        {/* 태양 코로나 글로우 */}
-        <sprite scale={[120, 120, 1]}>
+        {/* 태양 코로나 글로우 (외부) */}
+        <sprite scale={[160, 160, 1]}>
           <spriteMaterial
             map={glowTexture}
             transparent
             opacity={0.6}
+            blending={THREE.AdditiveBlending}
+            depthWrite={false}
+            toneMapped={false}
+          />
+        </sprite>
+        {/* 태양 내부 글로우 레이어 */}
+        <sprite scale={[60, 60, 1]}>
+          <spriteMaterial
+            map={glowTexture}
+            transparent
+            opacity={0.4}
             blending={THREE.AdditiveBlending}
             depthWrite={false}
             toneMapped={false}
@@ -545,20 +635,40 @@ function Starfield() {
 // ─── R3F: 대기 글로우 (림 라이트 효과) ───
 
 function AtmosphereGlow() {
+  const meshRef = useRef<THREE.Mesh>(null);
+
   const material = useMemo(() => {
     return new THREE.ShaderMaterial({
+      uniforms: {
+        uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+      },
       vertexShader: `
-        varying vec3 vNormal;
+        varying vec3 vWorldNormal;
+        varying vec3 vViewDir;
+
         void main() {
-          vNormal = normalize(normalMatrix * normal);
+          vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+          vec3 worldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          vViewDir = normalize(cameraPosition - worldPos);
           gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
         }
       `,
       fragmentShader: `
-        varying vec3 vNormal;
+        uniform vec3 uSunDir;
+        varying vec3 vWorldNormal;
+        varying vec3 vViewDir;
+
         void main() {
-          float intensity = pow(0.65 - dot(vNormal, vec3(0, 0, 1.0)), 2.0);
-          gl_FragColor = vec4(0.1, 0.3, 0.6, 1.0) * intensity;
+          float rim = 1.0 - abs(dot(vViewDir, vWorldNormal));
+          rim = pow(rim, 3.0);
+
+          float sunAlignment = max(dot(vWorldNormal, uSunDir), 0.0);
+          float atmosphereBright = 0.3 + 0.7 * sunAlignment;
+
+          vec3 dayAtmo = mix(vec3(0.1, 0.3, 0.8), vec3(0.4, 0.7, 1.0), sunAlignment);
+          vec3 atmoColor = dayAtmo * rim * atmosphereBright;
+
+          gl_FragColor = vec4(atmoColor, rim * atmosphereBright);
         }
       `,
       side: THREE.BackSide,
@@ -567,8 +677,24 @@ function AtmosphereGlow() {
     });
   }, []);
 
+  // UTC 기반 태양 방향 갱신 (EarthSphere와 동일한 계산)
+  useFrame(() => {
+    if (!meshRef.current) return;
+    const now = new Date();
+    const start = new Date(now.getFullYear(), 0, 0);
+    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
+    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
+    const ha = ((utcH - 12) / 24) * 2 * Math.PI;
+    const sx = Math.cos(decRad) * Math.cos(ha);
+    const sy = Math.sin(decRad);
+    const sz = Math.cos(decRad) * Math.sin(ha);
+    const mat = meshRef.current.material as THREE.ShaderMaterial;
+    mat.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+  });
+
   return (
-    <mesh material={material}>
+    <mesh ref={meshRef} material={material}>
       <sphereGeometry args={[RADIUS * 1.05, 32, 32]} />
     </mesh>
   );
@@ -963,6 +1089,19 @@ function CountryLabels({ countries }: { countries: CountryGeo[] }) {
   // 라벨별 호버 진행도 (0=기본, 1=호버 완료) — 부드러운 전환용
   const hoverProgress = useRef<Float32Array>(new Float32Array(0));
 
+  // 랜드마크 꼭대기 높이에 맞춘 라벨 위치 계산 (v20)
+  const LANDMARK_SURFACE_ALT = 2.5;
+  const LABEL_NAME_GAP = 1.0;   // 국가 이름: 건물 꼭대기 바로 위 (국기 라벨보다 아래)
+  const labelPositions = useMemo(() => {
+    return countries.map((c) => {
+      const archetype = getArchetypeForISO3(c.iso3);
+      const landmarkH = getArchetypeHeight(archetype);
+      const labelR = RADIUS + LANDMARK_SURFACE_ALT + landmarkH + LABEL_NAME_GAP;
+      const dir = c.centroid.clone().normalize();
+      return dir.multiplyScalar(labelR);
+    });
+  }, [countries]);
+
   // 각 라벨의 법선 벡터 — 1회만 계산
   const normals = useMemo(
     () => countries.map((c) => c.centroid.clone().normalize()),
@@ -1004,7 +1143,7 @@ function CountryLabels({ countries }: { countries: CountryGeo[] }) {
       g.quaternion.copy(camera.quaternion);
 
       // ── 화면 중앙 기반 페이드: NDC 좌표로 투영 후 중앙 거리 계산 ──
-      _proj.copy(countries[i].centroid).project(camera);
+      _proj.copy(labelPositions[i]).project(camera);
       const screenDist = Math.sqrt(_proj.x * _proj.x + _proj.y * _proj.y);
       const raw = 1 - THREE.MathUtils.clamp(
         (screenDist - LABEL_SCREEN_FULL) / (LABEL_SCREEN_HIDE - LABEL_SCREEN_FULL), 0, 1,
@@ -1044,14 +1183,14 @@ function CountryLabels({ countries }: { countries: CountryGeo[] }) {
       {countries.map((c, i) => (
         <group
           key={c.iso3}
-          position={c.centroid}
+          position={labelPositions[i]}
           ref={(el) => { refs.current[i] = el; }}
         >
           <Text
             fontSize={1.5}
             color="#E8E0D4"
             anchorX="center"
-            anchorY="middle"
+            anchorY="top"
             outlineWidth={0.1}
             outlineColor="#111111"
             letterSpacing={0.06}
@@ -1200,6 +1339,12 @@ function GlobeScene({
   // v15 Phase 6: Mobile LOD detection
   const lodConfig = useGlobeLOD();
 
+  // v21 Phase 4: 모바일 디바이스 감지 (Bloom 비활성화용)
+  const isMobile = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return window.innerWidth < 768 || navigator.maxTouchPoints > 0;
+  }, []);
+
   // GeoJSON → CountryGeo[] 로드 (1회)
   useEffect(() => {
     loadGeoJSON()
@@ -1256,7 +1401,7 @@ function GlobeScene({
       )}
 
       {/* 우주: 최소 ambient + 반구 필 + 실시간 태양 + 별 */}
-      <ambientLight intensity={0.35} color="#1a2a4a" />
+      <ambientLight intensity={0.12} color="#1a2a4a" />
       <hemisphereLight args={['#334466', '#0a0e18', 0.25]} />
       <SunLight />
       <Starfield />
@@ -1371,6 +1516,21 @@ function GlobeScene({
           onCameraTarget={handleCameraTarget}
         />
       )}
+
+      {/* v21 Phase 4: Bloom + Vignette 포스트프로세싱 */}
+      {/* 모바일에서는 성능을 위해 EffectComposer 전체 비활성화 */}
+      {!isMobile && (
+        <EffectComposer>
+          <Bloom
+            luminanceThreshold={0.8}
+            luminanceSmoothing={0.3}
+            intensity={0.5}
+            radius={0.6}
+            mipmapBlur
+          />
+          <Vignette offset={0.3} darkness={0.5} />
+        </EffectComposer>
+      )}
     </>
   );
 }
@@ -1409,7 +1569,8 @@ export function GlobeView({
     <div style={{ width: '100%', height: '100%', background: BG, position: 'relative', ...style }}>
       <Canvas
         camera={{ position: cameraStartPos, fov: 50, near: 1, far: 1000 }}
-        gl={{ antialias: true, alpha: false }}
+        gl={{ antialias: true, alpha: false, toneMappingExposure: 1.2 }}
+        dpr={[1, 2]}
         onCreated={({ gl }) => { gl.setClearColor(BG); }}
       >
         <SizeGate>
