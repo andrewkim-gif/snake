@@ -71,9 +71,18 @@ const BLINK_FREQUENCY = 0.5; // Hz
 const BLINK_COLOR = new THREE.Color(0xff3333);
 
 // Particles
-const EXPLOSION_PARTICLE_COUNT = 30;
 const ARROW_PARTICLE_COUNT = 12;
 const FIREWORK_PARTICLE_COUNT = 300; // v15: upgraded from 50 → 300
+
+// v23: Explosion3D constants
+const EXPLOSION_FLASH_DURATION = 0.2;     // seconds
+const EXPLOSION_FIREBALL_START = 0.1;     // seconds
+const EXPLOSION_FIREBALL_END = 0.8;       // seconds
+const EXPLOSION_FIREBALL_COUNT = 22;      // InstancedMesh spheres
+const EXPLOSION_DEBRIS_START = 0.3;       // seconds
+const EXPLOSION_DEBRIS_END = 1.5;         // seconds
+const EXPLOSION_DEBRIS_COUNT = 14;        // InstancedMesh cubes
+const EXPLOSION_TOTAL_DURATION = 1.6;     // auto cleanup after this
 
 // War end
 const WINNER_FIREWORK_COLOR = new THREE.Color(0xffd700); // gold
@@ -88,6 +97,12 @@ const WAR_FOG_SPREAD = 0.08; // spread relative to globe radius
 const CAMERA_SHAKE_DURATION = 0.5;  // seconds
 const CAMERA_SHAKE_INTENSITY = 0.3; // position offset magnitude
 const CAMERA_SHAKE_FREQUENCY = 40;  // sin wave frequency
+
+// ─── GC-prevention temp objects (module scope) ───
+
+const _tempObj3D = new THREE.Object3D();
+const _tempVec3 = new THREE.Vector3();
+const _tempColor = new THREE.Color();
 
 // ─── Helpers ───
 
@@ -328,9 +343,12 @@ function TerritoryBlink({
 }
 
 /**
- * ExplosionParticles — Random explosion particles near border areas.
+ * Explosion3D — v23 Phase 3: 3-stage InstancedMesh explosion particle system.
+ * Stage 1 (Flash, 0~0.2s): Center sphere rapid expansion, white→yellow, AdditiveBlending + Bloom
+ * Stage 2 (Fireball, 0.1~0.8s): 22 small spheres expanding outward, yellow→orange→dark red
+ * Stage 3 (Debris, 0.3~1.5s): 14 BoxGeometry cubes ejected randomly, spherical gravity pull
  */
-function ExplosionParticles({
+function Explosion3D({
   center,
   globeRadius,
   state,
@@ -339,101 +357,285 @@ function ExplosionParticles({
   globeRadius: number;
   state: 'preparation' | 'active' | 'ended';
 }) {
-  const pointsRef = useRef<THREE.Points>(null);
+  const groupRef = useRef<THREE.Group>(null);
+  const flashRef = useRef<THREE.Mesh>(null);
+  const fireballRef = useRef<THREE.InstancedMesh>(null);
+  const debrisRef = useRef<THREE.InstancedMesh>(null);
   const timeRef = useRef(0);
-  const velocitiesRef = useRef<Float32Array>(new Float32Array(EXPLOSION_PARTICLE_COUNT * 3));
+  const cycleRef = useRef(0); // tracks explosion cycles for continuous re-triggering
 
-  const geometry = useMemo(() => {
-    const positions = new Float32Array(EXPLOSION_PARTICLE_COUNT * 3);
-    const sizes = new Float32Array(EXPLOSION_PARTICLE_COUNT);
-    const lifetimes = new Float32Array(EXPLOSION_PARTICLE_COUNT);
-
-    for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
-      // Random position around center
-      const offset = new THREE.Vector3(
-        (Math.random() - 0.5) * globeRadius * 0.1,
-        (Math.random() - 0.5) * globeRadius * 0.1,
-        (Math.random() - 0.5) * globeRadius * 0.1,
-      );
-      const pos = center.clone().add(offset);
-      positions[i * 3] = pos.x;
-      positions[i * 3 + 1] = pos.y;
-      positions[i * 3 + 2] = pos.z;
-
-      sizes[i] = 0.5 + Math.random() * 1.5;
-      lifetimes[i] = Math.random(); // random phase offset
-
-      // Random velocity
-      velocitiesRef.current[i * 3] = (Math.random() - 0.5) * 2;
-      velocitiesRef.current[i * 3 + 1] = (Math.random() - 0.5) * 2;
-      velocitiesRef.current[i * 3 + 2] = (Math.random() - 0.5) * 2;
+  // Pre-compute fireball random directions + speeds (stable across re-renders)
+  const fireballData = useMemo(() => {
+    const directions: THREE.Vector3[] = [];
+    const speeds: number[] = [];
+    for (let i = 0; i < EXPLOSION_FIREBALL_COUNT; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      directions.push(new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta),
+        Math.sin(phi) * Math.sin(theta),
+        Math.cos(phi),
+      ));
+      speeds.push(1.5 + Math.random() * 2.5);
     }
+    return { directions, speeds };
+  }, []);
 
-    const geo = new THREE.BufferGeometry();
-    geo.setAttribute('position', new THREE.BufferAttribute(positions, 3));
-    geo.setAttribute('size', new THREE.BufferAttribute(sizes, 1));
-    geo.setAttribute('lifetime', new THREE.BufferAttribute(lifetimes, 1));
-    return geo;
-  }, [center, globeRadius]);
+  // Pre-compute debris random directions + speeds + rotation axes
+  const debrisData = useMemo(() => {
+    const directions: THREE.Vector3[] = [];
+    const speeds: number[] = [];
+    const rotAxes: THREE.Vector3[] = [];
+    const rotSpeeds: number[] = [];
+    for (let i = 0; i < EXPLOSION_DEBRIS_COUNT; i++) {
+      const theta = Math.random() * Math.PI * 2;
+      const phi = Math.acos(2 * Math.random() - 1);
+      directions.push(new THREE.Vector3(
+        Math.sin(phi) * Math.cos(theta),
+        Math.sin(phi) * Math.sin(theta),
+        Math.cos(phi),
+      ));
+      speeds.push(3.0 + Math.random() * 4.0);
+      // Random rotation axis for tumbling
+      rotAxes.push(new THREE.Vector3(
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+        Math.random() - 0.5,
+      ).normalize());
+      rotSpeeds.push(3.0 + Math.random() * 8.0);
+    }
+    return { directions, speeds, rotAxes, rotSpeeds };
+  }, []);
 
-  const material = useMemo(
-    () =>
-      new THREE.PointsMaterial({
-        color: 0xff4400,
-        size: globeRadius * 0.01,
-        transparent: true,
-        opacity: 0.7,
-        blending: THREE.AdditiveBlending,
-        depthWrite: false,
-      }),
-    [globeRadius],
-  );
+  // Shared geometries (created once)
+  const flashGeo = useMemo(() => new THREE.SphereGeometry(0.5, 12, 12), []);
+  const fireballGeo = useMemo(() => new THREE.SphereGeometry(0.3, 8, 8), []);
+  const debrisGeo = useMemo(() => new THREE.BoxGeometry(0.2, 0.2, 0.2), []);
 
+  // Flash material — AdditiveBlending, toneMapped=false for Bloom, high emissive
+  const flashMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0xffffff,
+    emissive: 0xffffff,
+    emissiveIntensity: 8,
+    transparent: true,
+    opacity: 1,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }), []);
+
+  // Fireball material
+  const fireballMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0xffaa00,
+    emissive: 0xff6600,
+    emissiveIntensity: 3,
+    transparent: true,
+    opacity: 1,
+    toneMapped: false,
+    blending: THREE.AdditiveBlending,
+    depthWrite: false,
+  }), []);
+
+  // Debris material
+  const debrisMat = useMemo(() => new THREE.MeshStandardMaterial({
+    color: 0x666666,
+    emissive: 0xff3300,
+    emissiveIntensity: 1.5,
+    transparent: true,
+    opacity: 1,
+    toneMapped: false,
+    depthWrite: false,
+  }), []);
+
+  // Continuous explosion cycle: reset every EXPLOSION_TOTAL_DURATION
   useFrame((_, delta) => {
-    if (!pointsRef.current || state !== 'active') return;
+    if (state !== 'active') return;
     timeRef.current += delta;
 
-    const positions = geometry.attributes.position as THREE.BufferAttribute;
-    const lifetimes = geometry.attributes.lifetime as THREE.BufferAttribute;
+    // Cycle repeats continuously during active war
+    const cycleTime = timeRef.current % (EXPLOSION_TOTAL_DURATION + 0.5); // 0.5s gap between cycles
+    const t = cycleTime;
 
-    for (let i = 0; i < EXPLOSION_PARTICLE_COUNT; i++) {
-      let lt = lifetimes.getX(i) + delta * 0.5;
-      if (lt > 1) {
-        // Reset particle
-        lt = 0;
-        const offset = new THREE.Vector3(
-          (Math.random() - 0.5) * globeRadius * 0.1,
-          (Math.random() - 0.5) * globeRadius * 0.1,
-          (Math.random() - 0.5) * globeRadius * 0.1,
-        );
-        const pos = center.clone().add(offset);
-        positions.setXYZ(i, pos.x, pos.y, pos.z);
+    // ─── Stage 1: Flash (0 ~ 0.2s) ───
+    if (flashRef.current) {
+      if (t < EXPLOSION_FLASH_DURATION) {
+        flashRef.current.visible = true;
+        // Scale: 0→5→0 (peak at 0.1s)
+        const flashProgress = t / EXPLOSION_FLASH_DURATION;
+        const flashScale = flashProgress < 0.5
+          ? flashProgress * 2 * 5   // 0→5
+          : (1 - (flashProgress - 0.5) * 2) * 5; // 5→0
+        flashRef.current.scale.setScalar(Math.max(0.01, flashScale));
+        flashRef.current.position.copy(center);
+        // White→Yellow color transition
+        const yellowT = flashProgress;
+        _tempColor.setRGB(1, 1, 1 - yellowT * 0.7); // white→yellow
+        flashMat.color.copy(_tempColor);
+        flashMat.emissive.copy(_tempColor);
+        flashMat.emissiveIntensity = 8 * (1 - flashProgress * 0.5);
+        flashMat.opacity = 1 - flashProgress * 0.3;
       } else {
-        // Move outward
-        const x = positions.getX(i) + velocitiesRef.current[i * 3] * delta;
-        const y = positions.getY(i) + velocitiesRef.current[i * 3 + 1] * delta;
-        const z = positions.getZ(i) + velocitiesRef.current[i * 3 + 2] * delta;
-        positions.setXYZ(i, x, y, z);
+        flashRef.current.visible = false;
       }
-      lifetimes.setX(i, lt);
     }
-    positions.needsUpdate = true;
-    lifetimes.needsUpdate = true;
 
-    // Fade based on lifetime
-    material.opacity = 0.4 + 0.3 * Math.sin(timeRef.current * 4);
+    // ─── Stage 2: Fireball (0.1 ~ 0.8s) ───
+    if (fireballRef.current) {
+      const fbStart = EXPLOSION_FIREBALL_START;
+      const fbEnd = EXPLOSION_FIREBALL_END;
+      const fbDuration = fbEnd - fbStart;
+
+      if (t >= fbStart && t <= fbEnd) {
+        fireballRef.current.visible = true;
+        const fbProgress = (t - fbStart) / fbDuration; // 0→1
+
+        for (let i = 0; i < EXPLOSION_FIREBALL_COUNT; i++) {
+          const dir = fireballData.directions[i];
+          const speed = fireballData.speeds[i];
+
+          // Position: expand from center
+          const dist = speed * fbProgress * 2;
+          _tempObj3D.position.copy(center);
+          _tempObj3D.position.addScaledVector(dir, dist);
+
+          // Scale: 0.3→0.5→0.1 (expand then shrink)
+          let s: number;
+          if (fbProgress < 0.4) {
+            s = 0.3 + (fbProgress / 0.4) * 0.2; // 0.3→0.5
+          } else {
+            s = 0.5 - ((fbProgress - 0.4) / 0.6) * 0.4; // 0.5→0.1
+          }
+          _tempObj3D.scale.setScalar(Math.max(0.05, s));
+          _tempObj3D.updateMatrix();
+          fireballRef.current.setMatrixAt(i, _tempObj3D.matrix);
+
+          // Color transition: yellow(0.1s) → orange(0.4s) → dark red(0.8s)
+          if (fbProgress < 0.3) {
+            // Yellow→Orange
+            const ct = fbProgress / 0.3;
+            _tempColor.setRGB(1, 1 - ct * 0.35, 0.1 - ct * 0.1);
+          } else {
+            // Orange→Dark Red
+            const ct = (fbProgress - 0.3) / 0.7;
+            _tempColor.setRGB(1 - ct * 0.4, 0.65 - ct * 0.55, ct * 0.05);
+          }
+          fireballRef.current.setColorAt(i, _tempColor);
+        }
+
+        fireballRef.current.instanceMatrix.needsUpdate = true;
+        if (fireballRef.current.instanceColor) {
+          fireballRef.current.instanceColor.needsUpdate = true;
+        }
+
+        // Fade opacity near end
+        fireballMat.opacity = fbProgress > 0.7 ? 1 - (fbProgress - 0.7) / 0.3 : 1;
+      } else {
+        fireballRef.current.visible = false;
+      }
+    }
+
+    // ─── Stage 3: Debris (0.3 ~ 1.5s) ───
+    if (debrisRef.current) {
+      const dbStart = EXPLOSION_DEBRIS_START;
+      const dbEnd = EXPLOSION_DEBRIS_END;
+      const dbDuration = dbEnd - dbStart;
+
+      if (t >= dbStart && t <= dbEnd) {
+        debrisRef.current.visible = true;
+        const dbProgress = (t - dbStart) / dbDuration; // 0→1
+
+        // Direction toward globe center for spherical gravity
+        _tempVec3.copy(center).normalize().negate(); // toward globe center
+
+        for (let i = 0; i < EXPLOSION_DEBRIS_COUNT; i++) {
+          const dir = debrisData.directions[i];
+          const speed = debrisData.speeds[i];
+          const rotAxis = debrisData.rotAxes[i];
+          const rotSpeed = debrisData.rotSpeeds[i];
+
+          // Position: eject outward + slight gravity pull toward globe surface
+          const dist = speed * dbProgress * 1.5;
+          const gravityPull = dbProgress * dbProgress * 0.8; // increasing gravity over time
+          _tempObj3D.position.copy(center);
+          _tempObj3D.position.addScaledVector(dir, dist);
+          _tempObj3D.position.addScaledVector(_tempVec3, gravityPull);
+
+          // Tumbling rotation
+          _tempObj3D.quaternion.setFromAxisAngle(rotAxis, t * rotSpeed);
+
+          // Scale: shrink over time
+          const dbScale = Math.max(0.05, 1.0 - dbProgress * 0.7);
+          _tempObj3D.scale.setScalar(dbScale);
+
+          _tempObj3D.updateMatrix();
+          debrisRef.current.setMatrixAt(i, _tempObj3D.matrix);
+        }
+
+        debrisRef.current.instanceMatrix.needsUpdate = true;
+
+        // Fade opacity
+        debrisMat.opacity = dbProgress > 0.5 ? 1 - (dbProgress - 0.5) / 0.5 : 1;
+        debrisMat.emissiveIntensity = Math.max(0, 1.5 * (1 - dbProgress));
+      } else {
+        debrisRef.current.visible = false;
+      }
+    }
   });
 
+  // Cleanup
   useEffect(() => {
     return () => {
-      geometry.dispose();
-      material.dispose();
+      flashGeo.dispose();
+      fireballGeo.dispose();
+      debrisGeo.dispose();
+      flashMat.dispose();
+      fireballMat.dispose();
+      debrisMat.dispose();
     };
-  }, [geometry, material]);
+  }, [flashGeo, fireballGeo, debrisGeo, flashMat, fireballMat, debrisMat]);
+
+  // Initialize instanceColor for fireball (need to set initial colors)
+  useEffect(() => {
+    if (fireballRef.current) {
+      for (let i = 0; i < EXPLOSION_FIREBALL_COUNT; i++) {
+        fireballRef.current.setColorAt(i, new THREE.Color(0xffcc00));
+      }
+      if (fireballRef.current.instanceColor) {
+        fireballRef.current.instanceColor.needsUpdate = true;
+      }
+    }
+  }, []);
 
   if (state !== 'active') return null;
 
-  return <points ref={pointsRef} geometry={geometry} material={material} />;
+  return (
+    <group ref={groupRef}>
+      {/* Stage 1: Flash sphere */}
+      <mesh
+        ref={flashRef}
+        geometry={flashGeo}
+        material={flashMat}
+        position={center}
+        visible={false}
+      />
+
+      {/* Stage 2: Fireball InstancedMesh */}
+      <instancedMesh
+        ref={fireballRef}
+        args={[fireballGeo, fireballMat, EXPLOSION_FIREBALL_COUNT]}
+        frustumCulled={false}
+        visible={false}
+      />
+
+      {/* Stage 3: Debris InstancedMesh */}
+      <instancedMesh
+        ref={debrisRef}
+        args={[debrisGeo, debrisMat, EXPLOSION_DEBRIS_COUNT]}
+        frustumCulled={false}
+        visible={false}
+      />
+    </group>
+  );
 }
 
 /**
@@ -834,9 +1036,9 @@ export function GlobeWarEffects({
               state={war.state}
             />
 
-            {/* 3. Explosion particles near border */}
+            {/* 3. v23: 3D explosion particles near border (3-stage: flash→fireball→debris) */}
             {borderCenter && (
-              <ExplosionParticles
+              <Explosion3D
                 center={borderCenter}
                 globeRadius={globeRadius}
                 state={war.state}
