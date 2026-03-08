@@ -17,6 +17,7 @@ import { useRef, useMemo, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { CAMERA_PRIORITY } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -36,8 +37,10 @@ export interface GlobeEventPulseProps {
   globeRadius?: number;
   /** Visibility toggle */
   visible?: boolean;
-  /** v15 Phase 6: Callback when camera should focus on an event position */
-  onCameraTarget?: (position: THREE.Vector3) => void;
+  /** v15 Phase 6: Callback when camera should focus on an event position
+   *  v24: priority 파라미터 추가 (epoch=3, alliance=2)
+   */
+  onCameraTarget?: (position: THREE.Vector3, priority?: number) => void;
 }
 
 // ─── Constants ───
@@ -220,12 +223,13 @@ export function GlobeEventPulse({
         type: eventType,
       });
 
-      // v15 Phase 6: 주요 이벤트 시 카메라 포커스 (epoch, alliance만)
+      // v15 Phase 6 + v24: 주요 이벤트 시 카메라 포커스 (epoch=3, alliance=2)
       if (!cameraFocusTriggered && onCameraTarget) {
-        const isSignificant = eventType.includes('epoch') || eventType.includes('alliance')
-          || eventType.includes('에포크') || eventType.includes('동맹');
-        if (isSignificant) {
-          onCameraTarget(posData.position);
+        const isEpoch = eventType.includes('epoch') || eventType.includes('에포크');
+        const isAlliance = eventType.includes('alliance') || eventType.includes('동맹');
+        if (isEpoch || isAlliance) {
+          const priority = isEpoch ? CAMERA_PRIORITY.epoch : CAMERA_PRIORITY.alliance;
+          onCameraTarget(posData.position, priority);
           cameraFocusTriggered = true;
         }
       }

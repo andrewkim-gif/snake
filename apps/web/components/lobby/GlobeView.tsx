@@ -40,8 +40,9 @@ import { GlobeEventPulse } from '@/components/3d/GlobeEventPulse';
 import type { TradeRouteData } from '@/hooks/useSocket';
 import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 
-// v15 Phase 6: Camera auto-focus + Mobile LOD
-import { CameraAutoFocus } from '@/components/3d/CameraAutoFocus';
+// v24 Phase 2: Unified camera controller (CameraAutoFocus + CameraShake 통합)
+import { CameraController } from '@/components/3d/CameraController';
+import { CAMERA_PRIORITY } from '@/lib/effect-constants';
 import { useGlobeLOD } from '@/hooks/useGlobeLOD';
 import { geoToXYZ } from '@/lib/globe-utils';
 
@@ -1606,12 +1607,15 @@ function GlobeScene({
   // v15 Phase 4: Shockwave ref for missile impact callback
   const shockwaveRef = useRef<GlobeShockwaveHandle>(null);
 
-  // v15 Phase 6: Camera auto-focus target ref
+  // v24 Phase 2: Unified camera controller refs
   const cameraTargetRef = useRef<THREE.Vector3 | null>(null);
+  const cameraPriorityRef = useRef<number>(1);
 
-  // v15 Phase 6: Camera target callback (shared by GlobeWarEffects + GlobeEventPulse)
-  const handleCameraTarget = useCallback((position: THREE.Vector3) => {
+  // v24: Camera target callback (shared by GlobeWarEffects + GlobeEventPulse)
+  // priority 기본값: war=4 (GlobeWarEffects 호출 시)
+  const handleCameraTarget = useCallback((position: THREE.Vector3, priority?: number) => {
     cameraTargetRef.current = position.clone();
+    cameraPriorityRef.current = priority ?? CAMERA_PRIORITY.war;
   }, []);
 
   // v15 Phase 6: Mobile LOD detection
@@ -1700,8 +1704,13 @@ function GlobeScene({
       {/* v17: 인트로 중에는 OrbitControls 비활성화 */}
       {!introActive && <AdaptiveOrbitControls />}
 
-      {/* v15 Phase 6: Camera auto-focus on major events (war declaration, hegemony, epoch) */}
-      <CameraAutoFocus targetRef={cameraTargetRef} globeRadius={RADIUS} />
+      {/* v24 Phase 2: Unified camera controller (focus + shake + priority queue) */}
+      <CameraController
+        targetRef={cameraTargetRef}
+        priorityRef={cameraPriorityRef}
+        introActive={!!introActive}
+        globeRadius={RADIUS}
+      />
 
       {/* v14: Domination color overlay (국가별 지배 색상) */}
       {dominationStates.size > 0 && (
@@ -1724,7 +1733,6 @@ function GlobeScene({
       )}
 
       {/* v15 Phase 4: Missile trajectories (attacker→defender parabolic arcs) */}
-      {/* 모바일: maxMissiles 제한 (LOD config에서 제어) */}
       {wars.length > 0 && centroidsMap.size > 0 && (
         <GlobeMissileEffect
           wars={wars}
@@ -1736,7 +1744,6 @@ function GlobeScene({
       )}
 
       {/* v15 Phase 4: Shockwave rings at missile impact points */}
-      {/* 모바일에서는 비활성화 (lodConfig.enableShockwave) */}
       {lodConfig.enableShockwave && (
         <GlobeShockwave ref={shockwaveRef} globeRadius={RADIUS} />
       )}
@@ -1764,7 +1771,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v17: Conflict indicators — "분쟁중" badges on active country arenas */}
+      {/* v17: Conflict indicators */}
       {centroidsMap.size > 0 && activeConflictCountries.size > 0 && (
         <Suspense fallback={null}>
           <GlobeConflictIndicators
@@ -1775,8 +1782,7 @@ function GlobeScene({
         </Suspense>
       )}
 
-      {/* v15 Phase 5: Trade route bezier lines (해상=파란 점선, 육상=초록 실선) */}
-      {/* 모바일에서는 비활성화 (lodConfig.enableTradeRoutes) */}
+      {/* v15 Phase 5: Trade route bezier lines */}
       {lodConfig.enableTradeRoutes && tradeRoutes.length > 0 && centroidsMap.size > 0 && (
         <GlobeTradeRoutes
           tradeRoutes={tradeRoutes}
@@ -1785,8 +1791,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v15 Phase 5: Global event pulse effects (동맹/정책/에포크/휴전/금수) */}
-      {/* 모바일에서도 경량 이펙트는 유지 (lodConfig.enableEventPulse) */}
+      {/* v15 Phase 5: Global event pulse effects */}
       {lodConfig.enableEventPulse && globalEvents.length > 0 && centroidsMap.size > 0 && (
         <GlobeEventPulse
           globalEvents={globalEvents}
@@ -1796,7 +1801,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 동맹 빛줄기 (2국가 연결 파란 아크 빔) — LOD 제어 */}
+      {/* v23 Phase 5: 동맹 빛줄기 (Line-based, TubeGeometry 제거 → 검은박스 해결) */}
       {lodConfig.enableAllianceBeam && alliances.length > 0 && centroidsMap.size > 0 && (
         <GlobeAllianceBeam
           alliances={alliances}
@@ -1805,7 +1810,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 제재 차단선 (빨간 X + 점선 아크) — LOD 제어 */}
+      {/* v23 Phase 5: 제재 차단선 */}
       {lodConfig.enableSanctionBarrier && sanctions.length > 0 && centroidsMap.size > 0 && (
         <GlobeSanctionBarrier
           sanctions={sanctions}
@@ -1814,7 +1819,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 자원 채굴 지표 이펙트 (금색 글로우 + 상승 파티클) — LOD 제어 */}
+      {/* v23 Phase 5: 자원 채굴 지표 이펙트 */}
       {lodConfig.enableResourceGlow && resources.length > 0 && centroidsMap.size > 0 && (
         <GlobeResourceGlow
           resources={resources}
@@ -1823,7 +1828,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 첩보 점선 트레일 (보라 점선 + 눈 아이콘) — LOD 제어 */}
+      {/* v23 Phase 5: 첩보 점선 트레일 */}
       {lodConfig.enableSpyTrail && spyOps.length > 0 && centroidsMap.size > 0 && (
         <GlobeSpyTrail
           spyOps={spyOps}
@@ -1832,7 +1837,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 핵실험 버섯구름 (충격파 + 파티클 + 기둥) — 모바일 비활성화 */}
+      {/* v23 Phase 5: 핵실험 버섯구름 */}
       {lodConfig.enableNukeEffect && nukes.length > 0 && centroidsMap.size > 0 && (
         <GlobeNukeEffect
           nukes={nukes}

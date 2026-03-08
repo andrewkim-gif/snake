@@ -13,10 +13,11 @@
  * 8. [v15] Camera shake: sin(t*40)*0.3 offset for 0.5s on war declaration
  */
 
-import { useRef, useMemo, useEffect, useCallback, useState } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
+import { CAMERA_PRIORITY } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -44,8 +45,10 @@ export interface GlobeWarEffectsProps {
   /** Whether to auto-rotate camera to war zone on new declaration */
   autoRotateCamera?: boolean;
 
-  /** Callback when camera should look at a position */
-  onCameraTarget?: (position: THREE.Vector3) => void;
+  /** Callback when camera should look at a position
+   *  v24: priority 파라미터 추가 (war=4)
+   */
+  onCameraTarget?: (position: THREE.Vector3, priority?: number) => void;
 
   /** Visibility toggle */
   visible?: boolean;
@@ -104,10 +107,7 @@ const LOSER_TRANSITION_DURATION = 5.0; // seconds
 const WAR_FOG_SPHERE_COUNT = 10;
 const WAR_FOG_SPREAD = 0.08; // spread relative to globe radius
 
-// v15: Camera shake constants
-const CAMERA_SHAKE_DURATION = 0.5;  // seconds
-const CAMERA_SHAKE_INTENSITY = 0.3; // position offset magnitude
-const CAMERA_SHAKE_FREQUENCY = 40;  // sin wave frequency
+// v24: CameraShake removed — now handled by CameraController
 
 // ─── GC-prevention temp objects (module scope) ───
 
@@ -462,6 +462,8 @@ function Explosion3D({
     opacity: 1,
     toneMapped: false,
     depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    side: THREE.DoubleSide,
   }), []);
 
   // Continuous explosion cycle: reset every EXPLOSION_TOTAL_DURATION
@@ -681,11 +683,21 @@ function VictoryFireworks3D({
   active: boolean;
 }) {
   const groupRef = useRef<THREE.Group>(null);
+  // ★ ref callback으로 count=0 즉시 설정 (useEffect는 첫 렌더 후라 1프레임 지연)
   const rocketMeshRef = useRef<THREE.InstancedMesh>(null);
   const smokeMeshRef = useRef<THREE.InstancedMesh>(null);
   const explosionMeshRef = useRef<THREE.InstancedMesh>(null);
   const flashRef = useRef<THREE.Mesh>(null);
   const timeRef = useRef(0);
+  const rocketRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; rocketMeshRef.current = mesh; }
+  }, []);
+  const smokeRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; smokeMeshRef.current = mesh; }
+  }, []);
+  const explosionRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; explosionMeshRef.current = mesh; }
+  }, []);
 
   // Surface normal at position (for ascent direction)
   const surfaceNormal = useMemo(() => position.clone().normalize(), [position]);
@@ -756,6 +768,8 @@ function VictoryFireworks3D({
     transparent: true,
     opacity: 0.5,
     depthWrite: false,
+    blending: THREE.AdditiveBlending,
+    toneMapped: false,
   }), []);
 
   const explosionMat = useMemo(() => new THREE.MeshStandardMaterial({
@@ -937,6 +951,10 @@ function VictoryFireworks3D({
     }
 
     // ─── Update instance matrices ───
+    // ★ count 복원 (useEffect에서 count=0으로 시작)
+    rocketMesh.count = ROCKET_COUNT;
+    smokeMesh.count = totalSmoke;
+    explosionMesh.count = totalExplosionParticles;
     rocketMesh.instanceMatrix.needsUpdate = true;
     smokeMesh.instanceMatrix.needsUpdate = true;
     explosionMesh.instanceMatrix.needsUpdate = true;
@@ -976,19 +994,19 @@ function VictoryFireworks3D({
     <group ref={groupRef}>
       {/* Rocket cones */}
       <instancedMesh
-        ref={rocketMeshRef}
+        ref={rocketRefCb}
         args={[rocketGeo, rocketMat, ROCKET_COUNT]}
         frustumCulled={false}
       />
       {/* Smoke trail spheres */}
       <instancedMesh
-        ref={smokeMeshRef}
+        ref={smokeRefCb}
         args={[smokeGeo, smokeMat, totalSmoke]}
         frustumCulled={false}
       />
       {/* Explosion particles */}
       <instancedMesh
-        ref={explosionMeshRef}
+        ref={explosionRefCb}
         args={[explosionGeo, explosionMat, totalExplosionParticles]}
         frustumCulled={false}
       />
@@ -1132,6 +1150,9 @@ function WarFog({
   state: 'preparation' | 'active' | 'ended';
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
+  const meshRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; meshRef.current = mesh; }
+  }, []);
   const timeRef = useRef(0);
 
   // Sphere offsets (random positions around center, computed once)
@@ -1227,55 +1248,14 @@ function WarFog({
 
   return (
     <instancedMesh
-      ref={meshRef}
+      ref={meshRefCb}
       args={[fogGeometry, fogMaterial, WAR_FOG_SPHERE_COUNT]}
       frustumCulled={false}
     />
   );
 }
 
-/**
- * CameraShake — v15: Screen vibration on war declaration.
- * Applies sin(t*40)*0.3 offset to camera.position for 0.5 seconds.
- */
-function CameraShake({ active }: { active: boolean }) {
-  const { camera } = useThree();
-  const shakeTimeRef = useRef(0);
-  const shakeActiveRef = useRef(false);
-  const origPosRef = useRef(new THREE.Vector3());
-
-  useEffect(() => {
-    if (active && !shakeActiveRef.current) {
-      shakeActiveRef.current = true;
-      shakeTimeRef.current = 0;
-      origPosRef.current.copy(camera.position);
-    }
-  }, [active, camera]);
-
-  useFrame((_, delta) => {
-    if (!shakeActiveRef.current) return;
-    shakeTimeRef.current += delta;
-
-    if (shakeTimeRef.current >= CAMERA_SHAKE_DURATION) {
-      // Restore original position
-      camera.position.copy(origPosRef.current);
-      shakeActiveRef.current = false;
-      return;
-    }
-
-    // Decay envelope: intensity decreases over time
-    const decay = 1.0 - (shakeTimeRef.current / CAMERA_SHAKE_DURATION);
-    const t = shakeTimeRef.current;
-    const offsetX = Math.sin(t * CAMERA_SHAKE_FREQUENCY) * CAMERA_SHAKE_INTENSITY * decay;
-    const offsetY = Math.cos(t * CAMERA_SHAKE_FREQUENCY * 1.3) * CAMERA_SHAKE_INTENSITY * decay * 0.7;
-
-    camera.position.copy(origPosRef.current);
-    camera.position.x += offsetX;
-    camera.position.y += offsetY;
-  });
-
-  return null;
-}
+// v24: CameraShake 컴포넌트 제거됨 — CameraController로 통합
 
 // ─── Main Component ───
 
@@ -1302,8 +1282,6 @@ export function GlobeWarEffects({
   enableWarFog = true,
 }: GlobeWarEffectsProps) {
   const prevWarIdsRef = useRef<Set<string>>(new Set());
-  // v15: Camera shake triggers when a new war is declared
-  const [shakeActive, setShakeActive] = useState(false);
 
   // Get 3D positions for countries
   const getCountryPosition = useCallback(
@@ -1326,33 +1304,22 @@ export function GlobeWarEffects({
     [getCountryPosition, globeRadius],
   );
 
-  // Camera auto-rotation to new war zones + v15 camera shake
+  // v24: Camera auto-rotation to new war zones (shake는 CameraController가 처리)
   useEffect(() => {
     const currentWarIds = new Set(wars.map((w) => w.warId));
     const prevWarIds = prevWarIdsRef.current;
-    let hasNewWar = false;
 
     // Find newly declared wars
     for (const war of wars) {
       if (!prevWarIds.has(war.warId) && (war.state === 'preparation' || war.state === 'active')) {
-        hasNewWar = true;
         if (autoRotateCamera && onCameraTarget) {
           const midpoint = getBorderCenter(war.attacker, war.defender);
           if (midpoint) {
-            onCameraTarget(midpoint);
+            onCameraTarget(midpoint, CAMERA_PRIORITY.war);
           }
         }
         break; // only handle first new war
       }
-    }
-
-    // v15: Trigger camera shake on new war declaration
-    if (hasNewWar) {
-      setShakeActive(true);
-      // Auto-reset after shake duration
-      const timer = setTimeout(() => setShakeActive(false), CAMERA_SHAKE_DURATION * 1000 + 100);
-      prevWarIdsRef.current = currentWarIds;
-      return () => clearTimeout(timer);
     }
 
     prevWarIdsRef.current = currentWarIds;
@@ -1378,9 +1345,6 @@ export function GlobeWarEffects({
 
   return (
     <group>
-      {/* v15: Camera shake on war declaration */}
-      <CameraShake active={shakeActive} />
-
       {warEffects.map(({ war, attackerPos, defenderPos, borderCenter }) => {
         if (!attackerPos || !defenderPos) return null;
 
@@ -1410,19 +1374,19 @@ export function GlobeWarEffects({
               state={war.state}
             />
 
-            {/* 3. v23: 3D explosion particles near border (3-stage: flash→fireball→debris) */}
-            {borderCenter && (
+            {/* 3. v23: 3D explosion particles at defender position (not border midpoint — midpoint between distant countries falls in ocean) */}
+            {defenderPos && (
               <Explosion3D
-                center={borderCenter}
+                center={defenderPos}
                 globeRadius={globeRadius}
                 state={war.state}
               />
             )}
 
-            {/* v15: 7. War fog between warring nations (모바일 LOD: enableWarFog로 비활성화) */}
-            {enableWarFog && borderCenter && (
+            {/* v15: 7. War fog at defender position (모바일 LOD: enableWarFog로 비활성화) */}
+            {enableWarFog && defenderPos && (
               <WarFog
-                center={borderCenter}
+                center={defenderPos}
                 globeRadius={globeRadius}
                 state={war.state}
               />
