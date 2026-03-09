@@ -22,6 +22,7 @@ import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
 import { LandmarkArchetype } from '@/lib/landmark-data';
 import type { Landmark } from '@/lib/landmark-data';
+import type { BiomeType } from '@/components/game/iso/types';
 import { createArchetypeGeometry, createArchetypeEdgeGeometry, disposeGeometryCache } from '@/lib/landmark-geometries';
 import { getBlockAtlasTexture } from '@/lib/mc-texture-atlas';
 
@@ -53,6 +54,8 @@ interface ArchetypeGroup {
   landmarks: Landmark[];
   positions: THREE.Vector3[];
   normals: THREE.Vector3[];
+  /** v29: 각 랜드마크의 바이옴 (Phase 2에서 셰이더 attribute로 전달) */
+  biomes: BiomeType[];
 }
 
 // ─── Landmark Sun Lighting Shaders (v22 Phase 1) ───
@@ -298,6 +301,7 @@ export function LandmarkMeshes({
           landmarks: [],
           positions: [],
           normals: [],
+          biomes: [],
         };
         groupMap.set(lm.archetype, group);
       }
@@ -307,6 +311,7 @@ export function LandmarkMeshes({
       group.landmarks.push(lm);
       group.positions.push(pos);
       group.normals.push(normal);
+      group.biomes.push(lm.biome);
     }
 
     return Array.from(groupMap.values());

@@ -6,7 +6,14 @@
  *   - 4종 폐지(MONOLITH, MESA, TILTED_TOWER, TERRACE)
  *   - 19종 신규 추가 (대륙/문화권별 고유 형태)
  *   - 195국 재매핑 (MONOLITH 54국 해소, 최대 공유 12국 이하)
+ *
+ * v29 Phase 1: 바이옴 데이터 파이프라인 연결
+ *   - Landmark 인터페이스에 biome 필드 추가
+ *   - generateLandmarksFromCentroids에서 getCountryBiome(iso3) 호출
  */
+
+import type { BiomeType } from '@/components/game/iso/types';
+import { getCountryBiome } from '@/lib/iso/country-biome-map';
 
 // ─── Enums ───
 
@@ -83,6 +90,7 @@ export interface Landmark {
   lng: number;
   tier: LandmarkTier;
   archetype: LandmarkArchetype;
+  biome: BiomeType;
 }
 
 // ─── ISO3 -> Archetype 매핑 (195국) ───
@@ -389,6 +397,7 @@ export function generateLandmarksFromCentroids(
       lng,
       tier: getTierForISO3(iso3),
       archetype: getArchetypeForISO3(iso3),
+      biome: getCountryBiome(iso3),
     });
   }
   return landmarks;
