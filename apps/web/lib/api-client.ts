@@ -122,9 +122,10 @@ export interface CountryEconomy {
   sovereignty_level: number;
 }
 
-export async function fetchCountries(): Promise<CountryEconomy[]> {
+export async function fetchCountries(): Promise<CountryEconomy[] | null> {
   const data = await apiFetch<{ countries: CountryEconomy[] }>('/api/countries');
-  return data?.countries ?? [];
+  if (!data) return null;
+  return data.countries ?? [];
 }
 
 // ── Council / Governance ──
@@ -235,9 +236,10 @@ export interface GdpEntry {
   tier: string;
 }
 
-export async function fetchGdpData(): Promise<GdpEntry[]> {
+export async function fetchGdpData(): Promise<GdpEntry[] | null> {
   const data = await apiFetch<{ entries: GdpEntry[] }>('/api/gdp');
-  return data?.entries ?? [];
+  if (!data) return null;
+  return data.entries ?? [];
 }
 
 // ── World ──

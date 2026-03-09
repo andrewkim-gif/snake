@@ -48,11 +48,11 @@ function TokensPageInner() {
   const countryParam = searchParams.get('country')?.toUpperCase() ?? null;
 
   const { data: gdpEntries, loading: gdpLoading } = useApiData(
-    () => fetchGdpData(),
+    fetchGdpData,
     { refreshInterval: 30000 },
   );
   const { data: countries, loading: countriesLoading } = useApiData(
-    () => fetchCountries(),
+    fetchCountries,
     { refreshInterval: 30000 },
   );
 
