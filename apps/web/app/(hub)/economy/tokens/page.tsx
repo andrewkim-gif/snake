@@ -159,7 +159,7 @@ function TokensPageInner() {
         <span style={{ fontSize: '16px', fontWeight: 600 }}>
           {tEconomy('noTokenData') ?? 'Token economy data not available yet'}
         </span>
-        <span style={{ fontSize: '13px', color: SK.textTertiary }}>
+        <span style={{ fontSize: '13px', color: SK.textMuted }}>
           {tEconomy('noTokenDataDesc') ?? 'GDP data will appear once the game season starts.'}
         </span>
       </div>
