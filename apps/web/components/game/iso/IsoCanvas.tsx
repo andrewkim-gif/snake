@@ -128,6 +128,15 @@ export function IsoCanvas({
       citizenLayerRef.current = citizenLayer;
       tilemap.getLayer(IsoLayer.Citizens).addChild(citizenLayer.container);
 
+      // v27 Phase 6: 시민 스프라이트 시트 비동기 로드
+      citizenLayer.loadSpritesheets().then((loaded) => {
+        if (loaded && !destroyed) {
+          console.log(`[IsoCanvas] Citizen spritesheets loaded`);
+        }
+      }).catch(() => {
+        // 스프라이트 시트 로드 실패 시 Graphics dot 폴백 유지
+      });
+
       // 초기 카메라 적용
       tilemap.applyCamera(app.screen.width, app.screen.height);
 
