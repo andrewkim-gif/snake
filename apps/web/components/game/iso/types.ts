@@ -107,3 +107,96 @@ export const ISO_CAMERA_DEFAULTS: IsoCameraState = {
 export const ISO_ZOOM_MIN = 0.25;
 export const ISO_ZOOM_MAX = 3.0;
 export const ISO_ZOOM_SPEED = 0.1;
+
+// ─── v27: 바이옴 & 에셋 타입 확장 ───
+
+/** 6개 기후대 (바이옴) 타입 */
+export type BiomeType =
+  | 'temperate'      // 온대 — 유럽/동아시아/북미 중위도
+  | 'arid'           // 건조 — 사하라/아라비아/호주 내륙
+  | 'tropical'       // 열대 — 동남아/아마존/적도 아프리카
+  | 'arctic'         // 극지 — 시베리아/스칸디나비아/캐나다 북부
+  | 'mediterranean'  // 지중해 — 남유럽/지중해 연안
+  | 'urban';         // 도시국가 — 싱가포르/모나코/바티칸
+
+/** 모든 바이옴 목록 */
+export const ALL_BIOMES: readonly BiomeType[] = [
+  'temperate', 'arid', 'tropical', 'arctic', 'mediterranean', 'urban',
+] as const;
+
+/** 아이소메트릭 타일 정보 (v27 확장) */
+export interface IsoTile {
+  /** 타일 좌표 */
+  tileX: number;
+  tileY: number;
+  /** v26 지형 타입 (호환 유지) */
+  type: TileType;
+  /** Ground 시리즈 문자 (A~J) */
+  groundSeries: string;
+  /** Ground 변형 번호 */
+  groundVariant: number;
+  /** 나무 배치 여부 */
+  hasTree: boolean;
+  /** Flora 배치 여부 */
+  hasFlora: boolean;
+  /** Stone path 여부 */
+  hasStonePath: boolean;
+  /** 건물 ID (있으면) */
+  buildingId?: string;
+}
+
+/**
+ * 건물 컴포지트 — Wall + Roof + Door 오버레이 레이어링 조합
+ * 같은 타일 좌표에 순서대로 겹침 (anchor 0.5, 1.0)
+ */
+export interface BuildingComposite {
+  /** Wall 시리즈 (A~G) */
+  wallSeries: string;
+  /** Wall 변형 번호 */
+  wallVariant: number;
+  /** Roof 시리즈 (A~G) */
+  roofSeries: string;
+  /** Roof 변형 번호 */
+  roofVariant: number;
+  /** Door 시리즈 (A or C) */
+  doorSeries: string;
+  /** Door 변형 번호 */
+  doorVariant: number;
+  /** 주변 소품 Misc ID 목록 */
+  miscItems?: string[];
+}
+
+/**
+ * 바이옴 정의 — 각 기후대별 에셋 시리즈 매핑
+ */
+export interface BiomeDef {
+  /** 기후대 ID */
+  readonly id: BiomeType;
+  /** 한국어 이름 */
+  readonly nameKo: string;
+  /** 영문 이름 */
+  readonly nameEn: string;
+  /** Ground 주력 시리즈 (70%) */
+  readonly mainGround: string;
+  /** Ground 보조 시리즈 (20%) */
+  readonly subGround: string[];
+  /** 도로/건물 주변 Ground (10%) */
+  readonly pathGround: string;
+  /** Tree 시리즈 목록 */
+  readonly trees: string[];
+  /** Flora 시리즈 목록 (비어있으면 Flora 없음) */
+  readonly flora: string[];
+  /** Wall 기본 시리즈 (건물 등급별 오버라이드 가능) */
+  readonly defaultWall: string;
+  /** Roof 기본 시리즈 */
+  readonly defaultRoof: string;
+}
+
+/** 에셋 번들 이름 타입 */
+export type AssetBundleName =
+  | 'terrain'
+  | 'buildings'
+  | 'citizens'
+  | 'decorations'
+  | 'effects'
+  | 'common';
