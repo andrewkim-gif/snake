@@ -32,6 +32,11 @@
  *   - Blinn-Phong 스페큘러 (밝은 블록=금속/크리스탈 proxy, 0.3 max 강도)
  *   - 창문 깜빡임 애니메이션 (uTime + vAgeSeed 위상차, 밤에만 동작)
  *   - vWorldPos varying (스페큘러 view direction 계산용)
+ *
+ * v29 Phase 7 추가:
+ *   - 7B: 셰이더 색온도 중립화 (스페큘러 near-white, 밤 emissive softer amber, sky indirect 2배)
+ *   - 7D: Face AO 범위 복원 (0.7→0.45 하한, 입체감 대폭 강화)
+ *   - 7E: 바이옴 weathering 필드 실제 연결 (uBiomeWeathering[6] uniform, 고정 0.12 제거)
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
@@ -101,6 +106,8 @@ const biomeFogArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].fog);
 const biomeNightEmissiveArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].nightEmissive);
 // v29 Phase 5: 바이옴별 디퓨즈 부스트 배열
 const biomeDiffuseBoostArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].diffuseBoost);
+// v29 Phase 7E: 바이옴별 풍화 강도 배열
+const biomeWeatheringArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].weathering);
 
 // ─── Types ───
 
@@ -157,6 +164,7 @@ const landmarkFragmentShader = /* glsl */ `
   uniform vec3 uBiomeFogs[6];    // v29: 6개 바이옴 fog 색상
   uniform float uBiomeNightEmissive[6]; // v29 Phase 4: 바이옴별 밤 이미시브 강도
   uniform float uBiomeDiffuseBoost[6]; // v29 Phase 5: 바이옴별 디퓨즈 부스트
+  uniform float uBiomeWeathering[6];  // v29 Phase 7E: 바이옴별 풍화 강도
   uniform float uTime;           // v29 Phase 5: 시간 (초, 창문 깜빡임용)
   varying vec3 vWorldNormal;
   varying vec2 vUv;
@@ -191,14 +199,14 @@ const landmarkFragmentShader = /* glsl */ `
     float ambient = 0.25 + biomeDiffuse * 0.15;
     float diffuse = max(NdotL, 0.0) * (0.65 + biomeDiffuse * 0.1) + ambient;
 
-    // 면별 AO (vertex color) — 부드럽게 적용 (0.5~1.0 → 0.7~1.0)
-    float ao = mix(0.7, 1.0, vColor.r);
+    // 면별 AO (vertex color) — 입체감 강화 (0.5~1.0 → 0.45~1.0)
+    float ao = mix(0.45, 1.0, vColor.r);
 
     // 최종 라이팅: 알베도 × 디퓨즈 × AO
     vec3 color = albedo * diffuse * ao;
 
     // 하늘빛 간접광 (태양 반대쪽에 은은한 파란 반사)
-    float skyFactor = max(-NdotL, 0.0) * 0.08;
+    float skyFactor = max(-NdotL, 0.0) * 0.15;
     color += albedo * vec3(0.5, 0.6, 0.9) * skyFactor;
 
     // v29 Phase 5: 스페큘러 하이라이트 (금속/크리스탈 블록 — Blinn-Phong)
@@ -207,14 +215,14 @@ const landmarkFragmentShader = /* glsl */ `
     vec3 halfDir = normalize(uSunDir + viewDir);
     float spec = pow(max(dot(N, halfDir), 0.0), 32.0);
     float shininess = smoothstep(0.6, 0.9, texColor.r) * 0.3;
-    color += vec3(1.0, 0.95, 0.85) * spec * shininess * max(NdotL, 0.0);
+    color += vec3(1.0, 0.98, 0.95) * spec * shininess * max(NdotL, 0.0);
 
     // v29 Phase 2: 바이옴 틴트 적용 (서틀하게 MC 미학 보존)
     vec3 biomeTint = uBiomeTints[biomeId];
     color = mix(color, color * biomeTint, 0.25);
 
-    // v29 Phase 2: 풍화(Weathering) 노이즈 — per-pixel 서틀 변형
-    float weathering = hash21(vUv * 50.0 + vAgeSeed * 100.0) * 0.12;
+    // v29 Phase 2+7E: 풍화(Weathering) 노이즈 — 바이옴별 차등 강도
+    float weathering = hash21(vUv * 50.0 + vAgeSeed * 100.0) * uBiomeWeathering[biomeId];
     color *= (1.0 - weathering);
 
     // 야간 emissive: 밤면에서 창문 불빛 (따뜻한 글로우)
@@ -224,7 +232,7 @@ const landmarkFragmentShader = /* glsl */ `
     float nightFactor = smoothstep(0.1, -0.3, NdotL);
     float flicker = 0.85 + 0.15 * sin(uTime * 2.0 + vAgeSeed * 50.0);
     float windowLight = texColor.r * 0.25 * biomeNightEmissive;
-    vec3 emissive = vec3(1.0, 0.85, 0.5) * windowLight * nightFactor * flicker;
+    vec3 emissive = vec3(0.95, 0.9, 0.75) * windowLight * nightFactor * flicker;
     color += emissive;
 
     // v29 Phase 2: 환경 안개(Atmospheric Fog) — 거리 기반 바이옴 안개
@@ -257,6 +265,8 @@ function getSharedMaterial(): THREE.ShaderMaterial {
       uBiomeNightEmissive: { value: biomeNightEmissiveArray },
       // v29 Phase 5: 바이옴별 디퓨즈 부스트 + 시간
       uBiomeDiffuseBoost: { value: biomeDiffuseBoostArray },
+      // v29 Phase 7E: 바이옴별 풍화 강도
+      uBiomeWeathering: { value: biomeWeatheringArray },
       uTime: { value: 0 },
     },
     vertexShader: landmarkVertexShader,

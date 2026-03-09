@@ -42,42 +42,42 @@ export const BIOME_INDEX: Record<BiomeType, number> = {
 
 export const BIOME_LANDMARK_TINTS: Record<BiomeType, BiomeLandmarkTint> = {
   temperate: {
-    tint: new THREE.Color(0xD4C9A8),          // warm stone
+    tint: new THREE.Color(0xC8C4B8),          // neutral stone
     fog: new THREE.Color(0x8BA4B8),            // cool mist
     nightEmissive: 0.5,
     weathering: 0.12,
     diffuseBoost: 0.0,
   },
   arid: {
-    tint: new THREE.Color(0xE8D5A3),          // sand wash
+    tint: new THREE.Color(0xE0D0A8),          // light sand
     fog: new THREE.Color(0xC4A872),            // dust haze
     nightEmissive: 0.3,
     weathering: 0.18,
     diffuseBoost: 0.1,
   },
   tropical: {
-    tint: new THREE.Color(0xA8C4A0),          // moss green
+    tint: new THREE.Color(0x98C098),          // deeper green
     fog: new THREE.Color(0x7BA68C),            // humid mist
     nightEmissive: 0.45,
     weathering: 0.15,
     diffuseBoost: -0.05,
   },
   arctic: {
-    tint: new THREE.Color(0xC8D8E8),          // ice blue
+    tint: new THREE.Color(0xC0D4F0),          // stronger blue
     fog: new THREE.Color(0xB0C4D8),            // snow fog
     nightEmissive: 0.2,
     weathering: 0.08,
     diffuseBoost: 0.15,
   },
   mediterranean: {
-    tint: new THREE.Color(0xE0C8A0),          // terra warm
+    tint: new THREE.Color(0xD8C8B0),          // warmer neutral
     fog: new THREE.Color(0xA0B8C8),            // sea haze
     nightEmissive: 0.55,
     weathering: 0.10,
     diffuseBoost: 0.05,
   },
   urban: {
-    tint: new THREE.Color(0xB8B8B8),          // concrete
+    tint: new THREE.Color(0xB0B4B8),          // slight cool
     fog: new THREE.Color(0x909090),            // smog
     nightEmissive: 0.9,
     weathering: 0.05,
