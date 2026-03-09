@@ -131,7 +131,7 @@ class SpriteManager {
     // We will save images in /public/assets/enemies/[key].svg
     // In Vite/Dev, just /assets/enemies/... might work if in public folder.
     // Let's assume absolute path from root for now or relative to public.
-    const url = `./assets/enemies/${imageKey}.svg`;
+    const url = `/assets/enemies/${imageKey}.svg`;
 
     // Check if we have the processed image
     if (!this.images.has(url)) {

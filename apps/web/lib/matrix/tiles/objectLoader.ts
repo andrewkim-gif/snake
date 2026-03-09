@@ -94,7 +94,7 @@ function getSpriteImagePath(type: string, direction: TileDirection): string {
     filename = `${type}_${direction}.png`;
   }
 
-  return `./assets/tile/${encodeURIComponent(filename)}`;
+  return `/assets/tile/${encodeURIComponent(filename)}`;
 }
 
 /**

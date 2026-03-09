@@ -144,7 +144,7 @@ function getTileCacheKey(type: GroundTileType, direction: TileDirection): string
  */
 function getTileImagePath(type: GroundTileType, direction: TileDirection): string {
   const filename = `Ground ${type}_${direction}.png`;
-  return `./assets/tile_n/${encodeURIComponent(filename)}`;
+  return `/assets/tile_n/${encodeURIComponent(filename)}`;
 }
 
 /**

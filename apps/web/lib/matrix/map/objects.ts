@@ -195,7 +195,7 @@ export const MAP_OBJECT_DEFS: Record<MapObjectType, MapObjectDef> = {
     height: 40,
     hasCollision: true,
     zIndex: 8,
-    sprite: './assets/map/furniture/desk.png',
+    sprite: '/assets/map/furniture/desk.png',
     renderScale: 1.5,
   },
   locker: {
@@ -212,7 +212,7 @@ export const MAP_OBJECT_DEFS: Record<MapObjectType, MapObjectDef> = {
     height: 64,
     hasCollision: true,
     zIndex: 15,
-    sprite: './assets/map/furniture/vending.png',
+    sprite: '/assets/map/furniture/vending.png',
     renderScale: 1.5,
   },
 };

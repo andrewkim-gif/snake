@@ -43,7 +43,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
  * 단일 캐릭터의 모든 방향 이미지 로드
  */
 async function loadCharacterSprites(characterId: PlayerClass): Promise<CharacterDirection8Sprites | null> {
-  const basePath = `./assets/cha/${characterId}`;
+  const basePath = `/assets/cha/${characterId}`;
   const sprites: Partial<CharacterDirection8Sprites> = {};
 
   try {

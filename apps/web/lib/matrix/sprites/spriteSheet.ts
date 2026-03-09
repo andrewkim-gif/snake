@@ -159,7 +159,7 @@ export async function loadSpriteSheet(characterId: PlayerClass): Promise<boolean
   }
 
   const config = getCharacterConfig(characterId);
-  const basePath = `./assets/cha/${characterId}/sprite`;
+  const basePath = `/assets/cha/${characterId}/sprite`;
   const cache: SpriteSheetCache = {};
 
   try {

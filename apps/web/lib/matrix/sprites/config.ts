@@ -106,7 +106,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // NEO - The Awakened Developer
   neo: {
     characterId: 'neo',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('neo'),
     fallbackToCanvas: true,
   },
@@ -114,7 +114,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // TANK - The Operator
   tank: {
     characterId: 'tank',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('tank'),
     fallbackToCanvas: true,
   },
@@ -122,7 +122,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // CYPHER - The Avenger
   cypher: {
     characterId: 'cypher',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('cypher'),
     fallbackToCanvas: true,
   },
@@ -130,7 +130,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // MORPHEUS - The Prophet
   morpheus: {
     characterId: 'morpheus',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('morpheus'),
     fallbackToCanvas: true,
   },
@@ -138,7 +138,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // NIOBE - AI Safety Architect
   niobe: {
     characterId: 'niobe',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('niobe'),
     fallbackToCanvas: true,
   },
@@ -146,7 +146,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // ORACLE - The Pattern Seer
   oracle: {
     characterId: 'oracle',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('oracle'),
     fallbackToCanvas: true,
   },
@@ -154,7 +154,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // TRINITY - The Shadow
   trinity: {
     characterId: 'trinity',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('trinity'),
     fallbackToCanvas: true,
   },
@@ -162,7 +162,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // MOUSE - The Swarm Master
   mouse: {
     characterId: 'mouse',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('mouse'),
     fallbackToCanvas: true,
   },
@@ -170,7 +170,7 @@ export const CHARACTER_SPRITE_CONFIGS: Record<PlayerClass, CharacterSpriteConfig
   // DOZER - The Destroyer
   dozer: {
     characterId: 'dozer',
-    basePath: './assets/cha',
+    basePath: '/assets/cha',
     animations: createCharacterAnimationSet('dozer'),
     fallbackToCanvas: true,
   },
