@@ -307,6 +307,14 @@ export interface Player {
   // 피격 리액션 (시각 피드백)
   hitReaction?: HitReaction;
 
+  // 공격 애니메이션 (렌더링용)
+  attackAnim?: {
+    active: boolean;
+    timer: number;
+    duration: number;
+    weaponType?: string;
+  };
+
   // 레벨업 애니메이션 (Phase 3)
   levelUpAnim?: number;             // 레벨업 애니메이션 진행도 (0-1)
 
@@ -707,6 +715,8 @@ export interface SafeZone {
   damagePerSecond?: number;
   /** 안전 구역 중심 좌표 */
   center?: Vector2;
+  /** 현재 페이즈 번호 */
+  phase?: ArenaPhase;
 }
 
 // ============================================
@@ -722,3 +732,100 @@ export interface RouletteReward {
   icon: string;    // lucide-react icon name (stubbed as string)
   color: string;
 }
+
+// ============================================
+// Turret System Types (rendering/turrets에서 사용)
+// ============================================
+
+/** 터렛 희귀도 */
+export type TurretRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
+
+/** 설치된 터렛 인스턴스 */
+export interface PlacedTurret {
+  id: string;
+  configId: string;
+  type: string;
+  x: number;
+  y: number;
+  hp: number;
+  maxHp: number;
+  spawnAnimation: number;
+  hitFlash: number;
+  facingAngle?: number;
+}
+
+/** 터렛 투사체 */
+export interface TurretProjectile {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  radius: number;
+  color: string;
+  abilityType?: string;
+  isBeam?: boolean;
+  beamWidth?: number;
+  startX?: number;
+  startY?: number;
+  targetX?: number;
+  targetY?: number;
+}
+
+/** 터렛 AOE 효과 */
+export interface TurretAoeEffect {
+  x: number;
+  y: number;
+  radius: number;
+  color: string;
+  life: number;
+  maxLife: number;
+  abilityType?: string;
+  rotation?: number;
+}
+
+/** 희귀도별 색상 설정 */
+export const RARITY_COLORS: Record<string, { primary: string; border: string; glow: string }> = {
+  common: { primary: '#9ca3af', border: '#6b7280', glow: '#9ca3af' },
+  rare: { primary: '#3b82f6', border: '#2563eb', glow: '#60a5fa' },
+  epic: { primary: '#a855f7', border: '#7c3aed', glow: '#c084fc' },
+  legendary: { primary: '#f59e0b', border: '#d97706', glow: '#fbbf24' },
+  mythic: { primary: '#ef4444', border: '#dc2626', glow: '#f87171' },
+};
+
+// ============================================
+// Agent System Types (rendering/ui에서 사용)
+// ============================================
+
+/** Arena 에이전트 정보 */
+export interface Agent {
+  agentId: string;
+  position: Vector2;
+  velocity: Vector2;
+  health: number;
+  maxHealth: number;
+  level: number;
+  selectedClass?: PlayerClass;
+  score: number;
+  kills: number;
+  deaths: number;
+}
+
+// ============================================
+// Combo System Types (rendering/ui에서 사용)
+// ============================================
+
+/** 콤보 티어 */
+export type ComboTier = 'none' | 'bronze' | 'silver' | 'gold' | 'diamond';
+
+/** 콤보 상태 */
+export interface ComboState {
+  count: number;
+  tier: ComboTier;
+  timer: number;
+  maxTimer: number;
+  multiplier: number;
+  tierUpAnimation?: number;
+}
+
+/** 번역 키 타입 (i18n stub) */
+export type TranslationKeys = Record<string, any>;

@@ -289,4 +289,109 @@ export const AI_PERSONALITY_WEIGHTS = {
   },
 };
 
+// ===== Turret Config =====
+export interface TurretConfig {
+  id: string;
+  name: string;
+  nameKo?: string;
+  description?: string;
+  descriptionKo?: string;
+  type: 'agent' | 'skill';
+  rarity: string;
+  weaponType?: string;
+  hp?: number;
+  range?: number;
+  baseDamage?: number;
+  damagePerLevel?: number;
+  cooldown?: number;
+  pierce?: number;
+  projectileSpeed?: number;
+  color?: string;
+  glowColor?: string;
+  price?: number;
+  upgradePrice?: number;
+  maxLevel?: number;
+}
+
+const TURRET_REGISTRY: TurretConfig[] = [];
+
+/** Turret ID로 설정 찾기 */
+export function getTurretById(id: string): TurretConfig | undefined {
+  return TURRET_REGISTRY.find(t => t.id === id);
+}
+
+/** 티어 인덱스 반환 */
+export function getTierIndex(tier: string): number {
+  const order = ['none', 'bronze', 'silver', 'gold', 'diamond'];
+  return order.indexOf(tier);
+}
+
+// ===== Nameplate Config =====
+export const NAMEPLATE_CONFIG = {
+  fontSize: 12,
+  fontFamily: 'monospace',
+  backgroundColor: 'rgba(0, 0, 0, 0.7)',
+  padding: 4,
+  borderRadius: 4,
+  offsetY: -60,
+};
+
+// ===== Chat Bubble Config =====
+export const CHAT_BUBBLE_CONFIG = {
+  maxWidth: 200,
+  fontSize: 11,
+  fontFamily: 'monospace',
+  backgroundColor: 'rgba(0, 0, 0, 0.8)',
+  textColor: '#FFFFFF',
+  borderColor: '#00FF41',
+  padding: 6,
+  borderRadius: 6,
+  offsetY: -80,
+  duration: 3000,
+};
+
+// ===== Agent Identity =====
+export interface AgentIdentity {
+  id: string;
+  displayName: string;
+  color: string;
+}
+
+const AGENT_IDENTITIES: AgentIdentity[] = [];
+
+export function getArenaAgentIdentity(agentId: string): AgentIdentity | undefined {
+  return AGENT_IDENTITIES.find(a => a.id === agentId);
+}
+
+export function getArenaAgentDisplayName(agentId: string): string {
+  const identity = getArenaAgentIdentity(agentId);
+  return identity?.displayName || agentId;
+}
+
+// ===== Combo Config =====
+export const COMBO_CONFIG = {
+  tiers: {
+    none: { name: 'None', color: '#666666', minCount: 0, multiplier: 1.0 },
+    bronze: { name: 'Bronze', color: '#CD7F32', minCount: 5, multiplier: 1.2 },
+    silver: { name: 'Silver', color: '#C0C0C0', minCount: 15, multiplier: 1.5 },
+    gold: { name: 'Gold', color: '#FFD700', minCount: 30, multiplier: 2.0 },
+    diamond: { name: 'Diamond', color: '#B9F2FF', minCount: 50, multiplier: 3.0 },
+  },
+  visual: {
+    sizeScale: {
+      base: 0.8,
+      perCombo: 0.01,
+      max: 1.5,
+    },
+  },
+  maxTimer: 3.0,
+};
+
+export const COMBO_TIER_ORDER = ['none', 'bronze', 'silver', 'gold', 'diamond'] as const;
+
+export function formatComboNumber(count: number): string {
+  if (count >= 1000) return `${(count / 1000).toFixed(1)}K`;
+  return String(count);
+}
+
 export default ARENA_CONFIG;
