@@ -47,7 +47,7 @@ import { BIOME_LANDMARK_TINTS, BIOME_INDEX } from '@/lib/biome-landmark-tints';
 
 // ─── Constants ───
 
-const SURFACE_ALT = 0.3;
+const SURFACE_ALT = 0.5;
 const BACKFACE_THRESHOLD = 0.05;
 const BACKFACE_FADE_RANGE = 0.3;
 
@@ -261,8 +261,15 @@ function getSharedMaterial(): THREE.ShaderMaterial {
     },
     vertexShader: landmarkVertexShader,
     fragmentShader: landmarkFragmentShader,
-    transparent: true,
-    depthWrite: false,
+    // ★ Fix: fill mesh는 항상 alpha=1.0 출력 → opaque 패스에서 렌더링해야 함
+    // transparent: true + depthWrite: false 였을 때 지구 edge 근처 건물이
+    // depth test 실패하여 라인만 보이는 버그 발생
+    transparent: false,
+    depthWrite: true,
+    // 지구 표면과의 z-fighting 방지 (depth 값을 카메라 쪽으로 미세 이동)
+    polygonOffset: true,
+    polygonOffsetFactor: -1,
+    polygonOffsetUnits: -1,
   });
   return sharedMaterial;
 }
