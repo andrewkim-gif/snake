@@ -1,29 +1,30 @@
 'use client';
 
 /**
- * MatrixHUD.tsx - v29 Phase 5: In-game HUD
+ * MatrixHUD.tsx - v32 Phase 2: Apex Tactical HUD 리디자인
  *
- * Adapted from app_ingame/components/UIOverlay.tsx (game HUD section)
- * - Top: XP bar (full width) + level badge + HP bar + score + menu button
- * - Sub-header: Stage info + timer
- * - Bottom: Weapon slots with lucide icons + cooldown overlay
- * - Special skill button (bottom right)
- * - Auto Hunt button (bottom left)
- * - Boss HP bar (when boss active)
+ * Apex 디자인 시스템 적용:
+ * - SK 토큰 (accent, glassBg, cardBg, border 등)
+ * - headingFont (Chakra Petch) / bodyFont (Space Grotesk)
+ * - apexClip.sm 삼각 컷 (borderRadius: 0)
+ * - monospace/MATRIX_GREEN 완전 제거
  *
- * Uses WEAPON_DATA for weapon info and WEAPON_ICONS for icon rendering.
+ * 레이아웃:
+ * - 상단: XP 바 (SK.accent 그라데이션, 4px) → 레벨 배지 + HP 바 + 킬/타이머
+ * - 하단: 무기 슬롯 (SK.cardBg, apexClip.sm, 쿨다운 오버레이)
+ * - 좌하단: 오토헌트 버튼 (SK.green 활성)
  *
- * v29b: All Tailwind className converted to inline styles.
+ * 기능 로직 변경 없음 — 오직 시각 스타일만 Apex 토큰으로 교체
  */
 
-import { memo, useMemo } from 'react';
+import { memo } from 'react';
 import {
-  Timer, Skull, Zap, Menu, X, Terminal,
-  Pause as PauseIcon, Clock,
+  Zap, Terminal, Clock,
 } from 'lucide-react';
 import { WEAPON_DATA } from '@/lib/matrix/constants';
 import type { WeaponType } from '@/lib/matrix/types';
 import { WEAPON_ICONS } from './MatrixLevelUp';
+import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 
 // ============================================
 // Props
@@ -49,12 +50,6 @@ export interface MatrixHUDProps {
   autoHuntEnabled: boolean;
   isPaused: boolean;
 }
-
-// ============================================
-// Constants
-// ============================================
-
-const MATRIX_GREEN = '#00FF41';
 
 // ============================================
 // Utils
@@ -103,11 +98,11 @@ function MatrixHUDInner({
       pointerEvents: 'none',
       userSelect: 'none',
       zIndex: 10,
-      fontFamily: 'monospace',
+      fontFamily: bodyFont,
     }}>
 
       {/* ========================================
-          TOP SYSTEM BAR (Survivor.io Style)
+          TOP SYSTEM BAR — Apex Tactical
           ======================================== */}
       <div style={{
         position: 'absolute',
@@ -118,83 +113,84 @@ function MatrixHUDInner({
         pointerEvents: 'auto',
       }}>
 
-        {/* XP Bar (full width, top) */}
+        {/* XP Bar — SK.accent 그라데이션, 4px 높이, apexClip.sm */}
         <div style={{
           width: '100%',
-          height: 12,
-          backgroundColor: '#e2e8f0',
-          borderBottom: '2px solid #1e293b',
+          height: 4,
+          backgroundColor: SK.cardBg,
           position: 'relative',
+          clipPath: apexClip.sm,
         }}>
           <div
             style={{
               height: '100%',
-              background: 'linear-gradient(to right, #4ade80, #10b981)',
+              background: `linear-gradient(to right, ${SK.accent}, ${SK.accentDark})`,
               position: 'relative',
               overflow: 'hidden',
               width: `${xpPercent}%`,
               transition: 'width 0.2s linear',
             }}
-          >
-            <div style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              backgroundImage: 'linear-gradient(45deg,rgba(255,255,255,0.2)25%,transparent 25%,transparent 50%,rgba(255,255,255,0.2)50%,rgba(255,255,255,0.2)75%,transparent 75%,transparent)',
-              backgroundSize: '10px 10px',
-            }} />
-          </div>
+          />
         </div>
 
-        {/* Main header: Level + HP + Score */}
+        {/* Main header: Level badge + HP bar + Kills/Timer */}
         <div style={{
           maxWidth: 1024,
           marginLeft: 'auto',
           marginRight: 'auto',
           width: '100%',
           position: 'relative',
-          height: 56,
+          height: 48,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingLeft: 16,
-          paddingRight: 16,
-          marginTop: 8,
+          paddingLeft: 12,
+          paddingRight: 12,
+          marginTop: 4,
         }}>
           {/* Left: Level badge + HP bar */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-            {/* Level badge */}
+            {/* Level badge — SK.accent bg, headingFont, apexClip.sm */}
             <div style={{
-              width: 40,
-              height: 40,
+              minWidth: 40,
+              height: 32,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              backgroundColor: '#fbbf24',
-              border: '2px solid #1e293b',
-              borderRadius: 12,
-              transform: 'rotate(3deg)',
-              boxShadow: '2px 2px 0 rgba(0,0,0,0.2)',
+              backgroundColor: SK.accent,
+              clipPath: apexClip.sm,
               flexShrink: 0,
               zIndex: 10,
+              paddingLeft: 8,
+              paddingRight: 10,
+              gap: 4,
             }}>
-              <span style={{ color: 'white', fontSize: 14, fontWeight: 900, transform: 'rotate(-3deg)' }}>{level}</span>
+              <span style={{
+                color: SK.textWhite,
+                fontSize: 11,
+                fontWeight: 700,
+                fontFamily: headingFont,
+                letterSpacing: '0.05em',
+              }}>LV</span>
+              <span style={{
+                color: SK.textWhite,
+                fontSize: 16,
+                fontWeight: 900,
+                fontFamily: headingFont,
+              }}>{level}</span>
             </div>
 
-            {/* HP bar (overlaps level badge slightly) */}
+            {/* HP bar — SK.red fill, SK.glassBg 트랙, 3px height, apexClip.sm */}
             <div style={{
               flex: 1,
-              maxWidth: 160,
-              height: 24,
-              backgroundColor: '#334155',
-              borderRadius: 9999,
-              border: '2px solid #1e293b',
+              maxWidth: 180,
+              height: 14,
+              backgroundColor: SK.glassBg,
+              backdropFilter: 'blur(4px)',
+              border: `1px solid ${SK.border}`,
               position: 'relative',
               overflow: 'hidden',
-              marginLeft: -12,
-              boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+              clipPath: apexClip.sm,
             }}>
               <div
                 style={{
@@ -202,21 +198,11 @@ function MatrixHUDInner({
                   top: 0,
                   bottom: 0,
                   left: 0,
-                  backgroundColor: '#ef4444',
-                  transition: 'all 0.3s ease-out',
-                  width: `calc(16px + (100% - 16px) * ${healthPercent / 100})`,
-                  borderRadius: healthPercent >= 100 ? 9999 : '9999px 0 0 9999px',
+                  background: `linear-gradient(to right, ${SK.red}, ${SK.redDark})`,
+                  transition: 'width 0.3s ease-out',
+                  width: `${healthPercent}%`,
                 }}
-              >
-                <div style={{
-                  position: 'absolute',
-                  left: 0,
-                  right: 0,
-                  top: 0,
-                  height: '50%',
-                  backgroundColor: 'rgba(255,255,255,0.2)',
-                }} />
-              </div>
+              />
               <div style={{
                 position: 'absolute',
                 top: 0,
@@ -227,75 +213,91 @@ function MatrixHUDInner({
                 alignItems: 'center',
                 justifyContent: 'center',
               }}>
-                <span style={{ color: 'white', fontSize: 10, fontWeight: 900 }}>
+                <span style={{
+                  color: SK.textWhite,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  fontFamily: bodyFont,
+                  textShadow: '0 1px 2px rgba(0,0,0,0.8)',
+                }}>
                   {Math.ceil(Math.min(health, maxHealth))}/{Math.ceil(maxHealth)}
                 </span>
               </div>
             </div>
           </div>
 
-          {/* Right: Score */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, flexShrink: 0 }}>
+          {/* Right: Kills + Timer + Score — bodyFont, SK.textSecondary */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+            gap: 12,
+            flexShrink: 0,
+          }}>
+            {/* Kills */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Zap size={12} style={{ color: SK.accent }} />
+              <span style={{
+                color: SK.accent,
+                fontSize: 14,
+                fontWeight: 900,
+                fontFamily: headingFont,
+              }}>{kills}</span>
+              <span style={{
+                color: SK.textMuted,
+                fontSize: 10,
+                fontWeight: 600,
+                fontFamily: bodyFont,
+                letterSpacing: '0.05em',
+              }}>KILLS</span>
+            </div>
+
+            {/* Timer */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <Clock size={12} style={{ color: SK.textSecondary }} />
+              <span style={{
+                color: SK.textSecondary,
+                fontSize: 14,
+                fontWeight: 700,
+                fontFamily: headingFont,
+                letterSpacing: '0.05em',
+              }}>
+                {formatTime(gameTime)}
+              </span>
+            </div>
+
+            {/* Score */}
             <div style={{
-              backgroundColor: 'rgba(30,41,59,0.8)',
+              backgroundColor: SK.glassBg,
               backdropFilter: 'blur(4px)',
-              paddingLeft: 12,
-              paddingRight: 12,
-              paddingTop: 4,
-              paddingBottom: 4,
-              borderRadius: 9999,
-              border: '2px solid #334155',
+              paddingLeft: 10,
+              paddingRight: 10,
+              paddingTop: 3,
+              paddingBottom: 3,
+              border: `1px solid ${SK.border}`,
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)',
+              gap: 4,
+              clipPath: apexClip.sm,
             }}>
-              <span style={{ color: '#fbbf24', fontSize: 12, fontWeight: 900 }}>$</span>
-              <span style={{ color: 'white', fontSize: 12, fontWeight: 900 }}>{formatScore(score)}</span>
+              <span style={{
+                color: SK.gold,
+                fontSize: 11,
+                fontWeight: 900,
+                fontFamily: headingFont,
+              }}>$</span>
+              <span style={{
+                color: SK.textPrimary,
+                fontSize: 12,
+                fontWeight: 700,
+                fontFamily: bodyFont,
+              }}>{formatScore(score)}</span>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Sub-header: Mode info + Timer */}
-      <div style={{
-        position: 'absolute',
-        top: 76,
-        left: 0,
-        width: '100%',
-        zIndex: 30,
-        pointerEvents: 'none',
-      }}>
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          paddingLeft: 16,
-          paddingRight: 16,
-          paddingTop: 4,
-          paddingBottom: 4,
-        }}>
-          {/* Left: Mode info + kills */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Zap size={14} style={{ color: '#22d3ee' }} />
-            <span style={{ color: '#67e8f9', fontSize: 12, fontWeight: 900 }}>
-              MATRIX
-            </span>
-            <span style={{ color: '#9ca3af', fontSize: 10 }}>
-              <span style={{ color: '#f87171', fontWeight: 'bold' }}>{kills}</span> KILLS
-            </span>
-          </div>
-          {/* Right: Timer */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Clock size={14} style={{ color: '#22d3ee' }} />
-            <span style={{ color: '#67e8f9', fontSize: 14, letterSpacing: '0.05em', fontWeight: 900 }}>
-              {formatTime(gameTime)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Auto Hunt indicator (bottom left) */}
+      {/* Auto Hunt indicator (bottom left) — SK.green 활성, SK.border 비활성 */}
       <div style={{
         position: 'absolute',
         bottom: 96,
@@ -304,18 +306,18 @@ function MatrixHUDInner({
         pointerEvents: 'none',
       }}>
         <div style={{
-          width: 56,
-          height: 56,
-          borderRadius: 8,
-          border: `2px solid ${autoHuntEnabled ? '#4ade80' : '#475569'}`,
+          width: 52,
+          height: 52,
+          border: `1px solid ${autoHuntEnabled ? SK.green : SK.border}`,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           justifyContent: 'center',
           position: 'relative',
           overflow: 'hidden',
-          backgroundColor: autoHuntEnabled ? '#14532d' : '#0f172a',
-          boxShadow: autoHuntEnabled ? '0 0 20px rgba(34,197,94,0.6)' : 'none',
+          backgroundColor: autoHuntEnabled ? 'rgba(16, 185, 129, 0.15)' : SK.cardBg,
+          clipPath: apexClip.sm,
+          boxShadow: autoHuntEnabled ? `0 0 16px rgba(16, 185, 129, 0.4)` : 'none',
         }}>
           {autoHuntEnabled && <div style={{
             position: 'absolute',
@@ -323,7 +325,7 @@ function MatrixHUDInner({
             left: 0,
             right: 0,
             bottom: 0,
-            backgroundColor: 'rgba(34,197,94,0.2)',
+            backgroundColor: 'rgba(16, 185, 129, 0.1)',
             animation: 'pulse 2s cubic-bezier(0.4,0,0.6,1) infinite',
           }} />}
           <div style={{
@@ -334,14 +336,24 @@ function MatrixHUDInner({
             alignItems: 'center',
             gap: 2,
           }}>
-            <Terminal size={24} style={{ color: autoHuntEnabled ? '#86efac' : '#94a3b8' }} />
-            <div style={{ fontSize: 8, lineHeight: 1, textAlign: 'center', color: 'white' }}>VIBE</div>
+            <Terminal size={22} style={{
+              color: autoHuntEnabled ? SK.green : SK.textMuted,
+            }} />
+            <div style={{
+              fontSize: 7,
+              lineHeight: 1,
+              textAlign: 'center',
+              color: autoHuntEnabled ? SK.greenLight : SK.textMuted,
+              fontFamily: headingFont,
+              fontWeight: 700,
+              letterSpacing: '0.1em',
+            }}>VIBE</div>
           </div>
         </div>
       </div>
 
       {/* ========================================
-          Bottom: Weapon Slots
+          Bottom: Weapon Slots — SK.cardBg, apexClip.sm, 쿨다운 SK.accent 오버레이
           ======================================== */}
       <div style={{
         position: 'absolute',
@@ -373,14 +385,16 @@ function MatrixHUDInner({
             justifyContent: 'center',
           }}>
             <div style={{
-              backgroundColor: 'rgba(0,0,0,0.9)',
+              backgroundColor: SK.glassBg,
+              backdropFilter: 'blur(8px)',
               padding: 4,
-              border: '1px solid #374151',
+              border: `1px solid ${SK.border}`,
               display: 'flex',
               gap: 4,
               overflowX: 'auto',
+              clipPath: apexClip.sm,
             }}>
-              {weaponSlots.map((slot, _i) => {
+              {weaponSlots.map((slot) => {
                 const type = slot.type as WeaponType;
                 const data = WEAPON_DATA[type as keyof typeof WEAPON_DATA];
                 const Icon = WEAPON_ICONS[type];
@@ -391,26 +405,27 @@ function MatrixHUDInner({
                 return (
                   <div key={slot.type} style={{ position: 'relative', flexShrink: 0 }}>
                     <div style={{
-                      width: 32,
-                      height: 32,
-                      backgroundColor: 'rgba(0,0,0,0.8)',
-                      border: '1px solid #4b5563',
+                      width: 36,
+                      height: 36,
+                      backgroundColor: SK.cardBg,
+                      border: `1px solid ${SK.border}`,
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
                       position: 'relative',
                       overflow: 'hidden',
+                      clipPath: apexClip.sm,
                     }}>
                       {Icon && <Icon size={16} style={{ color: data.color }} />}
-                      {/* Cooldown overlay from bottom */}
+                      {/* Cooldown overlay — SK.accent 반투명 */}
                       <div
                         style={{
                           position: 'absolute',
                           bottom: 0,
                           left: 0,
                           width: '100%',
-                          backgroundColor: 'rgba(0,0,0,0.7)',
-                          transition: 'all 0.1s',
+                          backgroundColor: 'rgba(239, 68, 68, 0.35)',
+                          transition: 'height 0.1s linear',
                           height: `${cdPercent}%`,
                         }}
                       />
@@ -419,13 +434,16 @@ function MatrixHUDInner({
                         position: 'absolute',
                         top: 0,
                         right: 0,
-                        backgroundColor: 'rgba(0,0,0,0.9)',
-                        fontSize: 6,
+                        backgroundColor: 'rgba(9, 9, 11, 0.9)',
+                        fontSize: 7,
                         paddingLeft: 2,
-                        paddingRight: 2,
-                        color: '#9ca3af',
-                        borderBottom: '1px solid #4b5563',
-                        borderLeft: '1px solid #4b5563',
+                        paddingRight: 3,
+                        paddingTop: 1,
+                        color: SK.textSecondary,
+                        fontFamily: headingFont,
+                        fontWeight: 700,
+                        borderBottom: `1px solid ${SK.border}`,
+                        borderLeft: `1px solid ${SK.border}`,
                       }}>
                         {slot.level}
                       </div>
@@ -446,17 +464,26 @@ function MatrixHUDInner({
         transform: 'translateX(-50%)',
         paddingBottom: 2,
       }}>
-        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.2)' }}>ESC Pause</span>
+        <span style={{
+          fontSize: 10,
+          color: SK.textMuted,
+          fontFamily: bodyFont,
+          letterSpacing: '0.05em',
+        }}>ESC Pause</span>
       </div>
 
-      {/* Enemy count (bottom right, subtle) */}
+      {/* Enemy count (bottom right) */}
       <div style={{ position: 'absolute', bottom: 8, right: 12, zIndex: 10 }}>
-        <span style={{ fontSize: 10, color: '#4b5563', fontFamily: 'monospace' }}>
+        <span style={{
+          fontSize: 10,
+          color: SK.textMuted,
+          fontFamily: bodyFont,
+        }}>
           Enemies: {enemyCount}
         </span>
       </div>
 
-      {/* Paused overlay */}
+      {/* Paused overlay — SK.accent, headingFont */}
       {isPaused && (
         <div style={{
           position: 'absolute',
@@ -467,9 +494,11 @@ function MatrixHUDInner({
           <span
             style={{
               fontSize: 36,
-              fontWeight: 'bold',
+              fontWeight: 900,
               letterSpacing: '0.3em',
-              color: MATRIX_GREEN,
+              color: SK.accent,
+              fontFamily: headingFont,
+              textShadow: `0 0 24px rgba(239, 68, 68, 0.6)`,
             }}
           >
             PAUSED
