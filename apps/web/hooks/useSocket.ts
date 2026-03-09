@@ -258,6 +258,20 @@ export interface UiState {
   weather: { type: string; intensity: number } | null;
   // v17: ISO3 set of countries with active conflicts (playing/countdown rooms)
   activeConflictCountries: Set<string>;
+  // v30 Task 1-6: Token reward notifications
+  tokenRewards: TokenRewardData[];
+}
+
+// v30 Task 1-6: Token reward data type
+export interface TokenRewardData {
+  id: string;
+  rewardType: string;
+  tokenType: string;
+  countryCode?: string;
+  amount: number;
+  reason: string;
+  timestamp: number;
+  pending: boolean;
 }
 
 export function useSocket() {
@@ -316,6 +330,7 @@ export function useSocket() {
     obstacleData: null,
     weather: null,
     activeConflictCountries: new Set(),
+    tokenRewards: [],
   });
 
   useEffect(() => {
@@ -327,6 +342,9 @@ export function useSocket() {
     socket.onConnect = () => {
       dataRef.current.connected = true;
       setUiState(prev => ({ ...prev, connected: true }));
+
+      // v30 Task 1-6: 재연결 시 기존 토큰 보상 복구 요청
+      socket.emit('get_token_rewards', {});
     };
 
     socket.onDisconnect = () => {
@@ -1012,6 +1030,23 @@ export function useSocket() {
           tradeRoutes: prev.tradeRoutes.filter(r => r !== route),
         }));
       }, 30000);
+    });
+
+    // ─── v30 Task 1-6: Token reward events ───
+    socket.on('token_reward', (data: TokenRewardData) => {
+      setUiState(prev => ({
+        ...prev,
+        tokenRewards: [...prev.tokenRewards, data].slice(-50),
+      }));
+    });
+
+    socket.on('token_rewards_update', (data: { rewards: TokenRewardData[] }) => {
+      if (data.rewards) {
+        setUiState(prev => ({
+          ...prev,
+          tokenRewards: data.rewards.slice(-50),
+        }));
+      }
     });
 
     // ─── v14: Global events (EventTicker / NewsFeed) ───

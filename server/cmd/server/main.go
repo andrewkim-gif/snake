@@ -410,6 +410,9 @@ func main() {
 			return false
 		},
 	)
+	// v30: forward reference — v14TokenRewardMgr가 뒤에서 생성되므로 클로저에서 참조합니다
+	var tokenRewardMgrRef *game.TokenRewardManager
+
 	v14WarSystem.OnEvent = func(event game.WarEvent) {
 		// Broadcast war events to lobby
 		frame, err := ws.EncodeFrame("war_event", event)
@@ -429,6 +432,19 @@ func main() {
 				winner, loser = event.Defender, event.Attacker
 			}
 			v14EventLog.LogWarEnded(winner, winner, loser, loser, event.Outcome)
+
+			// v30 Task 1-1: 전쟁 종료 시 승리 보상 큐에 적재합니다
+			// NOTE: tokenRewardMgrRef는 v14TokenRewardMgr 생성 후 할당됩니다
+			if tokenRewardMgrRef != nil {
+				// 승리자의 점수를 보상 계산에 사용합니다
+				winnerScore := event.AttackerScore
+				if event.Outcome == game.WarOutcomeDefenderWin {
+					winnerScore = event.DefenderScore
+				}
+				tokenRewardMgrRef.QueueWarVictoryReward(
+					winner, winner, winner, winnerScore, v14AccountLevelMgr,
+				)
+			}
 		}
 	}
 
@@ -464,11 +480,30 @@ func main() {
 	if crossRPC != "" {
 		buybackEngine = blockchain.NewBuybackEngine(crossRPC)
 		defenseOracle = blockchain.NewDefenseOracle(crossRPC)
-		slog.Info("v14 blockchain infra initialized", "rpcURL", crossRPC)
+
+		// Phase 0: 195개국을 DefenseOracle과 BuybackEngine에 일괄 등록합니다
+		for _, seed := range world.AllCountries {
+			defenseOracle.RegisterCountry(seed.ISO3)
+			buybackEngine.RegisterCountry(seed.ISO3, "") // treasury 주소는 Phase 3+에서 설정 예정
+		}
+		slog.Info("v14 blockchain infra initialized",
+			"rpcURL", crossRPC,
+			"registeredCountries", len(world.AllCountries),
+		)
 	} else {
-		slog.Info("v14 blockchain infra disabled (no CROSS_RPC_URL)")
+		// v30 Task 1-2/1-3: RPC 없으면 시뮬레이션 모드로 초기화합니다
+		buybackEngine = blockchain.NewBuybackEngine("") // 시뮬레이션 모드 (no RPC)
+		defenseOracle = blockchain.NewDefenseOracle("")  // 시뮬레이션 모드 (GDP 기반 폴백)
+		for _, seed := range world.AllCountries {
+			defenseOracle.RegisterCountry(seed.ISO3)
+			buybackEngine.RegisterCountry(seed.ISO3, "")
+		}
+		slog.Info("v14 blockchain infra: simulation mode (no CROSS_RPC_URL)",
+			"registeredCountries", len(world.AllCountries),
+		)
 	}
 	v14TokenRewardMgr := game.NewTokenRewardManager(buybackEngine, defenseOracle)
+	tokenRewardMgrRef = v14TokenRewardMgr // v30: forward reference 할당
 	v14TokenRewardMgr.OnRewardDistributed = func(event game.TokenRewardEvent) {
 		frame, err := ws.EncodeFrame("token_reward", event)
 		if err != nil {
@@ -643,7 +678,19 @@ func main() {
 	economyEngine.SetSeasonEngine(seasonEngine)
 	economyEngine.SetEventEngine(eventEngine)
 	economyEngine.SetUNCouncil(unCouncil)
-	slog.Info("wired", "engine", "EconomyEngine.BonusSystems", "modules", []string{"TechTree", "Season", "Events", "UNCouncil"})
+	// v30 Task 1-10: EconomyEngine에 BuybackEngine을 주입하여 GDP 기반 바이백을 직접 실행합니다
+	if buybackEngine != nil {
+		economyEngine.SetBuybackEngine(buybackEngine)
+	}
+	// v30 Task 1-3: DefenseOracle GDP 시뮬레이션 연결
+	if defenseOracle != nil {
+		economyEngine.SetDefenseOracle(defenseOracle)
+	}
+	// v30 Task 1-1: 주권 보상 콜백 연결 (경제 틱 시 QueueSovereigntyReward 호출)
+	economyEngine.OnSovereigntyReward = func(playerID, playerName, countryCode string) {
+		v14TokenRewardMgr.QueueSovereigntyReward(playerID, playerName, countryCode, v14AccountLevelMgr)
+	}
+	slog.Info("wired", "engine", "EconomyEngine.BonusSystems", "modules", []string{"TechTree", "Season", "Events", "UNCouncil", "BuybackEngine", "DefenseOracle", "SovereigntyReward"})
 
 	// IntelSystem ← FactionManager, TechTreeManager
 	intelSystem.SetFactionManager(factionManager)
@@ -754,6 +801,9 @@ func main() {
 		V14ArenaReaper:     v14ArenaReaper,
 		// CROSS Ramp webhook
 		RampWebhook: ramp.NewRampWebhookHandler(),
+		// v30 Task 1-4: blockchain engines for HTTP endpoints
+		BuybackEngine: buybackEngine,
+		DefenseOracle: defenseOracle,
 	})
 
 	// ================================================================
@@ -871,6 +921,16 @@ func main() {
 		}
 	})
 
+	// --- v30 Task 1-2: DefenseOracle background polling ---
+	if defenseOracle != nil {
+		g.Go(func() error {
+			slog.Info("v30 DefenseOracle starting")
+			defenseOracle.Start()
+			<-gCtx.Done()
+			return nil
+		})
+	}
+
 	// --- v14 TokenReward distributor (every 30 seconds) ---
 	g.Go(func() error {
 		slog.Info("v14 TokenReward distributor starting")
@@ -951,6 +1011,10 @@ func main() {
 		v14WarSystem.Reset()
 		v14TokenRewardMgr.DistributePendingRewards() // flush pending rewards
 		bandwidthMonitor.Reset()
+		// v30 Task 1-2: DefenseOracle graceful shutdown
+		if defenseOracle != nil {
+			defenseOracle.Stop()
+		}
 
 		slog.Info("stopping v11 engines...")
 		economyEngine.Stop()
@@ -1963,6 +2027,33 @@ func processEpochEndForV14(endData game.EpochEndData, v14Sys *V14Systems) {
 					"epoch", endData.EpochNumber,
 					"dominant", arena.Domination.GetDominantNation(),
 				)
+
+				// v30 Task 1-1: 에포크 종료 시 Domination 보상 큐에 적재합니다
+				if v14Sys.TokenRewardMgr != nil {
+					playerScores := make(map[string]*game.PlayerEpochStats)
+					for _, ag := range agents {
+						if ag.IsBot {
+							continue
+						}
+						playerScores[ag.ID] = &game.PlayerEpochStats{
+							ID:          ag.ID,
+							Name:        ag.Name,
+							Nationality: ag.Nationality,
+							Kills:       ag.Kills,
+							Deaths:      ag.Deaths,
+							Assists:     ag.Assists,
+							Level:       ag.Level,
+							NationScore: ag.Score,
+						}
+					}
+					domInput := &game.DominationRewardInput{
+						CountryCode:    endData.CountryCode,
+						DominantNation: arena.Domination.GetDominantNation(),
+						NationScores:   endData.NationScores,
+						PlayerScores:   playerScores,
+					}
+					v14Sys.TokenRewardMgr.QueueDominationRewards(domInput, v14Sys.AccountLevelMgr)
+				}
 			}
 		}
 	}

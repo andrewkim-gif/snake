@@ -66,6 +66,9 @@ type BuybackEngine struct {
 
 	// Config
 	maxHistorySize int
+
+	// v30 Task 2-8: Forge price for more accurate token conversion
+	forgePrice float64
 }
 
 // NewBuybackEngine creates a new BuybackEngine
@@ -116,15 +119,16 @@ func (e *BuybackEngine) ProcessEconomicTick(iso3 string, gdpRevenue float64) {
 
 // ExecutePendingBuybacks processes all accumulated tax into buyback transactions.
 // Called periodically by the game server (e.g., every 5 minutes).
+// BUG FIX (Phase 0): AccumulatedTax는 RPC 호출 성공 확인 후에만 리셋합니다.
+// 실패 시 세금이 보존되어 다음 주기에 재시도됩니다.
 func (e *BuybackEngine) ExecutePendingBuybacks() []BuybackRecord {
 	e.mu.Lock()
 
-	// Collect countries with pending tax
+	// Collect countries with pending tax (세금을 아직 리셋하지 않습니다)
 	var pendingList []buybackItem
 	for iso, state := range e.states {
 		if state.AccumulatedTax > 0 {
 			pendingList = append(pendingList, buybackItem{iso3: iso, amount: state.AccumulatedTax})
-			state.AccumulatedTax = 0
 		}
 	}
 	e.mu.Unlock()
@@ -146,10 +150,20 @@ func (e *BuybackEngine) ExecutePendingBuybacks() []BuybackRecord {
 		records = append(records, batchRecords...)
 	}
 
-	// Store history
+	// RPC 호출 성공한 국가만 세금을 리셋하고 이력을 기록합니다
+	successISOs := make(map[string]bool, len(records))
+	for _, rec := range records {
+		successISOs[rec.ISO3] = true
+	}
+
 	e.mu.Lock()
 	for _, rec := range records {
 		if state, ok := e.states[rec.ISO3]; ok {
+			// RPC 성공 확인 후에만 AccumulatedTax를 차감합니다
+			state.AccumulatedTax -= rec.GDPTaxAmount
+			if state.AccumulatedTax < 0 {
+				state.AccumulatedTax = 0
+			}
 			state.TotalBuyback += rec.TokensReceived
 			state.BuybackCount++
 			state.LastBuyback = rec.Timestamp
@@ -177,11 +191,16 @@ func (e *BuybackEngine) executeBuybackBatch(batch []buybackItem) []BuybackRecord
 
 	if e.rpcURL == "" {
 		// No RPC configured: record locally without on-chain tx
+		// v30 Task 2-8: Use Forge price for more accurate conversion if available
 		for _, b := range batch {
+			conversionRate := 100.0 // default: 1 gold = 100 tokens
+			if e.forgePrice > 0 {
+				conversionRate = 1.0 / e.forgePrice // tokens per gold unit
+			}
 			records = append(records, BuybackRecord{
 				ISO3:           b.iso3,
 				GDPTaxAmount:   b.amount,
-				TokensReceived: b.amount * 100, // Simulated: 1 gold = 100 tokens
+				TokensReceived: b.amount * conversionRate,
 				Timestamp:      now,
 			})
 		}
@@ -419,6 +438,40 @@ type BuybackStats struct {
 	TotalBuybackCount  int     `json:"totalBuybackCount"`
 	TotalBurnCount     int     `json:"totalBurnCount"`
 	ActiveCountries    int     `json:"activeCountries"`
+}
+
+// v30 Task 2-8: SetForgePrice sets the Forge $AWW price for more accurate token conversion.
+func (e *BuybackEngine) SetForgePrice(price float64) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.forgePrice = price
+}
+
+// v30 Task 2-8: GetForgePrice returns the current Forge price.
+func (e *BuybackEngine) GetForgePrice() float64 {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.forgePrice
+}
+
+// RecordBurn records a generic burn event (for Sink mechanisms).
+func (e *BuybackEngine) RecordBurn(reason string, context string, amount float64) {
+	now := time.Now()
+	record := BurnRecord{
+		ISO3:      context,
+		Amount:    amount,
+		Reason:    reason,
+		Timestamp: now,
+	}
+
+	e.mu.Lock()
+	e.burns = append(e.burns, record)
+	if len(e.burns) > e.maxHistorySize {
+		e.burns = e.burns[len(e.burns)-e.maxHistorySize:]
+	}
+	e.mu.Unlock()
+
+	log.Printf("[BuybackEngine] BURN %.2f tokens (%s: %s)", amount, reason, context)
 }
 
 // GetStats returns aggregated buyback/burn stats

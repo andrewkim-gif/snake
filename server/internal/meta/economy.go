@@ -7,6 +7,8 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/andrewkim-gif/snake/server/internal/blockchain"
 )
 
 // ResourceType enumerates the 6 resource types in the economy.
@@ -170,6 +172,15 @@ type EconomyEngine struct {
 	eventEngine     *EventEngine
 	unCouncil       *UNCouncil
 
+	// v30 Task 1-10: BuybackEngine for GDP-based buyback (EconomyEngine에서 직접 호출)
+	buybackEngine *blockchain.BuybackEngine
+
+	// v30 Task 1-1: 주권 보상 콜백 (순환 의존성 방지를 위해 콜백 사용)
+	OnSovereigntyReward func(playerID, playerName, countryCode string)
+
+	// v30 Task 1-3: DefenseOracle GDP 시뮬레이션 업데이트 콜백
+	defenseOracle *blockchain.DefenseOracle
+
 	// Battle participant tracking (countryISO → list of userIDs who participated in last battle)
 	battleParticipants map[string][]string
 
@@ -182,6 +193,9 @@ type EconomyEngine struct {
 	// Persistence
 	store        EconomyStore
 	dirtyCountries map[string]bool // countries modified since last flush
+
+	// v30 Task 2-15: GDP boost states
+	boostStates map[string]*CountryBoostState
 
 	// Lifecycle
 	cancel context.CancelFunc
@@ -209,6 +223,7 @@ func NewEconomyEngine(cfg EconomyConfig) *EconomyEngine {
 		battleParticipants: make(map[string][]string),
 		gdpHistory:         make(map[string][]GDPSnapshot),
 		dirtyCountries:     make(map[string]bool),
+		boostStates:        make(map[string]*CountryBoostState),
 	}
 }
 
@@ -252,6 +267,22 @@ func (ee *EconomyEngine) SetUNCouncil(uc *UNCouncil) {
 	ee.mu.Lock()
 	defer ee.mu.Unlock()
 	ee.unCouncil = uc
+}
+
+// SetBuybackEngine sets the buyback engine for GDP-based buyback execution.
+// v30 Task 1-10: EconomyEngine에서 직접 GDP 기반 바이백을 호출합니다.
+func (ee *EconomyEngine) SetBuybackEngine(be *blockchain.BuybackEngine) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.buybackEngine = be
+}
+
+// SetDefenseOracle sets the defense oracle for GDP-based simulation updates.
+// v30 Task 1-3: 경제 틱마다 GDP를 DefenseOracle에 시뮬레이션 값으로 전달합니다.
+func (ee *EconomyEngine) SetDefenseOracle(oracle *blockchain.DefenseOracle) {
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+	ee.defenseOracle = oracle
 }
 
 // InitializeCountry sets up the economy for a country based on seed data.
@@ -412,9 +443,15 @@ func (ee *EconomyEngine) recalcEffectiveProduction(econ *CountryEconomy) {
 		councilResourceMult, councilTechMult = ee.unCouncil.GetClimateAccordEffects()
 	}
 
+	// v30 Task 2-15: GDP boost multiplier
+	boostMult := 1.0
+	if boost := ee.getActiveBoostMultiplier(econ.CountryISO); boost > 0 {
+		boostMult = 1.0 + boost
+	}
+
 	// Combined multipliers
-	resourceMult := tierMult * sovBonus * civilianPenalty * techResourceMult * seasonMult * eventResourceMult * councilResourceMult
-	techMult := tierMult * sovBonus * techPolicyBonus * seasonMult * eventTechMult * councilTechMult
+	resourceMult := tierMult * sovBonus * civilianPenalty * techResourceMult * seasonMult * eventResourceMult * councilResourceMult * boostMult
+	techMult := tierMult * sovBonus * techPolicyBonus * seasonMult * eventTechMult * councilTechMult * boostMult
 	influenceMult := techInfluenceMult * seasonMult
 
 	econ.EffectiveProduction = ResourceBundle{
@@ -541,8 +578,25 @@ func (ee *EconomyEngine) processCountryTick(iso string, econ *CountryEconomy, no
 		GDPBefore:  econ.GDP,
 	}
 
-	// Skip unclaimed countries (no sovereign = minimal production)
+	// v30 Task 2-9: Non-sovereign countries still get basic GDP calculation + dirty marking
 	if econ.SovereignFaction == "" {
+		// Calculate basic GDP for non-sovereign countries (no resource distribution)
+		ee.recalcEffectiveProduction(econ)
+		econ.PrevGDP = econ.GDP
+		econ.GDP = ee.calculateGDP(econ)
+		econ.GDPDelta = econ.GDP - econ.PrevGDP
+		ee.dirtyCountries[iso] = true // mark for persistence
+		ee.recordGDPSnapshot(iso, econ.GDP, now)
+
+		// Feed GDP to DefenseOracle in simulation mode
+		if ee.defenseOracle != nil && ee.defenseOracle.IsSimulationMode() && econ.GDP > 0 {
+			ee.defenseOracle.SetSimulatedGDP(iso, float64(econ.GDP))
+		}
+		// Feed GDP to BuybackEngine
+		if ee.buybackEngine != nil && econ.GDP > 0 {
+			ee.buybackEngine.ProcessEconomicTick(iso, float64(econ.GDP))
+		}
+
 		econ.LastTickAt = now
 		result.GDPAfter = econ.GDP
 		return result
@@ -612,6 +666,24 @@ func (ee *EconomyEngine) processCountryTick(iso string, econ *CountryEconomy, no
 
 	// Step 8: Record GDP history
 	ee.recordGDPSnapshot(iso, econ.GDP, now)
+
+	// v30 Task 1-10: GDP 기반 바이백 실행 (매 경제 틱마다)
+	if ee.buybackEngine != nil && econ.GDP > 0 {
+		ee.buybackEngine.ProcessEconomicTick(iso, float64(econ.GDP))
+	}
+
+	// v30 Task 1-3: 시뮬레이션 모드에서 GDP를 DefenseOracle에 전달합니다
+	if ee.defenseOracle != nil && ee.defenseOracle.IsSimulationMode() && econ.GDP > 0 {
+		ee.defenseOracle.SetSimulatedGDP(iso, float64(econ.GDP))
+	}
+
+	// v30 Task 1-1: 주권 보상 — 주권 팩션이 있는 경우 콜백을 통해 보상을 큐에 적재합니다
+	if ee.OnSovereigntyReward != nil && econ.SovereignFaction != "" && econ.SovereigntyLevel >= 1 {
+		participants := ee.battleParticipants[iso]
+		for _, uid := range participants {
+			ee.OnSovereigntyReward(uid, "", iso)
+		}
+	}
 
 	econ.LastTickAt = now
 
@@ -954,4 +1026,125 @@ func clamp(v, min, max float64) float64 {
 		return max
 	}
 	return v
+}
+
+// ============================================================
+// v30 Task 2-15: Country GDP Boost (v3 Token Sink)
+// ============================================================
+
+// GDPBoostTier defines the boost tiers with AWW cost and GDP multiplier.
+type GDPBoostTier struct {
+	Cost       float64 `json:"cost"`
+	Boost      float64 `json:"boost"`
+	BurnRate   float64 `json:"burnRate"`   // fraction burned (0.50 = 50%)
+	LockRate   float64 `json:"lockRate"`   // fraction locked to treasury
+}
+
+// GDPBoostTiers defines the available boost levels.
+var GDPBoostTiers = []GDPBoostTier{
+	{Cost: 100, Boost: 0.05, BurnRate: 0.50, LockRate: 0.50},   // 100 AWW → +5%
+	{Cost: 500, Boost: 0.15, BurnRate: 0.50, LockRate: 0.50},   // 500 AWW → +15%
+	{Cost: 1000, Boost: 0.25, BurnRate: 0.50, LockRate: 0.50},  // 1000 AWW → +25%
+}
+
+// GDPBoostCooldown is the cooldown between boosts (4 hours).
+const GDPBoostCooldown = 4 * time.Hour
+
+// CountryBoostState tracks active GDP boosts per country.
+type CountryBoostState struct {
+	ActiveBoost   float64   `json:"activeBoost"`   // current boost multiplier (e.g. 0.05 for +5%)
+	ExpiresAt     time.Time `json:"expiresAt"`     // when boost expires (4h from activation)
+	LastBoostAt   time.Time `json:"lastBoostAt"`   // last boost time for cooldown
+	TotalBurned   float64   `json:"totalBurned"`   // total AWW burned for this country
+	TotalLocked   float64   `json:"totalLocked"`   // total AWW locked to treasury
+}
+
+// GetBoostState returns the current boost state for a country.
+func (ee *EconomyEngine) GetBoostState(iso3 string) *CountryBoostState {
+	ee.mu.RLock()
+	defer ee.mu.RUnlock()
+	if state, ok := ee.boostStates[iso3]; ok {
+		copied := *state
+		return &copied
+	}
+	return nil
+}
+
+// ApplyGDPBoost applies a GDP boost to a country.
+// Returns the burn and lock amounts, or an error.
+func (ee *EconomyEngine) ApplyGDPBoost(iso3 string, cost float64) (burn float64, lock float64, err error) {
+	// Find matching tier
+	var tier *GDPBoostTier
+	for i := range GDPBoostTiers {
+		if GDPBoostTiers[i].Cost == cost {
+			tier = &GDPBoostTiers[i]
+			break
+		}
+	}
+	if tier == nil {
+		return 0, 0, fmt.Errorf("invalid boost cost %.0f AWW", cost)
+	}
+
+	ee.mu.Lock()
+	defer ee.mu.Unlock()
+
+	_, ok := ee.economies[iso3]
+	if !ok {
+		return 0, 0, fmt.Errorf("country %s not found", iso3)
+	}
+
+	// Initialize boost states map if needed
+	if ee.boostStates == nil {
+		ee.boostStates = make(map[string]*CountryBoostState)
+	}
+
+	now := time.Now()
+	state := ee.boostStates[iso3]
+	if state == nil {
+		state = &CountryBoostState{}
+		ee.boostStates[iso3] = state
+	}
+
+	// Check cooldown
+	if !state.LastBoostAt.IsZero() && now.Before(state.LastBoostAt.Add(GDPBoostCooldown)) {
+		remaining := state.LastBoostAt.Add(GDPBoostCooldown).Sub(now)
+		return 0, 0, fmt.Errorf("boost on cooldown, %v remaining", remaining.Round(time.Minute))
+	}
+
+	// Apply boost
+	state.ActiveBoost = tier.Boost
+	state.ExpiresAt = now.Add(GDPBoostCooldown)
+	state.LastBoostAt = now
+	burnAmount := cost * tier.BurnRate
+	lockAmount := cost * tier.LockRate
+	state.TotalBurned += burnAmount
+	state.TotalLocked += lockAmount
+
+	ee.dirtyCountries[iso3] = true
+
+	slog.Info("GDP boost applied",
+		"country", iso3,
+		"boost", fmt.Sprintf("+%.0f%%", tier.Boost*100),
+		"burned", burnAmount,
+		"locked", lockAmount,
+	)
+
+	return burnAmount, lockAmount, nil
+}
+
+// getActiveBoostMultiplier returns the active boost multiplier for a country (0 if expired).
+// Must be called with lock held.
+func (ee *EconomyEngine) getActiveBoostMultiplier(iso3 string) float64 {
+	if ee.boostStates == nil {
+		return 0
+	}
+	state := ee.boostStates[iso3]
+	if state == nil {
+		return 0
+	}
+	if time.Now().After(state.ExpiresAt) {
+		state.ActiveBoost = 0
+		return 0
+	}
+	return state.ActiveBoost
 }

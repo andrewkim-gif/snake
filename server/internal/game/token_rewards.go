@@ -45,6 +45,17 @@ const (
 
 	// MinAccountLevelForTokens is the minimum account level to receive token rewards.
 	MinAccountLevelForTokens = 3
+
+	// v30 Task 1-11: 보상 큐 상한
+	MaxPendingRewards = 1000
+
+	// v30 Task 1-11: 일일 플레이어당 보상 캡 (토큰)
+	DailyPlayerRewardCap = 5000.0
+
+	// v30 Task 1-12: 전쟁 선포 $AWW 포인트 비용
+	WarCostSmall    = 500.0  // 소규모 전쟁
+	WarCostLarge    = 2000.0 // 대규모 전쟁
+	WarCostEconomic = 1000.0 // 경제 전쟁
 )
 
 // ============================================================
@@ -223,6 +234,10 @@ type TokenRewardManager struct {
 
 	// Max history size
 	maxHistory int
+
+	// v30 Task 1-11: 일일 플레이어당 보상 추적 (playerID → today's total)
+	dailyRewards   map[string]float64
+	dailyResetDate string // "YYYY-MM-DD" 형식으로 날짜 변경 감지
 }
 
 // NewTokenRewardManager creates a new token reward manager.
@@ -233,7 +248,39 @@ func NewTokenRewardManager(buyback *blockchain.BuybackEngine, oracle *blockchain
 		buybackEngine:      buyback,
 		defenseOracle:      oracle,
 		maxHistory:         10000,
+		dailyRewards:       make(map[string]float64),
+		dailyResetDate:     time.Now().Format("2006-01-02"),
 	}
+}
+
+// checkDailyCap checks if a player has exceeded their daily reward cap.
+// Returns true if the reward should be allowed, false if capped.
+// Must be called with lock held.
+func (trm *TokenRewardManager) checkDailyCap(playerID string, amount float64) bool {
+	today := time.Now().Format("2006-01-02")
+	if trm.dailyResetDate != today {
+		// 날짜가 변경되었으므로 리셋합니다
+		trm.dailyRewards = make(map[string]float64)
+		trm.dailyResetDate = today
+	}
+	current := trm.dailyRewards[playerID]
+	if current+amount > DailyPlayerRewardCap {
+		slog.Warn("daily reward cap exceeded",
+			"playerId", playerID,
+			"current", current,
+			"attempted", amount,
+			"cap", DailyPlayerRewardCap,
+		)
+		return false
+	}
+	trm.dailyRewards[playerID] += amount
+	return true
+}
+
+// GetBuybackEngine returns the buyback engine reference for external callers.
+// v30 Task 1-10: economy.go에서 직접 접근할 수 있도록 제공합니다.
+func (trm *TokenRewardManager) GetBuybackEngine() *blockchain.BuybackEngine {
+	return trm.buybackEngine
 }
 
 // QueueDominationRewards queues domination token rewards for distribution.
@@ -242,6 +289,9 @@ func (trm *TokenRewardManager) QueueDominationRewards(input *DominationRewardInp
 	if len(rewards) == 0 {
 		return
 	}
+
+	// v30 Task 1-5: DefenseOracle 기반 보상 조정 (인플레이션 방지)
+	trm.ApplyDefenseOracleToRewards(input.CountryCode, rewards)
 
 	trm.mu.Lock()
 	defer trm.mu.Unlock()
@@ -255,6 +305,20 @@ func (trm *TokenRewardManager) QueueDominationRewards(input *DominationRewardInp
 			if prof != nil && prof.AccountLevel < MinAccountLevelForTokens {
 				continue
 			}
+		}
+
+		// v30 Task 1-11: 일일 플레이어당 보상 캡 체크
+		if !trm.checkDailyCap(r.PlayerID, r.FinalAmount) {
+			continue
+		}
+
+		// v30 Task 1-11: 보상 큐 상한 체크
+		if len(trm.pendingRewards) >= MaxPendingRewards {
+			slog.Warn("pending rewards queue full, dropping oldest",
+				"size", len(trm.pendingRewards),
+				"dropping", "domination",
+			)
+			trm.pendingRewards = trm.pendingRewards[1:]
 		}
 
 		trm.counter++
@@ -316,9 +380,28 @@ func (trm *TokenRewardManager) QueueHegemonyRewards(playerIDs []string, playerNa
 }
 
 // QueueSovereigntyReward queues a daily sovereignty bonus for a player.
-func (trm *TokenRewardManager) QueueSovereigntyReward(playerID, playerName, countryCode string) {
+// v30 Task 1-1: accountMgr 파라미터를 추가하여 MinAccountLevelForTokens 체크를 수행합니다.
+func (trm *TokenRewardManager) QueueSovereigntyReward(playerID, playerName, countryCode string, accountMgr *AccountLevelManager) {
+	// v30: 계정 레벨 체크 (모든 보상 유형에 통일 적용)
+	if accountMgr != nil {
+		prof := accountMgr.GetProfileReadOnly(playerID)
+		if prof != nil && prof.AccountLevel < MinAccountLevelForTokens {
+			return
+		}
+	}
+
 	trm.mu.Lock()
 	defer trm.mu.Unlock()
+
+	// v30 Task 1-11: 보상 큐 상한 체크
+	if len(trm.pendingRewards) >= MaxPendingRewards {
+		slog.Warn("pending rewards queue full, dropping oldest",
+			"size", len(trm.pendingRewards),
+			"dropping", "sovereignty",
+			"playerId", playerID,
+		)
+		trm.pendingRewards = trm.pendingRewards[1:]
+	}
 
 	now := time.Now().UnixMilli()
 	trm.counter++
@@ -339,9 +422,28 @@ func (trm *TokenRewardManager) QueueSovereigntyReward(playerID, playerName, coun
 }
 
 // QueueWarVictoryReward queues a war victory token reward.
-func (trm *TokenRewardManager) QueueWarVictoryReward(playerID, playerName, countryCode string, warScore int) {
+// v30 Task 1-1: accountMgr 파라미터를 추가하여 MinAccountLevelForTokens 체크를 수행합니다.
+func (trm *TokenRewardManager) QueueWarVictoryReward(playerID, playerName, countryCode string, warScore int, accountMgr *AccountLevelManager) {
+	// v30: 계정 레벨 체크 (모든 보상 유형에 통일 적용)
+	if accountMgr != nil {
+		prof := accountMgr.GetProfileReadOnly(playerID)
+		if prof != nil && prof.AccountLevel < MinAccountLevelForTokens {
+			return
+		}
+	}
+
 	trm.mu.Lock()
 	defer trm.mu.Unlock()
+
+	// v30 Task 1-11: 보상 큐 상한 체크
+	if len(trm.pendingRewards) >= MaxPendingRewards {
+		slog.Warn("pending rewards queue full, dropping oldest",
+			"size", len(trm.pendingRewards),
+			"dropping", "war_victory",
+			"playerId", playerID,
+		)
+		trm.pendingRewards = trm.pendingRewards[1:]
+	}
 
 	now := time.Now().UnixMilli()
 	trm.counter++
@@ -389,12 +491,8 @@ func (trm *TokenRewardManager) DistributePendingRewards() int {
 		event := &pending[i]
 		event.Pending = false
 
-		// Attempt blockchain distribution for country tokens via buyback
-		if event.TokenType != "AWW" && trm.buybackEngine != nil {
-			// Feed into buyback engine's economic tick
-			// The buyback engine will handle the actual DEX purchase
-			trm.buybackEngine.ProcessEconomicTick(event.CountryCode, event.Amount)
-		}
+		// v30 Task 1-10: BuybackEngine 호출을 DistributePendingRewards에서 제거합니다.
+		// 바이백은 이제 EconomyEngine.processCountryTick에서 GDP 기반으로 직접 호출됩니다.
 
 		// Record distribution
 		trm.mu.Lock()
@@ -418,16 +516,6 @@ func (trm *TokenRewardManager) DistributePendingRewards() int {
 			"token", event.TokenType,
 			"amount", event.Amount,
 		)
-	}
-
-	// Trigger buyback execution if we fed country tokens
-	if trm.buybackEngine != nil {
-		records := trm.buybackEngine.ExecutePendingBuybacks()
-		if len(records) > 0 {
-			slog.Info("buyback executed for token rewards",
-				"count", len(records),
-			)
-		}
 	}
 
 	return distributed
@@ -581,4 +669,254 @@ func (trm *TokenRewardManager) ApplyDefenseOracleToRewards(countryCode string, r
 	for i := range rewards {
 		rewards[i].FinalAmount *= issuanceMod
 	}
+}
+
+// ============================================================
+// v30 Task 1-12: War Declaration $AWW Point Cost (v3 Sink)
+// ============================================================
+
+// WarType classifies war types for cost calculation.
+type WarType string
+
+const (
+	WarTypeSmall    WarType = "small"
+	WarTypeLarge    WarType = "large"
+	WarTypeEconomic WarType = "economic"
+)
+
+// GetWarDeclarationCost returns the $AWW point cost for a war declaration.
+func GetWarDeclarationCost(warType WarType) float64 {
+	switch warType {
+	case WarTypeSmall:
+		return WarCostSmall
+	case WarTypeLarge:
+		return WarCostLarge
+	case WarTypeEconomic:
+		return WarCostEconomic
+	default:
+		return WarCostSmall
+	}
+}
+
+// PlayerAWWBalance tracks in-game $AWW point balances.
+// v30: 블록체인 연동 전까지 서버 메모리에 포인트를 추적합니다.
+type PlayerAWWBalance struct {
+	mu       sync.RWMutex
+	balances map[string]float64 // playerID → AWW points
+}
+
+// NewPlayerAWWBalance creates a new AWW balance tracker.
+func NewPlayerAWWBalance() *PlayerAWWBalance {
+	return &PlayerAWWBalance{
+		balances: make(map[string]float64),
+	}
+}
+
+// GetBalance returns the current $AWW point balance for a player.
+func (p *PlayerAWWBalance) GetBalance(playerID string) float64 {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return p.balances[playerID]
+}
+
+// AddBalance adds $AWW points to a player's balance.
+func (p *PlayerAWWBalance) AddBalance(playerID string, amount float64) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.balances[playerID] += amount
+}
+
+// DeductBalance deducts $AWW points from a player's balance.
+// Returns an error if the balance is insufficient.
+func (p *PlayerAWWBalance) DeductBalance(playerID string, amount float64) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.balances[playerID] < amount {
+		return fmt.Errorf("insufficient AWW balance: have %.1f, need %.1f", p.balances[playerID], amount)
+	}
+	p.balances[playerID] -= amount
+	return nil
+}
+
+// ============================================================
+// v30 Task 2-16: Season Reward Staking (v3 Sink)
+// ============================================================
+
+// StakingTier defines reward multiplier tiers based on staked amount.
+type StakingTier struct {
+	MinStake   float64 `json:"minStake"`
+	Multiplier float64 `json:"multiplier"`
+}
+
+// StakingTiers defines the staking reward multiplier tiers.
+var StakingTiers = []StakingTier{
+	{MinStake: 500, Multiplier: 1.25},
+	{MinStake: 2000, Multiplier: 1.50},
+	{MinStake: 5000, Multiplier: 2.00},
+	{MinStake: 10000, Multiplier: 2.50},
+}
+
+// EarlyWithdrawPenalty is the percentage burned on early withdrawal.
+const EarlyWithdrawPenalty = 0.20
+
+// StakeInfo holds a player's current staking information.
+type StakeInfo struct {
+	PlayerID   string  `json:"playerId"`
+	Amount     float64 `json:"amount"`
+	StakedAt   int64   `json:"stakedAt"`   // unix ms
+	SeasonEnd  int64   `json:"seasonEnd"`  // unix ms when season ends
+	Multiplier float64 `json:"multiplier"` // reward multiplier from tier
+	CanWithdraw bool   `json:"canWithdraw"` // true if season has ended
+	PenaltyRate float64 `json:"penaltyRate,omitempty"` // early withdrawal penalty
+}
+
+// SeasonStakeManager manages season staking for reward multipliers.
+type SeasonStakeManager struct {
+	mu     sync.RWMutex
+	stakes map[string]*StakeInfo // playerID → stake info
+	seasonEndTime int64          // when current season ends (unix ms)
+}
+
+// NewSeasonStakeManager creates a new staking manager.
+func NewSeasonStakeManager(seasonEndTime int64) *SeasonStakeManager {
+	return &SeasonStakeManager{
+		stakes:        make(map[string]*StakeInfo),
+		seasonEndTime: seasonEndTime,
+	}
+}
+
+// SetSeasonEnd updates the season end time.
+func (sm *SeasonStakeManager) SetSeasonEnd(endTimeMs int64) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+	sm.seasonEndTime = endTimeMs
+}
+
+// Stake locks tokens for the season. Returns the reward multiplier.
+func (sm *SeasonStakeManager) Stake(playerID string, amount float64) (*StakeInfo, error) {
+	if amount <= 0 {
+		return nil, fmt.Errorf("stake amount must be positive")
+	}
+
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	now := time.Now().UnixMilli()
+
+	// Check if already staked — add to existing stake
+	existing := sm.stakes[playerID]
+	totalAmount := amount
+	if existing != nil {
+		totalAmount += existing.Amount
+	}
+
+	// Calculate multiplier from tiers
+	multiplier := 1.0
+	for _, tier := range StakingTiers {
+		if totalAmount >= tier.MinStake {
+			multiplier = tier.Multiplier
+		}
+	}
+
+	info := &StakeInfo{
+		PlayerID:    playerID,
+		Amount:      totalAmount,
+		StakedAt:    now,
+		SeasonEnd:   sm.seasonEndTime,
+		Multiplier:  multiplier,
+		CanWithdraw: now >= sm.seasonEndTime,
+		PenaltyRate: EarlyWithdrawPenalty,
+	}
+
+	sm.stakes[playerID] = info
+
+	slog.Info("season staking",
+		"playerId", playerID,
+		"amount", totalAmount,
+		"multiplier", multiplier,
+	)
+
+	return info, nil
+}
+
+// Withdraw removes staked tokens. Early withdrawal burns a penalty.
+// Returns (withdrawn amount, burn amount, error).
+func (sm *SeasonStakeManager) Withdraw(playerID string) (float64, float64, error) {
+	sm.mu.Lock()
+	defer sm.mu.Unlock()
+
+	info, ok := sm.stakes[playerID]
+	if !ok || info.Amount <= 0 {
+		return 0, 0, fmt.Errorf("no active stake found")
+	}
+
+	now := time.Now().UnixMilli()
+	amount := info.Amount
+	burnAmount := 0.0
+
+	// Early withdrawal penalty
+	if now < sm.seasonEndTime {
+		burnAmount = amount * EarlyWithdrawPenalty
+		amount -= burnAmount
+		slog.Warn("early withdrawal penalty applied",
+			"playerId", playerID,
+			"staked", info.Amount,
+			"burned", burnAmount,
+			"returned", amount,
+		)
+	}
+
+	delete(sm.stakes, playerID)
+	return amount, burnAmount, nil
+}
+
+// GetStakeInfo returns a player's staking info.
+func (sm *SeasonStakeManager) GetStakeInfo(playerID string) *StakeInfo {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	info, ok := sm.stakes[playerID]
+	if !ok {
+		return nil
+	}
+
+	now := time.Now().UnixMilli()
+	copied := *info
+	copied.CanWithdraw = now >= sm.seasonEndTime
+	return &copied
+}
+
+// GetRewardMultiplier returns the staking reward multiplier for a player.
+func (sm *SeasonStakeManager) GetRewardMultiplier(playerID string) float64 {
+	sm.mu.RLock()
+	defer sm.mu.RUnlock()
+
+	info, ok := sm.stakes[playerID]
+	if !ok {
+		return 1.0 // no bonus
+	}
+	return info.Multiplier
+}
+
+// RecordWarDeclarationBurn records a war declaration burn in the BuybackEngine.
+func (trm *TokenRewardManager) RecordWarDeclarationBurn(countryCode string, amount float64, warType WarType) {
+	if trm.buybackEngine == nil {
+		return
+	}
+	reason := fmt.Sprintf("war_declaration_%s", warType)
+	_, err := trm.buybackEngine.ExecuteWarVictoryBurn(countryCode, amount/blockchain.BurnRateOnVictory)
+	if err != nil {
+		slog.Warn("war declaration burn failed",
+			"country", countryCode,
+			"amount", amount,
+			"warType", warType,
+			"error", err,
+		)
+		return
+	}
+	slog.Info("war declaration burn recorded",
+		"country", countryCode,
+		"amount", amount,
+		"reason", reason,
+	)
 }

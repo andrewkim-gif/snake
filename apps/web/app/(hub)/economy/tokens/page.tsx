@@ -19,8 +19,8 @@ import { SK, SKFont, headingFont, bodyFont, grid } from '@/lib/sketch-ui';
 import { DashPanel, CountryFilterBadge } from '@/components/hub';
 import { TrendingUp, BarChart3, Layers, Shield, Flame } from 'lucide-react';
 
-import { fetchGdpData, fetchCountries } from '@/lib/api-client';
-import type { GdpEntry, CountryEconomy } from '@/lib/api-client';
+import { fetchGdpData, fetchCountries, fetchBuybackHistory, fetchBurnHistory, fetchTokenPrice, fetchDefenseMultipliers } from '@/lib/api-client';
+import type { GdpEntry, CountryEconomy, BuybackEntry, BurnEntry, TokenPriceData, DefenseMultiplierData } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
 
@@ -56,6 +56,28 @@ function TokensPageInner() {
     { refreshInterval: 30000 },
   );
 
+  // v30 Task 1-9: 바이백/소각 실데이터 API 연동
+  const { data: buybackData } = useApiData(
+    () => fetchBuybackHistory(50),
+    { refreshInterval: 30000 },
+  );
+  const { data: burnData } = useApiData(
+    () => fetchBurnHistory(50),
+    { refreshInterval: 30000 },
+  );
+
+  // v30 Task 2-3: $AWW 가격 피드
+  const { data: tokenPrice } = useApiData(
+    fetchTokenPrice,
+    { refreshInterval: 60000 },
+  );
+
+  // v30 Task 2-5: 서버 defense multiplier 실데이터
+  const { data: defenseData } = useApiData(
+    fetchDefenseMultipliers,
+    { refreshInterval: 30000 },
+  );
+
   // GDP + countries 데이터를 조합하여 기존 mock 형식에 맞게 변환
   const data = useMemo(() => {
     const gdpList = gdpEntries || [];
@@ -67,16 +89,24 @@ function TokensPageInner() {
       gdpMap.set(g.iso3, g);
     }
 
-    // marketCapData: GDP/countries 데이터로 생성
+    // v30 Task 2-4: GDP x $AWW price 기반 market cap (가격 없으면 GDP 직접 매핑 유지)
+    const awwPrice = tokenPrice?.price ?? 0;
+    const defMultipliers = defenseData?.multipliers ?? {};
+
     const marketCapData = gdpList.map((g) => {
       const tier = g.tier || 'C';
+      // v30 Task 2-4: 실제 가격이 있으면 GDP * price, 없으면 GDP 그대로
+      const marketCap = awwPrice > 0 ? (g.gdp || 0) * awwPrice : (g.gdp || 0);
+      // v30 Task 2-5: 서버 defense 실데이터가 있으면 사용
+      const serverDefense = defMultipliers[g.iso3];
+      const defenseMultiplier = serverDefense?.multiplier ?? (TIER_DEFENSE[tier] || 10000);
       return {
         iso3: g.iso3,
         name: g.name || `${g.iso3} Nation`,
         tier,
-        marketCap: g.gdp || 0,
+        marketCap,
         change24h: g.gdpGrowth || 0,
-        defenseMultiplier: TIER_DEFENSE[tier] || 10000,
+        defenseMultiplier,
       };
     });
 
@@ -95,22 +125,22 @@ function TokensPageInner() {
       };
     });
 
-    // buybacks / burns: 서버 API 미존재, 추후 추가
-    const buybacks: Array<{
-      iso3: string;
-      gdpTaxAmount: number;
-      tokensReceived: number;
-      timestamp: number;
-    }> = [];
-    const burns: Array<{
-      iso3: string;
-      amount: number;
-      reason: string;
-      timestamp: number;
-    }> = [];
+    // v30 Task 1-9: 서버 API에서 실데이터를 가져옵니다
+    const buybacks = (buybackData ?? []).map((b: BuybackEntry) => ({
+      iso3: b.iso3,
+      gdpTaxAmount: b.gdpTaxAmount,
+      tokensReceived: b.tokensReceived,
+      timestamp: new Date(b.timestamp).getTime(),
+    }));
+    const burns = (burnData ?? []).map((b: BurnEntry) => ({
+      iso3: b.iso3,
+      amount: b.amount,
+      reason: b.reason,
+      timestamp: new Date(b.timestamp).getTime(),
+    }));
 
     return { marketCapData, stakingData, buybacks, burns };
-  }, [gdpEntries, countries]);
+  }, [gdpEntries, countries, buybackData, burnData, tokenPrice, defenseData]);
 
   const stats = useMemo(() => {
     if (!data) return null;
@@ -178,19 +208,65 @@ function TokensPageInner() {
     >
       {/* Header */}
       <header style={{ marginBottom: 24 }}>
-        <h1
-          style={{
-            fontFamily: headingFont,
-            fontSize: SKFont.h1,
-            color: SK.gold,
-            margin: 0,
-          }}
-        >
-          {tEconomy('tokenEconomy')}
-        </h1>
-        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tEconomy('tokenEconomyDesc')}
-        </p>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '12px' }}>
+          <div>
+            <h1
+              style={{
+                fontFamily: headingFont,
+                fontSize: SKFont.h1,
+                color: SK.gold,
+                margin: 0,
+              }}
+            >
+              Token Economy
+            </h1>
+            <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+              Country token overview, supply and market data
+            </p>
+          </div>
+
+          {/* v30 Task 2-3: $AWW Price Widget */}
+          <div style={{
+            background: SK.cardBg,
+            border: `1px solid ${SK.border}`,
+            borderRadius: 0,
+            padding: '12px 20px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '16px',
+            minWidth: '240px',
+          }}>
+            <div>
+              <div style={{ fontFamily: headingFont, fontSize: '11px', color: SK.textMuted, letterSpacing: '1px', marginBottom: '2px' }}>
+                $AWW PRICE
+              </div>
+              {tokenPrice && tokenPrice.source !== 'unavailable' ? (
+                <div style={{ display: 'flex', alignItems: 'baseline', gap: '8px' }}>
+                  <span style={{ fontFamily: headingFont, fontSize: '20px', color: SK.textPrimary, fontWeight: 700 }}>
+                    ${tokenPrice.price < 0.01 ? tokenPrice.price.toFixed(6) : tokenPrice.price.toFixed(4)}
+                  </span>
+                  <span style={{
+                    fontFamily: bodyFont,
+                    fontSize: '12px',
+                    fontWeight: 600,
+                    color: tokenPrice.change24h >= 0 ? SK.green : SK.red,
+                  }}>
+                    {tokenPrice.change24h >= 0 ? '+' : ''}{tokenPrice.change24h.toFixed(1)}%
+                  </span>
+                </div>
+              ) : (
+                <span style={{ fontFamily: bodyFont, fontSize: '13px', color: SK.textMuted }}>
+                  Price unavailable
+                </span>
+              )}
+              {tokenPrice && tokenPrice.source !== 'unavailable' && (
+                <div style={{ fontFamily: bodyFont, fontSize: '10px', color: SK.textMuted, marginTop: '2px' }}>
+                  Source: {tokenPrice.source === 'forge' ? 'Forge Pool' : 'GDP Simulation'}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
       </header>
 
       {/* Tab content */}

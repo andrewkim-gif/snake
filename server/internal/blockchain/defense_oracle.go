@@ -85,6 +85,10 @@ type DefenseOracle struct {
 
 	// Callback: invoked when a country's defense multiplier changes
 	OnDefenseChanged func(iso3 string, multiplier uint64)
+
+	// v30 Task 2-2: Forge price feed
+	forgePrice          float64
+	forgePriceAvailable bool
 }
 
 // NewDefenseOracle creates a new DefenseOracle
@@ -293,14 +297,43 @@ type TWAPResult struct {
 	Timestamp int64   `json:"timestamp"`
 }
 
+// SetSimulatedGDP sets a simulated GDP value for a country (used in simulation mode).
+// v30 Task 1-3: RPC 없을 때 GDP 기반 방어력 계산 폴백을 제공합니다.
+func (o *DefenseOracle) SetSimulatedGDP(iso3 string, gdp float64) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+
+	state, ok := o.states[iso3]
+	if !ok {
+		return
+	}
+
+	// GDP를 시뮬레이션된 시가총액으로 변환합니다 (GDP * 100 = 시뮬레이션 마켓캡)
+	simulatedMarketCap := gdp * 100.0
+	state.MarketCap = simulatedMarketCap
+	state.DefenseMultiplier = calcMultiplier(simulatedMarketCap)
+	state.LastUpdated = time.Now()
+}
+
+// IsSimulationMode returns true if the oracle is running without RPC.
+func (o *DefenseOracle) IsSimulationMode() bool {
+	return o.rpcURL == ""
+}
+
 // batchQueryMarketCaps queries CROSS RPC for TWAP market caps of all countries
 func (o *DefenseOracle) batchQueryMarketCaps(isoList []string) (map[string]float64, error) {
 	if o.rpcURL == "" {
-		// Fallback: return zero caps (no RPC configured)
+		// v30 Task 1-3: 시뮬레이션 모드 — 기존 GDP 기반 시뮬레이션 값을 반환합니다
 		result := make(map[string]float64, len(isoList))
+		o.mu.RLock()
 		for _, iso := range isoList {
-			result[iso] = 0
+			if state, ok := o.states[iso]; ok {
+				result[iso] = state.MarketCap // SetSimulatedGDP로 설정된 값
+			} else {
+				result[iso] = 0
+			}
 		}
+		o.mu.RUnlock()
 		return result, nil
 	}
 
@@ -350,24 +383,54 @@ func (o *DefenseOracle) batchQueryMarketCaps(isoList []string) (map[string]float
 	return caps, nil
 }
 
+// DefenseBuffCap is the maximum defense buff percentage.
+// v30 Task 1-3: 티어 테이블과 일치하도록 조정합니다.
+// defenseTiers에서 최대 5.0x (50000bp)이므로 buff cap을 그에 맞게 설정합니다.
+// 5.0x 기준: (50000-10000)/10000 = 4.0 → buff cap 0.30 유지 (보상 발행 억제 목적)
+const DefenseBuffCap = 0.30
+
 // ApplyDefenseBuff calculates the actual defense buff percentage for a CountryArena.
 // Returns the buff as a float64 (e.g., 0.15 = +15% defense)
-// Max cap: +30% (0.30)
+// v30 Task 1-3: 방어 버프 캡을 티어 테이블과 일관되게 적용합니다.
 func (o *DefenseOracle) ApplyDefenseBuff(iso3 string) float64 {
 	multiplier := o.GetDefenseMultiplier(iso3)
 	// Convert basis points to buff percentage
 	// 10000 bp = 1.0x = +0%
-	// 15000 bp = 1.5x = +50% (but capped at 30%)
+	// 15000 bp = 1.5x = +50% (but capped at DefenseBuffCap)
 	buff := float64(multiplier-10000) / 10000.0
 
-	// Cap at +30%
-	if buff > 0.30 {
-		buff = 0.30
+	if buff > DefenseBuffCap {
+		buff = DefenseBuffCap
 	}
 	if buff < 0 {
 		buff = 0
 	}
 	return buff
+}
+
+// SetForgePrice feeds the Forge $AWW price into the DefenseOracle.
+// v30 Task 2-2: When Forge price is available, market caps are scaled by real price.
+// When Forge fails, simulation GDP-based pricing continues transparently.
+func (o *DefenseOracle) SetForgePrice(price float64) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.forgePrice = price
+	o.forgePriceAvailable = true
+}
+
+// ClearForgePrice reverts to simulation mode pricing.
+func (o *DefenseOracle) ClearForgePrice() {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.forgePriceAvailable = false
+	o.forgePrice = 0
+}
+
+// GetForgePrice returns current forge price and availability.
+func (o *DefenseOracle) GetForgePrice() (float64, bool) {
+	o.mu.RLock()
+	defer o.mu.RUnlock()
+	return o.forgePrice, o.forgePriceAvailable
 }
 
 // DefenseStats returns aggregated statistics for all tracked countries

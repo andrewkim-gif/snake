@@ -11,10 +11,10 @@ import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { FilterBar, DetailModal } from '@/components/hub';
-import { fetchCouncilProposals, postCouncilVote, CouncilProposal } from '@/lib/api-client';
+import { fetchCouncilProposals, postCouncilVote, fetchPlayerTokenBalance, CouncilProposal } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
-// lucide-react icons removed — 대시보드 스타일에서 StatCard 제거로 불필요
+import { useWalletStore } from '@/stores/wallet-store';
 import type { Proposal, ProposalStatus, ProposalType } from '@/components/governance/types';
 
 const ProposalList = dynamic(
@@ -55,11 +55,20 @@ function GovernancePageInner() {
   const tGov = useTranslations('governance');
   const searchParams = useSearchParams();
   const countryCode = searchParams.get('country');
+  const walletStore = useWalletStore();
 
   const { data: rawProposals, loading, refetch } = useApiData(
     () => fetchCouncilProposals(countryCode?.toUpperCase()),
     { refreshInterval: 30000 },
   );
+
+  // v30 Task 2-11: 서버에서 실제 토큰 잔고 조회 (하드코딩 제거)
+  const playerId = walletStore.isConnected ? walletStore.address : 'local-user';
+  const { data: tokenBalanceData } = useApiData(
+    () => fetchPlayerTokenBalance(playerId),
+    { refreshInterval: 15000 },
+  );
+  const userTokenBalance = tokenBalanceData?.balance ?? 0;
 
   const proposals = useMemo(() => (rawProposals || []).map(toProposal), [rawProposals]);
 
@@ -130,10 +139,10 @@ function GovernancePageInner() {
             margin: 0,
           }}
         >
-          {tGov('title')}
+          Governance
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tGov('subtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
+          Council proposals, voting, and policy decisions{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
         </p>
       </header>
 
@@ -171,7 +180,7 @@ function GovernancePageInner() {
         {selectedProposal && (
           <VoteInterface
             proposal={selectedProposal}
-            userTokenBalance={10000}
+            userTokenBalance={userTokenBalance}
             onVote={handleVote}
             onWithdraw={handleWithdraw}
           />

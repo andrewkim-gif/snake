@@ -39,6 +39,10 @@ var WarDeclarationCost = ResourceBundle{
 	Oil:       500,
 }
 
+// AWWWarDeclarationCost is the $AWW point cost for a standard war declaration.
+// v30 Task 1-12: 소규모 전쟁 기본 비용. 전쟁 유형에 따라 game.WarCostSmall/Large/Economic 사용.
+const AWWWarDeclarationCost = 500.0
+
 // WarRecord is the full war record extending the base War struct.
 type WarRecord struct {
 	ID              string       `json:"id"`
@@ -101,6 +105,23 @@ type WarManager struct {
 	// v18: EventLog callbacks for live news feed
 	OnWarDeclared func(attackerName, defenderName string)
 	OnWarEnded    func(winnerName, loserName, reason string)
+
+	// v30 Task 1-12: $AWW 포인트 잔고 추적 (전쟁 선포 비용)
+	awwBalanceTracker AWWBalanceChecker
+}
+
+// AWWBalanceChecker is an interface for checking/deducting AWW point balances.
+// v30 Task 1-12: game.PlayerAWWBalance가 이 인터페이스를 구현합니다.
+type AWWBalanceChecker interface {
+	GetBalance(playerID string) float64
+	DeductBalance(playerID string, amount float64) error
+}
+
+// SetAWWBalanceTracker sets the AWW balance tracker.
+func (wm *WarManager) SetAWWBalanceTracker(tracker AWWBalanceChecker) {
+	wm.mu.Lock()
+	defer wm.mu.Unlock()
+	wm.awwBalanceTracker = tracker
 }
 
 // NewWarManager creates a new WarManager.
@@ -146,6 +167,18 @@ func (wm *WarManager) DeclareWar(attackerID, defenderID string) (*WarRecord, err
 		if err != nil {
 			return nil, fmt.Errorf("insufficient resources: %w", err)
 		}
+	}
+
+	// v30 Task 1-12: $AWW 포인트 소각 비용 (전쟁 선포 시)
+	if wm.awwBalanceTracker != nil {
+		awwCost := AWWWarDeclarationCost
+		if err := wm.awwBalanceTracker.DeductBalance(attackerID, awwCost); err != nil {
+			return nil, fmt.Errorf("insufficient AWW points for war declaration: %w", err)
+		}
+		slog.Info("war declaration AWW cost deducted",
+			"attacker", attackerID,
+			"cost", awwCost,
+		)
 	}
 
 	now := time.Now()

@@ -302,3 +302,175 @@ export async function fetchAgents(apiKey: string): Promise<Record<string, unknow
   });
   return data?.agents ?? [];
 }
+
+// ── v30 Task 1-8: Token Rewards / Buyback / Defense API ──
+
+export interface TokenReward {
+  id: string;
+  playerId: string;
+  playerName: string;
+  rewardType: string;
+  tokenType: string;
+  countryCode: string;
+  amount: number;
+  reason: string;
+  timestamp: number;
+  txHash?: string;
+  pending: boolean;
+}
+
+export interface BuybackEntry {
+  iso3: string;
+  gdpTaxAmount: number;
+  tokensReceived: number;
+  txHash?: string;
+  timestamp: string;
+}
+
+export interface BurnEntry {
+  iso3: string;
+  amount: number;
+  reason: string;
+  txHash?: string;
+  timestamp: string;
+}
+
+export interface DefenseMultiplierData {
+  multipliers: Record<string, {
+    multiplier: number;
+    marketCap: number;
+    frozen: boolean;
+    lastUpdated: string;
+  }>;
+}
+
+export interface BuybackStatsData {
+  totalBuybackValue: number;
+  totalBurnedValue: number;
+  totalBuybackCount: number;
+  totalBurnCount: number;
+  activeCountries: number;
+}
+
+export interface DefenseStatsData {
+  totalCountries: number;
+  frozenCountries: number;
+  avgMultiplier: number;
+  maxMultiplier: number;
+  maxIso3: string;
+  totalMarketCap: number;
+}
+
+/** 플레이어의 보상 내역을 조회합니다. */
+export async function fetchRewards(playerId: string, limit = 50): Promise<TokenReward[]> {
+  const data = await apiFetch<TokenReward[]>(`/api/v14/rewards/${playerId}?limit=${limit}`);
+  return data ?? [];
+}
+
+/** 바이백 이력을 조회합니다. */
+export async function fetchBuybackHistory(limit = 50): Promise<BuybackEntry[]> {
+  const data = await apiFetch<{ history: BuybackEntry[] }>(`/api/buyback/history?limit=${limit}`);
+  return data?.history ?? [];
+}
+
+/** 소각 이력을 조회합니다. */
+export async function fetchBurnHistory(limit = 50): Promise<BurnEntry[]> {
+  const data = await apiFetch<{ burns: BurnEntry[] }>(`/api/buyback/burns?limit=${limit}`);
+  return data?.burns ?? [];
+}
+
+/** 바이백 통계를 조회합니다. */
+export async function fetchBuybackStats(): Promise<BuybackStatsData | null> {
+  return apiFetch<BuybackStatsData>('/api/buyback/stats');
+}
+
+/** 방어 배율 정보를 조회합니다. */
+export async function fetchDefenseMultipliers(): Promise<DefenseMultiplierData | null> {
+  return apiFetch<DefenseMultiplierData>('/api/defense/multipliers');
+}
+
+/** 방어 통계를 조회합니다. */
+export async function fetchDefenseStats(): Promise<DefenseStatsData | null> {
+  return apiFetch<DefenseStatsData>('/api/defense/stats');
+}
+
+// ── v30 Phase 2: Token Price ──
+
+export interface TokenPriceData {
+  price: number;
+  volume24h: number;
+  change24h: number;
+  marketCap: number;
+  source: 'forge' | 'simulation' | 'unavailable';
+  updatedAt: number;
+}
+
+/** $AWW 토큰 가격을 조회합니다. (Task 2-3) */
+export async function fetchTokenPrice(): Promise<TokenPriceData | null> {
+  return apiFetch<TokenPriceData>('/api/token/price');
+}
+
+/** $AWW 토큰 가격 이력을 조회합니다. */
+export async function fetchTokenPriceHistory(limit = 100): Promise<TokenPriceData[]> {
+  const data = await apiFetch<{ history: TokenPriceData[] }>(`/api/token/price/history?limit=${limit}`);
+  return data?.history ?? [];
+}
+
+// ── v30 Phase 2: Player Token Balance (Task 2-11) ──
+
+export interface PlayerTokenBalanceData {
+  playerId: string;
+  balance: number;
+  token: string;
+}
+
+/** 플레이어의 $AWW 토큰 잔고를 조회합니다. */
+export async function fetchPlayerTokenBalance(playerId: string): Promise<PlayerTokenBalanceData | null> {
+  return apiFetch<PlayerTokenBalanceData>(`/api/v14/token-balance/${playerId}`);
+}
+
+// ── v30 Phase 2: Staking (Task 2-16) ──
+
+export interface StakingStatusData {
+  playerId: string;
+  amount: number;
+  stakedAt: number;
+  seasonEnd: number;
+  multiplier: number;
+  canWithdraw: boolean;
+  penaltyRate: number;
+  staked?: boolean;
+}
+
+/** 플레이어의 스테이킹 상태를 조회합니다. */
+export async function fetchStakingStatus(playerId: string): Promise<StakingStatusData | null> {
+  return apiFetch<StakingStatusData>(`/api/staking/status/${playerId}`);
+}
+
+// ── v30 Phase 2: Auction (Task 2-17) ──
+
+export interface AuctionData {
+  id: string;
+  countryIso: string;
+  countryName: string;
+  tier: string;
+  status: string;
+  minBid: number;
+  currentBid: number;
+  topBidder: string;
+  topFaction: string;
+  bids: Array<{
+    bidderId: string;
+    factionId: string;
+    amount: number;
+    timestamp: number;
+  }>;
+  startedAt: number;
+  endsAt: number;
+}
+
+/** 활성 경매 목록을 조회합니다. */
+export async function fetchAuctions(): Promise<AuctionData[]> {
+  const data = await apiFetch<{ auctions: AuctionData[] }>('/api/auction/list');
+  return data?.auctions ?? [];
+}

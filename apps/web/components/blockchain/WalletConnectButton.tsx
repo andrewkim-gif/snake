@@ -1,70 +1,90 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
+import { useWalletStore } from '@/stores/wallet-store';
 import {
   CROSSX_LINKS,
   isCrossxAvailable,
   openCrossx,
-  type WalletState,
 } from '@/lib/crossx-config';
 
+/** 연결 시도 타임아웃 (5초) */
+const CONNECT_TIMEOUT_MS = 5000;
+
 interface WalletConnectButtonProps {
-  onConnect?: (wallet: WalletState) => void;
+  onConnect?: (address: string) => void;
   onDisconnect?: () => void;
   className?: string;
 }
 
 /**
  * CROSSx Wallet Connect Button
- * Deep links to CROSSx Super App for wallet connection
+ * zustand 글로벌 스토어(useWalletStore)를 사용하여 지갑 연결 상태를 관리합니다.
+ * 5초 타임아웃 + 언마운트 시 클린업을 포함합니다.
  */
 export default function WalletConnectButton({
   onConnect,
   onDisconnect,
   className = '',
 }: WalletConnectButtonProps) {
-  const [wallet, setWallet] = useState<WalletState | null>(null);
-  const [connecting, setConnecting] = useState(false);
+  const { address, isConnected, isConnecting, connect, disconnect, setConnecting } =
+    useWalletStore();
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const handleConnect = useCallback(() => {
-    if (wallet) {
-      // Disconnect
-      setWallet(null);
+  // 언마운트 시 타이머 클린업
+  useEffect(() => {
+    return () => {
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, []);
+
+  // 연결 성공 시 콜백 호출
+  useEffect(() => {
+    if (isConnected && address) {
+      onConnect?.(address);
+    }
+  }, [isConnected, address, onConnect]);
+
+  const handleClick = useCallback(() => {
+    if (isConnected) {
+      // 연결 해제
+      disconnect();
       onDisconnect?.();
       return;
     }
 
-    setConnecting(true);
+    if (isConnecting) return;
 
     if (isCrossxAvailable()) {
-      // Deep link to CROSSx app
+      // CROSSx 딥링크 (Phase 3+에서 콜백 처리 추가 예정)
       const callbackUrl = typeof window !== 'undefined' ? window.location.href : '';
       openCrossx(CROSSX_LINKS.connect(callbackUrl));
+      setConnecting(true);
     } else {
-      // Simulate connection for dev/demo
-      setTimeout(() => {
-        const mockWallet: WalletState = {
-          connected: true,
-          address: '0x' + Array.from({ length: 40 }, () =>
-            Math.floor(Math.random() * 16).toString(16)
-          ).join(''),
-          chainId: 0,
-          balance: '0',
-        };
-        setWallet(mockWallet);
-        onConnect?.(mockWallet);
-        setConnecting(false);
-      }, 1000);
+      // Mock 모드: zustand 스토어의 connect() 사용
+      connect();
     }
-  }, [wallet, onConnect, onDisconnect]);
+
+    // 5초 타임아웃: 연결 중 상태가 계속되면 자동으로 해제합니다
+    timeoutRef.current = setTimeout(() => {
+      const state = useWalletStore.getState();
+      if (state.isConnecting) {
+        setConnecting(false);
+      }
+      timeoutRef.current = null;
+    }, CONNECT_TIMEOUT_MS);
+  }, [isConnected, isConnecting, connect, disconnect, setConnecting, onDisconnect]);
 
   const shortenAddress = (addr: string) =>
     `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 
   return (
     <button
-      onClick={handleConnect}
-      disabled={connecting}
+      onClick={handleClick}
+      disabled={isConnecting}
       className={className}
       style={{
         display: 'flex',
@@ -72,17 +92,17 @@ export default function WalletConnectButton({
         gap: '8px',
         padding: '8px 16px',
         borderRadius: 0,
-        border: wallet ? '1px solid #4A9E4A' : '1px solid #CC9933',
-        background: wallet
+        border: isConnected ? '1px solid #4A9E4A' : '1px solid #CC9933',
+        background: isConnected
           ? 'rgba(74, 158, 74, 0.15)'
           : 'rgba(204, 153, 51, 0.15)',
-        color: wallet ? '#4A9E4A' : '#CC9933',
+        color: isConnected ? '#4A9E4A' : '#CC9933',
         fontFamily: '"Rajdhani", sans-serif',
         fontWeight: 600,
         fontSize: '14px',
-        cursor: connecting ? 'wait' : 'pointer',
+        cursor: isConnecting ? 'wait' : 'pointer',
         transition: 'all 0.2s ease',
-        opacity: connecting ? 0.6 : 1,
+        opacity: isConnecting ? 0.6 : 1,
       }}
     >
       {/* Wallet icon */}
@@ -92,10 +112,10 @@ export default function WalletConnectButton({
         <circle cx="11" cy="9" r="1.5" fill="currentColor" />
       </svg>
 
-      {connecting
+      {isConnecting
         ? 'Connecting...'
-        : wallet
-          ? shortenAddress(wallet.address)
+        : isConnected
+          ? shortenAddress(address)
           : 'Connect CROSSx'}
     </button>
   );

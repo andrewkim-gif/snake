@@ -22,8 +22,10 @@ import type { TokenBalance, StakingInfo } from '@/lib/crossx-config';
 import { CivilizationPanel } from '@/components/civilization/CivilizationPanel';
 import type { NationStatsData } from '@/components/civilization/StatsChart';
 import type { CountryPoliciesData, PolicyCategory } from '@/components/civilization/PolicyManager';
-import { fetchCouncilProposals, fetchGdpData, fetchFactions, fetchWorldStatus, type CouncilProposal, type GdpEntry, type FactionSummary, type WorldStatusData } from '@/lib/api-client';
+import { fetchCouncilProposals, fetchGdpData, fetchFactions, fetchWorldStatus, fetchPlayerTokenBalance, type CouncilProposal, type GdpEntry, type FactionSummary, type WorldStatusData } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
+import { useWalletStore } from '@/stores/wallet-store';
+import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import { KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 
 // ─── Types ───────────────────────────────────────────────
@@ -480,9 +482,34 @@ function OverviewTab({ country }: { country: CountryClientState }) {
 }
 
 /** TOKEN 탭 — CountryTokenInfo + StakingPanel 축소 연결 */
+/** v30 Task 2-12: 지갑 미연결 시 "Connect Wallet" 표시 */
 function TokenTab({ country, gdpData }: { country: CountryClientState; gdpData: GdpEntry[] | null }) {
+  const walletStore = useWalletStore();
   const token = getTokenBalance(country, gdpData);
   const stakingInfo = getStakingInfo(country, gdpData);
+
+  // v30 Task 2-12: 지갑 미연결 시 Connect Wallet 게이트
+  if (!walletStore.isConnected) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: '16px',
+        padding: '32px 16px',
+        textAlign: 'center',
+      }}>
+        <Coins size={32} style={{ color: SK.gold, opacity: 0.5 }} />
+        <div style={{ fontFamily: headingFont, fontSize: '14px', color: SK.textSecondary, letterSpacing: '0.5px' }}>
+          Connect your wallet to view token data and stake
+        </div>
+        <WalletConnectButton onConnect={() => {}} onDisconnect={() => {}} />
+      </div>
+    );
+  }
+
+  const treasuryAddr = walletStore.address || '0x0000000000000000000000000000000000000000';
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -496,7 +523,7 @@ function TokenTab({ country, gdpData }: { country: CountryClientState; gdpData: 
         tokenSymbol={country.iso3.slice(0, 3)}
         stakingInfo={stakingInfo}
         userBalance={token.balance}
-        treasuryAddress="0x0000000000000000000000000000000000000000"
+        treasuryAddress={treasuryAddr}
         defenseMultiplier={token.defenseMultiplier}
       />
 
@@ -519,8 +546,16 @@ function TokenTab({ country, gdpData }: { country: CountryClientState; gdpData: 
 }
 
 /** VOTE 탭 — ProposalList + VoteInterface 인라인 */
+/** v30 Task 2-11/2-12: 서버에서 실제 토큰 잔고 조회 */
 function VoteTab({ country, proposals }: { country: CountryClientState; proposals: Proposal[] }) {
   const [selectedProposal, setSelectedProposal] = useState<Proposal | null>(null);
+  const walletStore = useWalletStore();
+  const playerId = walletStore.isConnected ? walletStore.address : 'local-user';
+  const { data: tokenBalanceData } = useApiData(
+    () => fetchPlayerTokenBalance(playerId),
+    { refreshInterval: 15000 },
+  );
+  const userTokenBalance = tokenBalanceData?.balance ?? 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
@@ -551,7 +586,7 @@ function VoteTab({ country, proposals }: { country: CountryClientState; proposal
           </button>
           <VoteInterface
             proposal={selectedProposal}
-            userTokenBalance={10000}
+            userTokenBalance={userTokenBalance}
           />
         </>
       )}

@@ -20,10 +20,11 @@ import {
   fetchPlayerAchievements,
   fetchGdpData,
   fetchCountries,
+  fetchRewards,
   getServerUrl,
   isServerAvailable,
 } from '@/lib/api-client';
-import type { PlayerAccount, PlayerAchievement, GdpEntry, CountryEconomy } from '@/lib/api-client';
+import type { PlayerAccount, PlayerAchievement, GdpEntry, CountryEconomy, TokenReward } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
 
@@ -85,6 +86,13 @@ export default function ProfilePage() {
   const { data: gdpData } = useApiData(() => fetchGdpData());
   const { data: countries } = useApiData(() => fetchCountries());
 
+  // v30 Task 2-6/2-7: 토큰 보상 이력 (playerId = wallet address 또는 서버 할당 ID)
+  const playerId = walletStore.isConnected ? walletStore.address : 'local-user';
+  const { data: rewardHistory } = useApiData(
+    () => fetchRewards(playerId, 20),
+    { refreshInterval: 30000 },
+  );
+
   const profile = account || DEFAULT_PROFILE;
 
   // GDP/countries 데이터를 조합하여 토큰 잔액 생성
@@ -135,7 +143,7 @@ export default function ProfilePage() {
               margin: 0,
             }}
           >
-            {tProfile('title')}
+            Profile
           </h1>
           <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>...</p>
         </header>
@@ -177,7 +185,7 @@ export default function ProfilePage() {
               margin: 0,
             }}
           >
-            {tProfile('title')}
+            Profile
           </h1>
           <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
             {profile.name} — {profile.faction} [{profile.factionTag}]
@@ -393,6 +401,86 @@ export default function ProfilePage() {
               </div>
             )}
           </div>
+        </div>
+
+        {/* v30 Task 2-6: Token Reward History */}
+        <div style={{
+          background: SK.cardBg,
+          border: sketchBorder(),
+          borderRadius: 0,
+          padding: 24,
+          boxShadow: sketchShadow('md'),
+          marginBottom: 16,
+        }}>
+          <h3 style={{
+            fontFamily: headingFont,
+            fontSize: '16px',
+            color: SK.textPrimary,
+            margin: 0,
+            marginBottom: 16,
+            letterSpacing: '1px',
+          }}>
+            {tProfile('rewardHistory') ?? 'Token Reward History'}
+          </h3>
+
+          {rewardHistory && rewardHistory.length > 0 ? (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', maxHeight: '300px', overflowY: 'auto' }}>
+              {rewardHistory.map((reward: TokenReward, idx: number) => {
+                const date = new Date(reward.timestamp);
+                const dateStr = date.toLocaleDateString('en-US', {
+                  month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+                });
+                const typeColor = reward.rewardType === 'domination' ? SK.gold
+                  : reward.rewardType === 'hegemony' ? SK.blue
+                  : reward.rewardType === 'sovereignty' ? SK.green
+                  : SK.orange;
+                return (
+                  <div key={reward.id || idx} style={{
+                    display: 'grid',
+                    gridTemplateColumns: '90px 80px 1fr auto',
+                    gap: '8px',
+                    alignItems: 'center',
+                    padding: '6px 10px',
+                    background: SK.bgWarm,
+                    borderLeft: `3px solid ${typeColor}`,
+                    borderRadius: 0,
+                  }}>
+                    <span style={{ fontFamily: bodyFont, fontSize: SKFont.xs, color: SK.textMuted }}>{dateStr}</span>
+                    <span style={{
+                      fontFamily: bodyFont,
+                      fontSize: '10px',
+                      fontWeight: 700,
+                      color: typeColor,
+                      textTransform: 'uppercase',
+                    }}>
+                      {reward.rewardType}
+                    </span>
+                    <span style={{ fontFamily: bodyFont, fontSize: SKFont.xs, color: SK.textSecondary }}>
+                      {reward.reason?.slice(0, 40) || `${reward.tokenType} reward`}
+                    </span>
+                    <span style={{
+                      fontFamily: headingFont,
+                      fontSize: '13px',
+                      fontWeight: 700,
+                      color: SK.green,
+                    }}>
+                      +{reward.amount.toFixed(1)} ${reward.tokenType}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div style={{
+              fontFamily: bodyFont,
+              fontSize: SKFont.sm,
+              color: SK.textMuted,
+              textAlign: 'center',
+              padding: 24,
+            }}>
+              {tProfile('noRewards') ?? 'No token rewards yet. Play to earn!'}
+            </div>
+          )}
         </div>
 
         {/* Achievements 섹션 */}
