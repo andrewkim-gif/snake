@@ -197,6 +197,8 @@
     "economicPolicy": "경제 정책",
     "economicPolicyDesc": "국가의 세율, 무역 개방도, 군사비, 기술 투자를 설정하세요",
     "loadingTokens": "토큰 이코노미 데이터 로딩 중...",
+    "noTokenData": "토큰 이코노미 데이터가 아직 없습니다",
+    "noTokenDataDesc": "시즌이 시작되면 GDP 데이터가 표시됩니다.",
     "loadingPolicy": "정책 로딩 중...",
     "highlighted": "하이라이트: {country}",
     "clear": "해제",

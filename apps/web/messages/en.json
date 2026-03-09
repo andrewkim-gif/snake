@@ -197,6 +197,8 @@
     "economicPolicy": "ECONOMIC POLICY",
     "economicPolicyDesc": "Configure tax rates, trade openness, military spending, and tech investment for your nation",
     "loadingTokens": "Loading token economy data...",
+    "noTokenData": "Token economy data not available yet",
+    "noTokenDataDesc": "GDP data will appear once the game season starts.",
     "loadingPolicy": "Loading policy...",
     "highlighted": "Highlighted: {country}",
     "clear": "Clear",

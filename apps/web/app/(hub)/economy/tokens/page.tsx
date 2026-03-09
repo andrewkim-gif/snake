@@ -123,7 +123,7 @@ function TokensPageInner() {
 
   const isLoading = gdpLoading || countriesLoading;
 
-  if (isLoading || !stats || data.marketCapData.length === 0) {
+  if (isLoading) {
     return (
       <div
         style={{
@@ -137,6 +137,31 @@ function TokensPageInner() {
         }}
       >
         {tEconomy('loadingTokens')}
+      </div>
+    );
+  }
+
+  if (!stats || data.marketCapData.length === 0) {
+    return (
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '50vh',
+          color: SK.textSecondary,
+          fontFamily: bodyFont,
+          gap: '12px',
+        }}
+      >
+        <TrendingUp size={32} style={{ color: SK.orange, opacity: 0.5 }} />
+        <span style={{ fontSize: '16px', fontWeight: 600 }}>
+          {tEconomy('noTokenData') ?? 'Token economy data not available yet'}
+        </span>
+        <span style={{ fontSize: '13px', color: SK.textTertiary }}>
+          {tEconomy('noTokenDataDesc') ?? 'GDP data will appear once the game season starts.'}
+        </span>
       </div>
     );
   }
