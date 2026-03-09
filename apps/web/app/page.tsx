@@ -56,6 +56,11 @@ const MatrixCanvas = dynamic(
   () => import('@/components/game/matrix/MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
   { ssr: false },
 );
+// v28: Matrix 인트로 연출
+const MatrixIntro = dynamic(
+  () => import('@/components/game/matrix/MatrixIntro').then(m => ({ default: m.MatrixIntro })),
+  { ssr: false },
+);
 
 const NEWS_FEED_HEIGHT = 36;
 
@@ -77,6 +82,8 @@ export default function Home() {
 
   // v17: 시네마틱 인트로 상태
   const [introPhase, setIntroPhase] = useState<IntroPhase>('done');
+  // v28: Matrix 인트로 표시 여부
+  const [showMatrixIntro, setShowMatrixIntro] = useState(false);
   const [introComplete, setIntroComplete] = useState(true);
   const [introActive, setIntroActive] = useState(false);
   const [clientReady, setClientReady] = useState(false);
@@ -444,6 +451,18 @@ export default function Home() {
     );
   }
 
+  // --- v28: Matrix 인트로 → 게임 전환 ---
+  if (showMatrixIntro) {
+    return (
+      <MatrixIntro
+        onComplete={() => {
+          setShowMatrixIntro(false);
+          setMode('matrix');
+        }}
+      />
+    );
+  }
+
   // --- v28: Matrix 자동전투 서바이벌 화면 ---
   if (mode === 'matrix') {
     return (
@@ -721,6 +740,35 @@ export default function Home() {
             <Globe size={14} color="#FFFFFF" strokeWidth={2.5} />
             <span>GAME SYSTEM</span>
             <ChevronRight size={14} strokeWidth={2.5} color="#FFFFFF" />
+          </button>
+
+          {/* v28: Enter Matrix 디버그 버튼 */}
+          <button
+            onClick={() => setShowMatrixIntro(true)}
+            style={{
+              position: 'relative',
+              fontFamily: bodyFont,
+              fontWeight: 700,
+              fontSize: '13px',
+              color: '#00FF41',
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              padding: '10px 20px',
+              border: '1px solid rgba(0, 255, 65, 0.4)',
+              borderRadius: 0,
+              backgroundColor: 'rgba(0, 255, 65, 0.1)',
+              cursor: 'pointer',
+              transition: `all ${OVERLAY.transition}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              pointerEvents: 'auto',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              boxShadow: '0 0 20px rgba(0, 255, 65, 0.15), inset 0 1px 0 rgba(0, 255, 65, 0.15)',
+            }}
+          >
+            <span style={{ fontSize: '16px' }}>&#9654;</span>
+            ENTER MATRIX
           </button>
 
           {/* 언어 설정 */}
