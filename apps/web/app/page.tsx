@@ -51,13 +51,18 @@ const IsoCanvas = dynamic(
   () => import('@/components/game/iso/IsoCanvas').then(m => ({ default: m.IsoCanvas })),
   { ssr: false },
 );
+// v28: Matrix 자동전투 서바이벌 캔버스 — dynamic import, ssr: false
+const MatrixCanvas = dynamic(
+  () => import('@/components/game/matrix/MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
+  { ssr: false },
+);
 
 const NEWS_FEED_HEIGHT = 36;
 
 export default function Home() {
   const tLobby = useTranslations('lobby');
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso'>('lobby');
+  const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso' | 'matrix'>('lobby');
   // v26: 아이소메트릭 국가 관리 대상 (Phase 8: spectating 플래그 추가)
   const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string; spectating?: boolean } | null>(null);
   const [playerName, setPlayerName] = useState('');
@@ -434,6 +439,25 @@ export default function Home() {
           countryName={isoCountry.name}
           onBackToGlobe={handleBackToGlobe}
           spectating={isoCountry.spectating}
+        />
+      </div>
+    );
+  }
+
+  // --- v28: Matrix 자동전투 서바이벌 화면 ---
+  if (mode === 'matrix') {
+    return (
+      <div style={{
+        width: '100vw',
+        height: '100vh',
+        opacity: fadeOut ? 0 : 1,
+        transition: 'opacity 300ms ease',
+      }}>
+        <MatrixCanvas
+          onExit={() => {
+            setFadeOut(true);
+            setTimeout(() => { setMode('lobby'); setFadeOut(false); }, 300);
+          }}
         />
       </div>
     );
