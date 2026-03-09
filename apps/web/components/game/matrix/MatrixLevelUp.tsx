@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * MatrixLevelUp.tsx - v29 Phase 5: Level Up Selection Modal
+ * MatrixLevelUp.tsx - v32 Phase 3: Level Up Selection Modal (Apex Tactical Redesign)
  *
  * Adapted from app_ingame/components/LevelUpModal.tsx
  * - WEAPON_DATA / WEAPON_ICONS / config-driven skill system
@@ -9,9 +9,11 @@
  * - Rarity color/icon per skill
  * - Auto-select timer (Vibe Coding)
  * - Keyboard shortcuts (1-4)
- * - Matrix green theme (#00FF41)
+ * - Category color stripes
+ * - apexClip on skill cards
  *
- * v29b: All Tailwind className converted to inline styles.
+ * v32: Full Apex tactical redesign — SK tokens, headingFont/bodyFont, borderRadius:0,
+ *      apexClip, category color stripes. No monospace, no #00FF41.
  */
 
 import React, { useEffect, useState, useCallback, memo } from 'react';
@@ -25,6 +27,22 @@ import {
   Zap, Settings,
 } from 'lucide-react';
 import { soundManager } from '@/lib/matrix/utils/audio';
+import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
+import { OVERLAY } from '@/lib/overlay-tokens';
+import { getWeaponCategory } from '@/lib/matrix/config/skills/progressive-tree.config';
+
+// ============================================
+// Category color mapping for left stripe
+// ============================================
+
+const CATEGORY_STRIPE_COLORS: Record<string, string> = {
+  CODE: '#10B981',
+  DATA: '#06B6D4',
+  NETWORK: '#8B5CF6',
+  SECURITY: '#EF4444',
+  AI: '#F59E0B',
+  SYSTEM: '#EC4899',
+};
 
 // ============================================
 // Re-export interfaces for MatrixApp compatibility
@@ -123,10 +141,14 @@ export const WEAPON_ICONS: Record<string, React.ComponentType<{ size?: number; c
 };
 
 // ============================================
-// Constants
+// Helper: get category stripe color for a weapon
 // ============================================
 
-const MATRIX_GREEN = '#00FF41';
+function getCategoryColor(weaponType: WeaponType): string {
+  const cat = getWeaponCategory(weaponType);
+  if (cat && CATEGORY_STRIPE_COLORS[cat]) return CATEGORY_STRIPE_COLORS[cat];
+  return SK.textMuted;
+}
 
 // ============================================
 // Component
@@ -173,7 +195,6 @@ function MatrixLevelUpInner({
 
   // ─── Generate upgrade options from WEAPON_DATA ───
   const generateOptions = useCallback(() => {
-    // If no currentWeapons, fall back to pre-built options
     if (!currentWeapons) {
       if (fallbackOptions && fallbackOptions.length > 0) {
         const converted: UpgradeOption[] = fallbackOptions.map(opt => ({
@@ -184,7 +205,7 @@ function MatrixLevelUpInner({
           name: opt.name,
           description: opt.description,
           statChanges: '',
-          color: opt.rarity === 'legendary' ? '#facc15' : opt.rarity === 'epic' ? '#c084fc' : opt.rarity === 'rare' ? '#60a5fa' : MATRIX_GREEN,
+          color: opt.rarity === 'legendary' ? SK.gold : opt.rarity === 'epic' ? '#c084fc' : opt.rarity === 'rare' ? '#60a5fa' : SK.textPrimary,
           isUltimate: opt.rarity === 'legendary',
           isMax: opt.currentLevel + 1 >= opt.maxLevel,
         }));
@@ -245,7 +266,7 @@ function MatrixLevelUpInner({
           name: (nextStats as any).evolvedName || data.name,
           description,
           statChanges,
-          color: isUltimate ? '#facc15' : (isEvolved ? '#38bdf8' : data.color),
+          color: isUltimate ? SK.gold : (isEvolved ? '#38bdf8' : data.color),
           isUltimate,
           isMax: nextLevel === 20,
         });
@@ -371,6 +392,9 @@ function MatrixLevelUpInner({
     }
   };
 
+  // Auto-select timer percentage (for circular progress)
+  const timerPct = autoSelectTimer !== null ? (autoSelectTimer / 5) * 100 : 0;
+
   return (
     <div data-testid="levelup-modal" style={{
       position: 'absolute',
@@ -382,52 +406,67 @@ function MatrixLevelUpInner({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.9)',
+      backgroundColor: OVERLAY.bg,
+      backdropFilter: OVERLAY.blur,
+      WebkitBackdropFilter: OVERLAY.blur,
       padding: 8,
+      fontFamily: bodyFont,
     }}>
       <div style={{
         width: '100%',
-        maxWidth: 512,
-        backgroundColor: 'rgba(0,0,0,0.95)',
-        border: '2px solid #374151',
+        maxWidth: 520,
+        background: SK.bg,
+        border: `1px solid ${SK.border}`,
+        borderRadius: 0,
         display: 'flex',
         flexDirection: 'column',
         maxHeight: '95vh',
         overflow: 'hidden',
       }}>
 
-        {/* Header */}
+        {/* ─── Header ─── */}
         <div style={{
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          paddingLeft: 16,
-          paddingRight: 16,
-          paddingTop: 12,
-          paddingBottom: 12,
-          borderBottom: '1px solid #374151',
+          background: SK.cardBg,
+          paddingLeft: 20,
+          paddingRight: 20,
+          paddingTop: 14,
+          paddingBottom: 14,
+          borderBottom: `1px solid ${SK.border}`,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            <div
-              style={{
-                width: 40,
-                height: 40,
-                border: `2px solid ${MATRIX_GREEN}`,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                backgroundColor: `${MATRIX_GREEN}20`,
-              }}
-            >
-              <Zap size={20} style={{ color: MATRIX_GREEN }} />
+            <div style={{
+              width: 40,
+              height: 40,
+              border: `2px solid ${SK.accent}`,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: SK.accentBg,
+              clipPath: apexClip.sm,
+            }}>
+              <Zap size={20} style={{ color: SK.accent }} />
             </div>
             <div>
-              <h2 style={{ fontSize: 18, fontWeight: 'bold', letterSpacing: '0.05em', color: MATRIX_GREEN, margin: 0 }}>LEVEL UP</h2>
-              <p style={{ color: '#6b7280', fontSize: 10, margin: 0 }}>Select an upgrade</p>
+              <h2 style={{
+                fontFamily: headingFont,
+                fontSize: 20,
+                fontWeight: 700,
+                letterSpacing: '0.08em',
+                color: SK.accent,
+                margin: 0,
+              }}>
+                LEVEL UP
+              </h2>
+              <p style={{ color: SK.textMuted, fontSize: 11, margin: 0 }}>
+                Choose Your Upgrade
+              </p>
             </div>
           </div>
 
+          {/* Reroll button */}
           {onReroll && (
             <button
               onClick={handleRerollClick}
@@ -436,31 +475,34 @@ function MatrixLevelUpInner({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
-                paddingLeft: 12,
-                paddingRight: 12,
+                paddingLeft: 14,
+                paddingRight: 14,
                 paddingTop: 8,
                 paddingBottom: 8,
                 transition: 'all 0.2s',
                 cursor: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 'pointer' : 'not-allowed',
-                opacity: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 1 : 0.5,
-                backgroundColor: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? '#9333ea' : 'rgba(0,0,0,0.6)',
-                border: `1px solid ${rerollsLeft > 0 && !(options[0]?.isGoldReward) ? '#a855f7' : '#374151'}`,
+                opacity: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 1 : 0.4,
+                background: 'transparent',
+                border: `1px solid ${SK.textSecondary}`,
+                borderRadius: 0,
+                color: SK.textSecondary,
+                fontFamily: bodyFont,
               }}
             >
-              <Dice5 style={{ color: 'white', width: 20, height: 20 }} />
+              <Dice5 style={{ width: 18, height: 18 }} />
               <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
-                <span style={{ fontSize: 8, color: '#e9d5ff', lineHeight: 1, marginBottom: 2 }}>REROLL</span>
-                <span style={{ fontSize: 14, fontWeight: 'bold', color: 'white', lineHeight: 1 }}>{rerollsLeft}</span>
+                <span style={{ fontSize: 9, color: SK.textMuted, lineHeight: 1, marginBottom: 2, letterSpacing: '0.08em' }}>REROLL</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: SK.textSecondary, lineHeight: 1 }}>{rerollsLeft}</span>
               </div>
             </button>
           )}
         </div>
 
-        {/* Dev Mode Banner */}
+        {/* ─── Dev Mode Banner ─── */}
         {isDevMode && (
           <div style={{
-            backgroundColor: 'rgba(124,45,18,0.4)',
-            borderBottom: '1px solid rgba(249,115,22,0.5)',
+            background: `${SK.orange}15`,
+            borderBottom: `1px solid ${SK.orange}40`,
             paddingLeft: 12,
             paddingRight: 12,
             paddingTop: 6,
@@ -470,62 +512,62 @@ function MatrixLevelUpInner({
             justifyContent: 'space-between',
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Settings size={14} style={{ color: '#fb923c', animation: 'spin 3s linear infinite' }} />
-              <span style={{ color: '#fb923c', fontSize: 12, letterSpacing: '0.05em' }}>DEV MODE</span>
+              <Settings size={14} style={{ color: SK.orange, animation: 'spin 3s linear infinite' }} />
+              <span style={{ color: SK.orange, fontSize: 12, letterSpacing: '0.05em', fontWeight: 600 }}>DEV MODE</span>
             </div>
-            <span style={{ color: '#fdba74', fontSize: 10 }}>{options.length} skills</span>
+            <span style={{ color: SK.orangeLight, fontSize: 10 }}>{options.length} skills</span>
           </div>
         )}
 
-        {/* Auto Hunt Banner */}
+        {/* ─── Auto Hunt Banner ─── */}
         {!isDevMode && isAutoHunt && autoSelectTimer !== null && (
           <div style={{
-            borderBottom: '1px solid',
-            paddingLeft: 12,
-            paddingRight: 12,
-            paddingTop: 6,
-            paddingBottom: 6,
+            borderBottom: `1px solid ${isHoveringOptions ? `${SK.orange}40` : `${SK.green}40`}`,
+            paddingLeft: 14,
+            paddingRight: 14,
+            paddingTop: 8,
+            paddingBottom: 8,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
             transition: 'all 0.2s',
-            ...(isHoveringOptions
-              ? { backgroundColor: 'rgba(113,63,18,0.4)', borderBottomColor: 'rgba(234,179,8,0.5)' }
-              : { backgroundColor: 'rgba(20,83,45,0.4)', borderBottomColor: 'rgba(34,197,94,0.5)' }
-            ),
+            background: isHoveringOptions ? `${SK.orange}12` : `${SK.green}12`,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Bot size={14} style={{ color: isHoveringOptions ? '#facc15' : '#4ade80' }} />
+              <Bot size={14} style={{ color: isHoveringOptions ? SK.orange : SK.green }} />
               <span style={{
                 fontSize: 12,
-                letterSpacing: '0.05em',
-                color: isHoveringOptions ? '#facc15' : '#4ade80',
+                letterSpacing: '0.08em',
+                fontWeight: 600,
+                color: isHoveringOptions ? SK.orange : SK.green,
               }}>
-                {isHoveringOptions ? 'PAUSED' : 'VIBE CODING'}
+                {isHoveringOptions ? 'PAUSED' : 'AUTO SELECT'}
               </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              {/* Linear progress bar */}
               <div style={{
                 width: 64,
-                height: 6,
-                backgroundColor: 'rgba(0,0,0,0.8)',
-                border: `1px solid ${isHoveringOptions ? 'rgba(161,98,7,0.5)' : 'rgba(21,128,61,0.5)'}`,
+                height: 4,
+                background: SK.cardBg,
+                border: `1px solid ${SK.border}`,
+                borderRadius: 0,
                 overflow: 'hidden',
               }}>
-                <div
-                  style={{
-                    height: '100%',
-                    backgroundColor: isHoveringOptions ? '#eab308' : '#22c55e',
-                    width: `${(autoSelectTimer / 5) * 100}%`,
-                    transition: isHoveringOptions ? 'none' : 'width 1s linear',
-                  }}
-                />
+                <div style={{
+                  height: '100%',
+                  background: isHoveringOptions ? SK.orange : SK.accent,
+                  width: `${timerPct}%`,
+                  transition: isHoveringOptions ? 'none' : 'width 1s linear',
+                }} />
               </div>
               <span style={{
-                fontSize: 14,
+                fontFamily: headingFont,
+                fontSize: 16,
+                fontWeight: 700,
                 minWidth: 16,
                 textAlign: 'center',
-                color: isHoveringOptions ? '#facc15' : '#4ade80',
+                color: isHoveringOptions ? SK.orange : SK.accent,
               }}>
                 {autoSelectTimer}
               </span>
@@ -533,22 +575,23 @@ function MatrixLevelUpInner({
           </div>
         )}
 
-        {/* Options List */}
+        {/* ─── Options List ─── */}
         <div
           style={{
             flex: 1,
             overflowY: 'auto',
             overflowX: 'hidden',
             padding: 16,
-            backgroundColor: 'rgba(0,0,0,0.6)',
+            background: SK.bgWarm,
           }}
           onMouseEnter={() => setIsHoveringOptions(true)}
           onMouseLeave={() => setIsHoveringOptions(false)}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 448, marginLeft: 'auto', marginRight: 'auto' }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
             {options.map((opt, idx) => {
               const Icon = WEAPON_ICONS[opt.type] || Zap;
               const isUltimateUpgrade = opt.isUltimate;
+              const categoryColor = getCategoryColor(opt.type);
 
               return (
                 <button
@@ -557,142 +600,166 @@ function MatrixLevelUpInner({
                   onClick={() => onSelect(opt.type)}
                   style={{
                     position: 'relative',
-                    padding: 12,
+                    padding: 0,
                     display: 'flex',
-                    alignItems: 'center',
-                    gap: 16,
-                    transition: 'all 0.2s',
+                    alignItems: 'stretch',
+                    transition: 'all 0.15s',
                     pointerEvents: 'auto',
                     cursor: 'pointer',
                     textAlign: 'left',
-                    ...(isUltimateUpgrade
-                      ? { backgroundColor: 'rgba(113,63,18,0.3)', border: '2px solid #eab308' }
+                    background: isUltimateUpgrade
+                      ? `${SK.gold}12`
                       : opt.isGoldReward
-                        ? { backgroundColor: 'rgba(20,83,45,0.3)', border: '2px solid #22c55e' }
-                        : { backgroundColor: 'rgba(0,0,0,0.6)', border: '1px solid #374151' }
-                    ),
+                        ? `${SK.green}10`
+                        : SK.cardBg,
+                    border: isUltimateUpgrade
+                      ? `1px solid ${SK.gold}60`
+                      : opt.isGoldReward
+                        ? `1px solid ${SK.green}40`
+                        : `1px solid ${SK.border}`,
+                    borderRadius: 0,
+                    clipPath: apexClip.md,
+                    overflow: 'hidden',
+                    fontFamily: bodyFont,
                   }}
                 >
-                  {/* Left: Icon + Level */}
-                  <div style={{ position: 'relative', flexShrink: 0 }}>
-                    <div
-                      style={{
+                  {/* Category color stripe (left) */}
+                  <div style={{
+                    width: 4,
+                    flexShrink: 0,
+                    background: categoryColor,
+                  }} />
+
+                  {/* Main content area */}
+                  <div style={{
+                    flex: 1,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 14,
+                    padding: 12,
+                  }}>
+                    {/* Left: Icon + Level */}
+                    <div style={{ position: 'relative', flexShrink: 0 }}>
+                      <div style={{
                         width: 48,
                         height: 48,
-                        border: `2px solid ${opt.color}`,
+                        border: `1px solid ${opt.color}80`,
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        backgroundColor: isUltimateUpgrade ? 'rgba(113,63,18,0.4)' : 'rgba(0,0,0,0.8)',
-                      }}
-                    >
-                      <Icon size={24} style={{ color: opt.color }} />
+                        background: isUltimateUpgrade ? `${SK.gold}20` : SK.bg,
+                        clipPath: apexClip.sm,
+                      }}>
+                        <Icon size={24} style={{ color: opt.color }} />
+                      </div>
+                      {isUltimateUpgrade && (
+                        <Crown style={{
+                          position: 'absolute',
+                          top: -8,
+                          right: -8,
+                          color: SK.gold,
+                          width: 16,
+                          height: 16,
+                        }} />
+                      )}
+                      {opt.isNew && (
+                        <div style={{
+                          position: 'absolute',
+                          top: -4,
+                          left: -4,
+                          background: SK.gold,
+                          color: SK.bg,
+                          fontSize: 8,
+                          fontWeight: 700,
+                          paddingLeft: 4,
+                          paddingRight: 4,
+                          paddingTop: 1,
+                          paddingBottom: 1,
+                          letterSpacing: '0.05em',
+                        }}>
+                          NEW
+                        </div>
+                      )}
+                      {!opt.isGoldReward && (
+                        <div style={{
+                          position: 'absolute',
+                          bottom: -4,
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 2,
+                          background: SK.bg,
+                          border: `1px solid ${SK.border}`,
+                          paddingLeft: 6,
+                          paddingRight: 6,
+                          paddingTop: 2,
+                          paddingBottom: 2,
+                          fontSize: 9,
+                        }}>
+                          <span style={{ color: SK.textMuted }}>{opt.currentLevel}</span>
+                          <ArrowRight size={8} style={{ color: SK.textMuted }} />
+                          <span style={{ color: isUltimateUpgrade ? SK.gold : SK.accent, fontWeight: 700 }}>{opt.nextLevel}</span>
+                        </div>
+                      )}
                     </div>
-                    {isUltimateUpgrade && (
-                      <Crown style={{
-                        position: 'absolute',
-                        top: -8,
-                        right: -8,
-                        color: '#facc15',
-                        width: 16,
-                        height: 16,
-                      }} />
-                    )}
-                    {opt.isNew && (
-                      <div style={{
-                        position: 'absolute',
-                        top: -4,
-                        left: -4,
-                        backgroundColor: '#ef4444',
-                        border: '1px solid #f87171',
-                        color: 'white',
-                        fontSize: 8,
-                        paddingLeft: 4,
-                        paddingRight: 4,
-                        paddingTop: 2,
-                        paddingBottom: 2,
-                      }}>
-                        NEW
-                      </div>
-                    )}
-                    {!opt.isGoldReward && (
-                      <div style={{
-                        position: 'absolute',
-                        bottom: -4,
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: 2,
-                        backgroundColor: 'rgba(0,0,0,0.9)',
-                        border: '1px solid #374151',
-                        paddingLeft: 6,
-                        paddingRight: 6,
-                        paddingTop: 2,
-                        paddingBottom: 2,
-                        fontSize: 9,
-                      }}>
-                        <span style={{ color: '#6b7280' }}>{opt.currentLevel}</span>
-                        <ArrowRight size={8} style={{ color: '#4b5563' }} />
-                        <span style={{ color: isUltimateUpgrade ? '#facc15' : MATRIX_GREEN }}>{opt.nextLevel}</span>
-                      </div>
-                    )}
-                  </div>
 
-                  {/* Center: Name + Description + Stats */}
-                  <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
-                      <span style={{
-                        fontSize: 16,
-                        letterSpacing: '0.025em',
+                    {/* Center: Name + Description + Stats */}
+                    <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                        <span style={{
+                          fontFamily: headingFont,
+                          fontSize: 15,
+                          letterSpacing: '0.03em',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontWeight: 700,
+                          color: opt.color,
+                        }}>
+                          {opt.name}
+                        </span>
+                      </div>
+                      <p style={{
+                        color: SK.textMuted,
+                        fontSize: 11,
+                        lineHeight: 1.4,
+                        margin: 0,
+                        marginBottom: 4,
+                        display: '-webkit-box',
+                        WebkitLineClamp: 2,
+                        WebkitBoxOrient: 'vertical',
                         overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                        fontWeight: 'bold',
-                        color: opt.color,
                       }}>
-                        {opt.name}
+                        {opt.description}
+                      </p>
+                      <span style={{
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: isUltimateUpgrade ? SK.gold : SK.accent,
+                        letterSpacing: '0.03em',
+                      }}>
+                        {opt.statChanges}
                       </span>
                     </div>
-                    <p style={{
-                      color: '#6b7280',
-                      fontSize: 10,
-                      lineHeight: 1.375,
-                      marginBottom: 4,
-                      margin: 0,
-                      marginTop: 0,
-                      display: '-webkit-box',
-                      WebkitLineClamp: 2,
-                      WebkitBoxOrient: 'vertical',
-                      overflow: 'hidden',
-                    }}>
-                      {opt.description}
-                    </p>
-                    <span
-                      style={{
-                        fontSize: 10,
-                        color: isUltimateUpgrade ? '#facc15' : MATRIX_GREEN,
-                      }}
-                    >
-                      {opt.statChanges}
-                    </span>
-                  </div>
 
-                  {/* Right: Keyboard hint */}
-                  <div style={{
-                    flexShrink: 0,
-                    width: 28,
-                    height: 28,
-                    backgroundColor: 'rgba(0,0,0,0.8)',
-                    border: '1px solid #4b5563',
-                    fontSize: 14,
-                    color: '#9ca3af',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 'bold',
-                  }}>
-                    {idx + 1}
+                    {/* Right: Keyboard hint */}
+                    <div style={{
+                      flexShrink: 0,
+                      width: 28,
+                      height: 28,
+                      background: SK.bg,
+                      border: `1px solid ${SK.border}`,
+                      fontSize: 14,
+                      color: SK.textMuted,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontWeight: 700,
+                      fontFamily: headingFont,
+                    }}>
+                      {idx + 1}
+                    </div>
                   </div>
                 </button>
               );
@@ -700,17 +767,18 @@ function MatrixLevelUpInner({
           </div>
         </div>
 
-        {/* Footer */}
+        {/* ─── Footer ─── */}
         <div style={{
           paddingLeft: 16,
           paddingRight: 16,
           paddingTop: 8,
           paddingBottom: 8,
           textAlign: 'center',
-          color: '#4b5563',
-          fontSize: 9,
-          backgroundColor: 'rgba(0,0,0,0.8)',
-          borderTop: '1px solid #374151',
+          color: SK.textMuted,
+          fontSize: 10,
+          background: SK.cardBg,
+          borderTop: `1px solid ${SK.border}`,
+          letterSpacing: '0.05em',
         }}>
           Press 1, 2, 3, 4 for quick select
         </div>

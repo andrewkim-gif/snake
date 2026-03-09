@@ -67,6 +67,13 @@ import BreakTimeOverlay from './BreakTimeOverlay';
 import ComboCounter from './ComboCounter';
 import QuizChallengeCard, { QuizPenaltyIndicator } from './QuizChallengeCard';
 
+// ─── v32 Phase 3: Branch Selection + Synergy Notification ───
+import BranchSelectModal from './BranchSelectModal';
+import type { BranchOption } from './BranchSelectModal';
+import SynergyNotification from './SynergyNotification';
+import type { SynergyNotificationData } from './SynergyNotification';
+import { SKILL_BRANCHES } from '@/lib/matrix/config/skills/branches';
+
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
   () => import('./MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
@@ -137,6 +144,16 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const [sessionKills, setSessionKills] = useState(0);
   const [playerPosition, setPlayerPosition] = useState({ x: 0, y: 0 });
   const playerPositionRef = useRef({ x: 0, y: 0 });
+
+  // v32 Phase 3: Branch selection + Synergy notification
+  const [branchPending, setBranchPending] = useState<{
+    skill: WeaponType;
+    skillName: string;
+    skillColor: string;
+    branchA: BranchOption;
+    branchB: BranchOption;
+  } | null>(null);
+  const [synergyNotification, setSynergyNotification] = useState<SynergyNotificationData | null>(null);
 
   // 선택된 캐릭터 ref (stale closure 방지)
   const selectedClassRef = useRef(initialClass);
@@ -241,11 +258,67 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     soundManager.playSFX('gameover');
   }, [gameState]);
 
-  // 레벨업 선택
+  // 레벨업 선택 (v32: branch check + synergy notification 추가)
   const handleSelectUpgrade = useCallback((type: string) => {
+    const weaponType = type as WeaponType;
+
+    // Check if this upgrade triggers a branch choice at Lv.11
+    if (skillBuild.needsBranchChoice(weaponType)) {
+      const branches = SKILL_BRANCHES[weaponType];
+      if (branches) {
+        const weaponData = WEAPON_DATA[weaponType as keyof typeof WEAPON_DATA];
+        setBranchPending({
+          skill: weaponType,
+          skillName: weaponData?.name || weaponType,
+          skillColor: weaponData?.color || '#ECECEF',
+          branchA: { ...branches.A, ultimateEffect: branches.A.ultimateEffect },
+          branchB: { ...branches.B, ultimateEffect: branches.B.ultimateEffect },
+        });
+        return; // Don't apply upgrade yet — wait for branch selection
+      }
+    }
+
+    // Check for synergy activation
+    const currentLevel = gameState.weapons[weaponType] || 0;
+    const newSynergy = skillBuild.checkNewSynergies(weaponType, currentLevel + 1);
+    if (newSynergy) {
+      setSynergyNotification({
+        id: newSynergy.id,
+        name: newSynergy.name,
+        description: newSynergy.description || '',
+        tier: newSynergy.tier || 'basic',
+      });
+    }
+
     const maxHP = GAME_CONFIG.PLAYER_HP * (CLASS_DATA[gameState.selectedClass]?.hpMult || 1);
-    gameState.handleSelectUpgrade(type as WeaponType, maxHP);
-  }, [gameState]);
+    gameState.handleSelectUpgrade(weaponType, maxHP);
+  }, [gameState, skillBuild]);
+
+  // v32 Phase 3: Handle branch selection
+  const handleBranchSelect = useCallback((branch: 'A' | 'B') => {
+    if (!branchPending) return;
+    const { skill } = branchPending;
+
+    // Apply the branch choice
+    skillBuild.selectBranch(skill, branch);
+
+    // Check for synergy
+    const currentLevel = gameState.weapons[skill] || 0;
+    const newSynergy = skillBuild.checkNewSynergies(skill, currentLevel + 1);
+    if (newSynergy) {
+      setSynergyNotification({
+        id: newSynergy.id,
+        name: newSynergy.name,
+        description: newSynergy.description || '',
+        tier: newSynergy.tier || 'basic',
+      });
+    }
+
+    // Now apply the upgrade
+    const maxHP = GAME_CONFIG.PLAYER_HP * (CLASS_DATA[gameState.selectedClass]?.hpMult || 1);
+    gameState.handleSelectUpgrade(skill, maxHP);
+    setBranchPending(null);
+  }, [branchPending, gameState, skillBuild]);
 
   // 보스 콜백 (stub - Arena에서는 보스 없음)
   const handleBossSpawn = useCallback(() => {}, []);
@@ -586,12 +659,30 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       )}
 
       {/* ─── 레벨업 모달 ─── */}
-      {gameState.gameState.isLevelUp && levelUpOptions.length > 0 && (
+      {gameState.gameState.isLevelUp && levelUpOptions.length > 0 && !branchPending && (
         <MatrixLevelUp
           options={levelUpOptions}
           onSelect={handleSelectUpgrade}
         />
       )}
+
+      {/* ─── v32 Phase 3: Branch Selection Modal ─── */}
+      {branchPending && (
+        <BranchSelectModal
+          skillName={branchPending.skillName}
+          skillColor={branchPending.skillColor}
+          branchA={branchPending.branchA}
+          branchB={branchPending.branchB}
+          onSelect={handleBranchSelect}
+        />
+      )}
+
+      {/* ─── v32 Phase 3: Synergy Notification Banner ─── */}
+      <SynergyNotification
+        synergy={synergyNotification}
+        onDismiss={() => setSynergyNotification(null)}
+        duration={4000}
+      />
 
       {/* ─── 일시정지 메뉴 ─── */}
       {isPaused && !gameState.gameState.isGameOver && !gameState.gameState.isLevelUp && (

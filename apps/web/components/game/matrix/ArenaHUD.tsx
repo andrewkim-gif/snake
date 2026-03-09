@@ -1,29 +1,27 @@
 'use client';
 
 /**
- * ArenaHUD.tsx - v29 Phase 5: Arena Mode In-Game HUD
+ * ArenaHUD.tsx - v32 Phase 3: Arena Mode In-Game HUD (Apex Tactical Redesign)
  *
  * Adapted from app_ingame/components/arena/ArenaHUD.tsx
  * - Timer + Phase indicator
  * - Kill/Death stats
  * - Safe zone status with shrink warnings
  * - Mini leaderboard (top 5)
- * - Agent HP bar when damaged
  *
- * Matrix green (#00FF41) theme applied.
- *
- * v29b: All Tailwind className converted to inline styles.
+ * v32: Full Apex tactical redesign — SK tokens, headingFont/bodyFont, borderRadius:0, glassBg.
+ *      No monospace, no #00FF41.
  */
 
 import React, { memo, useMemo } from 'react';
 import {
   Timer,
-  Target,
   Shield,
   Skull,
   AlertTriangle,
   Trophy,
 } from 'lucide-react';
+import { SK, headingFont, bodyFont } from '@/lib/sketch-ui';
 
 // ============================================
 // Exported types (used by MatrixApp)
@@ -69,17 +67,29 @@ function formatTime(seconds: number): string {
   return `${mins}:${secs.toString().padStart(2, '0')}`;
 }
 
-function getSafeZoneStatus(isShrinking: boolean, isWarning: boolean, phase: number): string {
+function getPhaseLabel(isShrinking: boolean, isWarning: boolean, phase: number): string {
   if (isShrinking) return 'ZONE SHRINKING';
   if (isWarning) return `PHASE ${phase} WARNING`;
-  return `PHASE ${phase}`;
+  return `SAFE ZONE`;
+}
+
+function getPhaseColor(isShrinking: boolean, isWarning: boolean): string {
+  if (isShrinking) return SK.red;
+  if (isWarning) return SK.orange;
+  return SK.green;
 }
 
 // ============================================
-// Constants
+// Shared panel style
 // ============================================
 
-const MATRIX_GREEN = '#00FF41';
+const panelStyle: React.CSSProperties = {
+  background: SK.glassBg,
+  backdropFilter: 'blur(12px)',
+  WebkitBackdropFilter: 'blur(12px)',
+  border: `1px solid ${SK.border}`,
+  borderRadius: 0,
+};
 
 // ============================================
 // Component
@@ -116,6 +126,9 @@ function ArenaHUDInner({
     return idx >= 0 ? idx + 1 : leaderboard.length;
   }, [sortedAll, leaderboard.length]);
 
+  const phaseLabel = getPhaseLabel(isShrinking, isWarning, currentPhase);
+  const phaseColor = getPhaseColor(isShrinking, isWarning);
+
   return (
     <div style={{
       position: 'absolute',
@@ -123,188 +136,244 @@ function ArenaHUDInner({
       right: 0,
       top: 0,
       pointerEvents: 'none',
-      fontFamily: 'monospace',
+      fontFamily: bodyFont,
       zIndex: 20,
     }}>
 
-      {/* Top Center: Timer + Phase */}
+      {/* ─── Top Center: Timer + Alive + Phase ─── */}
       <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
         <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
-          {/* Timer */}
+          {/* Timer + Alive */}
           <div style={{
+            ...panelStyle,
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            paddingLeft: 16,
-            paddingRight: 16,
-            paddingTop: 8,
-            paddingBottom: 8,
-            backgroundColor: 'rgba(0,0,0,0.6)',
-            border: `1px solid ${isLowTime ? '#ef4444' : 'rgba(34,197,94,0.5)'}`,
+            gap: 12,
+            paddingLeft: 20,
+            paddingRight: 20,
+            paddingTop: 10,
+            paddingBottom: 10,
           }}>
-            <Timer style={{ width: 20, height: 20, color: isLowTime ? '#f87171' : '#4ade80' }} />
-            <span
-              style={{
-                fontSize: 24,
-                fontWeight: 'bold',
-                fontVariantNumeric: 'tabular-nums',
-                color: isLowTime ? '#f87171' : '#4ade80',
-                textShadow: isLowTime
-                  ? '0 0 10px rgba(255, 0, 0, 0.5)'
-                  : '0 0 10px rgba(0, 255, 65, 0.3)',
-              }}
-            >
+            <Timer style={{
+              width: 18,
+              height: 18,
+              color: isLowTime ? SK.red : SK.textSecondary,
+            }} />
+            <span style={{
+              fontFamily: headingFont,
+              fontSize: 24,
+              fontWeight: 700,
+              fontVariantNumeric: 'tabular-nums',
+              color: isLowTime ? SK.red : SK.textPrimary,
+              letterSpacing: '0.05em',
+            }}>
               {timeStr}
             </span>
-            {/* Alive count */}
+
+            {/* Divider */}
             <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 6,
-              marginLeft: 8,
-              paddingLeft: 8,
-              borderLeft: '1px solid #4b5563',
-            }}>
-              <div style={{ width: 8, height: 8, borderRadius: 9999, backgroundColor: MATRIX_GREEN }} />
-              <span style={{ fontSize: 14, fontWeight: 'bold', color: MATRIX_GREEN }}>
-                {aliveCount}/{totalCount}
+              width: 1,
+              height: 20,
+              background: SK.border,
+            }} />
+
+            {/* Alive count */}
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: SK.textSecondary,
+                letterSpacing: '0.08em',
+              }}>
+                ALIVE
+              </span>
+              <span style={{
+                fontFamily: headingFont,
+                fontSize: 16,
+                fontWeight: 700,
+                color: SK.green,
+              }}>
+                {aliveCount}
+              </span>
+              <span style={{ fontSize: 12, color: SK.textMuted }}>/</span>
+              <span style={{
+                fontSize: 14,
+                color: SK.textMuted,
+              }}>
+                {totalCount}
               </span>
             </div>
           </div>
 
-          {/* Safe Zone Status */}
+          {/* Phase status badge */}
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            paddingLeft: 12,
-            paddingRight: 12,
+            gap: 6,
+            paddingLeft: 14,
+            paddingRight: 14,
             paddingTop: 4,
             paddingBottom: 4,
-            fontSize: 12,
-            ...(isShrinking
-              ? { backgroundColor: 'rgba(239,68,68,0.8)', color: 'white' }
-              : isWarning
-                ? { backgroundColor: 'rgba(249,115,22,0.8)', color: 'white' }
-                : { backgroundColor: 'rgba(34,197,94,0.5)', color: '#dcfce7' }
-            ),
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.1em',
+            color: phaseColor,
+            background: `${phaseColor}15`,
+            border: `1px solid ${phaseColor}40`,
+            borderRadius: 0,
           }}>
             {isShrinking ? (
               <AlertTriangle style={{ width: 12, height: 12 }} />
             ) : (
               <Shield style={{ width: 12, height: 12 }} />
             )}
-            <span>{getSafeZoneStatus(isShrinking, isWarning, currentPhase)}</span>
+            <span>{phaseLabel}</span>
           </div>
         </div>
       </div>
 
-      {/* Top Left: Kill/Death Stats */}
+      {/* ─── Top Left: Kill/Death + Rank ─── */}
       <div style={{ position: 'absolute', top: 16, left: 16 }}>
         <div style={{
+          ...panelStyle,
           display: 'flex',
           flexDirection: 'column',
           gap: 8,
-          backgroundColor: 'rgba(0,0,0,0.6)',
           padding: 12,
-          border: '1px solid rgba(75,85,99,0.5)',
         }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Skull style={{ width: 16, height: 16, color: '#f87171' }} />
-            <span style={{ color: 'white' }}>
-              <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{playerKills}</span>
-              <span style={{ color: '#9ca3af' }}> / </span>
-              <span style={{ color: '#f87171' }}>{playerDeaths}</span>
+            <Skull style={{ width: 16, height: 16, color: SK.accent }} />
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ color: SK.green, fontWeight: 700, fontSize: 16, fontFamily: headingFont }}>{playerKills}</span>
+              <span style={{ color: SK.textMuted, fontSize: 12 }}>/</span>
+              <span style={{ color: SK.red, fontWeight: 600, fontSize: 14 }}>{playerDeaths}</span>
             </span>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#9ca3af' }}>
-            <Trophy style={{ width: 12, height: 12, color: '#facc15' }} />
-            <span>Rank #{myRank}</span>
-          </div>
-        </div>
-      </div>
-
-      {/* Top Right: Mini Leaderboard */}
-      <div style={{ position: 'absolute', top: 16, right: 16 }}>
-        <div style={{
-          backgroundColor: 'rgba(0,0,0,0.6)',
-          padding: 12,
-          border: '1px solid rgba(75,85,99,0.5)',
-          minWidth: 160,
-        }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
-            gap: 8,
-            marginBottom: 8,
+            gap: 6,
             fontSize: 12,
-            color: '#9ca3af',
+            color: SK.textSecondary,
           }}>
-            <Trophy style={{ width: 12, height: 12 }} />
-            <span>LEADERBOARD</span>
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            {top5.map((entry, index) => (
-              <div
-                key={entry.agentId}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  fontSize: 12,
-                  color: entry.isPlayer ? '#4ade80' : '#d1d5db',
-                  fontWeight: entry.isPlayer ? 'bold' : 'normal',
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <span style={{
-                    width: 16,
-                    color: index === 0 ? '#facc15'
-                      : index === 1 ? '#d1d5db'
-                      : index === 2 ? '#fb923c'
-                      : '#6b7280',
-                  }}>
-                    {index + 1}.
-                  </span>
-                  {/* Color dot */}
-                  <div
-                    style={{
-                      width: 6,
-                      height: 6,
-                      borderRadius: 9999,
-                      flexShrink: 0,
-                      backgroundColor: entry.color,
-                      opacity: entry.isAlive ? 1 : 0.3,
-                    }}
-                  />
-                  <span style={{
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                    maxWidth: 70,
-                    textDecoration: entry.isAlive ? 'none' : 'line-through',
-                  }}>
-                    {entry.isPlayer ? 'YOU' : entry.displayName}
-                  </span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ color: '#4ade80' }}>{entry.kills}K</span>
-                  <span style={{
-                    fontVariantNumeric: 'tabular-nums',
-                    width: 32,
-                    textAlign: 'right',
-                    color: 'rgba(0,255,65,0.7)',
-                  }}>
-                    {entry.score > 999 ? `${(entry.score / 1000).toFixed(1)}k` : entry.score}
-                  </span>
-                </div>
-              </div>
-            ))}
+            <Trophy style={{ width: 12, height: 12, color: SK.gold }} />
+            <span style={{ letterSpacing: '0.05em' }}>RANK</span>
+            <span style={{
+              fontFamily: headingFont,
+              fontWeight: 700,
+              color: SK.accent,
+            }}>
+              #{myRank}
+            </span>
           </div>
         </div>
       </div>
 
-      {/* Zone DPS warning (when outside) */}
+      {/* ─── Top Right: Mini Leaderboard ─── */}
+      <div style={{ position: 'absolute', top: 16, right: 16 }}>
+        <div style={{
+          ...panelStyle,
+          padding: 12,
+          minWidth: 180,
+        }}>
+          {/* Header */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            marginBottom: 8,
+            paddingBottom: 6,
+            borderBottom: `1px solid ${SK.border}`,
+          }}>
+            <Trophy style={{ width: 12, height: 12, color: SK.gold }} />
+            <span style={{
+              fontSize: 11,
+              fontWeight: 600,
+              color: SK.textSecondary,
+              letterSpacing: '0.1em',
+            }}>
+              LEADERBOARD
+            </span>
+          </div>
+
+          {/* Entries */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+            {top5.map((entry, index) => {
+              const isMe = entry.isPlayer;
+              const rankColor = index === 0 ? SK.gold
+                : index === 1 ? SK.textSecondary
+                : index === 2 ? SK.orange
+                : SK.textMuted;
+
+              return (
+                <div
+                  key={entry.agentId}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    fontSize: 12,
+                    padding: isMe ? '2px 4px' : undefined,
+                    background: isMe ? SK.accentBg : undefined,
+                    borderLeft: isMe ? `2px solid ${SK.accent}` : '2px solid transparent',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <span style={{
+                      width: 16,
+                      fontWeight: 600,
+                      color: rankColor,
+                      fontFamily: headingFont,
+                    }}>
+                      {index + 1}.
+                    </span>
+                    {/* Color dot */}
+                    <div style={{
+                      width: 6,
+                      height: 6,
+                      flexShrink: 0,
+                      backgroundColor: entry.color,
+                      opacity: entry.isAlive ? 1 : 0.3,
+                      borderRadius: 0,
+                    }} />
+                    <span style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                      maxWidth: 70,
+                      color: isMe ? SK.accent : SK.textSecondary,
+                      fontWeight: isMe ? 700 : 400,
+                      textDecoration: entry.isAlive ? 'none' : 'line-through',
+                    }}>
+                      {isMe ? 'YOU' : entry.displayName}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{
+                      color: isMe ? SK.accent : SK.green,
+                      fontWeight: 600,
+                      fontSize: 11,
+                    }}>
+                      {entry.kills}K
+                    </span>
+                    <span style={{
+                      fontVariantNumeric: 'tabular-nums',
+                      width: 32,
+                      textAlign: 'right',
+                      color: SK.textMuted,
+                      fontSize: 11,
+                    }}>
+                      {entry.score > 999 ? `${(entry.score / 1000).toFixed(1)}k` : entry.score}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+
+      {/* ─── Bottom: Zone DPS warning (outside zone) ─── */}
       {playerOutsideZone && (
         <div style={{
           position: 'fixed',
@@ -314,21 +383,41 @@ function ArenaHUDInner({
           zIndex: 50,
           pointerEvents: 'none',
         }}>
-          <div
-            style={{
-              paddingLeft: 24,
-              paddingRight: 24,
-              paddingTop: 12,
-              paddingBottom: 12,
-              textAlign: 'center',
-              backgroundColor: 'rgba(255, 0, 0, 0.2)',
-              border: '2px solid rgba(255, 0, 0, 0.6)',
-            }}
-          >
-            <div style={{ fontSize: 18, fontWeight: 'bold', color: '#ff4444' }}>
-              OUTSIDE SAFE ZONE
+          <div style={{
+            paddingLeft: 24,
+            paddingRight: 24,
+            paddingTop: 12,
+            paddingBottom: 12,
+            textAlign: 'center',
+            background: `${SK.red}30`,
+            border: `2px solid ${SK.red}`,
+            borderRadius: 0,
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+          }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
+              marginBottom: 4,
+            }}>
+              <AlertTriangle style={{ width: 18, height: 18, color: SK.red }} />
+              <span style={{
+                fontFamily: headingFont,
+                fontSize: 18,
+                fontWeight: 700,
+                color: SK.red,
+                letterSpacing: '0.1em',
+              }}>
+                OUTSIDE SAFE ZONE
+              </span>
             </div>
-            <div style={{ fontSize: 14, color: 'rgba(255, 100, 100, 0.8)' }}>
+            <div style={{
+              fontSize: 14,
+              fontWeight: 600,
+              color: SK.redLight,
+            }}>
               -{zoneDps.toFixed(0)} HP/s
             </div>
           </div>
