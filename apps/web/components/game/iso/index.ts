@@ -1,5 +1,5 @@
 /**
- * v26 Phase 1~3 — Isometric Module Exports
+ * v26 Phase 1~7 — Isometric Module Exports
  */
 
 export { IsoCanvas } from './IsoCanvas';

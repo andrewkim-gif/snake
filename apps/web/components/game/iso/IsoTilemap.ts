@@ -7,7 +7,7 @@
  * - Container 기반 씬 그래프
  */
 
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import {
   TileType,
   TILE_DEFS,
@@ -25,6 +25,7 @@ import {
   ISO_ZOOM_MAX,
   ISO_ZOOM_SPEED,
 } from './types';
+import { getTerrainTexture, getBuildingTexture, isTexturesLoaded } from '@/lib/iso-texture-loader';
 
 // ─── 좌표 변환 유틸 ───
 
@@ -157,8 +158,10 @@ export class IsoTilemap {
   // ─── 타일 렌더링 ───
 
   /** 전체 타일맵 렌더 (초기화 시 1회) */
-  private renderTiles(): void {
+  renderTiles(): void {
     this.tileLayer.removeChildren();
+
+    const useTextures = isTexturesLoaded();
 
     // 타일을 y→x 순으로 그려야 올바른 depth sort
     for (let y = 0; y < this.mapSize; y++) {
@@ -167,23 +170,35 @@ export class IsoTilemap {
         const tileDef = TILE_DEFS[tileType];
         const { sx, sy } = tileToScreen(x, y);
 
-        const g = new Graphics();
-        // 아이소메트릭 다이아몬드 그리기
-        this.drawDiamond(g, 0, 0, tileDef.color);
+        // Phase 7: 텍스처가 있으면 Sprite, 없으면 기존 Graphics
+        const texture = useTextures ? getTerrainTexture(tileType) : null;
 
-        // 경계선 (약간 어두운 색)
-        const borderColor = this.darkenColor(tileDef.color, 0.15);
-        g.poly([
-          0, -ISO_TILE_HEIGHT / 2,
-          ISO_TILE_WIDTH / 2, 0,
-          0, ISO_TILE_HEIGHT / 2,
-          -ISO_TILE_WIDTH / 2, 0,
-        ]).stroke({ width: 0.5, color: borderColor, alpha: 0.3 });
+        if (texture) {
+          const sprite = new Sprite(texture);
+          sprite.anchor.set(0.5, 0.5);
+          sprite.width = ISO_TILE_WIDTH;
+          sprite.height = ISO_TILE_HEIGHT;
+          sprite.x = sx;
+          sprite.y = sy;
+          this.tileLayer.addChild(sprite);
+        } else {
+          // Fallback: 기존 단색 Graphics 다이아몬드
+          const g = new Graphics();
+          this.drawDiamond(g, 0, 0, tileDef.color);
 
-        g.x = sx;
-        g.y = sy;
+          // 경계선 (약간 어두운 색)
+          const borderColor = this.darkenColor(tileDef.color, 0.15);
+          g.poly([
+            0, -ISO_TILE_HEIGHT / 2,
+            ISO_TILE_WIDTH / 2, 0,
+            0, ISO_TILE_HEIGHT / 2,
+            -ISO_TILE_WIDTH / 2, 0,
+          ]).stroke({ width: 0.5, color: borderColor, alpha: 0.3 });
 
-        this.tileLayer.addChild(g);
+          g.x = sx;
+          g.y = sy;
+          this.tileLayer.addChild(g);
+        }
       }
     }
   }
@@ -371,7 +386,6 @@ export class IsoTilemap {
     const def = BUILDING_DEFS.find(d => d.id === building.defId);
     if (!def) return;
 
-    const g = new Graphics();
     const hw = ISO_TILE_WIDTH / 2;
     const hh = ISO_TILE_HEIGHT / 2;
 
@@ -380,49 +394,66 @@ export class IsoTilemap {
     const centerTileY = building.tileY + (building.sizeH - 1) / 2;
     const { sx, sy } = tileToScreen(centerTileX, centerTileY);
 
-    const bw = hw * building.sizeW;
-    const bh = hh * building.sizeH;
+    // Phase 7: 텍스처가 있으면 Sprite, 없으면 기존 프로시저럴 박스
+    const texture = isTexturesLoaded() ? getBuildingTexture(building.defId) : null;
 
-    // 건물 높이 (아이소 박스)
-    const buildingHeight = 16 + building.sizeW * 4;
+    if (texture) {
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 1.0); // 하단 중앙 앵커 (건물이 타일 위에 서도록)
+      sprite.width = ISO_TILE_WIDTH * building.sizeW;
+      sprite.height = ISO_TILE_WIDTH * building.sizeW; // 정사각형 비율 유지 (64x64 원본)
+      sprite.x = sx;
+      sprite.y = sy + hh * building.sizeH; // 타일 하단에 맞춤
+      sprite.label = `building_${building.id}`;
+      this.buildingLayer.addChild(sprite);
+    } else {
+      // Fallback: 기존 프로시저럴 아이소 박스
+      const g = new Graphics();
 
-    // 좌측 면 (어두운 색)
-    g.poly([
-      sx - bw, sy,
-      sx, sy + bh,
-      sx, sy + bh - buildingHeight,
-      sx - bw, sy - buildingHeight,
-    ]).fill(this.darkenColor(def.color, 0.25));
+      const bw = hw * building.sizeW;
+      const bh = hh * building.sizeH;
 
-    // 우측 면 (중간 색)
-    g.poly([
-      sx + bw, sy,
-      sx, sy + bh,
-      sx, sy + bh - buildingHeight,
-      sx + bw, sy - buildingHeight,
-    ]).fill(this.darkenColor(def.color, 0.1));
+      // 건물 높이 (아이소 박스)
+      const buildingHeight = 16 + building.sizeW * 4;
 
-    // 지붕 (상단 다이아몬드)
-    g.poly([
-      sx, sy - bh - buildingHeight,
-      sx + bw, sy - buildingHeight,
-      sx, sy + bh - buildingHeight,
-      sx - bw, sy - buildingHeight,
-    ]).fill(def.roofColor);
+      // 좌측 면 (어두운 색)
+      g.poly([
+        sx - bw, sy,
+        sx, sy + bh,
+        sx, sy + bh - buildingHeight,
+        sx - bw, sy - buildingHeight,
+      ]).fill(this.darkenColor(def.color, 0.25));
 
-    // 테두리
-    g.poly([
-      sx, sy - bh - buildingHeight,
-      sx + bw, sy - buildingHeight,
-      sx, sy + bh - buildingHeight,
-      sx - bw, sy - buildingHeight,
-    ]).stroke({ width: 1, color: 0x000000, alpha: 0.3 });
+      // 우측 면 (중간 색)
+      g.poly([
+        sx + bw, sy,
+        sx, sy + bh,
+        sx, sy + bh - buildingHeight,
+        sx + bw, sy - buildingHeight,
+      ]).fill(this.darkenColor(def.color, 0.1));
 
-    g.x = 0;
-    g.y = 0;
-    g.label = `building_${building.id}`;
+      // 지붕 (상단 다이아몬드)
+      g.poly([
+        sx, sy - bh - buildingHeight,
+        sx + bw, sy - buildingHeight,
+        sx, sy + bh - buildingHeight,
+        sx - bw, sy - buildingHeight,
+      ]).fill(def.roofColor);
 
-    this.buildingLayer.addChild(g);
+      // 테두리
+      g.poly([
+        sx, sy - bh - buildingHeight,
+        sx + bw, sy - buildingHeight,
+        sx, sy + bh - buildingHeight,
+        sx - bw, sy - buildingHeight,
+      ]).stroke({ width: 1, color: 0x000000, alpha: 0.3 });
+
+      g.x = 0;
+      g.y = 0;
+      g.label = `building_${building.id}`;
+
+      this.buildingLayer.addChild(g);
+    }
   }
 
   // ─── 클릭 핸들링 ───

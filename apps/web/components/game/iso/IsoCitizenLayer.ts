@@ -9,9 +9,10 @@
  * - 위치 보간으로 부드러운 이동
  */
 
-import { Container, Graphics } from 'pixi.js';
+import { Container, Graphics, Sprite } from 'pixi.js';
 import { tileToScreen } from './IsoTilemap';
 import type { CitizenSnapshot } from '@agent-survivor/shared/types/city';
+import { getCitizenTexture, isTexturesLoaded } from '@/lib/iso-texture-loader';
 
 // ─── Constants ───
 
@@ -33,6 +34,9 @@ const LERP_SPEED = 0.15;
 
 // ─── Internal citizen position tracker for smooth movement ───
 
+/** Citizen sprite size (px) when using textures */
+const CITIZEN_SPRITE_SIZE = 12;
+
 interface CitizenRenderState {
   /** Current interpolated screen position */
   screenX: number;
@@ -42,8 +46,12 @@ interface CitizenRenderState {
   targetY: number;
   /** Current color (from FSM state) */
   color: number;
-  /** Graphics object for this citizen */
+  /** Current FSM state string */
+  state: string;
+  /** Graphics object for this citizen (fallback) */
   graphic: Graphics;
+  /** Sprite object for this citizen (when textures available) */
+  sprite: Sprite | null;
 }
 
 // ─── IsoCitizenLayer ───
@@ -71,6 +79,7 @@ export class IsoCitizenLayer {
    */
   updateFromSnapshot(citizens: CitizenSnapshot[]): void {
     const seenIds = new Set<string>();
+    const useTextures = isTexturesLoaded();
 
     for (const citizen of citizens) {
       seenIds.add(citizen.id);
@@ -78,37 +87,79 @@ export class IsoCitizenLayer {
       const { sx, sy } = tileToScreen(citizen.tileX, citizen.tileY);
       const color = STATE_COLORS[citizen.state] ?? 0xffffff;
 
-      let state = this.citizenStates.get(citizen.id);
+      let renderState = this.citizenStates.get(citizen.id);
 
-      if (state) {
+      if (renderState) {
         // Existing citizen: update target position and color
-        state.targetX = sx;
-        state.targetY = sy;
-        state.color = color;
+        renderState.targetX = sx;
+        renderState.targetY = sy;
+        renderState.color = color;
+
+        // Phase 7: 상태 변경 시 스프라이트 텍스처 교체
+        if (renderState.state !== citizen.state) {
+          renderState.state = citizen.state;
+          if (useTextures && renderState.sprite) {
+            const tex = getCitizenTexture(citizen.state);
+            if (tex) {
+              renderState.sprite.texture = tex;
+            }
+          }
+        }
       } else {
         // New citizen: create render state
         const graphic = this.acquireGraphic();
-        state = {
+        let sprite: Sprite | null = null;
+
+        // Phase 7: 텍스처 사용 가능하면 Sprite 생성
+        if (useTextures) {
+          const tex = getCitizenTexture(citizen.state);
+          if (tex) {
+            sprite = new Sprite(tex);
+            sprite.anchor.set(0.5, 1.0);
+            sprite.width = CITIZEN_SPRITE_SIZE;
+            sprite.height = CITIZEN_SPRITE_SIZE;
+            sprite.x = sx;
+            sprite.y = sy;
+            // 스프라이트 사용 시 그래픽 숨김
+            graphic.visible = false;
+            this.container.addChild(sprite);
+          }
+        }
+
+        renderState = {
           screenX: sx,
           screenY: sy,
           targetX: sx,
           targetY: sy,
           color,
+          state: citizen.state,
           graphic,
+          sprite,
         };
-        this.citizenStates.set(citizen.id, state);
-        this.container.addChild(graphic);
+        this.citizenStates.set(citizen.id, renderState);
+
+        // Sprite가 없을 때만 Graphics 사용
+        if (!sprite) {
+          this.container.addChild(graphic);
+        }
       }
 
-      // Immediately redraw color (in case state changed)
-      this.drawCitizenDot(state);
+      // Sprite가 없을 때만 Graphics dot 다시 그리기
+      if (!renderState.sprite) {
+        this.drawCitizenDot(renderState);
+      }
     }
 
     // Remove citizens no longer in snapshot
-    for (const [id, state] of this.citizenStates) {
+    for (const [id, renderState] of this.citizenStates) {
       if (!seenIds.has(id)) {
-        this.container.removeChild(state.graphic);
-        this.releaseGraphic(state.graphic);
+        if (renderState.sprite) {
+          this.container.removeChild(renderState.sprite);
+          renderState.sprite.destroy();
+        } else {
+          this.container.removeChild(renderState.graphic);
+        }
+        this.releaseGraphic(renderState.graphic);
         this.citizenStates.delete(id);
       }
     }
@@ -119,14 +170,19 @@ export class IsoCitizenLayer {
    * Call this every frame from the PixiJS ticker.
    */
   tick(): void {
-    for (const state of this.citizenStates.values()) {
+    for (const renderState of this.citizenStates.values()) {
       // Lerp toward target
-      state.screenX += (state.targetX - state.screenX) * LERP_SPEED;
-      state.screenY += (state.targetY - state.screenY) * LERP_SPEED;
+      renderState.screenX += (renderState.targetX - renderState.screenX) * LERP_SPEED;
+      renderState.screenY += (renderState.targetY - renderState.screenY) * LERP_SPEED;
 
-      // Update graphic position
-      state.graphic.x = state.screenX;
-      state.graphic.y = state.screenY;
+      // Update position (sprite or graphic)
+      if (renderState.sprite) {
+        renderState.sprite.x = renderState.screenX;
+        renderState.sprite.y = renderState.screenY;
+      } else {
+        renderState.graphic.x = renderState.screenX;
+        renderState.graphic.y = renderState.screenY;
+      }
     }
   }
 
@@ -141,8 +197,11 @@ export class IsoCitizenLayer {
    * Clean up all resources.
    */
   destroy(): void {
-    for (const state of this.citizenStates.values()) {
-      state.graphic.destroy();
+    for (const renderState of this.citizenStates.values()) {
+      renderState.graphic.destroy();
+      if (renderState.sprite) {
+        renderState.sprite.destroy();
+      }
     }
     this.citizenStates.clear();
     for (const g of this.graphicsPool) {

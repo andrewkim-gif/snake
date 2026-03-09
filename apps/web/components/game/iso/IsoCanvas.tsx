@@ -22,6 +22,7 @@ import {
 import type { CitizenSnapshot, Building } from '@agent-survivor/shared/types/city';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { useCityStore } from '@/stores/cityStore';
+import { preloadIsoTextures } from '@/lib/iso-texture-loader';
 
 // Phase 4+5 UI 컴포넌트
 import { ResourceHUD } from './ui/ResourceHUD';
@@ -124,6 +125,16 @@ export function IsoCanvas({
 
       // 초기 카메라 적용
       tilemap.applyCamera(app.screen.width, app.screen.height);
+
+      // Phase 7: 텍스처 프리로드 → 성공 시 타일맵 재렌더
+      preloadIsoTextures().then((success) => {
+        if (success && !destroyed && tilemapRef.current) {
+          console.log('[IsoCanvas] Textures loaded, re-rendering tilemap with sprites');
+          tilemapRef.current.renderTiles();
+        }
+      }).catch(() => {
+        // 텍스처 로드 실패 시 기존 Graphics 유지 (이미 렌더됨)
+      });
 
       // 게임 루프: 카메라 + 시민 보간 업데이트
       app.ticker.add(() => {
