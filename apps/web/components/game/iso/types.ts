@@ -77,8 +77,10 @@ export interface BuildingInstance {
 }
 
 // ─── 아이소메트릭 상수 ───
-export const ISO_TILE_WIDTH = 64;   // 타일 가로 (스크린 px)
-export const ISO_TILE_HEIGHT = 32;  // 타일 세로 (스크린 px)
+// v27: 256px 에셋 × 0.5 스케일 = 128×64 표시 타일
+export const ISO_TILE_WIDTH = 128;   // 타일 가로 (스크린 px)
+export const ISO_TILE_HEIGHT = 64;   // 타일 세로 (스크린 px)
+export const ISO_TILE_SCALE = 0.5;   // 256px 에셋 → 128px 표시 스케일
 
 // ─── 맵 크기 (국가 tier별) ───
 export type MapTier = 'S' | 'A' | 'B' | 'C' | 'D';
@@ -104,9 +106,48 @@ export const ISO_CAMERA_DEFAULTS: IsoCameraState = {
   zoom: 1.0,
 };
 
-export const ISO_ZOOM_MIN = 0.25;
-export const ISO_ZOOM_MAX = 3.0;
-export const ISO_ZOOM_SPEED = 0.1;
+// v27: 128×64 타일 크기에 맞춘 줌 범위
+export const ISO_ZOOM_MIN = 0.15;   // 전체 조감
+export const ISO_ZOOM_MAX = 2.0;    // 근접 디테일
+export const ISO_ZOOM_SPEED = 0.08; // 줌 스텝 (부드럽게)
+
+// ─── v27: 15 Layer 인덱스 ───
+export const enum IsoLayer {
+  Ground     = 0,
+  WaterAnim  = 1,
+  StonePath  = 2,
+  Shadow     = 3,
+  Flora      = 4,
+  Wall       = 5,
+  Misc       = 6,
+  Tree       = 7,
+  WallFlora  = 8,
+  Roof       = 9,
+  Chest      = 10,
+  Citizens   = 11,
+  Effects    = 12,
+  Cloud      = 13,
+  UIOverlay  = 14,
+}
+
+/** v27 레이어 이름 (디버그/라벨용) */
+export const ISO_LAYER_NAMES: Record<number, string> = {
+  [IsoLayer.Ground]:    'Ground',
+  [IsoLayer.WaterAnim]: 'WaterAnim',
+  [IsoLayer.StonePath]: 'StonePath',
+  [IsoLayer.Shadow]:    'Shadow',
+  [IsoLayer.Flora]:     'Flora',
+  [IsoLayer.Wall]:      'Wall',
+  [IsoLayer.Misc]:      'Misc',
+  [IsoLayer.Tree]:      'Tree',
+  [IsoLayer.WallFlora]: 'WallFlora',
+  [IsoLayer.Roof]:      'Roof',
+  [IsoLayer.Chest]:     'Chest',
+  [IsoLayer.Citizens]:  'Citizens',
+  [IsoLayer.Effects]:   'Effects',
+  [IsoLayer.Cloud]:     'Cloud',
+  [IsoLayer.UIOverlay]: 'UIOverlay',
+};
 
 // ─── v27: 바이옴 & 에셋 타입 확장 ───
 

@@ -17,12 +17,14 @@ import { IsoCitizenLayer } from './IsoCitizenLayer';
 import {
   BUILDING_DEFS,
   TILE_DEFS,
+  IsoLayer,
   type MapTier,
 } from './types';
 import type { CitizenSnapshot, Building } from '@agent-survivor/shared/types/city';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { useCityStore } from '@/stores/cityStore';
-import { preloadIsoTextures } from '@/lib/iso-texture-loader';
+import { preloadBiomeTextures } from '@/lib/iso/iso-texture-loader';
+import { getCountryBiome } from '@/lib/iso/country-biome-map';
 
 // Phase 4+5 UI 컴포넌트
 import { ResourceHUD } from './ui/ResourceHUD';
@@ -115,28 +117,29 @@ export function IsoCanvas({
       container.appendChild(app.canvas);
       appRef.current = app;
 
-      // 타일맵 생성
+      // v27: 타일맵 생성 (바이옴 포함)
       const seed = countryIso3.split('').reduce((acc, c) => acc + c.charCodeAt(0), 0);
-      const tilemap = new IsoTilemap(mapTier, seed);
+      const tilemap = new IsoTilemap(mapTier, seed, countryIso3);
       tilemapRef.current = tilemap;
       app.stage.addChild(tilemap.container);
 
-      // 시민 레이어 생성
+      // 시민 레이어 생성 — Citizens 레이어(11)에 추가
       const citizenLayer = new IsoCitizenLayer();
       citizenLayerRef.current = citizenLayer;
-      tilemap.container.addChild(citizenLayer.container);
+      tilemap.getLayer(IsoLayer.Citizens).addChild(citizenLayer.container);
 
       // 초기 카메라 적용
       tilemap.applyCamera(app.screen.width, app.screen.height);
 
-      // Phase 7: 텍스처 프리로드 → 성공 시 타일맵 재렌더
-      preloadIsoTextures().then((success) => {
+      // v27: 바이옴별 텍스처 프리로드 → 성공 시 타일맵 재렌더
+      const biome = getCountryBiome(countryIso3);
+      preloadBiomeTextures(biome).then((success) => {
         if (success && !destroyed && tilemapRef.current) {
-          console.log('[IsoCanvas] Textures loaded, re-rendering tilemap with sprites');
+          console.log(`[IsoCanvas] v27 biome ${biome} textures loaded, re-rendering`);
           tilemapRef.current.renderTiles();
         }
       }).catch(() => {
-        // 텍스처 로드 실패 시 기존 Graphics 유지 (이미 렌더됨)
+        // 텍스처 로드 실패 시 기존 Graphics fallback 유지
       });
 
       // 게임 루프: 카메라 + 시민 보간 업데이트
