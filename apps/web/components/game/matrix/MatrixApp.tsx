@@ -62,6 +62,11 @@ import MatrixPause from './MatrixPause';
 import MatrixResult from './MatrixResult';
 import ArenaHUD from './ArenaHUD';
 
+// ─── v3 시스템 시각 UI (v32 Phase 1) ───
+import BreakTimeOverlay from './BreakTimeOverlay';
+import ComboCounter from './ComboCounter';
+import QuizChallengeCard, { QuizPenaltyIndicator } from './QuizChallengeCard';
+
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
   () => import('./MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
@@ -328,6 +333,11 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     setV3Events(events);
   }, []);
 
+  // Kernel Panic 궁극기 트리거 (v32)
+  const handleTriggerUltimate = useCallback((): boolean => {
+    return v3Systems.breakTime.triggerUltimate();
+  }, [v3Systems.breakTime]);
+
   // 플레이어 위치 업데이트
   const handlePlayerPositionUpdate = useCallback((x: number, y: number) => {
     playerPositionRef.current = { x, y };
@@ -550,6 +560,29 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
           leaderboard={arenaLeaderboard}
           playerOutsideZone={false}
         />
+      )}
+
+      {/* ─── v3 시스템 시각 UI (v32 Phase 1) ─── */}
+      {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && v3State && (
+        <>
+          {/* BreakTimeOverlay: Data Burst 경고 + 게이지 + Kernel Panic */}
+          <BreakTimeOverlay
+            breakTime={v3State.breakTime}
+            onTriggerUltimate={handleTriggerUltimate}
+          />
+
+          {/* ComboCounter: 10단계 콤보 티어 표시 */}
+          <ComboCounter combo={v3State.combo} />
+
+          {/* QuizChallengeCard: 미션 목표 카드 */}
+          <QuizChallengeCard challenge={v3State.quiz.activeChallenge} />
+
+          {/* QuizPenaltyIndicator: 미션 실패 페널티 */}
+          <QuizPenaltyIndicator
+            isActive={v3State.quiz.isPenaltyActive}
+            timer={v3State.quiz.penaltyTimer}
+          />
+        </>
       )}
 
       {/* ─── 레벨업 모달 ─── */}
