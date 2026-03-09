@@ -64,6 +64,8 @@ const _obj = new THREE.Object3D();
 const _camDir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
+// v29 Phase 6: 태양 계산용 연초 밀리초 캐시 (per-frame Date 할당 방지)
+const _yearStartMs = new Date(new Date().getFullYear(), 0, 0).getTime();
 
 // ─── v29 Phase 2: iso3 해시 기반 결정론적 랜덤 시드 ───
 
@@ -378,6 +380,14 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
   // 공유 아틀라스 머티리얼 (vertexColors로 면별 밝기 적용)
   const material = useMemo(() => getSharedMaterial(), []);
 
+  // v29 Phase 6: 엣지 어트리뷰트 참조 캐시 (per-frame getAttribute 호출 제거)
+  const edgeAttrs = useMemo(() => ({
+    m0: edgeGeometry.getAttribute('aInstanceMatrix0') as THREE.InstancedBufferAttribute,
+    m1: edgeGeometry.getAttribute('aInstanceMatrix1') as THREE.InstancedBufferAttribute,
+    m2: edgeGeometry.getAttribute('aInstanceMatrix2') as THREE.InstancedBufferAttribute,
+    m3: edgeGeometry.getAttribute('aInstanceMatrix3') as THREE.InstancedBufferAttribute,
+  }), [edgeGeometry]);
+
   useFrame(() => {
     const mesh = meshRef.current;
     if (!mesh) return;
@@ -386,11 +396,8 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
 
     let visibleCount = 0;
 
-    // 엣지 어트리뷰트 배열 참조
-    const m0 = edgeGeometry.getAttribute('aInstanceMatrix0') as THREE.InstancedBufferAttribute;
-    const m1 = edgeGeometry.getAttribute('aInstanceMatrix1') as THREE.InstancedBufferAttribute;
-    const m2 = edgeGeometry.getAttribute('aInstanceMatrix2') as THREE.InstancedBufferAttribute;
-    const m3 = edgeGeometry.getAttribute('aInstanceMatrix3') as THREE.InstancedBufferAttribute;
+    // v29 Phase 6: 캐시된 엣지 어트리뷰트 참조 사용
+    const { m0, m1, m2, m3 } = edgeAttrs;
 
     // v29 Phase 2: 바이옴 attribute 참조
     const biomeAttr = biomeAttrRef.current;
@@ -517,12 +524,13 @@ export function LandmarkMeshes({
 
   // v22: useFrame에서 태양 방향 갱신 (UTC 기반, EarthSphere와 동일 계산)
   // sharedMaterial 하나를 모든 ArchetypeInstancedMesh가 공유 → uniform 한 번만 갱신
+  // v29 Phase 6: Date.now() + 캐시된 yearStartMs로 per-frame Date 할당 제거 (GC 방지)
   useFrame((state) => {
     if (!sharedMaterial) return;
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0);
-    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
-    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+    const nowMs = Date.now();
+    // UTC 시각을 밀리초에서 직접 계산 (new Date() 객체 생성 없음)
+    const dayOfYear = Math.floor((nowMs - _yearStartMs) / 86400000);
+    const utcH = (nowMs % 86400000) / 3600000;
     // 태양 적위 (지축 23.44도 기울기)
     const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
     // 시간각: UTC 12시 = 본초자오선 정오
