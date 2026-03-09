@@ -2,16 +2,15 @@
 
 /**
  * /economy/policy — 경제 정책 페이지
- * DashboardPage 래핑
+ * 대시보드 스타일 심플 헤더
  */
 
 import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { SK, bodyFont } from '@/lib/sketch-ui';
-import { DashboardPage, LoadingSkeleton } from '@/components/hub';
-import { ScrollText } from 'lucide-react';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { LoadingSkeleton } from '@/components/hub';
 
 const PolicyPanel = dynamic(
   () => import('@/components/economy/PolicyPanel'),
@@ -40,22 +39,44 @@ function PolicyPageInner() {
   const [currentUserId] = useState('');
 
   return (
-    <DashboardPage
-      icon={ScrollText}
-      title={tEconomy('economicPolicy')}
-      description={tEconomy('economicPolicyDesc')}
-      accentColor={SK.blue}
-      heroImage="/images/hero-economy.png"
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
     >
-      <PolicyPanel
-        serverUrl={serverUrl}
-        countryISO={countryISO}
-        countryName={countryName}
-        authToken={authToken}
-        currentUserId={currentUserId}
-        canEdit={false}
-      />
-    </DashboardPage>
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
+          {tEconomy('economicPolicy')}
+        </h1>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+          {tEconomy('economicPolicyDesc')}
+        </p>
+      </header>
+
+      {/* Tab content */}
+      <main>
+        <PolicyPanel
+          serverUrl={serverUrl}
+          countryISO={countryISO}
+          countryName={countryName}
+          authToken={authToken}
+          currentUserId={currentUserId}
+          canEdit={false}
+        />
+      </main>
+    </div>
   );
 }
 

@@ -4,6 +4,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius } from '@/lib/sketch-ui';
 import SeasonTimeline from './SeasonTimeline';
 
+/* 대시보드 스타일 심플 헤더 */
+
 // --- Types ---
 
 interface HOFCategory {
@@ -124,76 +126,104 @@ export default function HallOfFame({ serverUrl }: HallOfFameProps) {
   }
 
   return (
-    <div style={{ maxWidth: 960, margin: '0 auto', padding: '24px 16px' }}>
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
+    >
       {/* Header */}
-      <div style={{ textAlign: 'center', marginBottom: 32 }}>
-        <h1 style={{
-          fontFamily: headingFont,
-          fontSize: SKFont.h1,
-          color: SK.textPrimary,
-          fontWeight: 800,
-          margin: 0,
-          letterSpacing: '-0.02em',
-        }}>
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
           Hall of Fame
         </h1>
-        <p style={{
-          fontFamily: bodyFont,
-          fontSize: SKFont.body,
-          color: SK.textSecondary,
-          marginTop: 8,
-        }}>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
           Legends who shaped the world across seasons
         </p>
-      </div>
+      </header>
 
-      {/* Season Tabs */}
-      <div style={{
-        display: 'flex',
-        gap: 8,
-        marginBottom: 20,
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-      }}>
-        <TabButton
-          label="All Seasons"
-          active={selectedSeason === null}
+      {/* Tab content */}
+      <main>
+
+      {/* Season Tabs — 대시보드 스타일 */}
+      <nav style={{ display: 'flex', gap: 4, marginBottom: 16, borderBottom: `1px solid ${SK.border}`, paddingBottom: 0, flexWrap: 'wrap' }}>
+        <button
           onClick={() => setSelectedSeason(null)}
-        />
+          style={{
+            fontFamily: bodyFont, fontSize: SKFont.body,
+            fontWeight: selectedSeason === null ? 700 : 400,
+            color: selectedSeason === null ? SK.gold : SK.textSecondary,
+            background: selectedSeason === null ? `${SK.gold}15` : 'transparent',
+            border: 'none',
+            borderBottom: selectedSeason === null ? `1px solid ${SK.gold}` : '1px solid transparent',
+            padding: '10px 18px', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+        >
+          All Seasons
+        </button>
         {seasonNumbers.map((num) => (
-          <TabButton
+          <button
             key={num}
-            label={`Season ${num}`}
-            active={selectedSeason === num}
             onClick={() => setSelectedSeason(num)}
-          />
+            style={{
+              fontFamily: bodyFont, fontSize: SKFont.body,
+              fontWeight: selectedSeason === num ? 700 : 400,
+              color: selectedSeason === num ? SK.gold : SK.textSecondary,
+              background: selectedSeason === num ? `${SK.gold}15` : 'transparent',
+              border: 'none',
+              borderBottom: selectedSeason === num ? `1px solid ${SK.gold}` : '1px solid transparent',
+              padding: '10px 18px', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            Season {num}
+          </button>
         ))}
-      </div>
+      </nav>
 
-      {/* Category Filter */}
-      <div style={{
-        display: 'flex',
-        gap: 8,
-        marginBottom: 24,
-        flexWrap: 'wrap',
-        justifyContent: 'center',
-      }}>
-        <TabButton
-          label="All Categories"
-          active={selectedCategory === null}
+      {/* Category Filter — 대시보드 스타일 서브탭 */}
+      <nav style={{ display: 'flex', gap: 4, marginBottom: 24, borderBottom: `1px solid ${SK.border}`, paddingBottom: 0, flexWrap: 'wrap' }}>
+        <button
           onClick={() => setSelectedCategory(null)}
-          small
-        />
+          style={{
+            fontFamily: bodyFont, fontSize: SKFont.sm,
+            fontWeight: selectedCategory === null ? 700 : 400,
+            color: selectedCategory === null ? SK.gold : SK.textSecondary,
+            background: selectedCategory === null ? `${SK.gold}15` : 'transparent',
+            border: 'none',
+            borderBottom: selectedCategory === null ? `1px solid ${SK.gold}` : '1px solid transparent',
+            padding: '8px 14px', cursor: 'pointer', transition: 'all 0.15s',
+          }}
+        >
+          All Categories
+        </button>
         {categories.map((cat) => (
-          <TabButton
+          <button
             key={cat.category}
-            label={`${categoryIcons[cat.icon] || ''} ${cat.display_name}`}
-            active={selectedCategory === cat.category}
             onClick={() => setSelectedCategory(cat.category)}
-            small
-          />
+            style={{
+              fontFamily: bodyFont, fontSize: SKFont.sm,
+              fontWeight: selectedCategory === cat.category ? 700 : 400,
+              color: selectedCategory === cat.category ? SK.gold : SK.textSecondary,
+              background: selectedCategory === cat.category ? `${SK.gold}15` : 'transparent',
+              border: 'none',
+              borderBottom: selectedCategory === cat.category ? `1px solid ${SK.gold}` : '1px solid transparent',
+              padding: '8px 14px', cursor: 'pointer', transition: 'all 0.15s',
+            }}
+          >
+            {categoryIcons[cat.icon] || ''} {cat.display_name}
+          </button>
         ))}
-      </div>
+      </nav>
 
       {/* Entries */}
       {sortedSeasons.length === 0 ? (
@@ -336,38 +366,12 @@ export default function HallOfFame({ serverUrl }: HallOfFameProps) {
           </div>
         </div>
       )}
+      </main>
     </div>
   );
 }
 
 // --- Sub-components ---
-
-function TabButton({ label, active, onClick, small }: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-  small?: boolean;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      style={{
-        fontFamily: bodyFont,
-        fontSize: small ? SKFont.xs : SKFont.sm,
-        color: active ? SK.textWhite : SK.textSecondary,
-        background: active ? SK.blue : SK.cardBg,
-        border: sketchBorder(active ? SK.blue : SK.border),
-        borderRadius: radius.pill,
-        padding: small ? '4px 12px' : '6px 16px',
-        cursor: 'pointer',
-        transition: 'all 0.15s ease',
-        fontWeight: active ? 600 : 400,
-      }}
-    >
-      {label}
-    </button>
-  );
-}
 
 function WinnerCard({ entry, categoryInfo }: {
   entry: HOFEntry;

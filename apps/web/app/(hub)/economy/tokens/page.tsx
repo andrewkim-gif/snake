@@ -15,8 +15,8 @@ import {
   DefenseBuffVisualization,
   TokenRanking,
 } from '@/app/economy/tokens/components';
-import { SK, bodyFont, grid } from '@/lib/sketch-ui';
-import { DashboardPage, DashPanel, CountryFilterBadge } from '@/components/hub';
+import { SK, SKFont, headingFont, bodyFont, grid } from '@/lib/sketch-ui';
+import { DashPanel, CountryFilterBadge } from '@/components/hub';
 import { TrendingUp, BarChart3, Layers, Shield, Flame } from 'lucide-react';
 
 import { fetchGdpData, fetchCountries } from '@/lib/api-client';
@@ -167,32 +167,48 @@ function TokensPageInner() {
   }
 
   return (
-    <DashboardPage
-      icon={TrendingUp}
-      title={tEconomy('tokenEconomy')}
-      description={tEconomy('tokenEconomyDesc')}
-      accentColor={SK.orange}
-      heroImage="/images/hero-economy.png"
-      headerChildren={
-        countryParam ? (
-          <CountryFilterBadge
-            countryCode={countryParam}
-            label={tEconomy('highlighted', { country: countryParam })}
-            clearHref="/economy/tokens"
-            clearText={tEconomy('clear')}
-            accentColor={SK.orange}
-          />
-        ) : undefined
-      }
-      stats={[
-        { label: tEconomy('totalMarketCap'), value: `$${(stats.totalMarketCap / 1e6).toFixed(2)}M`, color: SK.textPrimary, icon: BarChart3 },
-        { label: tEconomy('totalStaked'), value: `${(stats.totalStaked / 1e6).toFixed(1)}M ${tEconomy('tokenUnit')}`, color: SK.orange, icon: Layers },
-        { label: tEconomy('buybackVolume'), value: `${(stats.totalBuybacks / 1e3).toFixed(1)}K ${tEconomy('tokenUnit')}`, color: SK.green, icon: TrendingUp },
-        { label: tEconomy('totalBurned'), value: `${(stats.totalBurned / 1e3).toFixed(1)}K ${tEconomy('tokenUnit')}`, color: SK.red, icon: Flame },
-      ]}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
     >
-      {/* Main grid */}
-      <div
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
+          {tEconomy('tokenEconomy')}
+        </h1>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+          {tEconomy('tokenEconomyDesc')}
+        </p>
+      </header>
+
+      {/* Tab content */}
+      <main>
+        {countryParam && (
+          <div style={{ marginBottom: 16 }}>
+            <CountryFilterBadge
+              countryCode={countryParam}
+              label={tEconomy('highlighted', { country: countryParam })}
+              clearHref="/economy/tokens"
+              clearText={tEconomy('clear')}
+              accentColor={SK.orange}
+            />
+          </div>
+        )}
+
+        {/* Main grid */}
+        <div
         className="economy-main-grid"
         style={{
           display: 'grid',
@@ -231,8 +247,9 @@ function TokensPageInner() {
             maxDisplay={25}
           />
         </DashPanel>
-      </div>
-    </DashboardPage>
+        </div>
+      </main>
+    </div>
   );
 }
 

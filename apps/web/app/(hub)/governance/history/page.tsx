@@ -9,12 +9,12 @@ import { useState, useMemo, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { SK, bodyFont } from '@/lib/sketch-ui';
-import { DashboardPage, FilterBar, CountryFilterBadge } from '@/components/hub';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { FilterBar } from '@/components/hub';
 import { fetchCouncilVotes, VoteRecord } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
-import { History, ThumbsUp, ThumbsDown, Coins } from 'lucide-react';
+// lucide-react icons removed — 대시보드 스타일에서 StatCard 제거로 불필요
 import type { VoteHistoryEntry } from '@/components/governance/types';
 
 const VoteHistory = dynamic(
@@ -88,29 +88,34 @@ function VoteHistoryPageInner() {
   }
 
   return (
-    <DashboardPage
-      icon={History}
-      title={tGov('voteHistory')}
-      description={tGov('voteHistorySubtitle') + (countryCode ? ` — ${countryCode.toUpperCase()}` : '')}
-      accentColor={SK.orange}
-      heroImage="/images/hero-governance.png"
-      headerChildren={
-        countryCode ? (
-          <CountryFilterBadge
-            countryCode={countryCode.toUpperCase()}
-            label={tGov('filtered', { country: countryCode.toUpperCase() })}
-            clearHref="/governance/history"
-            clearText={tGov('all')}
-          />
-        ) : undefined
-      }
-      stats={[
-        { label: tGov('totalVotes'), value: String(stats.total), color: SK.textPrimary, icon: History },
-        { label: tGov('votedFor'), value: String(stats.forCount), color: SK.green, icon: ThumbsUp },
-        { label: tGov('votedAgainst'), value: String(stats.againstCount), color: SK.red, icon: ThumbsDown },
-        { label: tGov('tokensUsed'), value: stats.totalTokens.toLocaleString(), color: SK.orange, icon: Coins },
-      ]}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
     >
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
+          {tGov('voteHistory')}
+        </h1>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+          {tGov('voteHistorySubtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
+        </p>
+      </header>
+
+      {/* Tab content */}
+      <main>
       <FilterBar
         options={filterOptions}
         value={voteFilter}
@@ -127,7 +132,8 @@ function VoteHistoryPageInner() {
       >
         <VoteHistory entries={filteredEntries} />
       </div>
-    </DashboardPage>
+      </main>
+    </div>
   );
 }
 

@@ -5,15 +5,15 @@
  * DashboardPage + tierColors + API 데이터 (서버 연동)
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, tierColors, grid } from '@/lib/sketch-ui';
-import { DashboardPage } from '@/components/hub';
 import { User } from 'lucide-react';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import TokenBalanceList from '@/components/blockchain/TokenBalanceList';
 import type { WalletState, TokenBalance } from '@/lib/crossx-config';
+import { useWalletStore } from '@/stores/wallet-store';
 
 import {
   fetchPlayerAccount,
@@ -71,7 +71,10 @@ function formatPlaytime(minutes: number): string {
 
 export default function ProfilePage() {
   const tProfile = useTranslations('profile');
-  const [wallet, setWallet] = useState<WalletState | null>(null);
+  const walletStore = useWalletStore();
+  const wallet: WalletState | null = walletStore.isConnected
+    ? { connected: true, address: walletStore.address, chainId: walletStore.chainId, balance: '0' }
+    : null;
 
   const { data: account, loading: accountLoading } = useApiData(
     () => fetchPlayerAccount('local-user'),
@@ -103,48 +106,86 @@ export default function ProfilePage() {
   // achievements 데이터 (null-safe)
   const achievementList = achievements || [];
 
-  const handleWalletConnect = useCallback((w: WalletState) => {
-    setWallet(w);
+  const handleWalletConnect = useCallback((_address: string) => {
+    // zustand 스토어가 자동으로 상태를 업데이트합니다
   }, []);
 
   const handleWalletDisconnect = useCallback(() => {
-    setWallet(null);
+    // zustand 스토어가 자동으로 상태를 업데이트합니다
   }, []);
 
   // 로딩 스피너
   if (accountLoading) {
     return (
-      <DashboardPage
-        icon={User}
-        title={tProfile('title')}
-        description="..."
-        accentColor={SK.blue}
-        maxWidth={960}
-      >
-        <div style={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-          height: '40vh',
-          color: SK.textSecondary,
+      <div
+        style={{
+          minHeight: "100vh",
+          background: SK.bg,
+          color: SK.textPrimary,
           fontFamily: bodyFont,
-          fontSize: SKFont.sm,
-        }}>
-          Loading profile...
-        </div>
-      </DashboardPage>
+          padding: 24,
+        }}
+      >
+        <header style={{ marginBottom: 24 }}>
+          <h1
+            style={{
+              fontFamily: headingFont,
+              fontSize: SKFont.h1,
+              color: SK.gold,
+              margin: 0,
+            }}
+          >
+            {tProfile('title')}
+          </h1>
+          <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>...</p>
+        </header>
+        <main>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            height: '40vh',
+            color: SK.textSecondary,
+            fontFamily: bodyFont,
+            fontSize: SKFont.sm,
+          }}>
+            Loading profile...
+          </div>
+        </main>
+      </div>
     );
   }
 
   return (
     <ServerRequired>
-      <DashboardPage
-        icon={User}
-        title={tProfile('title')}
-        description={`${profile.name} — ${profile.faction} [${profile.factionTag}]`}
-        accentColor={SK.blue}
-        maxWidth={960}
+      <div
+        style={{
+          minHeight: "100vh",
+          background: SK.bg,
+          color: SK.textPrimary,
+          fontFamily: bodyFont,
+          padding: 24,
+        }}
       >
+        {/* Header */}
+        <header style={{ marginBottom: 24 }}>
+          <h1
+            style={{
+              fontFamily: headingFont,
+              fontSize: SKFont.h1,
+              color: SK.gold,
+              margin: 0,
+            }}
+          >
+            {tProfile('title')}
+          </h1>
+          <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+            {profile.name} — {profile.faction} [{profile.factionTag}]
+          </p>
+        </header>
+
+        {/* Tab content */}
+        <main>
         {/* Agent Card + Wallet 섹션 (2-column) --- 반응형 */}
         <div
           className="profile-top-grid"
@@ -496,7 +537,8 @@ export default function ProfilePage() {
             </div>
           )}
         </div>
-      </DashboardPage>
+        </main>
+      </div>
     </ServerRequired>
   );
 }

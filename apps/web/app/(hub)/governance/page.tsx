@@ -9,12 +9,12 @@ import { useState, useMemo, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { SK, bodyFont } from '@/lib/sketch-ui';
-import { DashboardPage, FilterBar, DetailModal, CountryFilterBadge } from '@/components/hub';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
+import { FilterBar, DetailModal } from '@/components/hub';
 import { fetchCouncilProposals, postCouncilVote, CouncilProposal } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
-import { Vote, CheckCircle, XCircle, Clock } from 'lucide-react';
+// lucide-react icons removed — 대시보드 스타일에서 StatCard 제거로 불필요
 import type { Proposal, ProposalStatus, ProposalType } from '@/components/governance/types';
 
 const ProposalList = dynamic(
@@ -111,29 +111,34 @@ function GovernancePageInner() {
   }
 
   return (
-    <DashboardPage
-      icon={Vote}
-      title={tGov('title')}
-      description={tGov('subtitle') + (countryCode ? ` — ${countryCode.toUpperCase()}` : '')}
-      accentColor={SK.blue}
-      heroImage="/images/hero-governance.png"
-      headerChildren={
-        countryCode ? (
-          <CountryFilterBadge
-            countryCode={countryCode.toUpperCase()}
-            label={tGov('filtered', { country: countryCode.toUpperCase() })}
-            clearHref="/governance"
-            clearText={tGov('all')}
-          />
-        ) : undefined
-      }
-      stats={[
-        { label: tGov('totalProposals'), value: String(proposals.length), color: SK.textPrimary, icon: Vote },
-        { label: tGov('activeVoting'), value: String(activeCount), color: SK.orange, icon: Clock },
-        { label: tGov('passed'), value: String(passedCount), color: SK.green, icon: CheckCircle },
-        { label: tGov('rejected'), value: String(rejectedCount), color: SK.red, icon: XCircle },
-      ]}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
     >
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
+          {tGov('title')}
+        </h1>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+          {tGov('subtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
+        </p>
+      </header>
+
+      {/* Tab content */}
+      <main>
       <FilterBar
         options={filterOptions}
         value={statusFilter}
@@ -172,7 +177,8 @@ function GovernancePageInner() {
           />
         )}
       </DetailModal>
-    </DashboardPage>
+      </main>
+    </div>
   );
 }
 

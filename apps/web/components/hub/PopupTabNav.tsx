@@ -6,7 +6,7 @@
  * 클라이언트 상태 기반 전환 (라우트 X)
  */
 
-import { SK, bodyFont } from '@/lib/sketch-ui';
+import { SK, SKFont, bodyFont } from '@/lib/sketch-ui';
 import { useTranslations } from 'next-intl';
 import {
   TrendingUp, Swords, Landmark, Trophy, User,
@@ -155,19 +155,17 @@ export function PopupTabNav({
                   alignItems: 'center',
                   gap: '8px',
                   fontFamily: bodyFont,
-                  fontWeight: 600,
-                  fontSize: '13px',
-                  letterSpacing: '1.2px',
-                  textTransform: 'uppercase',
-                  color: active ? SK.accent : SK.textSecondary,
-                  padding: '14px 16px',
-                  background: 'none',
+                  fontSize: SKFont.body,
+                  fontWeight: active ? 700 : 400,
+                  color: active ? SK.gold : SK.textSecondary,
+                  background: active ? `${SK.gold}15` : 'transparent',
                   border: 'none',
                   borderBottom: active
-                    ? `1px solid ${SK.accent}`
+                    ? `1px solid ${SK.gold}`
                     : '1px solid transparent',
+                  padding: '10px 18px',
                   cursor: 'pointer',
-                  transition: 'color 150ms ease, border-color 150ms ease',
+                  transition: 'all 0.15s',
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -202,18 +200,20 @@ export function PopupTabNav({
         </button>
       </div>
 
-      {/* 서브 탭 바 */}
+      {/* 서브 탭 바 — 대시보드 탭과 동일한 스타일 */}
       {subTabs && subTabs.length > 0 && (
-        <div
+        <nav
           className="popup-sub-tabs"
           style={{
             display: 'flex',
-            gap: '4px',
-            padding: '8px 16px',
-            borderBottom: `1px solid ${SK.borderDark}`,
+            gap: 4,
+            marginBottom: 0,
+            borderBottom: `1px solid ${SK.border}`,
+            paddingBottom: 0,
             background: SK.bg,
             overflowX: 'auto',
             scrollbarWidth: 'none',
+            padding: '0 16px',
           }}
         >
           <style>{`
@@ -227,18 +227,15 @@ export function PopupTabNav({
                 onClick={() => onSubTabChange(sub.key)}
                 style={{
                   fontFamily: bodyFont,
-                  fontWeight: 600,
-                  fontSize: '12px',
-                  letterSpacing: '1px',
-                  textTransform: 'uppercase',
-                  color: active ? SK.textPrimary : SK.textMuted,
-                  padding: '6px 14px',
-                  background: active ? SK.accentBg : 'transparent',
+                  fontSize: SKFont.body,
+                  fontWeight: active ? 700 : 400,
+                  color: active ? SK.gold : SK.textSecondary,
+                  background: active ? `${SK.gold}15` : 'transparent',
                   border: 'none',
-                  borderBottom: active ? `1px solid ${SK.accent}` : '1px solid transparent',
-                  borderRadius: '0',
+                  borderBottom: active ? `1px solid ${SK.gold}` : '1px solid transparent',
+                  padding: '10px 18px',
                   cursor: 'pointer',
-                  transition: 'all 150ms ease',
+                  transition: 'all 0.15s',
                   whiteSpace: 'nowrap',
                 }}
               >
@@ -246,7 +243,7 @@ export function PopupTabNav({
               </button>
             );
           })}
-        </div>
+        </nav>
       )}
     </div>
   );

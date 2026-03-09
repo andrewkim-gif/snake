@@ -9,12 +9,11 @@ import { Suspense, useCallback, useMemo, useState } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
-import { SK, bodyFont } from '@/lib/sketch-ui';
-import { DashboardPage } from '@/components/hub';
+import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { fetchCountries, postCouncilProposal, CountryEconomy } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
-import { Plus } from 'lucide-react';
+// Plus icon removed — 대시보드 스타일에서 PageHeader 제거로 불필요
 import type { ProposalType } from '@/components/governance/types';
 
 const ProposalForm = dynamic(
@@ -144,14 +143,34 @@ function NewProposalPageInner() {
   }
 
   return (
-    <DashboardPage
-      icon={Plus}
-      title={tGov('newProposal')}
-      description={tGov('createProposal')}
-      accentColor={SK.green}
-      heroImage="/images/hero-governance.png"
-      maxWidth={700}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
     >
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
+          {tGov('newProposal')}
+        </h1>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+          {tGov('createProposal')}
+        </p>
+      </header>
+
+      {/* Tab content */}
+      <main style={{ maxWidth: 700 }}>
       {/* 국가 선택 (ProposalForm 전에) */}
       {!selectedCountry && (
         <div
@@ -271,7 +290,8 @@ function NewProposalPageInner() {
           />
         </>
       )}
-    </DashboardPage>
+      </main>
+    </div>
   );
 }
 

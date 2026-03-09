@@ -9,8 +9,8 @@ import { useState, useCallback, useEffect, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, grid } from '@/lib/sketch-ui';
-import { DashboardPage, DetailModal } from '@/components/hub';
-import { Swords, Users, MapPin, DollarSign, Shield, Crown, Star, User } from 'lucide-react';
+import { DetailModal } from '@/components/hub';
+import { Users, Shield, Crown, Star, User } from 'lucide-react';
 import { fetchFactions, fetchFaction, type FactionSummary, type FactionDetailResponse } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
@@ -88,19 +88,34 @@ function FactionsPageInner() {
   const selectedFaction = factionList.find((f) => f.id === selectedId) ?? null;
 
   return (
-    <DashboardPage
-      icon={Swords}
-      title={tFaction('title')}
-      description={tFaction('subtitle')}
-      accentColor="#EF4444"
-      heroImage="/images/hero-factions.png"
-      stats={[
-        { label: tFaction('activeFactions'), value: String(factionCount), color: SK.textPrimary, icon: Swords },
-        { label: tFaction('totalMembers'), value: String(totalMembers), color: SK.blue, icon: Users },
-        { label: tFaction('territories'), value: String(totalTerritories), color: SK.green, icon: MapPin },
-        { label: tFaction('combinedGdp'), value: `${(totalGdp / 1000).toFixed(0)}K`, color: SK.orange, icon: DollarSign },
-      ]}
+    <div
+      style={{
+        minHeight: "100vh",
+        background: SK.bg,
+        color: SK.textPrimary,
+        fontFamily: bodyFont,
+        padding: 24,
+      }}
     >
+      {/* Header */}
+      <header style={{ marginBottom: 24 }}>
+        <h1
+          style={{
+            fontFamily: headingFont,
+            fontSize: SKFont.h1,
+            color: SK.gold,
+            margin: 0,
+          }}
+        >
+          {tFaction('title')}
+        </h1>
+        <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
+          {tFaction('subtitle')}
+        </p>
+      </header>
+
+      {/* Tab content */}
+      <main>
       {/* 팩션 카드 그리드 — 서버 데이터 기반 */}
       <div
         className="factions-card-grid"
@@ -338,7 +353,8 @@ function FactionsPageInner() {
           </div>
         )}
       </DetailModal>
-    </DashboardPage>
+      </main>
+    </div>
   );
 }
 
