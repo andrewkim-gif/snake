@@ -1,11 +1,17 @@
 'use client';
 
 /**
- * GlobeSanctionBarrier — v23 Phase 5 Task 2
+ * GlobeSanctionBarrier — v24 Phase 6 최적화
  * 제재 차단선 이펙트:
- * - 대상국 centroid에 빨간 X 마크 (두 개의 BoxGeometry 교차 + 빨간 emissive)
+ * - 대상국 centroid에 빨간 X 마크 (InstancedMesh 2개로 통합 — draw call 감소)
  * - 제재 발동국→대상국 사이 빨간 점선 아크 라인 (LineDashedMaterial)
- * - 주변 빨간 점선 원 (RingGeometry + MeshBasicMaterial, 느린 회전)
+ * - 주변 빨간 점선 원 (InstancedMesh 1개로 통합)
+ *
+ * v24 Phase 6 변경:
+ * - 개별 Mesh → InstancedMesh 전환 (X바 2개 + 링 1개)
+ * - Material clone 제거 → 공유 material (전체 동시 펄스, 시각적으로 적합)
+ * - 3-tier distance LOD 지원 (far: 아크만, mid: 아이콘 표시, close: 풀)
+ * - prefers-reduced-motion: 펄스/회전 비활성화
  */
 
 import { useRef, useMemo, useEffect } from 'react';
@@ -13,7 +19,10 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
 import { createArcPoints } from '@/lib/effect-utils';
-import { ARC_HEIGHT, COLORS_3D, COLORS_BASE, RENDER_ORDER } from '@/lib/effect-constants';
+import {
+  ARC_HEIGHT, COLORS_3D, COLORS_BASE, RENDER_ORDER, REDUCED_MOTION,
+} from '@/lib/effect-constants';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
@@ -28,6 +37,10 @@ export interface GlobeSanctionBarrierProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
+  /** v24 Phase 6: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
+  /** v24 Phase 6: prefers-reduced-motion */
+  reducedMotion?: boolean;
 }
 
 // ─── Constants ───
@@ -36,29 +49,24 @@ const DEFAULT_RADIUS = 100;
 const SANCTION_ARC_SEGMENTS = 48;
 const X_BAR_LENGTH = 3.0;
 const X_BAR_THICKNESS = 0.4;
-
 const RING_INNER = 4.0;
 const RING_OUTER = 4.5;
+const MAX_SANCTIONS = 30; // InstancedMesh 최대 인스턴스 수
 
 // ─── GC-prevention ───
 
 const _tempVec = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
+const _matrix = new THREE.Matrix4();
+const _rotMatrix = new THREE.Matrix4();
+const _scaleMatrix = new THREE.Matrix4();
 
-// ─── Internal render data ───
+// ─── Internal render data (아크 라인용 — InstancedMesh 대상 아님) ───
 
-interface SanctionRenderData {
-  // X 마크 (대상국 위)
-  xBar1: THREE.Mesh;
-  xBar2: THREE.Mesh;
-  // 빨간 점선 원
-  ring: THREE.Mesh;
-  // 점선 아크 라인 (발동국→대상국)
+interface SanctionArcData {
   dashLine: THREE.Line;
   dashMaterial: THREE.LineDashedMaterial;
-  // 대상국 위치 normal (회전 연산용)
-  targetNormal: THREE.Vector3;
   key: string;
 }
 
@@ -69,11 +77,22 @@ export function GlobeSanctionBarrier({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
+  distanceLOD,
+  reducedMotion = false,
 }: GlobeSanctionBarrierProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const dataRef = useRef<SanctionRenderData[]>([]);
+  const arcDataRef = useRef<SanctionArcData[]>([]);
 
-  // 공유 geometry — PlaneGeometry로 교체 (BoxGeometry는 검은 박스 문제 유발)
+  // InstancedMesh refs
+  const xBar1Ref = useRef<THREE.InstancedMesh>(null);
+  const xBar2Ref = useRef<THREE.InstancedMesh>(null);
+  const ringRef = useRef<THREE.InstancedMesh>(null);
+
+  // 타겟 법선 저장 (링 회전용)
+  const normalsRef = useRef<THREE.Vector3[]>([]);
+  const instanceCountRef = useRef(0);
+
+  // 공유 geometry
   const barGeo = useMemo(
     () => new THREE.PlaneGeometry(X_BAR_LENGTH, X_BAR_THICKNESS),
     [],
@@ -83,7 +102,7 @@ export function GlobeSanctionBarrier({
     [],
   );
 
-  // 공유 material
+  // 공유 material (clone 없이 단일 인스턴스 사용)
   const xMaterial = useMemo(
     () => new THREE.MeshBasicMaterial({
       color: COLORS_3D.sanction.clone(),
@@ -115,66 +134,67 @@ export function GlobeSanctionBarrier({
     const group = groupRef.current;
     if (!group) return;
 
-    // 기존 정리
-    for (const d of dataRef.current) {
-      group.remove(d.xBar1);
-      group.remove(d.xBar2);
-      group.remove(d.ring);
+    // 기존 아크 라인 정리
+    for (const d of arcDataRef.current) {
       group.remove(d.dashLine);
       d.dashLine.geometry.dispose();
       d.dashMaterial.dispose();
     }
-    dataRef.current = [];
+    arcDataRef.current = [];
+    normalsRef.current = [];
 
+    const count = Math.min(sanctions.length, MAX_SANCTIONS);
+    instanceCountRef.current = count;
+
+    // InstancedMesh 인스턴스 매트릭스 설정
+    let idx = 0;
     for (const sanction of sanctions) {
-      const fromC = centroidsMap.get(sanction.from);
-      const toC = centroidsMap.get(sanction.to);
-      if (!toC) continue; // 대상국은 필수
+      if (idx >= MAX_SANCTIONS) break;
 
+      const toC = centroidsMap.get(sanction.to);
+      if (!toC) continue;
+
+      const fromC = centroidsMap.get(sanction.from);
       const targetPos = latLngToVector3(toC[0], toC[1], globeRadius + 1.5);
       const targetNormal = targetPos.clone().normalize();
+      normalsRef.current.push(targetNormal);
 
-      // X 마크: 두 개의 교차 박스
-      const xBar1 = new THREE.Mesh(barGeo, xMaterial.clone());
-      const xBar2 = new THREE.Mesh(barGeo, xMaterial.clone());
-
-      // 표면 법선 방향으로 회전
+      // 기저 회전: _up → targetNormal
       _quat.setFromUnitVectors(_up, targetNormal);
-      xBar1.position.copy(targetPos);
-      xBar1.quaternion.copy(_quat);
-      xBar1.rotateX(-Math.PI / 2); // 표면에 눕힘
-      xBar1.rotateZ(Math.PI / 4);  // 45도 회전 → X 모양
 
-      xBar2.position.copy(targetPos);
-      xBar2.quaternion.copy(_quat);
-      xBar2.rotateX(-Math.PI / 2);
-      xBar2.rotateZ(-Math.PI / 4); // -45도 회전
+      // X Bar 1: +45도 회전
+      _matrix.makeRotationFromQuaternion(_quat);
+      _rotMatrix.makeRotationX(-Math.PI / 2);
+      _matrix.multiply(_rotMatrix);
+      _rotMatrix.makeRotationZ(Math.PI / 4);
+      _matrix.multiply(_rotMatrix);
+      _matrix.setPosition(targetPos);
+      if (xBar1Ref.current) xBar1Ref.current.setMatrixAt(idx, _matrix);
 
-      xBar1.renderOrder = RENDER_ORDER.SANCTION_XMARK;
-      xBar2.renderOrder = RENDER_ORDER.SANCTION_XMARK;
+      // X Bar 2: -45도 회전
+      _matrix.makeRotationFromQuaternion(_quat);
+      _rotMatrix.makeRotationX(-Math.PI / 2);
+      _matrix.multiply(_rotMatrix);
+      _rotMatrix.makeRotationZ(-Math.PI / 4);
+      _matrix.multiply(_rotMatrix);
+      _matrix.setPosition(targetPos);
+      if (xBar2Ref.current) xBar2Ref.current.setMatrixAt(idx, _matrix);
 
-      // 빨간 점선 원 (대상국 주변)
-      const ring = new THREE.Mesh(ringGeo, ringMaterial.clone());
-      ring.position.copy(targetPos);
-      ring.quaternion.copy(_quat);
-      ring.rotateX(-Math.PI / 2);
-      ring.renderOrder = RENDER_ORDER.SURFACE_RING;
+      // Ring
+      _matrix.makeRotationFromQuaternion(_quat);
+      _rotMatrix.makeRotationX(-Math.PI / 2);
+      _matrix.multiply(_rotMatrix);
+      _matrix.setPosition(targetPos);
+      if (ringRef.current) ringRef.current.setMatrixAt(idx, _matrix);
 
-      group.add(xBar1);
-      group.add(xBar2);
-      group.add(ring);
-
-      // 점선 아크 라인 (발동국→대상국)
-      let dashLine: THREE.Line;
-      let dashMaterial: THREE.LineDashedMaterial;
-
+      // 점선 아크 라인 (발동국→대상국) — 아크는 InstancedMesh 불가
       if (fromC) {
         const startPos = latLngToVector3(fromC[0], fromC[1], globeRadius + 1.0);
         const endPos = latLngToVector3(toC[0], toC[1], globeRadius + 1.0);
         const points = createArcPoints(startPos, endPos, globeRadius, ARC_HEIGHT.sanction, SANCTION_ARC_SEGMENTS);
 
         const lineGeo = new THREE.BufferGeometry().setFromPoints(points);
-        dashMaterial = new THREE.LineDashedMaterial({
+        const dashMaterial = new THREE.LineDashedMaterial({
           color: COLORS_BASE.sanction.clone(),
           dashSize: 2.0,
           gapSize: 1.5,
@@ -183,64 +203,79 @@ export function GlobeSanctionBarrier({
           depthWrite: false,
         });
 
-        dashLine = new THREE.Line(lineGeo, dashMaterial);
-        dashLine.computeLineDistances(); // dashed material 필수
+        const dashLine = new THREE.Line(lineGeo, dashMaterial);
+        dashLine.computeLineDistances();
         dashLine.renderOrder = RENDER_ORDER.ARC_SANCTION;
-      } else {
-        // from 없으면 빈 라인
-        dashMaterial = new THREE.LineDashedMaterial({ color: COLORS_BASE.sanction.clone() });
-        dashLine = new THREE.Line(new THREE.BufferGeometry(), dashMaterial);
-        dashLine.visible = false;
+        group.add(dashLine);
+
+        arcDataRef.current.push({
+          dashLine,
+          dashMaterial,
+          key: `${sanction.from}_${sanction.to}_${sanction.timestamp}`,
+        });
       }
 
-      group.add(dashLine);
+      idx++;
+    }
 
-      dataRef.current.push({
-        xBar1,
-        xBar2,
-        ring,
-        dashLine,
-        dashMaterial,
-        targetNormal,
-        key: `${sanction.from}_${sanction.to}_${sanction.timestamp}`,
-      });
+    // InstancedMesh count + needsUpdate
+    if (xBar1Ref.current) {
+      xBar1Ref.current.count = idx;
+      xBar1Ref.current.instanceMatrix.needsUpdate = true;
+    }
+    if (xBar2Ref.current) {
+      xBar2Ref.current.count = idx;
+      xBar2Ref.current.instanceMatrix.needsUpdate = true;
+    }
+    if (ringRef.current) {
+      ringRef.current.count = idx;
+      ringRef.current.instanceMatrix.needsUpdate = true;
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sanctions, centroidsMap, globeRadius]);
 
-  // 매 프레임: X 마크 펄스 + 링 느린 회전
+  // 매 프레임: X 마크 펄스 + 링 회전 (LOD + reduced motion 반영)
   useFrame(({ clock }) => {
     if (!visible) return;
+
     const elapsed = clock.getElapsedTime();
+    const showIcons = distanceLOD?.showIcons ?? true;
 
-    for (const d of dataRef.current) {
-      // X 마크 펄스 (크기 진동)
+    // X 마크: 스케일 펄스 + opacity 진동
+    if (reducedMotion) {
+      // 정적 표시
+      xMaterial.opacity = REDUCED_MOTION.staticOpacity;
+      ringMaterial.opacity = REDUCED_MOTION.staticOpacity * 0.6;
+    } else {
       const pulse = 1.0 + Math.sin(elapsed * 3.0) * 0.15;
-      d.xBar1.scale.setScalar(pulse);
-      d.xBar2.scale.setScalar(pulse);
-
-      // X 마크 opacity 진동
       const xOpacity = 0.7 + Math.sin(elapsed * 2.0) * 0.3;
-      (d.xBar1.material as THREE.MeshBasicMaterial).opacity = xOpacity;
-      (d.xBar2.material as THREE.MeshBasicMaterial).opacity = xOpacity;
+      xMaterial.opacity = xOpacity;
 
-      // 링 느린 회전 (법선 축 기준)
-      d.ring.rotateZ(0.003);
+      // 스케일 펄스는 InstancedMesh에서 전체 그룹에 적용
+      if (xBar1Ref.current) xBar1Ref.current.scale.setScalar(pulse);
+      if (xBar2Ref.current) xBar2Ref.current.scale.setScalar(pulse);
 
       // 링 opacity 진동
-      (d.ring.material as THREE.MeshBasicMaterial).opacity = 0.3 + Math.sin(elapsed * 1.5) * 0.15;
+      ringMaterial.opacity = 0.3 + Math.sin(elapsed * 1.5) * 0.15;
+
+      // 링 회전: InstancedMesh 전체에 느린 Z 회전 적용
+      if (ringRef.current) {
+        ringRef.current.rotation.z += 0.003;
+      }
     }
+
+    // LOD: far에서 아이콘 숨김
+    if (xBar1Ref.current) xBar1Ref.current.visible = showIcons;
+    if (xBar2Ref.current) xBar2Ref.current.visible = showIcons;
+    if (ringRef.current) ringRef.current.visible = showIcons;
   });
 
   // cleanup
   useEffect(() => {
     return () => {
-      for (const d of dataRef.current) {
+      for (const d of arcDataRef.current) {
         d.dashLine.geometry.dispose();
         d.dashMaterial.dispose();
-        (d.xBar1.material as THREE.Material).dispose();
-        (d.xBar2.material as THREE.Material).dispose();
-        (d.ring.material as THREE.Material).dispose();
       }
       barGeo.dispose();
       ringGeo.dispose();
@@ -250,5 +285,29 @@ export function GlobeSanctionBarrier({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  return <group ref={groupRef} visible={visible} />;
+  return (
+    <group ref={groupRef} visible={visible}>
+      {/* InstancedMesh: X 바 1 (+45도) */}
+      <instancedMesh
+        ref={xBar1Ref}
+        args={[barGeo, xMaterial, MAX_SANCTIONS]}
+        renderOrder={RENDER_ORDER.SANCTION_XMARK}
+        frustumCulled={false}
+      />
+      {/* InstancedMesh: X 바 2 (-45도) */}
+      <instancedMesh
+        ref={xBar2Ref}
+        args={[barGeo, xMaterial, MAX_SANCTIONS]}
+        renderOrder={RENDER_ORDER.SANCTION_XMARK}
+        frustumCulled={false}
+      />
+      {/* InstancedMesh: 점선 원 링 */}
+      <instancedMesh
+        ref={ringRef}
+        args={[ringGeo, ringMaterial, MAX_SANCTIONS]}
+        renderOrder={RENDER_ORDER.SURFACE_RING}
+        frustumCulled={false}
+      />
+    </group>
+  );
 }

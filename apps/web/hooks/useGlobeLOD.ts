@@ -1,19 +1,27 @@
 'use client';
 
 /**
- * useGlobeLOD — 디바이스 성능 기반 LOD(Level of Detail) 설정 훅 (v15 Phase 6 + v20 landmark 확장)
+ * useGlobeLOD — 디바이스 성능 + 카메라 거리 기반 LOD 설정 훅
+ * (v15 Phase 6 + v20 landmark + v24 Phase 6: 3-tier distance LOD + reduced motion)
  *
- * navigator.hardwareConcurrency + 화면 크기로 성능 등급 판별:
- * - Desktop (고성능): 모든 이펙트 활성, 195개국 라벨, 42개 랜드마크
- * - Mobile (저성능): 파티클 50%, 라벨 상위 30개국, 15개 랜드마크, 무역라인/안개/충격파 비활성화
+ * 2개 축의 독립 LOD:
+ *   1. 디바이스 성능 (desktop/mobile) — navigator.hardwareConcurrency + 화면 크기
+ *   2. 카메라 거리 (close/mid/far) — useFrame에서 실시간 계산, 히스테리시스 적용
  *
- * ⚠️ 참고: useGlobeLOD(2-tier)와 performance.ts(3-tier AdaptiveQuality)는 완전 별개 시스템.
- *    랜드마크는 useGlobeLOD만 사용. AdaptiveQuality 연동은 v20 Phase 5 별도 브리지.
+ * ⚠️ 카메라 거리 LOD는 R3F Canvas 안에서만 동작 (useFrame 필요).
+ *    Canvas 밖 GlobeView 컴포넌트에서 호출 시 distanceTier='close' 고정.
+ *    → useGlobeLODDistance() 별도 훅을 Canvas 안 컴포넌트에서 사용.
  *
- * 반환값: GlobeLODConfig 객체 (각 컴포넌트에서 참조)
+ * 반환값: GlobeLODConfig 객체
  */
 
-import { useMemo, useEffect, useState } from 'react';
+import { useMemo, useEffect, useState, useRef, useCallback } from 'react';
+import { useFrame } from '@react-three/fiber';
+import {
+  LOD_DISTANCE,
+  ARC_SEGMENTS,
+  type DistanceLODTier,
+} from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -56,6 +64,25 @@ export interface GlobeLODConfig {
   enableSpyTrail: boolean;
   /** 핵실험 버섯구름 활성화 여부 (모바일: false, 무거움) */
   enableNukeEffect: boolean;
+}
+
+/**
+ * v24 Phase 6: 카메라 거리 LOD 설정.
+ * useGlobeLODDistance() 에서 반환.
+ */
+export interface DistanceLODConfig {
+  /** 카메라 거리 LOD 티어 */
+  distanceTier: DistanceLODTier;
+  /** LOD에 따른 아크 세그먼트 수 (64/32/16) */
+  arcSegments: number;
+  /** LOD에 따른 파티클 배율 (1.0/0.5/0.0) */
+  particleMultiplier: number;
+  /** 카고 메쉬 표시 여부 */
+  showCargo: boolean;
+  /** 파티클 표시 여부 */
+  showParticles: boolean;
+  /** 아이콘 표시 여부 (눈, X마크 등) */
+  showIcons: boolean;
 }
 
 // ─── 감지 함수 ───
@@ -121,7 +148,36 @@ const MOBILE_CONFIG: GlobeLODConfig = {
   enableNukeEffect: false,    // 버섯구름 파티클 무거움 — 모바일 비활성화
 };
 
-// ─── Hook ───
+// ─── Distance LOD 프리셋 ───
+
+const DISTANCE_LOD_CLOSE: DistanceLODConfig = {
+  distanceTier: 'close',
+  arcSegments: ARC_SEGMENTS.HIGH,     // 64
+  particleMultiplier: 1.0,
+  showCargo: true,
+  showParticles: true,
+  showIcons: true,
+};
+
+const DISTANCE_LOD_MID: DistanceLODConfig = {
+  distanceTier: 'mid',
+  arcSegments: ARC_SEGMENTS.MEDIUM,   // 32
+  particleMultiplier: 0.5,
+  showCargo: false,
+  showParticles: true,
+  showIcons: true,
+};
+
+const DISTANCE_LOD_FAR: DistanceLODConfig = {
+  distanceTier: 'far',
+  arcSegments: ARC_SEGMENTS.LOW,      // 16
+  particleMultiplier: 0.0,
+  showCargo: false,
+  showParticles: false,
+  showIcons: false,
+};
+
+// ─── Hook: 디바이스 성능 LOD ───
 
 export function useGlobeLOD(): GlobeLODConfig {
   const [isMobile, setIsMobile] = useState(false);
@@ -141,6 +197,51 @@ export function useGlobeLOD(): GlobeLODConfig {
   const config = useMemo<GlobeLODConfig>(() => {
     return isMobile ? MOBILE_CONFIG : DESKTOP_CONFIG;
   }, [isMobile]);
+
+  return config;
+}
+
+// ─── Hook: 카메라 거리 LOD (R3F Canvas 안에서만 사용) ───
+
+/**
+ * v24 Phase 6: 카메라 거리 기반 3단계 LOD 훅.
+ * useFrame 내에서 카메라 거리를 실시간 감지하고 히스테리시스를 적용.
+ *
+ * ⚠️ 반드시 R3F Canvas 안에서 호출해야 함 (useFrame 사용).
+ */
+export function useGlobeLODDistance(): DistanceLODConfig {
+  const tierRef = useRef<DistanceLODTier>('close');
+  const [distanceTier, setDistanceTier] = useState<DistanceLODTier>('close');
+
+  // 매 프레임 카메라 거리 체크 (히스테리시스 적용)
+  useFrame(({ camera }) => {
+    const dist = camera.position.length();
+    const current = tierRef.current;
+    let next = current;
+
+    if (current === 'close') {
+      if (dist > LOD_DISTANCE.CLOSE_TO_MID) next = 'mid';
+    } else if (current === 'mid') {
+      if (dist < LOD_DISTANCE.MID_TO_CLOSE) next = 'close';
+      else if (dist > LOD_DISTANCE.MID_TO_FAR) next = 'far';
+    } else {
+      // current === 'far'
+      if (dist < LOD_DISTANCE.FAR_TO_MID) next = 'mid';
+    }
+
+    if (next !== current) {
+      tierRef.current = next;
+      setDistanceTier(next);
+    }
+  });
+
+  const config = useMemo<DistanceLODConfig>(() => {
+    switch (distanceTier) {
+      case 'close': return DISTANCE_LOD_CLOSE;
+      case 'mid':   return DISTANCE_LOD_MID;
+      case 'far':   return DISTANCE_LOD_FAR;
+    }
+  }, [distanceTier]);
 
   return config;
 }

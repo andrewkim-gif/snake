@@ -244,7 +244,58 @@ export const ARC_SEGMENTS = {
 } as const;
 
 // ===================================================================
-// 9. Centroid Prop Type (Phase 1: 타입 정의만, 리네임은 각 Phase에서 점진적 적용)
+// 9. LOD Distance Thresholds (v24 Phase 6: 3-tier camera-distance LOD)
+// ===================================================================
+
+/**
+ * 카메라 거리 기반 3단계 LOD 임계값.
+ * 히스테리시스 버퍼(20 단위)로 경계 근처 빠른 전환 방지.
+ *
+ *   close (< 200): 풀 디테일 — 모든 파티클, 64-segment 아크, 모든 아이콘
+ *   mid (200-350): 중간 — 파티클 50%, 32-segment 아크, 카고 비표시
+ *   far (> 350): 최소 — 아크 라인만 (정적), 파티클/아이콘 비표시
+ */
+export const LOD_DISTANCE = {
+  /** close → mid 전환 거리 (히스테리시스 적용: 200 + 10) */
+  CLOSE_TO_MID: 210,
+  /** mid → close 전환 거리 (히스테리시스 적용: 200 - 10) */
+  MID_TO_CLOSE: 190,
+  /** mid → far 전환 거리 (히스테리시스 적용: 350 + 10) */
+  MID_TO_FAR: 360,
+  /** far → mid 전환 거리 (히스테리시스 적용: 350 - 10) */
+  FAR_TO_MID: 340,
+} as const;
+
+/** 카메라 거리 LOD 티어 타입 */
+export type DistanceLODTier = 'close' | 'mid' | 'far';
+
+// ===================================================================
+// 10. Reduced Motion Accessibility (v24 Phase 6)
+// ===================================================================
+
+/**
+ * prefers-reduced-motion 감지 시 적용할 기본값.
+ * 파티클/쉐이크/펄스 비활성화, 아크는 정적 라인으로 표시.
+ */
+export const REDUCED_MOTION = {
+  /** 파티클 표시 여부 */
+  showParticles: false,
+  /** 펄스/글로우 애니메이션 여부 */
+  enablePulse: false,
+  /** 카메라 쉐이크 여부 */
+  enableShake: false,
+  /** 링 회전 여부 */
+  enableRotation: false,
+  /** 아이콘 크기 진동 여부 */
+  enableScaleOscillation: false,
+  /** 대시 라인 애니메이션 여부 (false → 정적 라인) */
+  enableDashAnimation: false,
+  /** 고정 opacity (펄스 대신) */
+  staticOpacity: 0.6,
+} as const;
+
+// ===================================================================
+// 11. Centroid Prop Type (Phase 1: 타입 정의만, 리네임은 각 Phase에서 점진적 적용)
 // ===================================================================
 
 /**

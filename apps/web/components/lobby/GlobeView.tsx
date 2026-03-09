@@ -43,7 +43,8 @@ import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 // v24 Phase 2: Unified camera controller (CameraAutoFocus + CameraShake 통합)
 import { CameraController } from '@/components/3d/CameraController';
 import { CAMERA_PRIORITY } from '@/lib/effect-constants';
-import { useGlobeLOD } from '@/hooks/useGlobeLOD';
+import { useGlobeLOD, useGlobeLODDistance } from '@/hooks/useGlobeLOD';
+import { useReducedMotion } from '@/hooks/useReducedMotion';
 import { geoToXYZ } from '@/lib/globe-utils';
 
 // v17: Intro camera animation
@@ -1621,6 +1622,12 @@ function GlobeScene({
   // v15 Phase 6: Mobile LOD detection
   const lodConfig = useGlobeLOD();
 
+  // v24 Phase 6: Camera distance LOD (3-tier: close/mid/far)
+  const distanceLOD = useGlobeLODDistance();
+
+  // v24 Phase 6: Reduced motion accessibility
+  const reducedMotion = useReducedMotion();
+
   // v21 Phase 4: 모바일 디바이스 감지 (Bloom 비활성화용)
   const isMobile = useMemo(() => {
     if (typeof window === 'undefined') return false;
@@ -1810,30 +1817,36 @@ function GlobeScene({
         />
       )}
 
-      {/* v23 Phase 5: 제재 차단선 */}
+      {/* v23 Phase 5: 제재 차단선 (v24 Phase 6: InstancedMesh + LOD + reduced motion) */}
       {lodConfig.enableSanctionBarrier && sanctions.length > 0 && centroidsMap.size > 0 && (
         <GlobeSanctionBarrier
           sanctions={sanctions}
           centroidsMap={centroidsMap}
           globeRadius={RADIUS}
+          distanceLOD={distanceLOD}
+          reducedMotion={reducedMotion}
         />
       )}
 
-      {/* v23 Phase 5: 자원 채굴 지표 이펙트 */}
+      {/* v23 Phase 5: 자원 채굴 지표 이펙트 (v24 Phase 6: material pool + LOD + reduced motion) */}
       {lodConfig.enableResourceGlow && resources.length > 0 && centroidsMap.size > 0 && (
         <GlobeResourceGlow
           resources={resources}
           centroidsMap={centroidsMap}
           globeRadius={RADIUS}
+          distanceLOD={distanceLOD}
+          reducedMotion={reducedMotion}
         />
       )}
 
-      {/* v23 Phase 5: 첩보 점선 트레일 */}
+      {/* v23 Phase 5: 첩보 점선 트레일 (v24 Phase 6: shared material + LOD + reduced motion) */}
       {lodConfig.enableSpyTrail && spyOps.length > 0 && centroidsMap.size > 0 && (
         <GlobeSpyTrail
           spyOps={spyOps}
           centroidsMap={centroidsMap}
           globeRadius={RADIUS}
+          distanceLOD={distanceLOD}
+          reducedMotion={reducedMotion}
         />
       )}
 

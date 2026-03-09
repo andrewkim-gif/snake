@@ -1,18 +1,25 @@
 'use client';
 
 /**
- * GlobeResourceGlow — v23 Phase 5 Task 3, v24 Phase 4 통일
+ * GlobeResourceGlow — v24 Phase 6 최적화
  * 자원 채굴 지표 이펙트:
  * - 자원 산출국 centroid 지표면에 빛나는 원 (RingGeometry + ShaderMaterial pulse)
  * - 상승 파티클 (InstancedMesh SphereGeometry(0.15) 6~8개, 위로 상승 후 페이드)
- * - v24: COLORS_3D.resource 색상, SURFACE_ALT.GROUND 고도, RENDER_ORDER 체계 적용
+ *
+ * v24 Phase 6 변경:
+ * - ShaderMaterial: per-event uTime은 필요하므로 material 풀링 대신 uniform 기반 유지
+ *   (architecture doc: "Acceptable. ShaderMaterial has per-event uniform state.")
+ * - particleMaterial: 공유 material 사용 (color.clone() 대신 단일 인스턴스)
+ * - 3-tier distance LOD 지원 (far: 링만, mid: 파티클 50%, close: 풀)
+ * - prefers-reduced-motion: 펄스/회전 비활성화, 정적 글로우
  */
 
 import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
-import { COLORS_3D, SURFACE_ALT, RENDER_ORDER } from '@/lib/effect-constants';
+import { COLORS_3D, SURFACE_ALT, RENDER_ORDER, REDUCED_MOTION } from '@/lib/effect-constants';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
@@ -27,6 +34,10 @@ export interface GlobeResourceGlowProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
+  /** v24 Phase 6: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
+  /** v24 Phase 6: prefers-reduced-motion */
+  reducedMotion?: boolean;
 }
 
 // ─── Constants ───
@@ -66,10 +77,11 @@ const ringFragmentShader = `
   uniform vec3 uColor;
   uniform float uTime;
   uniform float uOpacity;
+  uniform float uReducedMotion;
   varying vec2 vUv;
   void main() {
-    // 펄스: 밝기 진동
-    float pulse = 0.5 + 0.5 * sin(uTime * 3.0);
+    // 펄스: 밝기 진동 (reduced motion이면 정적)
+    float pulse = uReducedMotion > 0.5 ? 0.7 : 0.5 + 0.5 * sin(uTime * 3.0);
     // 링 중심에서 바깥으로 밝기 감소
     float dist = length(vUv - 0.5) * 2.0;
     float glow = 1.0 - smoothstep(0.3, 1.0, dist);
@@ -84,7 +96,6 @@ interface ResourceRenderData {
   ring: THREE.Mesh;
   ringMaterial: THREE.ShaderMaterial;
   particles: THREE.InstancedMesh;
-  particleMaterial: THREE.MeshBasicMaterial;
   normal: THREE.Vector3; // 표면 법선
   position: THREE.Vector3;
   key: string;
@@ -97,6 +108,8 @@ export function GlobeResourceGlow({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
+  distanceLOD,
+  reducedMotion = false,
 }: GlobeResourceGlowProps) {
   const groupRef = useRef<THREE.Group>(null);
   const dataRef = useRef<ResourceRenderData[]>([]);
@@ -111,6 +124,18 @@ export function GlobeResourceGlow({
     [],
   );
 
+  // v24 Phase 6: 공유 particle material (clone 제거)
+  const sharedParticleMaterial = useMemo(
+    () => new THREE.MeshBasicMaterial({
+      color: RESOURCE_COLOR_HDR.clone(),
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      toneMapped: false,
+    }),
+    [],
+  );
+
   // resources 변경 시 재구축
   useEffect(() => {
     const group = groupRef.current;
@@ -121,7 +146,6 @@ export function GlobeResourceGlow({
       group.remove(d.ring);
       group.remove(d.particles);
       d.ringMaterial.dispose();
-      d.particleMaterial.dispose();
       d.particles.dispose();
     }
     dataRef.current = [];
@@ -133,12 +157,13 @@ export function GlobeResourceGlow({
       const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + SURFACE_ALT.GROUND);
       const normal = pos.clone().normalize();
 
-      // 글로우 링
+      // 글로우 링 (per-event ShaderMaterial — uTime phase offset 필요)
       const ringMaterial = new THREE.ShaderMaterial({
         uniforms: {
           uColor: { value: RESOURCE_COLOR_HDR.clone() },
           uTime: { value: 0 },
           uOpacity: { value: 0.7 },
+          uReducedMotion: { value: reducedMotion ? 1.0 : 0.0 },
         },
         vertexShader: ringVertexShader,
         fragmentShader: ringFragmentShader,
@@ -156,21 +181,13 @@ export function GlobeResourceGlow({
       ring.rotateX(-Math.PI / 2);
       ring.renderOrder = RENDER_ORDER.SURFACE_GLOW;
 
-      // 상승 파티클 (InstancedMesh)
-      const particleMaterial = new THREE.MeshBasicMaterial({
-        color: RESOURCE_COLOR_HDR.clone(),
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        toneMapped: false,
-      });
-
+      // 상승 파티클 (InstancedMesh — 공유 material 사용)
       const particles = new THREE.InstancedMesh(
         particleGeo,
-        particleMaterial,
+        sharedParticleMaterial,
         PARTICLE_COUNT,
       );
-      particles.count = 0; // ★ 초기 count=0 (origin 검은박스 방지)
+      particles.count = 0; // 초기 count=0 (origin 검은박스 방지)
       particles.renderOrder = RENDER_ORDER.PARTICLES;
 
       group.add(ring);
@@ -180,7 +197,6 @@ export function GlobeResourceGlow({
         ring,
         ringMaterial,
         particles,
-        particleMaterial,
         normal,
         position: pos.clone(),
         key: `${resource.country}_${resource.resourceType}_${resource.timestamp}`,
@@ -189,20 +205,36 @@ export function GlobeResourceGlow({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resources, centroidsMap, globeRadius]);
 
-  // 매 프레임: 셰이더 time + 파티클 상승 애니메이션
+  // 매 프레임: 셰이더 time + 파티클 상승 (LOD + reduced motion 반영)
   useFrame(({ clock }) => {
     if (!visible) return;
     const elapsed = clock.getElapsedTime();
 
-    for (const d of dataRef.current) {
-      // 링 셰이더 time
-      d.ringMaterial.uniforms.uTime.value = elapsed;
+    // LOD 기반 파티클 표시/숨김 + 배율
+    const showParticles = distanceLOD?.showParticles ?? true;
+    const lodParticleMultiplier = distanceLOD?.particleMultiplier ?? 1.0;
+    const effectiveParticleCount = showParticles
+      ? Math.max(1, Math.floor(PARTICLE_COUNT * lodParticleMultiplier))
+      : 0;
 
-      // 링 느린 회전
-      d.ring.rotateZ(0.002);
+    for (const d of dataRef.current) {
+      // 링 셰이더 time + reduced motion uniform 업데이트
+      d.ringMaterial.uniforms.uTime.value = elapsed;
+      d.ringMaterial.uniforms.uReducedMotion.value = reducedMotion ? 1.0 : 0.0;
+
+      // 링 느린 회전 (reduced motion이면 비활성화)
+      if (!reducedMotion) {
+        d.ring.rotateZ(0.002);
+      }
+
+      // reduced motion이면 파티클 숨김
+      if (reducedMotion || !showParticles) {
+        d.particles.count = 0;
+        continue;
+      }
 
       // 파티클 상승: 각 파티클은 시차(phase offset)를 두고 순환
-      for (let i = 0; i < PARTICLE_COUNT; i++) {
+      for (let i = 0; i < effectiveParticleCount; i++) {
         const phase = i / PARTICLE_COUNT;
         const t = ((elapsed / PARTICLE_CYCLE_SEC) + phase) % 1.0;
 
@@ -227,11 +259,11 @@ export function GlobeResourceGlow({
         _tempMatrix.scale(_scaleVec);
 
         d.particles.setMatrixAt(i, _tempMatrix);
-
-        // 색상: opacity 페이드 (위로 갈수록 투명)
-        d.particleMaterial.opacity = 0.8 * (1.0 - t * 0.8);
       }
-      d.particles.count = PARTICLE_COUNT; // ★ count 복원
+
+      // opacity 페이드 (공유 material이므로 마지막 파티클 기준)
+      sharedParticleMaterial.opacity = 0.8;
+      d.particles.count = effectiveParticleCount;
       d.particles.instanceMatrix.needsUpdate = true;
     }
   });
@@ -241,11 +273,11 @@ export function GlobeResourceGlow({
     return () => {
       for (const d of dataRef.current) {
         d.ringMaterial.dispose();
-        d.particleMaterial.dispose();
         d.particles.dispose();
       }
       ringGeo.dispose();
       particleGeo.dispose();
+      sharedParticleMaterial.dispose();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
