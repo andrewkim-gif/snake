@@ -20,8 +20,10 @@ import {
   CLOUD_ASSETS, SPECIAL_ASSETS, OTHER_ASSETS,
   envAssetPath, shadowAssetPath,
   waterRipplePath, windmillPath,
+  effectFramePath, destructibleFramePath, propFramePath,
   WATER_RIPPLE_COUNT, WATER_RIPPLE_FRAMES,
   WINDMILL_COUNT, WINDMILL_FRAMES,
+  EFFECT_ANIMS, DESTRUCTIBLE_ANIMS, PROP_ANIMS,
   type GroundSeries, type WallSeries, type RoofSeries,
   type TreeSeries, type FloraSeries, type MiscSeries,
   type DoorSeries, type ChestSeries,
@@ -349,6 +351,57 @@ function buildWindmillAssets(): BundleAsset[] {
 }
 
 /**
+ * Effects 애니메이션 프레임 에셋 (14종)
+ * 건설/버프/전투 이펙트
+ */
+function buildEffectAssets(): BundleAsset[] {
+  const assets: BundleAsset[] = [];
+  for (const effect of EFFECT_ANIMS) {
+    for (let frame = 0; frame < effect.frames; frame++) {
+      assets.push({
+        alias: `effect_${effect.name}_${frame}`,
+        src: effectFramePath(effect.name, frame),
+      });
+    }
+  }
+  return assets;
+}
+
+/**
+ * Destructible 애니메이션 프레임 에셋 (17종)
+ * 건물 파괴 이펙트
+ */
+function buildDestructibleAssets(): BundleAsset[] {
+  const assets: BundleAsset[] = [];
+  for (const destr of DESTRUCTIBLE_ANIMS) {
+    for (let frame = 0; frame < destr.frames; frame++) {
+      assets.push({
+        alias: `destructible_${destr.name}_${frame}`,
+        src: destructibleFramePath(destr.name, frame),
+      });
+    }
+  }
+  return assets;
+}
+
+/**
+ * Props 애니메이션 프레임 에셋 (11종)
+ * Fire, Torch, Barrel 등 소품 애니메이션
+ */
+function buildPropAnimAssets(): BundleAsset[] {
+  const assets: BundleAsset[] = [];
+  for (const prop of PROP_ANIMS) {
+    for (let frame = 0; frame < prop.frames; frame++) {
+      assets.push({
+        alias: `prop_${prop.name}_${frame}`,
+        src: propFramePath(prop.name, frame),
+      });
+    }
+  }
+  return assets;
+}
+
+/**
  * 공통 에셋 (구름, 특수 타일, 애니메이션)
  */
 function buildCommonAssets(): BundleAsset[] {
@@ -433,6 +486,14 @@ export function buildBiomeManifest(biome: BiomeType): AssetManifest {
         name: 'common',
         assets: buildCommonAssets(),
       },
+      {
+        name: 'effects',
+        assets: [
+          ...buildEffectAssets(),
+          ...buildDestructibleAssets(),
+          ...buildPropAnimAssets(),
+        ],
+      },
     ],
   };
 }
@@ -446,6 +507,7 @@ export function getBiomeBundleNames(biome: BiomeType): string[] {
     `buildings_${biome}`,
     `decorations_${biome}`,
     'common',
+    'effects',
   ];
 }
 

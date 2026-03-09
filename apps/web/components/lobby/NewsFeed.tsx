@@ -31,6 +31,8 @@ export interface NewsItem {
   headline: string;
   detail?: string;
   countryISO?: string;
+  /** v28: 타겟 국가 ISO3 (아크 이벤트 라벨용) */
+  targetISO?: string;
   factionName?: string;
   timestamp: number; // unix ms
 }

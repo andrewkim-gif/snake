@@ -55,13 +55,27 @@ export interface FactionSummary {
   total_gdp?: number;
 }
 
+export interface FactionMember {
+  user_id: string;
+  username: string;
+  role: 'supreme_leader' | 'council' | 'commander' | 'member';
+  joined_at: string;
+}
+
+export interface FactionDetailResponse extends FactionSummary {
+  treasury?: Record<string, number>;
+  members: FactionMember[];
+}
+
 export async function fetchFactions(): Promise<FactionSummary[]> {
   const data = await apiFetch<{ factions: FactionSummary[] }>('/api/factions');
   return data?.factions ?? [];
 }
 
-export async function fetchFaction(id: string): Promise<FactionSummary | null> {
-  return apiFetch<FactionSummary>(`/api/factions/${id}`);
+export async function fetchFaction(id: string): Promise<FactionDetailResponse | null> {
+  const data = await apiFetch<{ faction: FactionSummary; members: FactionMember[] }>(`/api/factions/${id}`);
+  if (!data?.faction) return null;
+  return { ...data.faction, members: data.members ?? [] };
 }
 
 export interface HofCategory {

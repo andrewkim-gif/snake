@@ -242,7 +242,7 @@ export interface UiState {
   dominationStates: Map<string, CountryDominationState>;
   wars: WarEffectData[];
   // v14: Global events (EventTicker)
-  globalEvents: Array<{ id: string; type: string; message: string; timestamp: number }>;
+  globalEvents: Array<{ id: string; type: string; message: string; timestamp: number; countryCode?: string; targetCode?: string; countryName?: string; targetName?: string }>;
   // v14: Epoch scoreboard (full player data)
   epochScoreboard: EpochScoreboardEntry[];
   // v15: Trade route visualization data
@@ -1018,7 +1018,7 @@ export function useSocket() {
 
     // v18: Batch global events with 500ms throttle to prevent UI jank
     // (300-agent sim produces 2-3 events/sec → without throttle, 2-3 full React re-renders/sec)
-    let pendingEvents: Array<{ id: string; type: string; message: string; timestamp: number }> = [];
+    let pendingEvents: Array<{ id: string; type: string; message: string; timestamp: number; countryCode?: string; targetCode?: string; countryName?: string; targetName?: string }> = [];
     let flushTimer: ReturnType<typeof setTimeout> | null = null;
     const FLUSH_INTERVAL = 500; // ms
 
@@ -1033,12 +1033,16 @@ export function useSocket() {
       }));
     };
 
-    socket.on('global_event', (data: { type: string; message: string }) => {
+    socket.on('global_event', (data: { type: string; message: string; countryCode?: string; targetCode?: string; countryName?: string; targetName?: string }) => {
       pendingEvents.push({
         id: `evt_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         type: data.type,
         message: data.message,
         timestamp: Date.now(),
+        countryCode: data.countryCode,
+        targetCode: data.targetCode,
+        countryName: data.countryName,
+        targetName: data.targetName,
       });
       if (!flushTimer) {
         flushTimer = setTimeout(flushEvents, FLUSH_INTERVAL);

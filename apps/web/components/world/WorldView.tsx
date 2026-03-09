@@ -8,6 +8,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { SK, bodyFont } from '@/lib/sketch-ui';
+import { GlobeLoadingScreen } from '@/components/lobby/GlobeLoadingScreen';
 import type { CountryClientState } from '@/lib/globe-data';
 import { loadGeoJSON, featureToCountryState } from '@/lib/globe-data';
 
@@ -96,6 +97,12 @@ export function WorldView({
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [fallbackStates, setFallbackStates] = useState<Map<string, CountryClientState>>(new Map());
+
+  // 3D Globe 로딩 상태
+  const [globeReady, setGlobeReady] = useState(false);
+  const [loadingDismissed, setLoadingDismissed] = useState(false);
+  const handleGlobeReady = useCallback(() => setGlobeReady(true), []);
+  const handleLoadingFadeComplete = useCallback(() => setLoadingDismissed(true), []);
 
   // v14: Hover state for GlobeHoverPanel
   const [hoverData, setHoverData] = useState<GlobeHoverData | null>(null);
@@ -257,8 +264,17 @@ export function WorldView({
           resources={resources}
           spyOps={spyOps}
           nukes={nukes}
+          onReady={handleGlobeReady}
         />
       </div>
+
+      {/* 3D 로딩 스크린 */}
+      {!loadingDismissed && (
+        <GlobeLoadingScreen
+          ready={globeReady}
+          onFadeComplete={handleLoadingFadeComplete}
+        />
+      )}
 
       {/* 하단 범례 — 삭제됨 (v17) */}
 

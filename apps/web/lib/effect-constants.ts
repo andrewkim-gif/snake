@@ -186,6 +186,11 @@ export const RENDER_ORDER = {
 
   // Layer 8: 라벨 (100)
   COUNTRY_LABEL:   100,
+
+  // Layer 9: 이벤트 라벨 (110-119) — v28 Globe Event Labels
+  EVENT_LABEL_LINE:  110,   // Leader line
+  EVENT_LABEL_TAG:   112,   // Event briefing label
+  ARC_KEYWORD_TAG:   115,   // Arc midpoint keyword tag
 } as const;
 
 // ===================================================================

@@ -27,6 +27,10 @@ export interface GlobalEventData {
   type: string;
   message: string;
   timestamp: number;
+  /** v28: 이벤트 발생 국가 ISO3 (Globe Event Labels용) */
+  countryCode?: string;
+  /** v28: 타겟 국가 ISO3 (아크 라벨용) */
+  targetCode?: string;
 }
 
 export interface GlobeEventPulseProps {

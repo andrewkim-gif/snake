@@ -317,6 +317,60 @@ export function getWindmillFrames(millIndex: number): Texture[] | null {
 }
 
 /**
+ * Effect 프레임 텍스처 배열 반환 (AnimatedSprite용)
+ * @param effectName 이펙트 이름 (예: 'LevelUp', 'Buff1')
+ * @param frameCount 총 프레임 수
+ * @returns Texture 배열 또는 null
+ */
+export function getEffectFrames(effectName: string, frameCount: number): Texture[] | null {
+  if (_fallbackMode) return null;
+  const frames: Texture[] = [];
+  for (let i = 0; i < frameCount; i++) {
+    const alias = `effect_${effectName}_${i}`;
+    const tex = Assets.get<Texture>(alias);
+    if (!tex) return null;
+    frames.push(tex);
+  }
+  return frames;
+}
+
+/**
+ * Destructible 프레임 텍스처 배열 반환 (AnimatedSprite용)
+ * @param destructibleName 파괴 애니메이션 이름 (예: 'Wall Wood explosion Small')
+ * @param frameCount 총 프레임 수
+ * @returns Texture 배열 또는 null
+ */
+export function getDestructibleFrames(destructibleName: string, frameCount: number): Texture[] | null {
+  if (_fallbackMode) return null;
+  const frames: Texture[] = [];
+  for (let i = 0; i < frameCount; i++) {
+    const alias = `destructible_${destructibleName}_${i}`;
+    const tex = Assets.get<Texture>(alias);
+    if (!tex) return null;
+    frames.push(tex);
+  }
+  return frames;
+}
+
+/**
+ * Prop 프레임 텍스처 배열 반환 (AnimatedSprite용)
+ * @param propName 소품 이름 (예: 'Fire', 'Torch 1')
+ * @param frameCount 총 프레임 수
+ * @returns Texture 배열 또는 null
+ */
+export function getPropFrames(propName: string, frameCount: number): Texture[] | null {
+  if (_fallbackMode) return null;
+  const frames: Texture[] = [];
+  for (let i = 0; i < frameCount; i++) {
+    const alias = `prop_${propName}_${i}`;
+    const tex = Assets.get<Texture>(alias);
+    if (!tex) return null;
+    frames.push(tex);
+  }
+  return frames;
+}
+
+/**
  * 특수 에셋 텍스처 반환
  */
 export function getSpecialTexture(name: string): Texture | null {

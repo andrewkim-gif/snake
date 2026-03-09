@@ -101,6 +101,9 @@ import {
   BUILDING_DEF_MAP,
   type ClientBuildingDef,
 } from './ui/buildingDefs';
+import { IsoEffectManager } from './IsoEffectManager';
+import { IsoPropManager } from './IsoPropManager';
+import { IsoChestManager } from './IsoChestManager';
 
 // ─── 상수 ───
 const LAYER_COUNT = 15;
@@ -241,6 +244,15 @@ export class IsoTilemap {
 
   /** 텍스처 로드 완료 여부 */
   private texturesReady = false;
+
+  /** Phase 7: 이펙트 매니저 */
+  private effectManager: IsoEffectManager | null = null;
+
+  /** Phase 7: Props 매니저 */
+  private propManager: IsoPropManager | null = null;
+
+  /** Phase 7: Chest 매니저 */
+  private chestManager: IsoChestManager | null = null;
 
   constructor(
     tier: MapTier = 'C',
@@ -591,6 +603,9 @@ export class IsoTilemap {
     this.placeWaterRipples();
     this.placeCoastlineTransitions();
     this.placeWindmills();
+
+    // Phase 7: 이펙트 매니저 초기화
+    this.initPhase7Managers();
   }
 
   /**
@@ -1364,6 +1379,9 @@ export class IsoTilemap {
         );
       }
     }
+
+    // Phase 7: Props 뷰포트 컬링 (루프 애니메이션 stop/play)
+    this.propManager?.cullViewport(viewLeft, viewRight, viewTop, viewBottom);
   }
 
   // ─── 마우스 인터랙션 ───
@@ -1506,6 +1524,9 @@ export class IsoTilemap {
 
     this.buildings.push(building);
     this.renderBuilding(building);
+
+    // Phase 7: 건설 이펙트 재생
+    this.playConstructionEffect(tileX, tileY);
 
     return building;
   }
@@ -1744,6 +1765,77 @@ export class IsoTilemap {
     return this.layers[index];
   }
 
+  // ─── Phase 7: 이펙트 & Props & Chest ───
+
+  /**
+   * Phase 7 매니저 초기화
+   * 텍스처 로드 후 호출 — 이펙트/Props/Chest 배치
+   */
+  private initPhase7Managers(): void {
+    // 이전 매니저 정리
+    this.effectManager?.destroy();
+    this.propManager?.destroy();
+    this.chestManager?.destroy();
+
+    // Chest 레이어 클리어
+    this.layers[IsoLayer.Chest].removeChildren();
+
+    // 이펙트 매니저 (Layer 12)
+    this.effectManager = new IsoEffectManager(this.layers[IsoLayer.Effects]);
+
+    // Props 매니저 (Layer 6 Misc에 AnimatedSprite 추가)
+    this.propManager = new IsoPropManager(
+      this.layers[IsoLayer.Misc],
+      this.mapSize,
+      this.seed,
+    );
+    this.propManager.placePropsForBuildings(this.buildings);
+
+    // Chest 매니저 (Layer 10)
+    this.chestManager = new IsoChestManager(
+      this.layers[IsoLayer.Chest],
+      this.mapSize,
+      this.seed,
+      this.occupancy,
+    );
+    this.chestManager.placeChestsForBuildings(this.buildings);
+  }
+
+  /**
+   * 건설 이펙트 재생 — 외부에서 호출 가능
+   * 건물 배치 완료 시 자동 호출됨
+   */
+  playConstructionEffect(tileX: number, tileY: number): void {
+    if (!this.effectManager) return;
+    const { sx, sy } = tileToScreen(tileX, tileY);
+    this.effectManager.playConstructionEffect(sx, sy);
+  }
+
+  /**
+   * 파괴 이펙트 재생 — 외부에서 호출 가능
+   * @param visualGrade 건물 시각 등급 (파괴 애니메이션 선택용)
+   */
+  playDestroyEffect(tileX: number, tileY: number, visualGrade?: string): void {
+    if (!this.effectManager) return;
+    const { sx, sy } = tileToScreen(tileX, tileY);
+    this.effectManager.playDestroyEffect(sx, sy, visualGrade);
+  }
+
+  /**
+   * 버프/칙령 이펙트 재생 — 외부에서 호출 가능
+   * @param buffIndex 1~10 (없으면 랜덤)
+   */
+  playBuffEffect(tileX: number, tileY: number, buffIndex?: number): void {
+    if (!this.effectManager) return;
+    const { sx, sy } = tileToScreen(tileX, tileY);
+    this.effectManager.playBuffEffect(sx, sy, buffIndex);
+  }
+
+  /** 이펙트 매니저 접근 (외부 고급 사용) */
+  getEffectManager(): IsoEffectManager | null {
+    return this.effectManager;
+  }
+
   // ─── 정리 ───
 
   destroy(): void {
@@ -1757,6 +1849,14 @@ export class IsoTilemap {
     this.waterAnimSprites = [];
     this.windmillAnimSprites = [];
     this.cloudInstances = [];
+
+    // Phase 7: 매니저 정리
+    this.effectManager?.destroy();
+    this.effectManager = null;
+    this.propManager?.destroy();
+    this.propManager = null;
+    this.chestManager?.destroy();
+    this.chestManager = null;
 
     this.container.destroy({ children: true });
     this.buildings = [];

@@ -110,7 +110,7 @@ export function ResourceHUD() {
         </div>
 
         {/* 자원 아이템 */}
-        {HUD_RESOURCES.map(({ key, label, icon, color }) => {
+        {HUD_RESOURCES.map(({ key, label, icon, iconAsset, color }) => {
           const value = getValue(key);
           const subtext = getSubtext(key);
           const valueColor = getValueColor(key, value);
@@ -134,7 +134,23 @@ export function ResourceHUD() {
                 alignItems: 'center',
                 gap: '3px',
               }}>
-                <span style={{ fontSize: '11px' }}>{icon}</span>
+                {iconAsset ? (
+                  <img
+                    src={iconAsset}
+                    alt={label}
+                    width={14}
+                    height={14}
+                    style={{ imageRendering: 'pixelated', objectFit: 'contain' }}
+                    onError={(e) => {
+                      // 아이콘 로드 실패 시 이모지 폴백
+                      const target = e.currentTarget;
+                      target.style.display = 'none';
+                      const fallback = target.nextElementSibling as HTMLElement | null;
+                      if (fallback) fallback.style.display = 'inline';
+                    }}
+                  />
+                ) : null}
+                <span style={{ fontSize: '11px', display: iconAsset ? 'none' : 'inline' }}>{icon}</span>
                 <span style={{
                   fontFamily: bodyFont,
                   fontSize: '8px',

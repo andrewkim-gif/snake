@@ -257,6 +257,8 @@ export default function Home() {
       type: (evt.type as NewsEventType) || 'global_event',
       headline: evt.message,
       timestamp: evt.timestamp,
+      countryISO: evt.countryCode,
+      targetISO: evt.targetCode,
     })),
     [uiState.globalEvents],
   );
@@ -602,8 +604,8 @@ export default function Home() {
       {/* 좌상단 로고 */}
       <div style={{
         position: 'absolute',
-        top: 16,
-        left: 20,
+        top: 24,
+        left: 28,
         zIndex: 70,
         pointerEvents: 'none',
         opacity: showHeader ? 1 : 0,

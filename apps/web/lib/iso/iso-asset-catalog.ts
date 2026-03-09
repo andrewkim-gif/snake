@@ -1159,6 +1159,101 @@ export const PROP_ANIMS: readonly PropAnimDef[] = [
   { name: 'Torch 1', frames: 16, fps: 12, loop: true },
   { name: 'Turret1', frames: 8, fps: 8, loop: true },
 ] as const;
+
+// ============================================================================
+// 16.1 Animation 프레임 경로 생성 유틸리티
+// ============================================================================
+
+/**
+ * Effect 프레임 번호 생성 (홀수 번호, 4자리 zero-pad)
+ * Effects와 Destructible/Props 모두 동일 패턴
+ */
+export function animFrameNumber(frameIdx: number): string {
+  return String(frameIdx * 2 + 1).padStart(4, '0');
+}
+
+/**
+ * 경로 세그먼트 인코딩 — 각 디렉토리를 개별 인코딩하여 슬래시 보존
+ */
+function encodePathSegments(dir: string): string {
+  return dir.split('/').map(seg => encodeURIComponent(seg)).join('/');
+}
+
+/**
+ * Effects 프레임 경로 생성
+ * @param effectName 이펙트 이름 (예: 'LevelUp', 'Buff1')
+ * @param frameIdx 프레임 인덱스 (0-based)
+ */
+export function effectFramePath(effectName: string, frameIdx: number): string {
+  const frameNum = animFrameNumber(frameIdx);
+  return `${ANIM_BASE_PATH}/${encodePathSegments(`Effects/${effectName}`)}/${frameNum}.png`;
+}
+
+/**
+ * Destructible 프레임 경로 생성
+ * @param destructibleName 파괴 애니메이션 이름 (예: 'Wall Wood explosion Small')
+ * @param frameIdx 프레임 인덱스 (0-based)
+ */
+export function destructibleFramePath(destructibleName: string, frameIdx: number): string {
+  const frameNum = animFrameNumber(frameIdx);
+  return `${ANIM_BASE_PATH}/${encodePathSegments(`Destructible tiles/${destructibleName}`)}/${frameNum}.png`;
+}
+
+/**
+ * Props 프레임 경로 생성
+ * @param propName 소품 이름 (예: 'Fire', 'Torch 1')
+ * @param frameIdx 프레임 인덱스 (0-based)
+ */
+export function propFramePath(propName: string, frameIdx: number): string {
+  const frameNum = animFrameNumber(frameIdx);
+  return `${ANIM_BASE_PATH}/${encodePathSegments(`Props/${propName}`)}/${frameNum}.png`;
+}
+
+/**
+ * 건물 시각 등급 → 파괴 이펙트 매핑
+ * 건물의 Wall 재질에 따라 적합한 파괴 애니메이션 선택
+ */
+export const BUILDING_DESTROY_EFFECT_MAP: Record<string, string> = {
+  small_wood:    'Wall Wood explosion Small',
+  medium_wood:   'Wall Wood explotion Large',
+  medium_stone:  'Wall Stone explosion',
+  large_factory: 'stone explosion large',
+  military:      'Wall wood+stone explosion',
+  government:    'Wall Stone explosion',
+};
+
+/**
+ * 건물 카테고리 → Props 매핑 (건물 인접에 배치할 애니메이션 소품)
+ */
+export const BUILDING_PROP_MAP: Record<string, string[]> = {
+  // 공장류: 불/가스
+  factory: ['Fire', 'Gas'],
+  steel_mill: ['Fire', 'Fire2'],
+  refinery: ['Fire', 'Gas'],
+  power_plant: ['Fire'],
+  coal_power: ['Fire'],
+  gas_power: ['Gas'],
+  oil_power: ['Fire', 'Gas'],
+  nuclear_power: ['Gas'],
+  // 군사: 횃불
+  barracks: ['Torch 1'],
+  weapons_depot: ['Torch 1'],
+  military_base: ['Torch 1', 'Turret1'],
+  // 정부/종교: 횃불
+  church: ['Torch 1'],
+  town_hall: ['Torch 1'],
+  capitol: ['Torch 1'],
+  government: ['Torch 1'],
+};
+
+/**
+ * Chest 배치 대상 건물 (market/government/warehouse 인근)
+ */
+export const CHEST_ELIGIBLE_BUILDINGS: readonly string[] = [
+  'market', 'warehouse', 'town_hall', 'capitol', 'government',
+  'port', 'luxury_workshop',
+];
+
 // ============================================================================
 // 17. 에셋 수량 요약 + 유틸리티
 // ============================================================================

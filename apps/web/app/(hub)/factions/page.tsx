@@ -10,8 +10,8 @@ import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, grid } from '@/lib/sketch-ui';
 import { DashboardPage, DetailModal } from '@/components/hub';
-import { Swords, Users, MapPin, DollarSign } from 'lucide-react';
-import { fetchFactions, fetchFaction, type FactionSummary } from '@/lib/api-client';
+import { Swords, Users, MapPin, DollarSign, Shield, Crown, Star, User } from 'lucide-react';
+import { fetchFactions, fetchFaction, type FactionSummary, type FactionDetailResponse } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
 import { ServerRequired } from '@/components/ui/ServerRequired';
 
@@ -207,7 +207,7 @@ function FactionsPageInner() {
       <DetailModal
         open={!!selectedDetail}
         onClose={() => setSelectedId(null)}
-        title={selectedDetail?.name}
+        title={selectedDetail?.name ?? 'Faction Detail'}
         accentColor={selectedDetail?.color}
       >
         {selectedDetail && (
@@ -217,7 +217,7 @@ function FactionsPageInner() {
               fontSize: SKFont.xs,
               color: SK.textMuted,
             }}>
-              [{selectedDetail.tag}] &mdash; {tFaction('leader')}: {selectedDetail.leader_id}
+              [{selectedDetail.tag}] &mdash; {tFaction('leader')}: {selectedDetail.leader_id?.slice(0, 8) ?? 'N/A'}
             </div>
 
             <div style={{
@@ -230,6 +230,72 @@ function FactionsPageInner() {
               <StatItem label={tFaction('prestige')} value={String(selectedDetail.prestige)} color={SK.gold} />
               <StatItem label={tFaction('totalGdp')} value={`${((selectedDetail.total_gdp ?? 0) / 1000).toFixed(1)}K`} color={SK.orange} />
             </div>
+
+            {/* 멤버 목록 */}
+            {'members' in selectedDetail && (selectedDetail as FactionDetailResponse).members?.length > 0 && (
+              <div>
+                <div style={{
+                  fontFamily: headingFont,
+                  fontSize: SKFont.xs,
+                  color: SK.textSecondary,
+                  letterSpacing: '1px',
+                  textTransform: 'uppercase',
+                  marginBottom: 8,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                }}>
+                  <Users size={14} />
+                  MEMBERS ({(selectedDetail as FactionDetailResponse).members.length})
+                </div>
+                <div style={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                  maxHeight: 200,
+                  overflowY: 'auto',
+                }}>
+                  {(selectedDetail as FactionDetailResponse).members
+                    .sort((a, b) => {
+                      const order = { supreme_leader: 0, council: 1, commander: 2, member: 3 };
+                      return (order[a.role] ?? 4) - (order[b.role] ?? 4);
+                    })
+                    .map((m) => (
+                    <div
+                      key={m.user_id}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '6px 10px',
+                        background: SK.bgWarm,
+                        border: `1px solid ${SK.borderDark}`,
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <MemberRoleIcon role={m.role} />
+                        <span style={{
+                          fontFamily: bodyFont,
+                          fontSize: SKFont.xs,
+                          color: SK.textPrimary,
+                        }}>
+                          {m.username || m.user_id.slice(0, 8)}
+                        </span>
+                      </div>
+                      <span style={{
+                        fontFamily: bodyFont,
+                        fontSize: '10px',
+                        color: getRoleColor(m.role),
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.5px',
+                      }}>
+                        {m.role.replace('_', ' ')}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
             <div style={{ display: 'flex', gap: 12 }}>
               <button style={{
@@ -246,8 +312,8 @@ function FactionsPageInner() {
               }}>
                 {tFaction('joinFaction')}
               </button>
-              <a
-                href={`/factions/${selectedDetail.id}`}
+              <button
+                onClick={() => setSelectedId(null)}
                 style={{
                   flex: 1,
                   padding: '10px 20px',
@@ -257,13 +323,12 @@ function FactionsPageInner() {
                   background: 'transparent',
                   border: sketchBorder(),
                   borderRadius: 0,
-                  textDecoration: 'none',
-                  textAlign: 'center',
+                  cursor: 'pointer',
                   letterSpacing: '1px',
                 }}
               >
-                {tFaction('viewDetail')}
-              </a>
+                CLOSE
+              </button>
             </div>
           </div>
         )}
@@ -286,6 +351,26 @@ export default function FactionsPage() {
       </Suspense>
     </ServerRequired>
   );
+}
+
+function getRoleColor(role: string): string {
+  switch (role) {
+    case 'supreme_leader': return SK.gold;
+    case 'council': return SK.orange;
+    case 'commander': return SK.blue;
+    default: return SK.textMuted;
+  }
+}
+
+function MemberRoleIcon({ role }: { role: string }) {
+  const color = getRoleColor(role);
+  const size = 14;
+  switch (role) {
+    case 'supreme_leader': return <Crown size={size} color={color} />;
+    case 'council': return <Shield size={size} color={color} />;
+    case 'commander': return <Star size={size} color={color} />;
+    default: return <User size={size} color={color} />;
+  }
 }
 
 function StatItem({ label, value, color }: { label: string; value: string; color: string }) {

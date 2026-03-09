@@ -55,15 +55,18 @@ export const CATEGORY_COLORS: Record<string, string> = {
   government: '#CC9933',
 };
 
+/** HUD 자원 아이콘 경로 (에셋팩 아이콘) */
+export const HUD_ICON_PATH = '/textures/iso/icons';
+
 /** 핵심 HUD 자원 (상단 바에 표시할 것들) */
-export const HUD_RESOURCES: { key: string; label: string; icon: string; color: string }[] = [
-  { key: '_treasury', label: 'Treasury', icon: '\u{1F4B0}', color: '#F59E0B' },
-  { key: 'food', label: 'Food', icon: '\u{1F35E}', color: '#10B981' },
-  { key: 'iron_ore', label: 'Iron', icon: '\u{26CF}\uFE0F', color: '#8B8D98' },
-  { key: 'crude_oil', label: 'Oil', icon: '\u{1F6E2}\uFE0F', color: '#55565E' },
-  { key: '_power', label: 'Power', icon: '\u{26A1}', color: '#FBBF24' },
-  { key: '_population', label: 'Pop', icon: '\u{1F465}', color: '#6366F1' },
-  { key: '_happiness', label: 'Happy', icon: '\u{2764}\uFE0F', color: '#EF4444' },
+export const HUD_RESOURCES: { key: string; label: string; icon: string; iconAsset?: string; color: string }[] = [
+  { key: '_treasury', label: 'Treasury', icon: '\u{1F4B0}', iconAsset: `${HUD_ICON_PATH}/gold.png`, color: '#F59E0B' },
+  { key: 'food', label: 'Food', icon: '\u{1F35E}', iconAsset: `${HUD_ICON_PATH}/food.png`, color: '#10B981' },
+  { key: 'iron_ore', label: 'Iron', icon: '\u{26CF}\uFE0F', iconAsset: `${HUD_ICON_PATH}/iron.png`, color: '#8B8D98' },
+  { key: 'crude_oil', label: 'Oil', icon: '\u{1F6E2}\uFE0F', iconAsset: `${HUD_ICON_PATH}/oil.png`, color: '#55565E' },
+  { key: '_power', label: 'Power', icon: '\u{26A1}', iconAsset: `${HUD_ICON_PATH}/power.png`, color: '#FBBF24' },
+  { key: '_population', label: 'Pop', icon: '\u{1F465}', iconAsset: `${HUD_ICON_PATH}/population.png`, color: '#6366F1' },
+  { key: '_happiness', label: 'Happy', icon: '\u{2764}\uFE0F', iconAsset: `${HUD_ICON_PATH}/happiness.png`, color: '#EF4444' },
 ];
 
 /** 58 건물 정의 — 서버 BuildingRegistry 미러 */

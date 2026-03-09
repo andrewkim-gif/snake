@@ -40,6 +40,9 @@ import { GlobeEventPulse } from '@/components/3d/GlobeEventPulse';
 import type { TradeRouteData } from '@/hooks/useSocket';
 import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 
+// v28: Globe event labels (3D 뉴스 브리핑 라벨 + 아크 키워드 태그)
+import { GlobeEventLabels } from '@/components/3d/GlobeEventLabels';
+
 // v24 Phase 2: Unified camera controller (CameraAutoFocus + CameraShake 통합)
 import { CameraController } from '@/components/3d/CameraController';
 import { CAMERA_PRIORITY } from '@/lib/effect-constants';
@@ -105,6 +108,8 @@ interface GlobeViewProps {
   spyOps?: SpyOpData[];
   /** v23 Phase 5: 핵실험 이벤트 */
   nukes?: NukeData[];
+  /** 3D Canvas 로딩 완료 콜백 */
+  onReady?: () => void;
 }
 
 const BG = '#030305';
@@ -1529,11 +1534,46 @@ function AdaptiveOrbitControls() {
 }
 
 // ─── 3D 타이틀: "AI WORLD WAR" 글로브 위 이미지 텍스처 (Last of Us 스타일) ───
+// Bloom 제외: 커스텀 ShaderMaterial로 bloom luminance pass에서 어둡게 출력
+// (onBeforeCompile로 MeshBasicMaterial의 fragment에 gl_FragColor.rgb 클램핑)
+
+/**
+ * Bloom-proof MeshBasicMaterial.
+ * fragment shader를 패치하여 출력 luminance를 bloom threshold 미만으로 클램핑.
+ * 화면에는 정상적으로 보이지만 bloom의 luminance threshold(0.4)를 넘지 않음.
+ */
+function useNoBloomMaterial(texture: THREE.Texture) {
+  return useMemo(() => {
+    const mat = new THREE.MeshBasicMaterial({
+      map: texture,
+      transparent: true,
+      depthWrite: false,
+      toneMapped: false,
+    });
+    // fragment shader 패치: bloom luminance가 threshold 미만이 되도록 밝기 제한
+    mat.onBeforeCompile = (shader) => {
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <opaque_fragment>',
+        `
+        // bloom 제외: 최종 색상의 luminance를 0.38 이하로 클램핑
+        // (luminanceThreshold=0.4 미만 → bloom에 기여하지 않음)
+        float lum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
+        if (lum > 0.38) {
+          outgoingLight *= 0.38 / lum;
+        }
+        #include <opaque_fragment>
+        `
+      );
+    };
+    return mat;
+  }, [texture]);
+}
 
 function GlobeTitle() {
   const groupRef = useRef<THREE.Group>(null!);
   const { camera } = useThree();
   const texture = useTexture('/assets/generated/title-3d.png');
+  const material = useNoBloomMaterial(texture);
 
   useFrame((state) => {
     if (!groupRef.current) return;
@@ -1552,12 +1592,7 @@ function GlobeTitle() {
     <group ref={groupRef} position={[0, 138, 0]}>
       <mesh>
         <planeGeometry args={[planeWidth, planeHeight]} />
-        <meshBasicMaterial
-          map={texture}
-          transparent
-          toneMapped={false}
-          depthWrite={false}
-        />
+        <primitive object={material} attach="material" />
       </mesh>
     </group>
   );
@@ -1809,6 +1844,20 @@ function GlobeScene({
         />
       )}
 
+      {/* v28: Globe event labels — 3D 뉴스 브리핑 라벨 + 아크 키워드 태그 */}
+      {centroidsMap.size > 0 && (
+        <GlobeEventLabels
+          globalEvents={globalEvents}
+          countryCentroids={centroidsMap}
+          globeRadius={RADIUS}
+          wars={wars}
+          tradeRoutes={tradeRoutes}
+          alliances={alliances}
+          sanctions={sanctions}
+          spyOps={spyOps}
+        />
+      )}
+
       {/* v23 Phase 5: 동맹 빛줄기 (Line-based, TubeGeometry 제거 → 검은박스 해결) */}
       {lodConfig.enableAllianceBeam && alliances.length > 0 && centroidsMap.size > 0 && (
         <GlobeAllianceBeam
@@ -1861,7 +1910,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v21 Phase 4: Bloom 포스트프로세싱 */}
+      {/* v21 Phase 4: Bloom 포스트프로세싱 — GlobeTitle은 shader 클램핑으로 bloom 제외 */}
       {!isMobile && (
         <EffectComposer>
           <Bloom
@@ -1897,6 +1946,7 @@ export function GlobeView({
   resources,
   spyOps,
   nukes,
+  onReady,
 }: GlobeViewProps) {
   // v14: fallback empty maps/arrays for domination and war effects
   const domStates = dominationStates ?? new Map<string, CountryDominationState>();
@@ -1924,7 +1974,7 @@ export function GlobeView({
         camera={{ position: cameraStartPos, fov: 50, near: 1, far: 1000 }}
         gl={{ antialias: true, alpha: false, toneMappingExposure: 1.0 }}
         dpr={[1, 2]}
-        onCreated={({ gl }) => { gl.setClearColor(BG); }}
+        onCreated={({ gl }) => { gl.setClearColor(BG); onReady?.(); }}
       >
         <SizeGate>
           <GlobeScene

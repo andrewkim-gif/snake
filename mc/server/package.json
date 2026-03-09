@@ -1,0 +1,13 @@
+{
+  "name": "minecraft-r3f-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Static server for Minecraft R3F production build",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.0"
+  }
+}
