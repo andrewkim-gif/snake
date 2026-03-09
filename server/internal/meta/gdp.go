@@ -7,6 +7,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/world"
 	"github.com/go-chi/chi/v5"
 )
 
@@ -336,6 +337,9 @@ func (ge *GDPEngine) GetFactionGDPTimeSeries(factionID string) []GDPTimeSeriesPo
 func (ge *GDPEngine) GDPRoutes() chi.Router {
 	r := chi.NewRouter()
 
+	// Root: client-compatible GDP entries (used by tokens page)
+	r.Get("/", ge.handleGetEntries)
+
 	r.Get("/summary", ge.handleGetSummary)
 	r.Get("/ranking/countries", ge.handleGetCountryRanking)
 	r.Get("/ranking/factions", ge.handleGetFactionRanking)
@@ -346,6 +350,44 @@ func (ge *GDPEngine) GDPRoutes() chi.Router {
 	r.Get("/world/history", ge.handleGetWorldHistory)
 
 	return r
+}
+
+// handleGetEntries — GET /api/gdp
+// Returns all country GDP data in { entries: [] } format for the client tokens page.
+func (ge *GDPEngine) handleGetEntries(w http.ResponseWriter, r *http.Request) {
+	economies := ge.economy.GetAllEconomies()
+
+	countryNames := make(map[string]string, len(world.AllCountries))
+	for _, c := range world.AllCountries {
+		countryNames[c.ISO3] = c.Name
+	}
+
+	type gdpEntry struct {
+		ISO3      string  `json:"iso3"`
+		Name      string  `json:"name"`
+		GDP       float64 `json:"gdp"`
+		GDPGrowth float64 `json:"gdpGrowth"`
+		Tier      string  `json:"tier"`
+	}
+
+	entries := make([]gdpEntry, 0, len(economies))
+	for iso, econ := range economies {
+		var growth float64
+		if econ.PrevGDP > 0 {
+			growth = float64(econ.GDPDelta) / float64(econ.PrevGDP) * 100
+		}
+		entries = append(entries, gdpEntry{
+			ISO3:      iso,
+			Name:      countryNames[iso],
+			GDP:       float64(econ.GDP),
+			GDPGrowth: growth,
+			Tier:      econ.Tier,
+		})
+	}
+
+	writeJSON(w, http.StatusOK, map[string]interface{}{
+		"entries": entries,
+	})
 }
 
 // handleGetSummary — GET /api/economy/gdp/summary

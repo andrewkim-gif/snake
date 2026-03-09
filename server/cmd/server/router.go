@@ -716,46 +716,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 			r.Mount("/season", d.SeasonEngine.SeasonRoutes())
 		}
 
-		// /api/gdp → client-compatible GDP summary (entries format)
-		if d.EconomyEngine != nil {
-			r.Get("/gdp", func(w http.ResponseWriter, r *http.Request) {
-				economies := d.EconomyEngine.GetAllEconomies()
-				countryNames := make(map[string]string, len(world.AllCountries))
-				for _, c := range world.AllCountries {
-					countryNames[c.ISO3] = c.Name
-				}
-
-				type gdpEntry struct {
-					ISO3      string  `json:"iso3"`
-					Name      string  `json:"name"`
-					GDP       float64 `json:"gdp"`
-					GDPGrowth float64 `json:"gdpGrowth"`
-					Tier      string  `json:"tier"`
-				}
-
-				entries := make([]gdpEntry, 0, len(economies))
-				for iso, econ := range economies {
-					var growth float64
-					if econ.PrevGDP > 0 {
-						growth = float64(econ.GDPDelta) / float64(econ.PrevGDP) * 100
-					}
-					entries = append(entries, gdpEntry{
-						ISO3:      iso,
-						Name:      countryNames[iso],
-						GDP:       float64(econ.GDP),
-						GDPGrowth: growth,
-						Tier:      econ.Tier,
-					})
-				}
-
-				w.Header().Set("Content-Type", "application/json")
-				json.NewEncoder(w).Encode(map[string]interface{}{
-					"entries": entries,
-				})
-			})
-		}
-
-		// /api/gdp/* → /api/v11/gdp (detailed sub-routes)
+		// /api/gdp → /api/v11/gdp (includes root + detailed sub-routes)
 		if d.GDPEngine != nil {
 			r.Mount("/gdp", d.GDPEngine.GDPRoutes())
 		}
