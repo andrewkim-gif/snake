@@ -1,11 +1,12 @@
 /**
- * mc-blocks.ts -- MC 블록 타입 정의 (v20 Phase 1)
+ * mc-blocks.ts -- MC 블록 타입 정의 (v29 Phase 3)
  *
- * 32종 블록 타입의 기본색, 패턴, 가장자리 어둡기 계수 정의.
+ * 38종 블록 타입의 기본색, 패턴, 가장자리 어둡기 계수 정의.
+ * 512x512 아틀라스, 64x64 셀 (8x8 그리드).
  * mc-texture-atlas.ts에서 프로시저럴 텍스처 생성 시 참조.
  */
 
-// ─── BlockType 열거형 (32종) ───
+// ─── BlockType 열거형 (38종) ───
 
 export enum BlockType {
   STONE = 0,
@@ -40,6 +41,13 @@ export enum BlockType {
   OAK_LOG = 29,
   DARK_OAK = 30,
   PACKED_ICE = 31,
+  // ─── 바이옴 변형 블록 (v29 Phase 3) ───
+  SNOW_STONE = 32,
+  SAND_BRICK = 33,
+  MOSS_WOOD = 34,
+  GLAZED_TERRACOTTA = 35,
+  SLATE = 36,
+  BIRCH_WOOD = 37,
 }
 
 // ─── 패턴 타입 ───
@@ -59,7 +67,7 @@ export interface BlockDef {
   noiseColors?: string[];
 }
 
-// ─── 32종 블록 정의 테이블 ───
+// ─── 38종 블록 정의 테이블 ───
 
 export const BLOCK_DEFS: Record<BlockType, BlockDef> = {
   [BlockType.STONE]: {
@@ -254,13 +262,50 @@ export const BLOCK_DEFS: Record<BlockType, BlockDef> = {
     edgeDarken: 0.15,
     noiseColors: ['#9EC0E2', '#B6D8F8', '#A4C8E8'],
   },
+  // ─── 바이옴 변형 블록 (v29 Phase 3) ───
+  [BlockType.SNOW_STONE]: {
+    baseColor: '#C8D4E0',
+    pattern: 'noise',
+    edgeDarken: 0.2,
+    noiseColors: ['#B8C8D8', '#D4E0EC', '#C0D0DE'],
+  },
+  [BlockType.SAND_BRICK]: {
+    baseColor: '#D4B882',
+    pattern: 'brick',
+    edgeDarken: 0.22,
+    noiseColors: ['#C8AC76', '#E0C48E', '#D0B47E'],
+  },
+  [BlockType.MOSS_WOOD]: {
+    baseColor: '#6B8E4A',
+    pattern: 'wood',
+    edgeDarken: 0.24,
+    noiseColors: ['#5F8040', '#778E54', '#688A46'],
+  },
+  [BlockType.GLAZED_TERRACOTTA]: {
+    baseColor: '#CC6633',
+    pattern: 'noise',
+    edgeDarken: 0.25,
+    noiseColors: ['#BB5A28', '#DD7240', '#C46030'],
+  },
+  [BlockType.SLATE]: {
+    baseColor: '#4A5568',
+    pattern: 'noise',
+    edgeDarken: 0.28,
+    noiseColors: ['#404B5C', '#546074', '#4E5966'],
+  },
+  [BlockType.BIRCH_WOOD]: {
+    baseColor: '#D8D0B8',
+    pattern: 'wood',
+    edgeDarken: 0.18,
+    noiseColors: ['#CCC4AC', '#E4DCC4', '#D0C8B0'],
+  },
 };
 
 /** 전체 블록 수 */
-export const BLOCK_COUNT = 32;
+export const BLOCK_COUNT = 38;
 
 /** 아틀라스 그리드 크기 */
 export const ATLAS_COLS = 8;
-export const ATLAS_ROWS = 4;
-export const CELL_SIZE = 32; // 각 블록 텍스처 32×32 px
-export const ATLAS_SIZE = 256; // 전체 아틀라스 256×256 px
+export const ATLAS_ROWS = 8;
+export const CELL_SIZE = 64; // 각 블록 텍스처 64×64 px
+export const ATLAS_SIZE = 512; // 전체 아틀라스 512×512 px
