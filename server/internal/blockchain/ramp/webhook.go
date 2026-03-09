@@ -64,11 +64,18 @@ func (h *RampWebhookHandler) Routes() chi.Router {
 }
 
 // hmacVerifyMiddleware는 X-Ramp-Signature 헤더의 HMAC-SHA256 서명을 검증합니다.
-// 시크릿이 설정되지 않은 경우 검증을 건너뜁니다 (개발 모드).
+// 시크릿이 설정되지 않은 경우: RAILWAY_ENVIRONMENT 설정 시 모든 요청 거부 (프로덕션 보호),
+// 미설정 시 검증 건너뜀 (로컬 개발 모드).
 func (h *RampWebhookHandler) hmacVerifyMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if h.webhookSecret == "" {
-			// 시크릿 미설정 시 검증 건너뜀 (개발 모드)
+			// 프로덕션 환경에서는 시크릿 필수
+			if os.Getenv("RAILWAY_ENVIRONMENT") != "" {
+				slog.Error("ramp: RAMP_WEBHOOK_SECRET not set in production — rejecting request")
+				writeJSON(w, http.StatusForbidden, map[string]string{"error": "webhook secret not configured"})
+				return
+			}
+			// 로컬 개발 모드에서만 검증 건너뜀
 			next.ServeHTTP(w, r)
 			return
 		}

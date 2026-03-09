@@ -107,10 +107,10 @@ function VoteHistoryPageInner() {
             margin: 0,
           }}
         >
-          {tGov('voteHistory')}
+          Vote History
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tGov('voteHistorySubtitle')}{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
+          Past votes, participation records, and outcomes{countryCode ? ` — ${countryCode.toUpperCase()}` : ''}
         </p>
       </header>
 

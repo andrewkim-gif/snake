@@ -103,8 +103,9 @@ function MatrixPauseInner({ onResume, onExitToLobby }: MatrixPauseProps) {
             onClick={onResume}
             style={{
               width: '100%',
-              paddingTop: 12,
-              paddingBottom: 12,
+              minHeight: 48,
+              paddingTop: 14,
+              paddingBottom: 14,
               fontSize: 14,
               fontWeight: 700,
               letterSpacing: '0.1em',
@@ -127,8 +128,9 @@ function MatrixPauseInner({ onResume, onExitToLobby }: MatrixPauseProps) {
             onClick={onExitToLobby}
             style={{
               width: '100%',
-              paddingTop: 12,
-              paddingBottom: 12,
+              minHeight: 48,
+              paddingTop: 14,
+              paddingBottom: 14,
               fontSize: 14,
               fontWeight: 700,
               letterSpacing: '0.1em',

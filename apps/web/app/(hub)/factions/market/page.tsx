@@ -6,7 +6,6 @@
  */
 
 import dynamic from 'next/dynamic';
-import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { LoadingSkeleton } from '@/components/hub';
 
@@ -15,7 +14,6 @@ const MercenaryMarket = dynamic(() => import('@/components/market/MercenaryMarke
 });
 
 export default function MercenaryMarketPage() {
-  const tFaction = useTranslations('faction');
   return (
     <div
       style={{
@@ -36,10 +34,10 @@ export default function MercenaryMarketPage() {
             margin: 0,
           }}
         >
-          {tFaction('mercenaryMarket')}
+          Mercenary Market
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tFaction('mercenaryMarketDesc')}
+          Recruit mercenaries and trade faction assets
         </p>
       </header>
 

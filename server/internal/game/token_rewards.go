@@ -720,15 +720,22 @@ func (p *PlayerAWWBalance) GetBalance(playerID string) float64 {
 }
 
 // AddBalance adds $AWW points to a player's balance.
+// amount must be positive; negative values are silently rejected.
 func (p *PlayerAWWBalance) AddBalance(playerID string, amount float64) {
+	if amount <= 0 {
+		return
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	p.balances[playerID] += amount
 }
 
 // DeductBalance deducts $AWW points from a player's balance.
-// Returns an error if the balance is insufficient.
+// Returns an error if the balance is insufficient or amount is not positive.
 func (p *PlayerAWWBalance) DeductBalance(playerID string, amount float64) error {
+	if amount <= 0 {
+		return fmt.Errorf("deduct amount must be positive, got %.1f", amount)
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.balances[playerID] < amount {

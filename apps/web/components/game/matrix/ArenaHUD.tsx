@@ -10,7 +10,7 @@
  * - Mini leaderboard (top 5)
  *
  * v32: Full Apex tactical redesign — SK tokens, headingFont/bodyFont, borderRadius:0, glassBg.
- *      No monospace, no #00FF41.
+ *      Uses Apex tactical design system (SK tokens only).
  */
 
 import React, { memo, useMemo } from 'react';

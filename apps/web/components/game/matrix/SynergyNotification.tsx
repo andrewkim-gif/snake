@@ -6,7 +6,7 @@
  * Displays a bottom notification banner when a synergy is activated.
  * Auto-dismisses after a configurable duration.
  *
- * Uses SK tokens, headingFont/bodyFont. No monospace, no #00FF41.
+ * Uses SK tokens, headingFont/bodyFont. Apex tactical design system (SK tokens only).
  */
 
 import React, { memo, useEffect, useState } from 'react';

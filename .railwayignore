@@ -1,0 +1,10 @@
+node_modules
+.next
+app_ingame
+apps/web/.next
+apps/web/node_modules
+docs
+.claude
+.git
+*.md
+UTC--*

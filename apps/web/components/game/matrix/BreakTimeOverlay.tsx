@@ -7,7 +7,7 @@
  * - SK.accent (#EF4444), SK.gold (#F59E0B), SK.green (#10B981)
  * - headingFont (Chakra Petch), bodyFont (Space Grotesk)
  * - borderRadius: 0 (sharp tactical edges)
- * - No monospace, no #00FF41 (Matrix green)
+ * - Apex tactical design system (SK tokens only)
  *
  * States:
  * 1. Warning (3s countdown before burst)

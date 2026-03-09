@@ -40,7 +40,7 @@
   },
   "lobby": {
     "title": "AI WORLD WAR",
-    "agentSetup": "AGENT SETUP",
+    "agentSetup": "AGENT",
     "enterCallsign": "Enter callsign...",
     "clickToDeploy": "CLICK A COUNTRY TO DEPLOY",
     "deploying": "DEPLOYING TO ARENA...",

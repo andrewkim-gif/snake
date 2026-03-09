@@ -14,3 +14,7 @@ export { CountryFilterBadge } from './CountryFilterBadge';
 export { GameSystemPopup } from './GameSystemPopup';
 export { PopupTabNav } from './PopupTabNav';
 export type { MainTabKey } from './PopupTabNav';
+export { SystemPopup } from './SystemPopup';
+export type { SystemPopupProps, SlideDirection } from './SystemPopup';
+export { SectionNav } from './SectionNav';
+export type { SectionDef, SectionNavProps } from './SectionNav';

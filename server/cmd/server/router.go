@@ -985,8 +985,12 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	})
 
 	// ==============================================================
-	// v30 Phase 2: Token Balance API (Task 2-11)
+	// v30 Phase 2: Token Economy APIs
+	// POST endpoints require authentication to prevent impersonation.
+	// GET endpoints are public (read-only data).
 	// ==============================================================
+
+	// --- Public GET endpoints (no auth required) ---
 	r.Get("/api/v14/token-balance/{playerId}", func(w http.ResponseWriter, r *http.Request) {
 		playerID := chi.URLParam(r, "playerId")
 		balance := 0.0
@@ -1001,9 +1005,12 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	})
 
 	// ==============================================================
-	// v30 Phase 2: GDP Boost (Task 2-15)
+	// v30 Phase 2: Authenticated Token Economy Endpoints
+	// All POST endpoints require JWT/API Key authentication.
 	// ==============================================================
-	r.Post("/api/country/{iso}/boost", func(w http.ResponseWriter, r *http.Request) {
+
+	// v30: GDP Boost (Task 2-15)
+	r.With(auth.RequireAuth).Post("/api/country/{iso}/boost", func(w http.ResponseWriter, r *http.Request) {
 		iso := chi.URLParam(r, "iso")
 		var body struct {
 			PlayerID string  `json:"playerId"`
@@ -1011,6 +1018,16 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+
+		// Input validation
+		if body.PlayerID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "playerId is required"})
+			return
+		}
+		if body.Cost <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "cost must be positive"})
 			return
 		}
 
@@ -1055,16 +1072,24 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 		})
 	})
 
-	// ==============================================================
-	// v30 Phase 2: Season Staking (Task 2-16)
-	// ==============================================================
-	r.Post("/api/staking/stake", func(w http.ResponseWriter, r *http.Request) {
+	// v30: Season Staking (Task 2-16)
+	r.With(auth.RequireAuth).Post("/api/staking/stake", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			PlayerID string  `json:"playerId"`
 			Amount   float64 `json:"amount"`
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+
+		// Input validation
+		if body.PlayerID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "playerId is required"})
+			return
+		}
+		if body.Amount <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "amount must be positive"})
 			return
 		}
 
@@ -1100,7 +1125,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 		writeJSON(w, http.StatusOK, info)
 	})
 
-	r.Post("/api/staking/withdraw", func(w http.ResponseWriter, r *http.Request) {
+	r.With(auth.RequireAuth).Post("/api/staking/withdraw", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			PlayerID string `json:"playerId"`
 		}
@@ -1182,7 +1207,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 		})
 	})
 
-	r.Post("/api/auction/{id}/bid", func(w http.ResponseWriter, r *http.Request) {
+	r.With(auth.RequireAuth).Post("/api/auction/{id}/bid", func(w http.ResponseWriter, r *http.Request) {
 		auctionID := chi.URLParam(r, "id")
 		var body struct {
 			BidderID  string  `json:"bidderId"`
@@ -1194,36 +1219,49 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 			return
 		}
 
+		// Input validation
+		if body.BidderID == "" || body.FactionID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bidderId and factionId are required"})
+			return
+		}
+		if body.Amount <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "bid amount must be positive"})
+			return
+		}
+
 		if d.AuctionManager == nil || d.PlayerAWWBalance == nil {
 			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auction not initialized"})
 			return
 		}
 
-		// Check balance
-		if d.PlayerAWWBalance.GetBalance(body.BidderID) < body.Amount {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "insufficient AWW balance"})
-			return
-		}
-
-		// Place bid (escrow: deduct immediately, refund previous top bidder)
-		auction := d.AuctionManager.GetAuction(auctionID)
-		if auction != nil && auction.TopBidder != "" && auction.TopBidder != body.BidderID {
-			// Refund previous top bidder
-			d.PlayerAWWBalance.AddBalance(auction.TopBidder, auction.CurrentBid)
-		}
-
-		// Deduct from bidder
+		// Step 1: Deduct from new bidder FIRST (atomic balance check)
 		if err := d.PlayerAWWBalance.DeductBalance(body.BidderID, body.Amount); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
 		}
 
+		// Step 2: Attempt to place bid (AuctionManager is internally serialized)
+		// Capture previous top bidder info BEFORE PlaceBid mutates auction state
+		prevBidder := ""
+		prevBidAmount := 0.0
+		if auction := d.AuctionManager.GetAuction(auctionID); auction != nil {
+			if auction.TopBidder != "" && auction.TopBidder != body.BidderID {
+				prevBidder = auction.TopBidder
+				prevBidAmount = auction.CurrentBid
+			}
+		}
+
 		updated, err := d.AuctionManager.PlaceBid(auctionID, body.BidderID, body.FactionID, body.Amount)
 		if err != nil {
-			// Refund on error
+			// Refund new bidder on PlaceBid failure — no previous bidder was touched
 			d.PlayerAWWBalance.AddBalance(body.BidderID, body.Amount)
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 			return
+		}
+
+		// Step 3: PlaceBid succeeded — now safely refund previous top bidder
+		if prevBidder != "" && prevBidAmount > 0 {
+			d.PlayerAWWBalance.AddBalance(prevBidder, prevBidAmount)
 		}
 
 		writeJSON(w, http.StatusOK, updated)
@@ -1248,7 +1286,7 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// Council vote endpoint is in UNCouncil.CouncilRoutes,
 	// so we add a POST /api/v14/council/vote-with-burn wrapper.
 	// ==============================================================
-	r.Post("/api/v14/council/vote-with-burn", func(w http.ResponseWriter, r *http.Request) {
+	r.With(auth.RequireAuth).Post("/api/v14/council/vote-with-burn", func(w http.ResponseWriter, r *http.Request) {
 		var body struct {
 			ProposalID string  `json:"proposalId"`
 			PlayerID   string  `json:"playerId"`
@@ -1257,6 +1295,16 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 		}
 		if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
 			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid JSON"})
+			return
+		}
+
+		// Input validation
+		if body.PlayerID == "" || body.ProposalID == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "playerId and proposalId are required"})
+			return
+		}
+		if body.Tokens <= 0 {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "tokens must be positive"})
 			return
 		}
 
@@ -1301,9 +1349,14 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	// CROSS Ramp Webhook Endpoints (Token Economy)
 	// Called by CROSS Ramp platform for asset exchange operations.
 	// No auth middleware — Ramp platform authenticates via HMAC.
+	// Rate limited: 30 requests/minute per IP for DoS protection.
 	// ==============================================================
 	if d.RampWebhook != nil {
-		r.Mount("/api/ramp", d.RampWebhook.Routes())
+		rampLimiter := auth.NewRateLimiter(30, time.Minute)
+		rampRateLimit := auth.RateLimitMiddleware(rampLimiter, func(req *http.Request) string {
+			return req.RemoteAddr
+		})
+		r.With(rampRateLimit).Mount("/api/ramp", d.RampWebhook.Routes())
 	}
 
 	return r

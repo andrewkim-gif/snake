@@ -432,8 +432,9 @@ function MatrixResultInner({
               onClick={onExitToLobby}
               style={{
                 flex: 1,
-                paddingTop: 12,
-                paddingBottom: 12,
+                minHeight: 48,
+                paddingTop: 14,
+                paddingBottom: 14,
                 paddingLeft: 24,
                 paddingRight: 24,
                 fontWeight: 700,
@@ -455,8 +456,9 @@ function MatrixResultInner({
               onClick={onRetry}
               style={{
                 flex: 1,
-                paddingTop: 12,
-                paddingBottom: 12,
+                minHeight: 48,
+                paddingTop: 14,
+                paddingBottom: 14,
                 paddingLeft: 24,
                 paddingRight: 24,
                 fontWeight: 700,

@@ -9,7 +9,7 @@
  * - bodyFont (Space Grotesk) for labels/body
  * - SK.gold for mission theme, SK.accent for warnings
  * - borderRadius: 0 (sharp tactical edges)
- * - No monospace, no #00FF41
+ * - Apex tactical design system (SK tokens only)
  *
  * States: active, success, failed/expired
  */

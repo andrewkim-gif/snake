@@ -162,10 +162,10 @@ function NewProposalPageInner() {
             margin: 0,
           }}
         >
-          {tGov('newProposal')}
+          New Proposal
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tGov('createProposal')}
+          Submit a new governance proposal for council review
         </p>
       </header>
 

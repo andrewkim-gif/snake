@@ -7,7 +7,7 @@
  * - SK 토큰 (accent, glassBg, cardBg, border 등)
  * - headingFont (Chakra Petch) / bodyFont (Space Grotesk)
  * - apexClip.sm 삼각 컷 (borderRadius: 0)
- * - monospace/MATRIX_GREEN 완전 제거
+ * - Apex tactical design system (SK tokens only)
  *
  * 레이아웃:
  * - 상단: XP 바 (SK.accent 그라데이션, 4px) → 레벨 배지 + HP 바 + 킬/타이머
@@ -340,7 +340,7 @@ function MatrixHUDInner({
               color: autoHuntEnabled ? SK.green : SK.textMuted,
             }} />
             <div style={{
-              fontSize: 7,
+              fontSize: 8,
               lineHeight: 1,
               textAlign: 'center',
               color: autoHuntEnabled ? SK.greenLight : SK.textMuted,
@@ -435,7 +435,7 @@ function MatrixHUDInner({
                         top: 0,
                         right: 0,
                         backgroundColor: 'rgba(9, 9, 11, 0.9)',
-                        fontSize: 7,
+                        fontSize: 8,
                         paddingLeft: 2,
                         paddingRight: 3,
                         paddingTop: 1,

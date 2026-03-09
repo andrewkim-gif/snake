@@ -107,10 +107,10 @@ function FactionsPageInner() {
             margin: 0,
           }}
         >
-          {tFaction('title')}
+          Factions
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tFaction('subtitle')}
+          Alliance standings, power rankings, and faction warfare
         </p>
       </header>
 

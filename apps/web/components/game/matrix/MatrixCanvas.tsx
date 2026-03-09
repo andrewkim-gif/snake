@@ -1443,7 +1443,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                     position: startPos,
                     velocity: { x: (toCenter.x / dist) * speed, y: (toCenter.y / dist) * speed },
                     radius: 10 + Math.random() * 6,
-                    color: '#00FF41',
+                    color: '#10B981',
                     colorEnd: '#ffffff',
                     life: 0.35,
                     maxLife: 0.35,
@@ -1490,7 +1490,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         velocity: { x: Math.cos(angle) * speed, y: Math.sin(angle) * speed },
                         radius: 12,
                         color: '#ff0000',
-                        colorEnd: '#00FF41',
+                        colorEnd: '#10B981',
                         life: 0.6,
                         maxLife: 0.6,
                         type: 'text',
@@ -1544,7 +1544,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         position: { x: pos.x + xOffset, y: pos.y - 200 - Math.random() * 100 },
                         velocity: { x: 0, y: 150 + Math.random() * 100 },
                         radius: 10 + Math.random() * 6,
-                        color: '#00FF41',
+                        color: '#10B981',
                         colorEnd: '#003300',
                         life: 0.8 + Math.random() * 0.4,
                         maxLife: 1.2,
@@ -3650,7 +3650,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 100) * 0.2;
                         ctx.beginPath();
                         ctx.arc(0, 0, agent.radius + 10, 0, Math.PI * 2);
-                        ctx.strokeStyle = '#00FF41';
+                        ctx.strokeStyle = '#10B981';
                         ctx.lineWidth = 2;
                         ctx.stroke();
                         ctx.globalAlpha = 1;
@@ -3729,7 +3729,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 100) * 0.2;
                         ctx.beginPath();
                         ctx.arc(0, 0, agent.radius + 10, 0, Math.PI * 2);
-                        ctx.strokeStyle = '#00FF41';
+                        ctx.strokeStyle = '#10B981';
                         ctx.lineWidth = 2;
                         ctx.stroke();
                         ctx.globalAlpha = 1;
@@ -3875,7 +3875,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
 
             // 충돌 박스 정보 텍스트
             ctx.fillStyle = '#FFFF00';
-            ctx.font = '12px monospace';
+            ctx.font = '12px "Rajdhani", sans-serif';
             ctx.fillText(`P: (${Math.round(p.position.x)}, ${Math.round(p.position.y)})`, playerScreenX + 50, playerScreenY - 60);
             ctx.fillText(`box: ${p.collisionBox.width}x${p.collisionBox.height} (world)`, playerScreenX + 50, playerScreenY - 45);
         } else {
@@ -3888,7 +3888,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
             ctx.stroke();
 
             ctx.fillStyle = '#FFFF00';
-            ctx.font = '12px monospace';
+            ctx.font = '12px "Rajdhani", sans-serif';
             ctx.fillText(`P: (${Math.round(p.position.x)}, ${Math.round(p.position.y)})`, playerScreenX + 20, playerScreenY - 20);
             ctx.fillText(`r: ${p.radius}`, playerScreenX + 20, playerScreenY - 5);
         }
@@ -3918,7 +3918,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
 
             // 픽업 타입 표시
             ctx.fillStyle = '#FF00FF';
-            ctx.font = '10px monospace';
+            ctx.font = '10px "Rajdhani", sans-serif';
             ctx.fillText(`${pk.type} r:${pk.radius}`, screenX + radiusScreen + 5, screenY);
 
             // 픽업 월드 좌표 중심점 (작은 점)
@@ -4386,7 +4386,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 100) * 0.2;
                         ctx.beginPath();
                         ctx.arc(0, 0, agent.radius + 10, 0, Math.PI * 2);
-                        ctx.strokeStyle = '#00FF41';
+                        ctx.strokeStyle = '#10B981';
                         ctx.lineWidth = 2;
                         ctx.stroke();
                         ctx.globalAlpha = 1;
@@ -4461,7 +4461,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 100) * 0.2;
                         ctx.beginPath();
                         ctx.arc(0, 0, agent.radius + 10, 0, Math.PI * 2);
-                        ctx.strokeStyle = '#00FF41';
+                        ctx.strokeStyle = '#10B981';
                         ctx.lineWidth = 2;
                         ctx.stroke();
                         ctx.globalAlpha = 1;
@@ -4665,7 +4665,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                 // "0" 텍스트 (제네시스 블록 = 블록 #0)
                 if (alpha > 0.5) {
                     ctx.globalAlpha = (alpha - 0.5) * 2;
-                    ctx.font = 'bold 24px monospace'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+                    ctx.font = 'bold 24px "Rajdhani", sans-serif'; ctx.fillStyle = '#ffffff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
                     ctx.fillText('0', 0, 0);
                 }
             } else if (b.type === 'explosion') {
@@ -4928,7 +4928,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                         // 데이터: 문자 (text type과 유사하지만 글리치 효과)
                         ctx.globalAlpha = lifeRatio;
                         ctx.fillStyle = currentColor;
-                        ctx.font = `${Math.max(8, ptSize)}px monospace`;
+                        ctx.font = `${Math.max(8, ptSize)}px "Rajdhani", sans-serif`;
                         ctx.textAlign = 'center';
                         ctx.fillText(pt.text || '0', 0, 0);
                         // 글리치 오프셋 (시안/마젠타)
@@ -4953,7 +4953,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
             else if (pt.type === 'text' && pt.text) {
                 ctx.globalAlpha = lifeRatio;
                 ctx.fillStyle = currentColor;
-                ctx.font = `bold ${Math.max(10, ptSize)}px monospace`;
+                ctx.font = `bold ${Math.max(10, ptSize)}px "Rajdhani", sans-serif`;
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
                 ctx.fillText(pt.text, 0, 0);

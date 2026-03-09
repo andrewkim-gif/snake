@@ -836,45 +836,37 @@ export default function Home() {
         </div>
       )}
 
-      {/* 좌상단 로고 */}
+      {/* 좌하단 컨트롤 — 로고 + 가로 버튼 */}
       <div style={{
         position: 'absolute',
-        top: 24,
+        bottom: NEWS_FEED_HEIGHT + 28,
         left: 28,
-        zIndex: 70,
-        pointerEvents: 'none',
-        opacity: showHeader ? 1 : 0,
-        transform: showHeader ? 'translateY(0)' : 'translateY(-10px)',
-        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
-      }}>
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src="/assets/generated/logo-v2.png"
-          alt="AI WORLD WAR"
-          style={{
-            height: '28px',
-            width: 'auto',
-            objectFit: 'contain',
-            filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
-            pointerEvents: 'auto',
-          }}
-        />
-      </div>
-
-      {/* 좌하단 컨트롤 바 — 버튼들 + 언어 한줄 */}
-      <div style={{
-        position: 'absolute',
-        bottom: NEWS_FEED_HEIGHT + 14,
-        left: 16,
         zIndex: 65,
         display: 'flex',
-        alignItems: 'center',
-        gap: '8px',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: '6px',
         pointerEvents: 'none',
         opacity: showLeftPanel ? 1 : 0,
         transform: showLeftPanel ? 'translateX(0)' : 'translateX(-20px)',
         transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
       }}>
+          {/* 로고 — 버튼 행 상단 */}
+          <div style={{ pointerEvents: 'auto', marginBottom: '4px', paddingLeft: '2px' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/assets/generated/logo-v2.png"
+              alt="AI WORLD WAR"
+              style={{
+                height: '22px',
+                width: 'auto',
+                objectFit: 'contain',
+                filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
+              }}
+            />
+          </div>
+          {/* 가로 버튼 행 */}
+          <div style={{ display: 'flex', flexDirection: 'row', gap: '4px' }}>
           {/* Agent Setup 버튼 — 메인 컬러 통일 */}
           <button
             onClick={() => setSetupOpen(prev => !prev)}
@@ -882,11 +874,11 @@ export default function Home() {
               position: 'relative',
               fontFamily: bodyFont,
               fontWeight: 700,
-              fontSize: '13px',
+              fontSize: '11px',
               color: '#FFFFFF',
               letterSpacing: '1px',
               textTransform: 'uppercase',
-              padding: '10px 20px',
+              padding: '6px 14px',
               border: 'none',
               borderRadius: 0,
               backgroundColor: SK.accent,
@@ -894,13 +886,13 @@ export default function Home() {
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '6px',
               pointerEvents: 'auto',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 5px 100%, 0 calc(100% - 5px))',
               boxShadow: '0 0 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
             }}
           >
-            <Settings size={14} color="#FFFFFF" strokeWidth={2.5} />
+            <Settings size={12} color="#FFFFFF" strokeWidth={2.5} />
             {tLobby('agentSetup')}
           </button>
 
@@ -911,11 +903,11 @@ export default function Home() {
               position: 'relative',
               fontFamily: bodyFont,
               fontWeight: 700,
-              fontSize: '13px',
+              fontSize: '11px',
               color: '#FFFFFF',
               letterSpacing: '1px',
               textTransform: 'uppercase',
-              padding: '10px 20px',
+              padding: '6px 14px',
               border: 'none',
               borderRadius: 0,
               backgroundColor: activePopup === 'economy' ? SK.accent : `rgba(239, 68, 68, 0.7)`,
@@ -923,16 +915,16 @@ export default function Home() {
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '6px',
               pointerEvents: 'auto',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 5px 100%, 0 calc(100% - 5px))',
               boxShadow: activePopup === 'economy'
                 ? '0 0 24px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
                 : '0 0 16px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
               borderLeft: `3px solid ${SK.accent}`,
             }}
           >
-            <TrendingUp size={14} color="#FFFFFF" strokeWidth={2.5} />
+            <TrendingUp size={12} color="#FFFFFF" strokeWidth={2.5} />
             ECONOMY
           </button>
 
@@ -943,11 +935,11 @@ export default function Home() {
               position: 'relative',
               fontFamily: bodyFont,
               fontWeight: 700,
-              fontSize: '13px',
+              fontSize: '11px',
               color: '#FFFFFF',
               letterSpacing: '1px',
               textTransform: 'uppercase',
-              padding: '10px 20px',
+              padding: '6px 14px',
               border: 'none',
               borderRadius: 0,
               backgroundColor: activePopup === 'factions' ? SK.accent : `rgba(239, 68, 68, 0.7)`,
@@ -955,16 +947,16 @@ export default function Home() {
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '6px',
               pointerEvents: 'auto',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 5px 100%, 0 calc(100% - 5px))',
               boxShadow: activePopup === 'factions'
                 ? '0 0 24px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
                 : '0 0 16px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
               borderLeft: `3px solid ${SK.accent}`,
             }}
           >
-            <Swords size={14} color="#FFFFFF" strokeWidth={2.5} />
+            <Swords size={12} color="#FFFFFF" strokeWidth={2.5} />
             FACTIONS
           </button>
 
@@ -975,11 +967,11 @@ export default function Home() {
               position: 'relative',
               fontFamily: bodyFont,
               fontWeight: 700,
-              fontSize: '13px',
+              fontSize: '11px',
               color: '#FFFFFF',
               letterSpacing: '1px',
               textTransform: 'uppercase',
-              padding: '10px 20px',
+              padding: '6px 14px',
               border: 'none',
               borderRadius: 0,
               backgroundColor: activePopup === 'governance' ? SK.accent : `rgba(239, 68, 68, 0.7)`,
@@ -987,18 +979,19 @@ export default function Home() {
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '8px',
+              gap: '6px',
               pointerEvents: 'auto',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 5px 100%, 0 calc(100% - 5px))',
               boxShadow: activePopup === 'governance'
                 ? '0 0 24px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
                 : '0 0 16px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
               borderLeft: `3px solid ${SK.accent}`,
             }}
           >
-            <Landmark size={14} color="#FFFFFF" strokeWidth={2.5} />
+            <Landmark size={12} color="#FFFFFF" strokeWidth={2.5} />
             GOVERNANCE
           </button>
+          </div>{/* 가로 버튼 행 닫기 */}
 
       </div>
 
@@ -1006,8 +999,8 @@ export default function Home() {
       {setupOpen && (
         <div style={{
           position: 'absolute',
-          bottom: NEWS_FEED_HEIGHT + 62,
-          left: 16,
+          bottom: NEWS_FEED_HEIGHT + 95,
+          left: 28,
           zIndex: 66,
           width: 'min(300px, calc(100vw - 32px))',
           pointerEvents: 'auto',
@@ -1132,10 +1125,10 @@ export default function Home() {
         </div>
       )}
 
-      {/* BGM Player — 우하단 (NewsFeed 위) */}
+      {/* BGM Player — 우하단 (좌하단 버튼과 동일 높이) */}
       <BgmPlayer
         visible={showLeftPanel && mode === 'lobby'}
-        bottomOffset={NEWS_FEED_HEIGHT + 12}
+        bottomOffset={NEWS_FEED_HEIGHT + 28}
       />
 
       {/* 뉴스 피드 — 하단 고정 — v17: staggered reveal */}

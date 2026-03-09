@@ -13,7 +13,7 @@
  * - apexClip on skill cards
  *
  * v32: Full Apex tactical redesign — SK tokens, headingFont/bodyFont, borderRadius:0,
- *      apexClip, category color stripes. No monospace, no #00FF41.
+ *      apexClip, category color stripes. Apex tactical design system (SK tokens only).
  */
 
 import React, { useEffect, useState, useCallback, memo } from 'react';
@@ -475,10 +475,11 @@ function MatrixLevelUpInner({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
+                minHeight: 48,
                 paddingLeft: 14,
                 paddingRight: 14,
-                paddingTop: 8,
-                paddingBottom: 8,
+                paddingTop: 10,
+                paddingBottom: 10,
                 transition: 'all 0.2s',
                 cursor: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 'pointer' : 'not-allowed',
                 opacity: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 1 : 0.4,

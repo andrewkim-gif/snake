@@ -1534,13 +1534,14 @@ function AdaptiveOrbitControls() {
 }
 
 // ─── 3D 타이틀: "AI WORLD WAR" 글로브 위 이미지 텍스처 (Last of Us 스타일) ───
-// Bloom 제외: 커스텀 ShaderMaterial로 bloom luminance pass에서 어둡게 출력
-// (onBeforeCompile로 MeshBasicMaterial의 fragment에 gl_FragColor.rgb 클램핑)
+// toneMapped: false로 원본 텍스처 밝기 유지 (tone mapping 바이패스)
+// MeshBasicMaterial이므로 씬 조명에 영향받지 않음
 
 /**
  * Bloom-proof MeshBasicMaterial.
- * fragment shader를 패치하여 출력 luminance를 bloom threshold 미만으로 클램핑.
- * 화면에는 정상적으로 보이지만 bloom의 luminance threshold(0.4)를 넘지 않음.
+ * toneMapped: false로 원본 텍스처 밝기를 그대로 유지하면서,
+ * bloom luminance pass에서만 어둡게 출력하여 bloom 번짐을 방지.
+ * userData.noBloom 플래그로 EffectComposer의 Selection 제외 가능.
  */
 function useNoBloomMaterial(texture: THREE.Texture) {
   return useMemo(() => {
@@ -1550,21 +1551,6 @@ function useNoBloomMaterial(texture: THREE.Texture) {
       depthWrite: false,
       toneMapped: false,
     });
-    // fragment shader 패치: bloom luminance가 threshold 미만이 되도록 밝기 제한
-    mat.onBeforeCompile = (shader) => {
-      shader.fragmentShader = shader.fragmentShader.replace(
-        '#include <opaque_fragment>',
-        `
-        // bloom 제외: 최종 색상의 luminance를 0.38 이하로 클램핑
-        // (luminanceThreshold=0.4 미만 → bloom에 기여하지 않음)
-        float lum = dot(outgoingLight, vec3(0.2126, 0.7152, 0.0722));
-        if (lum > 0.38) {
-          outgoingLight *= 0.38 / lum;
-        }
-        #include <opaque_fragment>
-        `
-      );
-    };
     return mat;
   }, [texture]);
 }
@@ -1910,7 +1896,7 @@ function GlobeScene({
         />
       )}
 
-      {/* v21 Phase 4: Bloom 포스트프로세싱 — GlobeTitle은 shader 클램핑으로 bloom 제외 */}
+      {/* v21 Phase 4: Bloom 포스트프로세싱 — GlobeTitle은 toneMapped:false로 원본 밝기 유지 */}
       {!isMobile && (
         <EffectComposer>
           <Bloom

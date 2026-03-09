@@ -2,16 +2,19 @@
   "pipeline": "da:work",
   "execution_mode": "plan",
   "pipeline_mode": "turbo",
-  "plan_file": "docs/designs/v29b-hud-and-country-entry-plan.md",
+  "plan_file": "docs/designs/v32-matrix-gameplay-plan.md",
   "project_type": "GAME",
   "current_stage": 3,
-  "current_phase": 2,
-  "total_phases": 2,
+  "current_phase": 5,
+  "total_phases": 5,
   "phases": [
-    {"name": "Phase 1: HUD inline style 변환", "design_needed": false, "status": "done", "tasks": ["MatrixHUD 변환", "ArenaHUD 변환", "MatrixLevelUp 변환", "MatrixResult 변환", "MatrixApp 변환", "MatrixPause 변환"]},
-    {"name": "Phase 2: 국가 선택 → Matrix 진입 연결", "design_needed": false, "status": "pending", "tasks": ["page.tsx 상태 추가", "handleManageCountry 수정", "MatrixApp props 확장", "page.tsx MatrixApp 연결", "MatrixIntro 국가 표시", "디버그 버튼 제거", "IsoCanvas 경로 보존"]}
+    {"name": "Phase 1: v3 시스템 시각 UI 이식 + Multiplier 검증", "design_needed": false, "status": "done", "tasks": ["spawn/XP multiplier 적용 검증", "BreakTimeOverlay 이식", "Kernel Panic 트리거 구현", "ComboCounter 이식", "QuizChallengeCard 이식", "MatrixApp에 v3 오버레이 렌더링"]},
+    {"name": "Phase 2: MatrixHUD Apex 리디자인", "design_needed": false, "status": "done", "tasks": ["XP 바 리디자인", "HP 바 리디자인", "레벨/킬/타이머 UI", "무기 슬롯 리디자인", "오토헌트 버튼"]},
+    {"name": "Phase 3: ArenaHUD + MatrixLevelUp Apex 리디자인", "design_needed": false, "status": "done", "tasks": ["ArenaHUD 리디자인", "MatrixLevelUp 리디자인", "브랜치 선택 UI", "시너지 알림 UI"]},
+    {"name": "Phase 4: MatrixResult + MatrixPause Apex 리디자인", "design_needed": false, "status": "done", "tasks": ["MatrixResult 리디자인", "MatrixPause 리디자인", "키보드 단축키 확인"]},
+    {"name": "Phase 5: 통합 검증 및 정리", "design_needed": false, "status": "pending", "tasks": ["전체 게임 플로우 검증", "미사용 코드 정리", "모바일 반응형 검증", "빌드 최종 검증"]}
   ],
   "iterations": {"arch": 0, "dev": 0, "e2e": 0},
-  "last_skill": "phase1_done",
-  "last_update": "2026-03-10T12:00:00Z"
+  "last_skill": "turbo_phase4_done",
+  "last_update": "2026-03-10T16:00:00Z"
 }

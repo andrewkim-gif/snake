@@ -40,7 +40,7 @@
   },
   "lobby": {
     "title": "AI WORLD WAR",
-    "agentSetup": "에이전트 설정",
+    "agentSetup": "AGENT",
     "enterCallsign": "콜사인을 입력하세요...",
     "clickToDeploy": "국가를 클릭하여 배치하세요",
     "deploying": "아레나에 배치 중...",

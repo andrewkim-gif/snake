@@ -8,7 +8,7 @@
  * - bodyFont (Space Grotesk) for labels
  * - SK.gold, SK.accent for highlights
  * - borderRadius: 0
- * - No monospace, no #00FF41
+ * - Apex tactical design system (SK tokens only)
  *
  * 10 Tiers: Bronze -> Silver -> Gold -> Diamond -> Platinum
  *           -> Master -> Grandmaster -> Legend -> Mythic -> Transcendent

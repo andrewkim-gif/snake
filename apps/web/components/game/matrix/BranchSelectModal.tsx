@@ -6,7 +6,7 @@
  * Shown at Lv.11 when a skill has branch evolution options.
  * Player chooses between Path A (multi/area) or Path B (power/focus).
  *
- * Uses SK tokens, headingFont/bodyFont, apexClip. No monospace, no #00FF41.
+ * Uses SK tokens, headingFont/bodyFont, apexClip. Apex tactical design system (SK tokens only).
  */
 
 import React, { memo, useCallback, useEffect } from 'react';

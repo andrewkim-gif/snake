@@ -39,9 +39,25 @@ var WarDeclarationCost = ResourceBundle{
 	Oil:       500,
 }
 
-// AWWWarDeclarationCost is the $AWW point cost for a standard war declaration.
-// v30 Task 1-12: 소규모 전쟁 기본 비용. 전쟁 유형에 따라 game.WarCostSmall/Large/Economic 사용.
-const AWWWarDeclarationCost = 500.0
+// AWWWarDeclarationCost defines type-differentiated $AWW costs for war declarations.
+// v30 Task 1-12: 전쟁 유형별 차등 비용.
+const (
+	AWWWarCostSmall    = 500.0  // 소규모 전쟁 (기본)
+	AWWWarCostEconomic = 1000.0 // 경제 전쟁
+	AWWWarCostLarge    = 2000.0 // 대규모 전쟁
+)
+
+// getAWWWarCost returns the $AWW cost based on war type string.
+func getAWWWarCost(warType string) float64 {
+	switch warType {
+	case "economic":
+		return AWWWarCostEconomic
+	case "large":
+		return AWWWarCostLarge
+	default:
+		return AWWWarCostSmall
+	}
+}
 
 // WarRecord is the full war record extending the base War struct.
 type WarRecord struct {
@@ -138,7 +154,8 @@ func NewWarManager(fm *FactionManager, de *DiplomacyEngine) *WarManager {
 }
 
 // DeclareWar initiates a war declaration between two factions.
-func (wm *WarManager) DeclareWar(attackerID, defenderID string) (*WarRecord, error) {
+// warType determines the AWW cost: "small" (500), "economic" (1000), "large" (2000).
+func (wm *WarManager) DeclareWar(attackerID, defenderID string, warType ...string) (*WarRecord, error) {
 	wm.mu.Lock()
 	defer wm.mu.Unlock()
 
@@ -169,14 +186,23 @@ func (wm *WarManager) DeclareWar(attackerID, defenderID string) (*WarRecord, err
 		}
 	}
 
-	// v30 Task 1-12: $AWW 포인트 소각 비용 (전쟁 선포 시)
+	// v30 Task 1-12: $AWW 포인트 소각 비용 (전쟁 선포 시, 유형별 차등)
 	if wm.awwBalanceTracker != nil {
-		awwCost := AWWWarDeclarationCost
+		wt := "small"
+		if len(warType) > 0 && warType[0] != "" {
+			wt = warType[0]
+		}
+		awwCost := getAWWWarCost(wt)
 		if err := wm.awwBalanceTracker.DeductBalance(attackerID, awwCost); err != nil {
-			return nil, fmt.Errorf("insufficient AWW points for war declaration: %w", err)
+			// W9 fix: AWW 부족 시 이미 차감된 자원 환불
+			if wm.factionManager != nil {
+				_ = wm.factionManager.DepositToTreasury(attackerID, WarDeclarationCost)
+			}
+			return nil, fmt.Errorf("insufficient AWW points for war declaration (need %.0f): %w", awwCost, err)
 		}
 		slog.Info("war declaration AWW cost deducted",
 			"attacker", attackerID,
+			"warType", wt,
 			"cost", awwCost,
 		)
 	}
@@ -553,6 +579,7 @@ func (wm *WarManager) WarRoutes() chi.Router {
 // DeclareWarRequest is the HTTP request body for declaring war.
 type DeclareWarRequest struct {
 	DefenderFactionID string `json:"defender_faction_id"`
+	WarType           string `json:"war_type,omitempty"` // "small" (default) | "economic" | "large"
 }
 
 func (wm *WarManager) handleDeclareWar(w http.ResponseWriter, r *http.Request) {
@@ -588,15 +615,20 @@ func (wm *WarManager) handleDeclareWar(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	war, err := wm.DeclareWar(factionID, req.DefenderFactionID)
+	war, err := wm.DeclareWar(factionID, req.DefenderFactionID, req.WarType)
 	if err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]string{"error": err.Error()})
 		return
 	}
 
+	wt := req.WarType
+	if wt == "" {
+		wt = "small"
+	}
 	writeJSON(w, http.StatusCreated, map[string]interface{}{
-		"war":  war,
-		"cost": WarDeclarationCost,
+		"war":     war,
+		"cost":    WarDeclarationCost,
+		"awwCost": getAWWWarCost(wt),
 	})
 }
 

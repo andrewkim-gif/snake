@@ -492,7 +492,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
 
   // Arena 리더보드 (ArenaHUD용)
   // Agent 컬러 팔레트 (10명분)
-  const AGENT_COLORS = ['#00FF41', '#FF4444', '#44AAFF', '#FFAA00', '#AA44FF', '#FF44AA', '#44FFAA', '#FFFF44', '#FF8844', '#8844FF'];
+  const AGENT_COLORS = ['#10B981', '#FF4444', '#44AAFF', '#FFAA00', '#AA44FF', '#FF44AA', '#44FFAA', '#FFFF44', '#FF8844', '#8844FF'];
   const arenaLeaderboard: LeaderboardEntry[] = useMemo(() => {
     return arena.agents
       .filter((a: { isAlive: boolean }) => a.isAlive)

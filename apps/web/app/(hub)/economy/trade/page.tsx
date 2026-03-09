@@ -6,7 +6,6 @@
  */
 
 import { useState } from 'react';
-import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { LoadingSkeleton } from '@/components/hub';
@@ -20,8 +19,6 @@ const TradeMarket = dynamic(
 );
 
 export default function TradePage() {
-  const tEconomy = useTranslations('economy');
-
   const serverUrl =
     typeof window !== 'undefined'
       ? process.env.NEXT_PUBLIC_SERVER_URL || window.location.origin
@@ -51,10 +48,10 @@ export default function TradePage() {
             margin: 0,
           }}
         >
-          {tEconomy('tradeMarket')}
+          Trade Market
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tEconomy('tradeMarketDesc')}
+          Buy and sell country tokens on the open market
         </p>
       </header>
 

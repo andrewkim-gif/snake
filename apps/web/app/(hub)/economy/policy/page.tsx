@@ -21,7 +21,6 @@ const PolicyPanel = dynamic(
 );
 
 function PolicyPageInner() {
-  const tEconomy = useTranslations('economy');
   const searchParams = useSearchParams();
   const countryParam = searchParams.get('country');
 
@@ -58,10 +57,10 @@ function PolicyPageInner() {
             margin: 0,
           }}
         >
-          {tEconomy('economicPolicy')}
+          Economic Policy
         </h1>
         <p style={{ color: SK.textSecondary, fontSize: SKFont.sm, marginTop: 4 }}>
-          {tEconomy('economicPolicyDesc')}
+          Tax rates, treasury allocation, and fiscal strategy
         </p>
       </header>
 
