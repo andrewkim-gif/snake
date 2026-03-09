@@ -11,6 +11,12 @@
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
+import MatrixHUD from './MatrixHUD';
+import type { WeaponSlot } from './MatrixHUD';
+import MatrixLevelUp from './MatrixLevelUp';
+import type { LevelUpOption } from './MatrixLevelUp';
+import MatrixPause from './MatrixPause';
+import MatrixResult from './MatrixResult';
 import type {
   Player,
   Enemy,
@@ -84,6 +90,19 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   const [showHUD, setShowHUD] = useState(true);
+  const [isPaused, setIsPaused] = useState(false);
+  const [showLevelUp, setShowLevelUp] = useState(false);
+  const [levelUpOptions, setLevelUpOptions] = useState<LevelUpOption[]>([]);
+  const [gameOver, setGameOver] = useState(false);
+  const [survived, setSurvived] = useState(false);
+  const [hudData, setHudData] = useState({
+    health: 100, maxHealth: 100, xp: 0, xpToNext: 100,
+    level: 1, score: 0, kills: 0, gameTime: 0,
+    weaponSlots: [] as WeaponSlot[], enemyCount: 0, autoHuntEnabled: true,
+  });
+  const killsRef = useRef(0);
+  const weaponNamesRef = useRef<string[]>([]);
+  const hudUpdateTimerRef = useRef(0);
 
   // ---- 게임 엔티티 refs (0 re-render) ----
   const playerRef = useRef<Player>(createInitialPlayer());
@@ -166,6 +185,23 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
   // 경험치/레벨업 (기초)
   // ============================================
 
+  // ---- 레벨업 옵션 생성 ----
+  const generateLevelUpOptions = useCallback((): LevelUpOption[] => {
+    const pool: LevelUpOption[] = [
+      { id: 'wand_up', name: 'Wand Upgrade', description: '+5 damage, +1 pierce', currentLevel: playerRef.current.level, maxLevel: 20, rarity: 'common', icon: '\u{1F310}', type: 'weapon' },
+      { id: 'hp_boost', name: 'HP Boost', description: '+30 max HP, full heal', currentLevel: 1, maxLevel: 10, rarity: 'uncommon', icon: '\u{2764}\u{FE0F}', type: 'passive' },
+      { id: 'speed_boost', name: 'Speed Boost', description: '+15% move speed', currentLevel: 1, maxLevel: 5, rarity: 'common', icon: '\u{26A1}', type: 'passive' },
+      { id: 'crit_boost', name: 'Critical Strike', description: '+5% crit chance', currentLevel: 1, maxLevel: 10, rarity: 'rare', icon: '\u{1F4A5}', type: 'passive' },
+      { id: 'multi_shot', name: 'Multi Shot', description: '+1 projectile amount', currentLevel: 1, maxLevel: 5, rarity: 'epic', icon: '\u{1F320}', type: 'skill' },
+      { id: 'cooldown_red', name: 'Rapid Fire', description: '-10% weapon cooldown', currentLevel: 1, maxLevel: 5, rarity: 'rare', icon: '\u{1F525}', type: 'skill' },
+      { id: 'knockback_up', name: 'Force Push', description: '+50% knockback', currentLevel: 1, maxLevel: 3, rarity: 'uncommon', icon: '\u{1F4A8}', type: 'passive' },
+      { id: 'area_up', name: 'Area Expand', description: '+20% attack area', currentLevel: 1, maxLevel: 5, rarity: 'uncommon', icon: '\u{1F30A}', type: 'passive' },
+    ];
+    // 가중 랜덤 4개 선택
+    const shuffled = pool.sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, 4);
+  }, []);
+
   const addXP = useCallback((amount: number) => {
     const player = playerRef.current;
     player.xp += amount;
@@ -176,19 +212,84 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       player.nextLevelXp = XP_THRESHOLDS[idx];
       player.nextXp = player.nextLevelXp;
 
-      // 레벨업 보상: HP 회복 + 무기 강화
+      // 레벨업 보상: HP 회복
       player.health = Math.min(player.maxHealth, player.health + 20);
-      const wand = player.weapons[STARTING_WEAPON];
-      if (wand) {
-        wand.damage += 3;
-        if (player.level % 3 === 0) {
-          wand.amount = Math.min(wand.amount + 1, 5);
-        }
-        if (player.level % 5 === 0) {
-          wand.cooldown = Math.max(0.3, wand.cooldown - 0.1);
-        }
-      }
+
+      // 레벨업 모달 표시
+      const options = generateLevelUpOptions();
+      setLevelUpOptions(options);
+      setShowLevelUp(true);
+      gameActiveRef.current = false; // 일시정지
     }
+  }, [generateLevelUpOptions]);
+
+  // ---- 레벨업 선택 핸들러 ----
+  const handleLevelUpSelect = useCallback((id: string) => {
+    const player = playerRef.current;
+    const wand = player.weapons[STARTING_WEAPON];
+
+    switch (id) {
+      case 'wand_up':
+        if (wand) { wand.damage += 5; wand.pierce += 1; }
+        break;
+      case 'hp_boost':
+        player.maxHealth += 30;
+        player.health = player.maxHealth;
+        break;
+      case 'speed_boost':
+        player.speed *= 1.15;
+        break;
+      case 'crit_boost':
+        player.criticalChance = Math.min(0.5, player.criticalChance + 0.05);
+        break;
+      case 'multi_shot':
+        if (wand) wand.amount = Math.min(wand.amount + 1, 8);
+        break;
+      case 'cooldown_red':
+        if (wand) wand.cooldown = Math.max(0.2, wand.cooldown * 0.9);
+        break;
+      case 'knockback_up':
+        if (wand) wand.knockback = (wand.knockback || 3) * 1.5;
+        break;
+      case 'area_up':
+        if (wand) wand.area = (wand.area || 8) * 1.2;
+        break;
+    }
+
+    setShowLevelUp(false);
+    gameActiveRef.current = true; // 게임 재개
+  }, []);
+
+  // ---- 게임 오버 처리 ----
+  const triggerGameOver = useCallback((didSurvive: boolean) => {
+    gameActiveRef.current = false;
+    setSurvived(didSurvive);
+    setGameOver(true);
+  }, []);
+
+  // ---- 재시도 ----
+  const handleRetry = useCallback(() => {
+    // 상태 리셋
+    playerRef.current = createInitialPlayer();
+    enemiesRef.current = [];
+    projectilesRef.current = [];
+    enemyProjectilesRef.current = [];
+    gemsRef.current = [];
+    pickupsRef.current = [];
+    blastsRef.current = [];
+    lightningBoltsRef.current = [];
+    particlesRef.current = [];
+    damageNumbersRef.current = [];
+    gameTimeRef.current = 0;
+    frameCountRef.current = 0;
+    lastSpawnTimeRef.current = 0;
+    killsRef.current = 0;
+    weaponNamesRef.current = [];
+
+    setGameOver(false);
+    setIsPaused(false);
+    setShowLevelUp(false);
+    gameActiveRef.current = true;
   }, []);
 
   // ============================================
@@ -236,8 +337,9 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       enemy.stunTimer = 0.3;
       enemy.deathScale = 1;
 
-      // 점수 + 경험치
+      // 점수 + 경험치 + 킬 카운트
       playerRef.current.score += 10;
+      killsRef.current += 1;
       const xpValue = enemy.isBoss ? 50 : (enemy.radius > 15 ? 8 : 5);
       addXP(xpValue);
 
@@ -484,13 +586,43 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       if (particles[i].life <= 0) particles.splice(i, 1);
     }
 
+    // ---- 플레이어 사망 체크 ----
+    if (player.health <= 0) {
+      triggerGameOver(false);
+      return;
+    }
+
+    // ---- HUD 데이터 동기화 (5프레임마다 React 상태 갱신) ----
+    hudUpdateTimerRef.current += 1;
+    if (hudUpdateTimerRef.current >= 5) {
+      hudUpdateTimerRef.current = 0;
+      const weaponSlots: WeaponSlot[] = Object.entries(player.weapons).map(([type, w]) => ({
+        type,
+        level: w.level,
+        cooldownPercent: 0, // TODO: 무기별 쿨다운 추적
+      }));
+      setHudData({
+        health: player.health,
+        maxHealth: player.maxHealth,
+        xp: player.xp,
+        xpToNext: player.nextLevelXp,
+        level: player.level,
+        score: player.score,
+        kills: killsRef.current,
+        gameTime: gameTimeRef.current,
+        weaponSlots,
+        enemyCount: enemies.length,
+        autoHuntEnabled: autoHuntEnabled.current,
+      });
+    }
+
     // ---- 렌더 컨텍스트 업데이트 (LOD) ----
     updateRenderContext(
       enemies.length,
       projectilesRef.current.length,
       particles.length,
     );
-  }, [addXP, damageEnemy]);
+  }, [addXP, damageEnemy, triggerGameOver]);
 
   // ============================================
   // 게임 리셋
@@ -644,8 +776,7 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
 
     ctx.restore(); // 카메라 변환 종료
 
-    // ---- HUD (화면 고정) ----
-    drawHUD(ctx, width, height, player);
+    // ---- HUD는 React 오버레이로 대체 (MatrixHUD) ----
   }, []);
 
   // ============================================
@@ -754,8 +885,14 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
-        gameActiveRef.current = false;
-        onExit();
+        e.preventDefault();
+        // 레벨업 모달 열려있으면 무시
+        if (showLevelUp || gameOver) return;
+        setIsPaused(prev => {
+          const next = !prev;
+          gameActiveRef.current = !next;
+          return next;
+        });
         return;
       }
       if (e.key === 'Tab') {
@@ -776,7 +913,7 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       window.removeEventListener('keydown', handleKeyDown);
       window.removeEventListener('keyup', handleKeyUp);
     };
-  }, [onExit]);
+  }, [showLevelUp, gameOver]);
 
   // ---- 포인터 입력 (터치 조이스틱) ----
   const handlePointerDown = useCallback((e: React.PointerEvent) => {
@@ -881,20 +1018,73 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
   }, []);
 
   return (
-    <canvas
-      ref={canvasRef}
-      style={{
-        display: 'block',
-        width: '100vw',
-        height: '100vh',
-        backgroundColor: '#000',
-        cursor: 'crosshair',
-        touchAction: 'none',
-      }}
-      onPointerDown={handlePointerDown}
-      onPointerMove={handlePointerMove}
-      onPointerUp={handlePointerUp}
-      onPointerLeave={handlePointerUp}
-    />
+    <div style={{ position: 'relative', width: '100vw', height: '100vh', overflow: 'hidden' }}>
+      <canvas
+        ref={canvasRef}
+        style={{
+          display: 'block',
+          width: '100%',
+          height: '100%',
+          backgroundColor: '#000',
+          cursor: 'crosshair',
+          touchAction: 'none',
+        }}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerLeave={handlePointerUp}
+      />
+
+      {/* React HUD 오버레이 */}
+      {showHUD && !gameOver && (
+        <MatrixHUD
+          health={hudData.health}
+          maxHealth={hudData.maxHealth}
+          xp={hudData.xp}
+          xpToNext={hudData.xpToNext}
+          level={hudData.level}
+          score={hudData.score}
+          kills={hudData.kills}
+          gameTime={hudData.gameTime}
+          weaponSlots={hudData.weaponSlots}
+          enemyCount={hudData.enemyCount}
+          autoHuntEnabled={hudData.autoHuntEnabled}
+          isPaused={isPaused}
+        />
+      )}
+
+      {/* 레벨업 모달 */}
+      {showLevelUp && (
+        <MatrixLevelUp
+          options={levelUpOptions}
+          onSelect={handleLevelUpSelect}
+        />
+      )}
+
+      {/* 일시정지 메뉴 */}
+      {isPaused && !showLevelUp && !gameOver && (
+        <MatrixPause
+          onResume={() => {
+            setIsPaused(false);
+            gameActiveRef.current = true;
+          }}
+          onExitToLobby={onExit}
+        />
+      )}
+
+      {/* 게임 결과 화면 */}
+      {gameOver && (
+        <MatrixResult
+          survived={survived}
+          survivalTime={gameTimeRef.current}
+          kills={killsRef.current}
+          score={playerRef.current.score}
+          level={playerRef.current.level}
+          weapons={Object.keys(playerRef.current.weapons)}
+          onRetry={handleRetry}
+          onExitToLobby={onExit}
+        />
+      )}
+    </div>
   );
 }
