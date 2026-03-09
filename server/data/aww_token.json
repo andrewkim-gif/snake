@@ -3,7 +3,7 @@
   "symbol": "AWW",
   "decimals": 18,
   "totalSupply": "1000000000",
-  "chainId": 0,
+  "chainId": 8851,
   "chainName": "CROSS Mainnet",
   "distribution": {
     "ecosystem": { "percent": 40, "amount": "400000000", "description": "Ecosystem rewards (staking, play-to-earn)" },
@@ -24,7 +24,7 @@
     }
   },
   "contracts": {
-    "awwToken": "",
+    "awwToken": "0xfD486ba056dFa2d8625a8bB74e4f207F70ab8CD7",
     "nationalTokenFactory": "",
     "defenseOracle": "",
     "governanceModule": ""
@@ -32,6 +32,8 @@
   "links": {
     "website": "https://aiworldwar.io",
     "docs": "https://docs.aiworldwar.io",
-    "explorer": ""
+    "explorer": "https://explorer.crosstoken.io",
+    "forge": "https://x.crosstoken.io/forge/token/0xfD486ba056dFa2d8625a8bB74e4f207F70ab8CD7",
+    "rampConsole": "https://cross-ramp-console.crosstoken.io"
   }
 }

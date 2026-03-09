@@ -5,7 +5,7 @@
 
 // --- Chain Config ---
 export const CROSS_CHAIN_CONFIG = {
-  chainId: 0, // CROSS Mainnet (placeholder — set from env)
+  chainId: 8851, // CROSS Mainnet
   chainName: 'CROSS Mainnet',
   rpcUrl: process.env.NEXT_PUBLIC_CROSS_RPC_URL || 'https://rpc.crosstoken.io',
   wsUrl: process.env.NEXT_PUBLIC_CROSS_WS_URL || 'wss://ws.crosstoken.io',
@@ -50,7 +50,16 @@ export const CROSSX_LINKS = {
     `${CROSS_CHAIN_CONFIG.explorerUrl}/tx/${txHash}`,
 } as const;
 
-// --- Contract Addresses (loaded from server) ---
+// --- Deployed Contract Addresses ---
+export const CONTRACT_ADDRESSES = {
+  awwToken: '0xfD486ba056dFa2d8625a8bB74e4f207F70ab8CD7',
+  forgePool: 'https://x.crosstoken.io/forge/token/0xfD486ba056dFa2d8625a8bB74e4f207F70ab8CD7',
+  // Foundry contracts (not yet deployed — Phase 10)
+  nationalTokenFactory: '',
+  defenseOracle: '',
+  governanceModule: '',
+} as const;
+
 export interface ContractAddresses {
   awwToken: string;
   nationalTokenFactory: string;
