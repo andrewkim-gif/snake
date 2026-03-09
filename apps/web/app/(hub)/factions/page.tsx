@@ -5,7 +5,7 @@
  * DashboardPage + DetailModal + API 연동 (mock fallback 제거)
  */
 
-import { useState, useCallback, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import dynamic from 'next/dynamic';
 import { useTranslations } from 'next-intl';
 import { SK, SKFont, headingFont, bodyFont, sketchBorder, sketchShadow, radius, grid } from '@/lib/sketch-ui';
@@ -57,11 +57,14 @@ function FactionsPageInner() {
   const { data: factions, loading } = useApiData(fetchFactions, { refreshInterval: 30_000 });
 
   // 선택된 팩션 상세 가져오기
-  const fetchSelectedFaction = useCallback(() => {
-    if (!selectedId) return Promise.resolve(null);
-    return fetchFaction(selectedId);
+  const [selectedDetail, setSelectedDetail] = useState<FactionDetailResponse | null>(null);
+  useEffect(() => {
+    if (!selectedId) {
+      setSelectedDetail(null);
+      return;
+    }
+    fetchFaction(selectedId).then((d) => setSelectedDetail(d));
   }, [selectedId]);
-  const { data: selectedDetail } = useApiData(fetchSelectedFaction);
 
   const handleFactionSelect = useCallback((faction: { id: string }) => {
     setSelectedId(faction.id);
@@ -120,13 +123,15 @@ function FactionsPageInner() {
             key={faction.id}
             style={{
               background: SK.cardBg,
-              border: sketchBorder(selectedId === faction.id ? SK.blue : SK.border),
+              borderTop: `1px solid ${selectedId === faction.id ? SK.blue : SK.border}`,
+              borderRight: `1px solid ${selectedId === faction.id ? SK.blue : SK.border}`,
+              borderBottom: `1px solid ${selectedId === faction.id ? SK.blue : SK.border}`,
+              borderLeft: `4px solid ${faction.color}`,
               borderRadius: 0,
               padding: 20,
               boxShadow: sketchShadow('sm'),
               cursor: 'pointer',
               transition: 'all 0.2s ease',
-              borderLeft: `4px solid ${faction.color}`,
             }}
             onClick={() => setSelectedId(faction.id)}
           >

@@ -77,10 +77,12 @@ export interface BuildingInstance {
 }
 
 // ─── 아이소메트릭 상수 ───
-// v27: 256px 에셋 × 0.5 스케일 = 128×64 표시 타일
+// v27: 256px 에셋 내 다이아몬드 콘텐츠 = 128×80px (캔버스 하단 배치)
+// 스케일 1.0으로 네이티브 렌더 → 128px 폭이 타일 그리드에 정확히 맞음
+// 80px 높이 > 64px 그리드 높이 = 자연스러운 아이소메트릭 오버랩
 export const ISO_TILE_WIDTH = 128;   // 타일 가로 (스크린 px)
 export const ISO_TILE_HEIGHT = 64;   // 타일 세로 (스크린 px)
-export const ISO_TILE_SCALE = 0.5;   // 256px 에셋 → 128px 표시 스케일
+export const ISO_TILE_SCALE = 1.0;   // 256px 에셋 네이티브 렌더 (다이아몬드=128px)
 
 // ─── 맵 크기 (국가 tier별) ───
 export type MapTier = 'S' | 'A' | 'B' | 'C' | 'D';

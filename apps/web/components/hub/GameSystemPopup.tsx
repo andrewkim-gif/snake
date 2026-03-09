@@ -56,6 +56,10 @@ const ProfilePage = dynamic(
   () => import('@/app/(hub)/profile/page'),
   { loading: () => <TabLoading /> },
 );
+const DashboardPage = dynamic(
+  () => import('@/app/dashboard/page'),
+  { loading: () => <TabLoading /> },
+);
 const SettingsContent = dynamic(
   () => import('./SettingsContent'),
   { loading: () => <TabLoading /> },
@@ -105,7 +109,7 @@ function TabContent({ mainTab, subTab }: { mainTab: MainTabKey; subTab: string }
     case 'profile':
       return <ProfilePage />;
     case 'dashboard':
-      return <DashboardPlaceholder />;
+      return <DashboardPage />;
     case 'settings':
       return <SettingsContent />;
     default:
@@ -113,38 +117,6 @@ function TabContent({ mainTab, subTab }: { mainTab: MainTabKey; subTab: string }
   }
 }
 
-function DashboardPlaceholder() {
-  const tNav = useTranslations('nav');
-  const tCommon = useTranslations('common');
-  return (
-    <div style={{
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      minHeight: '300px',
-      gap: '12px',
-    }}>
-      <span style={{
-        fontFamily: bodyFont,
-        fontSize: '14px',
-        fontWeight: 600,
-        color: SK.textSecondary,
-        letterSpacing: '2px',
-      }}>
-        {tNav('dashboard').toUpperCase()}
-      </span>
-      <span style={{
-        fontFamily: bodyFont,
-        fontSize: '12px',
-        color: SK.textMuted,
-        letterSpacing: '1px',
-      }}>
-        {tCommon('comingSoon')}
-      </span>
-    </div>
-  );
-}
 
 /* ── 메인 팝업 ── */
 

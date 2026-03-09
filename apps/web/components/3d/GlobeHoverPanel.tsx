@@ -51,7 +51,7 @@ interface GlobeHoverPanelProps {
 // ─── Constants ──
 
 const PANEL_WIDTH = 260;
-const PANEL_HEIGHT = 220;
+const PANEL_HEIGHT = 200;
 const OFFSET_X = 16;
 const OFFSET_Y = 16;
 const EDGE_MARGIN = 12;
@@ -158,11 +158,6 @@ export function GlobeHoverPanel({
     setPosition({ x, y });
   }, [mouseX, mouseY, visible, data]);
 
-  const handleEnterClick = useCallback((e: React.MouseEvent) => {
-    e.stopPropagation();
-    if (data) onClickEnter?.(data.countryCode);
-  }, [data, onClickEnter]);
-
   const handleManageClick = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     if (data) onClickManage?.(data.countryCode);
@@ -263,62 +258,32 @@ export function GlobeHoverPanel({
         <MiniStat label="Population" value={formatPopulation(data.population)} color="#FB923C" />
       </div>
 
-      {/* Action Buttons */}
-      <div style={{ display: 'flex', gap: '6px' }}>
-        {/* Enter Arena Button */}
-        <button
-          onClick={handleEnterClick}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: radius.md,
-            border: `1px solid ${SK.blue}60`,
-            background: `${SK.blue}20`,
-            color: SK.blue,
-            fontFamily: bodyFont,
-            fontSize: SKFont.xs,
-            fontWeight: 700,
-            cursor: 'pointer',
-            letterSpacing: '1px',
-            transition: 'all 150ms ease',
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLButtonElement).style.background = `${SK.blue}40`;
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLButtonElement).style.background = `${SK.blue}20`;
-          }}
-        >
-          ENTER ARENA
-        </button>
-
-        {/* v26: Manage Country Button (Isometric) */}
-        <button
-          onClick={handleManageClick}
-          style={{
-            flex: 1,
-            padding: '8px',
-            borderRadius: radius.md,
-            border: `1px solid ${SK.gold}60`,
-            background: `${SK.gold}20`,
-            color: SK.gold,
-            fontFamily: bodyFont,
-            fontSize: SKFont.xs,
-            fontWeight: 700,
-            cursor: 'pointer',
-            letterSpacing: '1px',
-            transition: 'all 150ms ease',
-          }}
-          onMouseEnter={(e) => {
-            (e.target as HTMLButtonElement).style.background = `${SK.gold}40`;
-          }}
-          onMouseLeave={(e) => {
-            (e.target as HTMLButtonElement).style.background = `${SK.gold}20`;
-          }}
-        >
-          MANAGE
-        </button>
-      </div>
+      {/* Action Button — ENTER {COUNTRY} */}
+      <button
+        onClick={handleManageClick}
+        style={{
+          width: '100%',
+          padding: '10px 8px',
+          borderRadius: radius.md,
+          border: `1px solid ${SK.green}60`,
+          background: `${SK.green}20`,
+          color: SK.green,
+          fontFamily: bodyFont,
+          fontSize: SKFont.xs,
+          fontWeight: 700,
+          cursor: 'pointer',
+          letterSpacing: '1.5px',
+          transition: 'all 150ms ease',
+        }}
+        onMouseEnter={(e) => {
+          (e.target as HTMLButtonElement).style.background = `${SK.green}40`;
+        }}
+        onMouseLeave={(e) => {
+          (e.target as HTMLButtonElement).style.background = `${SK.green}20`;
+        }}
+      >
+        ENTER {data.countryName.toUpperCase()}
+      </button>
     </div>
   );
 }

@@ -35,6 +35,159 @@ import { ProductionChainOverlay } from './ui/ProductionChainOverlay';
 import { PoliticsPanel } from './ui/PoliticsPanel';
 import { ElectionPanel } from './ui/ElectionPanel';
 
+// ─── 로딩 텍스트 사이클 (GlobeLoadingScreen 스타일) ───
+const ISO_LOADING_TEXTS = [
+  'LOADING TERRAIN DATA',
+  'GENERATING BIOME MAP',
+  'DEPLOYING INFRASTRUCTURE',
+  'INITIALIZING CITY VIEW',
+];
+
+// ─── IsoLoadingScreen ───
+
+function IsoLoadingScreen({
+  ready,
+  countryName,
+  onFadeComplete,
+}: {
+  ready: boolean;
+  countryName: string;
+  onFadeComplete: () => void;
+}) {
+  const [fadeOut, setFadeOut] = useState(false);
+  const [textIndex, setTextIndex] = useState(0);
+  const [progress, setProgress] = useState(0);
+  const progressRef = useRef(0);
+  const rafRef = useRef(0);
+
+  // 시뮬레이션 프로그레스 (0→85% 3초 ease-out, ready 후 100%)
+  useEffect(() => {
+    const startTime = Date.now();
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      if (!ready) {
+        const t = Math.min(elapsed / 3000, 1);
+        const eased = 1 - (1 - t) * (1 - t);
+        progressRef.current = eased * 85;
+      } else {
+        progressRef.current = Math.min(progressRef.current + 5, 100);
+      }
+      setProgress(progressRef.current);
+      if (progressRef.current < 100) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [ready]);
+
+  // 텍스트 사이클
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTextIndex((prev) => (prev + 1) % ISO_LOADING_TEXTS.length);
+    }, 800);
+    return () => clearInterval(interval);
+  }, []);
+
+  // ready + 100% → 페이드아웃
+  useEffect(() => {
+    if (ready && progress >= 99) {
+      const timer = setTimeout(() => setFadeOut(true), 200);
+      return () => clearTimeout(timer);
+    }
+  }, [ready, progress]);
+
+  // 페이드아웃 완료 → 콜백
+  useEffect(() => {
+    if (fadeOut) {
+      const timer = setTimeout(() => onFadeComplete(), 600);
+      return () => clearTimeout(timer);
+    }
+  }, [fadeOut, onFadeComplete]);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      zIndex: 100,
+      background: SK.bg,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      opacity: fadeOut ? 0 : 1,
+      transition: 'opacity 600ms ease',
+      pointerEvents: fadeOut ? 'none' : 'auto',
+    }}>
+      <div style={{ width: 320, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 국가 이름 */}
+        <div style={{
+          fontFamily: bodyFont,
+          fontSize: 16,
+          fontWeight: 700,
+          color: SK.textPrimary,
+          letterSpacing: '2px',
+          textAlign: 'center',
+          textTransform: 'uppercase',
+        }}>
+          {countryName}
+        </div>
+
+        {/* 프로그레스 바 트랙 */}
+        <div style={{
+          width: '100%',
+          height: 3,
+          background: 'rgba(255, 255, 255, 0.06)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            height: '100%',
+            width: `${progress}%`,
+            background: `linear-gradient(90deg, ${SK.accentDark}, ${SK.accent})`,
+            transition: 'width 100ms linear',
+            boxShadow: `0 0 12px ${SK.accent}66, 0 0 4px ${SK.accent}44`,
+          }} />
+        </div>
+
+        {/* 하단 정보 */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: 10,
+            letterSpacing: '0.15em',
+            color: SK.textMuted,
+            textTransform: 'uppercase',
+          }}>
+            {ISO_LOADING_TEXTS[textIndex]}
+          </div>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: 11,
+            color: SK.textSecondary,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {Math.round(progress)}%
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 악센트 라인 */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 1,
+        background: `linear-gradient(90deg, transparent, ${SK.accent}66, transparent)`,
+      }} />
+    </div>
+  );
+}
+
 // ─── Props ───
 
 interface IsoCanvasProps {
@@ -67,6 +220,10 @@ export function IsoCanvas({
   const [placingDefId, setPlacingDefId] = useState<string | null>(null);
   const [hoverInfo, setHoverInfo] = useState<{ tileX: number; tileY: number; tileType: string } | null>(null);
 
+  // 로딩 상태
+  const [mapReady, setMapReady] = useState(false);
+  const [loadingDismissed, setLoadingDismissed] = useState(false);
+
   // Phase 4: Zustand store 바인딩
   const selectedBuildingId = useCityStore(s => s.selectedBuildingId);
   const selectBuilding = useCityStore(s => s.selectBuilding);
@@ -93,6 +250,10 @@ export function IsoCanvas({
 
   // ─── PixiJS 초기화 ───
   useEffect(() => {
+    // 국가 변경 시 로딩 상태 리셋
+    setMapReady(false);
+    setLoadingDismissed(false);
+
     const container = canvasContainerRef.current;
     if (!container) return;
 
@@ -143,12 +304,16 @@ export function IsoCanvas({
       // v27: 바이옴별 텍스처 프리로드 → 성공 시 타일맵 재렌더
       const biome = getCountryBiome(countryIso3);
       preloadBiomeTextures(biome).then((success) => {
-        if (success && !destroyed && tilemapRef.current) {
+        if (destroyed) return;
+        if (success && tilemapRef.current) {
           console.log(`[IsoCanvas] v27 biome ${biome} textures loaded, re-rendering`);
           tilemapRef.current.renderTiles();
         }
+        // 텍스처 성공/실패 무관 — 맵은 로드 완료 (fallback도 유효)
+        setMapReady(true);
       }).catch(() => {
         // 텍스처 로드 실패 시 기존 Graphics fallback 유지
+        if (!destroyed) setMapReady(true);
       });
 
       // 게임 루프: 카메라 + 구름/물결 + 시민 보간 업데이트
@@ -760,6 +925,15 @@ export function IsoCanvas({
             </button>
           ))}
         </div>
+      )}
+
+      {/* ──── 로딩 오버레이 (GlobeLoadingScreen 스타일) ──── */}
+      {!loadingDismissed && (
+        <IsoLoadingScreen
+          ready={mapReady}
+          countryName={countryName}
+          onFadeComplete={() => setLoadingDismissed(true)}
+        />
       )}
     </div>
   );

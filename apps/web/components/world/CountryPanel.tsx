@@ -8,7 +8,7 @@
 
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
-import { BarChart3, Coins, Vote, Shield, Building2, X, Play, Eye } from 'lucide-react';
+import { BarChart3, Coins, Vote, Shield, Building2, X } from 'lucide-react';
 import { McButton } from '@/components/lobby/McButton';
 import { SK, SKFont, bodyFont, headingFont, sketchBorder, handDrawnRadius, radius } from '@/lib/sketch-ui';
 import { tierColors, resourceLabels, resourceIcons } from '@/lib/map-style';
@@ -925,42 +925,23 @@ export function CountryPanel({
     <div style={{
       padding: '14px 20px 20px',
       borderTop: `1px solid rgba(239, 68, 68, 0.15)`,
-      display: 'flex',
-      gap: '10px',
     }}>
       <McButton
         variant="green"
-        onClick={() => country?.iso3 && onEnterArena?.(country.iso3)}
-        disabled={!country}
-        style={{ flex: 1, fontSize: SKFont.sm, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-      >
-        <Play size={14} strokeWidth={2} /> ENTER ARENA
-      </McButton>
-      <McButton
-        variant="default"
-        onClick={() => country?.iso3 && onSpectate?.(country.iso3)}
-        disabled={!country}
-        style={{ flex: 1, fontSize: SKFont.sm, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '6px' }}
-      >
-        <Eye size={14} strokeWidth={2} /> SPECTATE
-      </McButton>
-      {/* v26: Manage Country → Isometric 시뮬레이션 */}
-      <McButton
-        variant="default"
         onClick={() => country?.iso3 && onManageCountry?.(country.iso3)}
         disabled={!country}
         style={{
-          flex: 1,
-          fontSize: SKFont.sm,
+          width: '100%',
+          fontSize: SKFont.body,
+          padding: '14px 20px',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          gap: '6px',
-          borderColor: 'rgba(204, 153, 51, 0.5)',
-          color: '#CC9933',
+          gap: '8px',
+          letterSpacing: '2px',
         }}
       >
-        <Building2 size={14} strokeWidth={2} /> MANAGE
+        <Building2 size={16} strokeWidth={2} /> ENTER {country?.name?.toUpperCase() || 'COUNTRY'}
       </McButton>
     </div>
   );

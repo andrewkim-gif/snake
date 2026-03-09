@@ -111,19 +111,37 @@ async function _doPreload(biome: BiomeType): Promise<boolean> {
       }
     }
 
-    // 4. 번들 로드
+    // 4. 번들 로드 — 각 번들 독립적으로 로드 (하나의 실패가 전체를 죽이지 않음)
     const bundleNames = getBiomeBundleNames(biome);
+    let loadedCount = 0;
+    let terrainLoaded = false;
+
     for (const name of bundleNames) {
-      await Assets.loadBundle(name);
+      try {
+        await Assets.loadBundle(name);
+        loadedCount++;
+        // terrain 번들 성공 여부 추적 (가장 중요 — 바닥 타일)
+        if (name.startsWith('terrain_')) {
+          terrainLoaded = true;
+        }
+      } catch (bundleErr) {
+        console.warn(`[IsoTextureLoader] Bundle '${name}' failed to load:`, bundleErr);
+        // 번들 실패해도 계속 진행 — 나머지 번들은 독립적으로 로드
+      }
     }
 
     _currentBiome = biome;
     _loaded = true;
-    _fallbackMode = false;
+    // terrain 번들이 로드되면 fallback 모드 비활성화 (나머지는 부분 실패 허용)
+    _fallbackMode = !terrainLoaded;
 
     const elapsed = (performance.now() - startTime).toFixed(0);
-    console.log(`[IsoTextureLoader] Biome ${biome} loaded in ${elapsed}ms`);
-    return true;
+    if (terrainLoaded) {
+      console.log(`[IsoTextureLoader] Biome ${biome} loaded in ${elapsed}ms (${loadedCount}/${bundleNames.length} bundles)`);
+    } else {
+      console.warn(`[IsoTextureLoader] Biome ${biome} terrain failed, fallback mode (${loadedCount}/${bundleNames.length} bundles)`);
+    }
+    return terrainLoaded;
   } catch (err) {
     console.warn('[IsoTextureLoader] Preload failed, using fallback mode:', err);
     _loaded = true;

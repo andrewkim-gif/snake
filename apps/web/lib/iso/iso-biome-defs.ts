@@ -248,6 +248,9 @@ export function getBiomeGroundSeries(biome: BiomeType): string[] {
   series.add(def.mainGround);
   for (const s of def.subGround) series.add(s);
   series.add(def.pathGround);
+  // buildIsoGrid에서 TileType에 따라 직접 할당하는 시리즈 (모든 바이옴에서 필요)
+  series.add('C'); // Desert/Beach → 모래 타일
+  series.add('D'); // Mountain → 자갈/진흙길 타일
   series.add('J'); // 해안 에지는 모든 바이옴에서 필요
   return Array.from(series);
 }

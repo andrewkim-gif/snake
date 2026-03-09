@@ -30,8 +30,8 @@ import { ISO_TILE_SCALE } from './types';
 /** 최대 동시 이펙트 수 */
 const MAX_CONCURRENT_EFFECTS = 10;
 
-/** 이펙트 기본 스케일 (512px 이펙트 → 128px 표시) */
-const EFFECT_SCALE_512 = 0.25;
+/** 이펙트 기본 스케일 (512px 이펙트 → 타일 대비 2× 크기) */
+const EFFECT_SCALE_512 = ISO_TILE_SCALE * 0.5;
 /** 이펙트 기본 스케일 (256px 이펙트 → 128px 표시) */
 const EFFECT_SCALE_256 = ISO_TILE_SCALE;
 

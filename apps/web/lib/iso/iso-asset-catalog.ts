@@ -1051,7 +1051,7 @@ export function waterRipplePath(rippleIndex: number, frameIdx: number): string {
   // 프레임 인덱스(0~15) → 실제 파일명 (0001, 0003, ... 0031)
   const frameNum = WATER_RIPPLE_FRAME_NUMBERS[frameIdx] ?? '0001';
   const dir = `Animated Tiles/Water Ripples ${rippleIndex}`;
-  return `${ANIM_BASE_PATH}/${encodeURIComponent(dir)}/${frameNum}.png`;
+  return `${ANIM_BASE_PATH}/${encodePathSegments(dir)}/${frameNum}.png`;
 }
 
 /**
@@ -1074,7 +1074,7 @@ export function windmillPath(windmillIndex: number, frameIdx: number): string {
   // 프레임 인덱스(0~16) → 실제 파일명 (0001, 0003, ... 0033)
   const frameNum = WINDMILL_FRAME_NUMBERS[frameIdx] ?? '0001';
   const dir = `Animated Tiles/WindMill${windmillIndex}`;
-  return `${ANIM_BASE_PATH}/${encodeURIComponent(dir)}/${frameNum}.png`;
+  return `${ANIM_BASE_PATH}/${encodePathSegments(dir)}/${frameNum}.png`;
 }
 
 /**
