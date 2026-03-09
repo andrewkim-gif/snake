@@ -49,6 +49,48 @@ export type WeaponType =
   | 'genesis'     // 제네시스 (대폭발)
   | 'gold_reward' // 골드 리워드
   | 'crossbow'    // 크로스보우
+  // CODE 카테고리 (Tier 2-4)
+  | 'syntax_error'    // 구문 오류
+  | 'compiler'        // 컴파일러
+  | 'debugger_skill'  // 디버거
+  | 'refactor'        // 리팩터링
+  | 'regex'           // 정규표현식
+  | 'hotfix'          // 핫픽스 (CODE Ultimate)
+  // DATA 카테고리 (Tier 2-4)
+  | 'json_bomb'       // JSON 폭탄
+  | 'csv_spray'       // CSV 스프레이
+  | 'binary'          // 바이너리
+  | 'big_data'        // 빅데이터 (DATA Ultimate)
+  // NETWORK 카테고리 (Tier 2-4)
+  | 'websocket'       // 웹소켓
+  | 'tcp_flood'       // TCP 플러드
+  | 'dns_spoof'       // DNS 스푸핑
+  | 'vpn_tunnel'      // VPN 터널 (NETWORK Ultimate)
+  | 'ddos'            // DDoS 공격
+  // SECURITY 카테고리 (Tier 2-4)
+  | 'antivirus'       // 안티바이러스
+  | 'sandbox'         // 샌드박스
+  | 'zero_trust'      // 제로 트러스트
+  | 'encryption'      // 암호화
+  | 'honeypot'        // 허니팟 (SECURITY Ultimate)
+  | 'firewall_surge'  // 방화벽 서지
+  | 'backup'          // 백업
+  | 'incident_response' // 인시던트 대응
+  | 'sql_injection'   // SQL 인젝션
+  // SYSTEM 카테고리 (Tier 2-4)
+  | 'ram_upgrade'     // RAM 업그레이드
+  | 'cpu_boost'       // CPU 부스트
+  | 'cache'           // 캐시
+  | 'multithreading'  // 멀티스레딩 (SYSTEM Ultimate)
+  | 'garbage_collection' // 가비지 컬렉션
+  // AI/시너지 스킬
+  | 'neural_net'      // 뉴럴넷
+  | 'chatgpt'         // ChatGPT
+  | 'deepfake'        // 딥페이크
+  | 'singularity_core' // 싱귤래리티 코어
+  | 'autopilot'       // 오토파일럿
+  | 'agi'             // AGI
+  | 'packet_loss'     // 패킷 로스
   // 패시브 스킬
   | 'focus'       // 딥워크 (크리티컬 확률)
   | 'overclock';  // 오버클럭 (이동속도)
@@ -634,4 +676,49 @@ export interface CircleCollider {
   x: number;
   y: number;
   radius: number;
+}
+
+// ============================================
+// Phase 2 Types - Arena, Config, Skill System
+// ============================================
+
+// ============================================
+// 24. ArenaPhase - 안전 구역 페이즈 번호
+// ============================================
+
+/** Arena safe zone phase number (1-4) */
+export type ArenaPhase = 1 | 2 | 3 | 4;
+
+// ============================================
+// 25. SafeZone - 안전 구역 상태
+// ============================================
+
+/** Arena safe zone state */
+export interface SafeZone {
+  /** 현재 안전 구역 반경 */
+  currentRadius: number;
+  /** 목표 안전 구역 반경 */
+  targetRadius: number;
+  /** 경고 표시 여부 */
+  isWarning: boolean;
+  /** 축소 중 여부 */
+  isShrinking: boolean;
+  /** 구역 밖 초당 피해량 */
+  damagePerSecond?: number;
+  /** 안전 구역 중심 좌표 */
+  center?: Vector2;
+}
+
+// ============================================
+// 26. RouletteReward - 룰렛 보상 정의
+// ============================================
+
+/** 룰렛 보상 아이템 (config/index.ts에서도 정의됨, 양쪽 호환) */
+export interface RouletteReward {
+  id: string;
+  type: string;
+  label: string;
+  value: number;
+  icon: string;    // lucide-react icon name (stubbed as string)
+  color: string;
 }

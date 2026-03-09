@@ -16,7 +16,7 @@ import { isoKnockback, ISO_Y_SCALE } from '../isometric';
 const CRITICAL_TEXTS = ['펑!', '쾅!', '퍽!', '팍!', '쿵!', '빵!', '탕!', '땅!'];
 
 // 무기별 크리티컬 이펙트 색상
-const CRITICAL_COLORS: Record<WeaponType | 'bomb' | 'special', string> = {
+const CRITICAL_COLORS: Partial<Record<WeaponType | 'bomb' | 'special', string>> = {
   whip: '#a855f7',      // 보라
   wand: '#3b82f6',      // 파랑
   knife: '#facc15',     // 노랑
