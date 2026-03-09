@@ -1,18 +1,25 @@
 'use client';
 
 /**
- * MatrixPause.tsx - v28 Phase 5: ESC Pause Menu
+ * MatrixPause.tsx - v32 Phase 4: ESC Pause Menu
  *
- * 반투명 다크 오버레이 + 중앙 패널
- * Resume, Settings (disabled), Exit to Lobby
+ * Apex Tactical CIC design system (SK tokens):
+ * - OVERLAY.bg + blur backdrop
+ * - SK.bg panel, SK.border, max-width 320px
+ * - headingFont "PAUSED" title with SK.accent
+ * - RESUME: SK.accent bg, SK.bg text
+ * - EXIT TO LOBBY: SK.red outlined
+ * - "ESC to resume": SK.textMuted, bodyFont
  *
- * v29b: All Tailwind className converted to inline styles.
+ * Keyboard: ESC = resume
  */
 
 import { useCallback, useEffect, memo } from 'react';
+import { SK, headingFont, bodyFont, apexClip, sketchShadow } from '@/lib/sketch-ui';
+import { OVERLAY } from '@/lib/overlay-tokens';
 
 // ============================================
-// Props 인터페이스
+// Props
 // ============================================
 
 export interface MatrixPauseProps {
@@ -21,17 +28,11 @@ export interface MatrixPauseProps {
 }
 
 // ============================================
-// 상수
+// Component
 // ============================================
 
-const MATRIX_GREEN = '#00FF41';
-
-// ============================================
-// 컴포넌트
-// ============================================
-
-function MatrixPause({ onResume, onExitToLobby }: MatrixPauseProps) {
-  // ESC 키로 Resume
+function MatrixPauseInner({ onResume, onExitToLobby }: MatrixPauseProps) {
+  // ESC to resume
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
@@ -60,8 +61,10 @@ function MatrixPause({ onResume, onExitToLobby }: MatrixPauseProps) {
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        backgroundColor: 'rgba(0,0,0,0.8)',
-        fontFamily: 'monospace',
+        backgroundColor: OVERLAY.bg,
+        backdropFilter: OVERLAY.blur,
+        WebkitBackdropFilter: OVERLAY.blur,
+        fontFamily: bodyFont,
       }}
     >
       <div
@@ -73,24 +76,27 @@ function MatrixPause({ onResume, onExitToLobby }: MatrixPauseProps) {
           padding: 32,
           width: '100%',
           maxWidth: 320,
-          backgroundColor: 'rgba(0, 0, 0, 0.9)',
-          border: `1px solid ${MATRIX_GREEN}40`,
+          backgroundColor: SK.bg,
+          border: `1px solid ${SK.border}`,
+          boxShadow: sketchShadow('lg'),
+          clipPath: apexClip.md,
         }}
       >
-        {/* 타이틀 */}
+        {/* Title */}
         <h2
           style={{
-            fontSize: 24,
-            fontWeight: 'bold',
-            letterSpacing: '0.3em',
-            color: MATRIX_GREEN,
+            fontSize: 28,
+            fontWeight: 700,
+            letterSpacing: '0.15em',
+            fontFamily: headingFont,
+            color: SK.accent,
             margin: 0,
           }}
         >
           PAUSED
         </h2>
 
-        {/* 메뉴 버튼 */}
+        {/* Menu buttons */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12, width: '100%' }}>
           {/* Resume */}
           <button
@@ -100,37 +106,20 @@ function MatrixPause({ onResume, onExitToLobby }: MatrixPauseProps) {
               paddingTop: 12,
               paddingBottom: 12,
               fontSize: 14,
-              fontWeight: 'bold',
+              fontWeight: 700,
               letterSpacing: '0.1em',
+              fontFamily: bodyFont,
               transition: 'all 0.15s',
               pointerEvents: 'auto',
               cursor: 'pointer',
-              color: '#000',
-              backgroundColor: MATRIX_GREEN,
-              border: `1px solid ${MATRIX_GREEN}`,
+              color: SK.bg,
+              backgroundColor: SK.accent,
+              border: `1px solid ${SK.accent}`,
+              borderRadius: 0,
+              clipPath: apexClip.sm,
             }}
           >
             RESUME
-          </button>
-
-          {/* Settings (미구현) */}
-          <button
-            disabled
-            style={{
-              width: '100%',
-              paddingTop: 12,
-              paddingBottom: 12,
-              fontSize: 14,
-              fontWeight: 'bold',
-              letterSpacing: '0.1em',
-              opacity: 0.3,
-              cursor: 'not-allowed',
-              color: MATRIX_GREEN,
-              backgroundColor: 'transparent',
-              border: `1px solid ${MATRIX_GREEN}40`,
-            }}
-          >
-            SETTINGS
           </button>
 
           {/* Exit to Lobby */}
@@ -141,27 +130,35 @@ function MatrixPause({ onResume, onExitToLobby }: MatrixPauseProps) {
               paddingTop: 12,
               paddingBottom: 12,
               fontSize: 14,
-              fontWeight: 'bold',
+              fontWeight: 700,
               letterSpacing: '0.1em',
+              fontFamily: bodyFont,
               transition: 'all 0.15s',
               pointerEvents: 'auto',
               cursor: 'pointer',
-              color: '#ef4444',
+              color: SK.red,
               backgroundColor: 'transparent',
-              border: '1px solid rgba(239, 68, 68, 0.4)',
+              border: `1px solid ${SK.accentBorder}`,
+              borderRadius: 0,
             }}
           >
             EXIT TO LOBBY
           </button>
         </div>
 
-        {/* 안내 */}
-        <p style={{ fontSize: 10, color: '#4b5563', letterSpacing: '0.05em', margin: 0 }}>
-          Press ESC to resume
+        {/* Hint */}
+        <p style={{
+          fontSize: 10,
+          color: SK.textMuted,
+          letterSpacing: '0.08em',
+          margin: 0,
+          fontFamily: bodyFont,
+        }}>
+          ESC to resume
         </p>
       </div>
     </div>
   );
 }
 
-export default memo(MatrixPause);
+export default memo(MatrixPauseInner);

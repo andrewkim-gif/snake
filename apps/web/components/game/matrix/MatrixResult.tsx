@@ -1,18 +1,16 @@
 'use client';
 
 /**
- * MatrixResult.tsx - v29 Phase 5: Game Over / Arena Result Screen
+ * MatrixResult.tsx - v32 Phase 4: Game Over / Arena Result Screen
  *
- * Adapted from app_ingame/components/arena/ArenaResultScreen.tsx
- * - Final standings with rank, kills, deaths
- * - Rewards breakdown (base score, rank bonus, kill bonus)
- * - Weapon inventory
- * - Retry / Exit to Lobby buttons
- * - Keyboard shortcuts (Enter = retry, Escape = exit)
+ * Apex Tactical CIC design system (SK tokens):
+ * - SK.bg + SK.border panels, borderRadius: 0
+ * - headingFont titles, bodyFont body text
+ * - SK.red (death) / SK.gold (survived) heading colors
+ * - apexClip diagonal cuts on cards/buttons
+ * - OVERLAY.bg backdrop
  *
- * Matrix green (#00FF41) theme.
- *
- * v29b: All Tailwind className converted to inline styles.
+ * Keyboard shortcuts: Enter = retry, Escape = exit to lobby
  */
 
 import React, { useCallback, useEffect, memo } from 'react';
@@ -26,6 +24,8 @@ import {
   Coins,
   ArrowRight,
 } from 'lucide-react';
+import { SK, headingFont, bodyFont, apexClip, sketchShadow } from '@/lib/sketch-ui';
+import { OVERLAY } from '@/lib/overlay-tokens';
 
 // ============================================
 // Props (backward-compatible with MatrixApp)
@@ -43,12 +43,9 @@ export interface MatrixResultProps {
 }
 
 // ============================================
-// Constants
+// Weapon display names
 // ============================================
 
-const MATRIX_GREEN = '#00FF41';
-
-// Weapon display names
 const WEAPON_NAMES: Record<string, string> = {
   wand: 'API Call',
   knife: 'Git Push',
@@ -84,14 +81,7 @@ const WEAPON_NAMES: Record<string, string> = {
 function formatTime(seconds: number): string {
   const mins = Math.floor(seconds / 60);
   const secs = Math.floor(seconds % 60);
-  return `${mins}:${secs.toString().padStart(2, '0')}`;
-}
-
-function getRankSuffix(rank: number): string {
-  if (rank === 1) return 'st';
-  if (rank === 2) return 'nd';
-  if (rank === 3) return 'rd';
-  return 'th';
+  return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
 }
 
 // ============================================
@@ -128,6 +118,10 @@ function MatrixResultInner({
   const timeBonus = Math.floor(survivalTime / 60) * 50;
   const totalCredits = baseCredits + killBonus + timeBonus;
 
+  const titleColor = survived ? SK.gold : SK.red;
+  const titleText = survived ? 'SURVIVED' : 'GAME OVER';
+  const subtitleText = survived ? 'YOU HAVE ESCAPED THE MATRIX' : 'CONNECTION TERMINATED';
+
   return (
     <div style={{
       position: 'fixed',
@@ -139,209 +133,368 @@ function MatrixResultInner({
       display: 'flex',
       alignItems: 'center',
       justifyContent: 'center',
-      backgroundColor: 'rgba(0,0,0,0.9)',
-      fontFamily: 'monospace',
+      backgroundColor: OVERLAY.bg,
+      backdropFilter: OVERLAY.blur,
+      WebkitBackdropFilter: OVERLAY.blur,
+      fontFamily: bodyFont,
     }}>
       <div style={{
         width: '100%',
-        maxWidth: 672,
+        maxWidth: 560,
         marginLeft: 16,
         marginRight: 16,
-        padding: 24,
-        background: 'linear-gradient(to bottom, #111827, #030712)',
-        border: '1px solid #374151',
+        backgroundColor: SK.bg,
+        border: `1px solid ${SK.border}`,
+        boxShadow: sketchShadow('lg'),
+        clipPath: apexClip.lg,
       }}>
 
-        {/* Title */}
-        <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          {survived ? (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <Crown style={{ width: 64, height: 64, color: '#facc15' }} />
-              <h1 style={{ fontSize: 36, fontWeight: 'bold', color: MATRIX_GREEN, margin: 0 }}>
-                SURVIVED
-              </h1>
-              <p style={{ fontSize: 12, color: '#6b7280', letterSpacing: '0.05em', margin: 0 }}>
-                YOU HAVE ESCAPED THE MATRIX
-              </p>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
-              <Skull style={{ width: 48, height: 48, color: '#f87171' }} />
-              <h1 style={{ fontSize: 30, fontWeight: 'bold', color: '#f87171', margin: 0 }}>
-                GAME OVER
-              </h1>
-              <p style={{ fontSize: 12, color: '#6b7280', letterSpacing: '0.05em', margin: 0 }}>
-                CONNECTION TERMINATED
-              </p>
-            </div>
-          )}
+        {/* ── Title Section ── */}
+        <div style={{
+          textAlign: 'center',
+          padding: '28px 24px 20px',
+          borderBottom: `1px solid ${SK.border}`,
+        }}>
+          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+            {survived ? (
+              <Crown style={{ width: 48, height: 48, color: SK.gold }} />
+            ) : (
+              <Skull style={{ width: 48, height: 48, color: SK.red }} />
+            )}
+            <h1 style={{
+              fontSize: 32,
+              fontWeight: 700,
+              fontFamily: headingFont,
+              color: titleColor,
+              margin: 0,
+              letterSpacing: '0.08em',
+            }}>
+              {titleText}
+            </h1>
+            <p style={{
+              fontSize: 12,
+              color: SK.textMuted,
+              letterSpacing: '0.12em',
+              margin: 0,
+              fontFamily: bodyFont,
+            }}>
+              {subtitleText}
+            </p>
+          </div>
         </div>
 
-        {/* My Stats */}
+        {/* ── Stats Section ── */}
         <div style={{
-          backgroundColor: 'rgba(0,0,0,0.4)',
-          padding: 16,
-          marginBottom: 24,
-          border: `1px solid ${survived ? `${MATRIX_GREEN}50` : 'rgba(239,68,68,0.3)'}`,
+          padding: '16px 24px',
+          borderBottom: `1px solid ${SK.border}`,
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-              <div>
-                <div style={{ fontSize: 18, fontWeight: 'bold', color: MATRIX_GREEN }}>
-                  Level {level}
-                </div>
+          {/* Level / Kills / Time row */}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 32,
+            marginBottom: 12,
+          }}>
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: 11,
+                color: SK.textMuted,
+                letterSpacing: '0.08em',
+                marginBottom: 4,
+                fontFamily: bodyFont,
+              }}>LEVEL</div>
+              <div style={{
+                fontSize: 20,
+                fontWeight: 700,
+                fontFamily: headingFont,
+                color: SK.textSecondary,
+              }}>
+                LV.{level}
               </div>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#4ade80' }}>{kills}</div>
-                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Target style={{ width: 12, height: 12 }} /> Kills
-                </div>
+            <div style={{ width: 1, height: 32, backgroundColor: SK.border }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: 11,
+                color: SK.textMuted,
+                letterSpacing: '0.08em',
+                marginBottom: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                fontFamily: bodyFont,
+              }}>
+                <Target style={{ width: 11, height: 11 }} />
+                KILLS
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#22d3ee' }}>{formatTime(survivalTime)}</div>
-                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Clock style={{ width: 12, height: 12 }} /> Time
-                </div>
+              <div style={{
+                fontSize: 20,
+                fontWeight: 700,
+                fontFamily: headingFont,
+                color: SK.textSecondary,
+              }}>
+                {kills}
               </div>
-              <div style={{ textAlign: 'center' }}>
-                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#facc15' }}>{score.toLocaleString()}</div>
-                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
-                  <Star style={{ width: 12, height: 12 }} /> Score
-                </div>
+            </div>
+            <div style={{ width: 1, height: 32, backgroundColor: SK.border }} />
+            <div style={{ textAlign: 'center' }}>
+              <div style={{
+                fontSize: 11,
+                color: SK.textMuted,
+                letterSpacing: '0.08em',
+                marginBottom: 4,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 4,
+                fontFamily: bodyFont,
+              }}>
+                <Clock style={{ width: 11, height: 11 }} />
+                TIME
               </div>
+              <div style={{
+                fontSize: 20,
+                fontWeight: 700,
+                fontFamily: headingFont,
+                color: SK.textSecondary,
+              }}>
+                {formatTime(survivalTime)}
+              </div>
+            </div>
+          </div>
+
+          {/* Score */}
+          <div style={{
+            textAlign: 'center',
+            paddingTop: 12,
+            borderTop: `1px solid ${SK.border}`,
+          }}>
+            <div style={{
+              fontSize: 11,
+              color: SK.textMuted,
+              letterSpacing: '0.08em',
+              marginBottom: 4,
+              fontFamily: bodyFont,
+            }}>SCORE</div>
+            <div style={{
+              fontSize: 28,
+              fontWeight: 700,
+              fontFamily: headingFont,
+              color: SK.gold,
+            }}>
+              {score.toLocaleString()}
             </div>
           </div>
         </div>
 
-        {/* Weapons Acquired */}
+        {/* ── Weapons Acquired ── */}
         {weapons.length > 0 && (
-          <div style={{ marginBottom: 24 }}>
-            <h2 style={{ fontSize: 14, fontWeight: 'bold', color: '#9ca3af', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <Trophy style={{ width: 16, height: 16 }} /> WEAPONS ACQUIRED
+          <div style={{
+            padding: '16px 24px',
+            borderBottom: `1px solid ${SK.border}`,
+          }}>
+            <h2 style={{
+              fontSize: 11,
+              fontWeight: 700,
+              color: SK.textMuted,
+              margin: 0,
+              marginBottom: 10,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              letterSpacing: '0.1em',
+              fontFamily: bodyFont,
+            }}>
+              <Trophy style={{ width: 13, height: 13 }} />
+              WEAPONS ACQUIRED
             </h2>
-            <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: 12 }}>
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                {weapons.map((w, i) => (
-                  <span
-                    key={`${w}-${i}`}
-                    style={{
-                      fontSize: 10,
-                      paddingLeft: 10,
-                      paddingRight: 10,
-                      paddingTop: 4,
-                      paddingBottom: 4,
-                      letterSpacing: '0.05em',
-                      fontWeight: 'bold',
-                      color: MATRIX_GREEN,
-                      backgroundColor: 'rgba(0, 255, 65, 0.08)',
-                      border: '1px solid rgba(0, 255, 65, 0.2)',
-                    }}
-                  >
-                    {WEAPON_NAMES[w] || w}
-                  </span>
-                ))}
-              </div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {weapons.map((w, i) => (
+                <span
+                  key={`${w}-${i}`}
+                  style={{
+                    fontSize: 10,
+                    paddingLeft: 10,
+                    paddingRight: 10,
+                    paddingTop: 4,
+                    paddingBottom: 4,
+                    letterSpacing: '0.05em',
+                    fontWeight: 600,
+                    fontFamily: bodyFont,
+                    color: SK.textPrimary,
+                    backgroundColor: SK.cardBg,
+                    border: `1px solid ${SK.border}`,
+                    clipPath: apexClip.sm,
+                  }}
+                >
+                  {WEAPON_NAMES[w] || w}
+                </span>
+              ))}
             </div>
           </div>
         )}
 
-        {/* Rewards */}
+        {/* ── Rewards ── */}
         <div style={{
-          background: 'linear-gradient(to right, rgba(234,179,8,0.1), rgba(249,115,22,0.1))',
-          padding: 16,
-          marginBottom: 24,
-          border: '1px solid rgba(234,179,8,0.3)',
+          padding: '16px 24px',
+          borderBottom: `1px solid ${SK.border}`,
         }}>
-          <h2 style={{ fontSize: 14, fontWeight: 'bold', color: '#facc15', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <Star style={{ width: 16, height: 16 }} /> REWARDS
+          <h2 style={{
+            fontSize: 11,
+            fontWeight: 700,
+            color: SK.textMuted,
+            margin: 0,
+            marginBottom: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            letterSpacing: '0.1em',
+            fontFamily: bodyFont,
+          }}>
+            <Star style={{ width: 13, height: 13 }} />
+            REWARDS
           </h2>
           <div style={{
             display: 'grid',
             gridTemplateColumns: 'repeat(3, 1fr)',
-            gap: 16,
+            gap: 12,
             textAlign: 'center',
+            marginBottom: 14,
           }}>
-            <div>
-              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Base Score</div>
-              <div style={{ fontSize: 18, fontWeight: 'bold', color: '#22d3ee' }}>+{baseCredits}</div>
+            <div style={{
+              backgroundColor: SK.cardBg,
+              padding: '10px 8px',
+              border: `1px solid ${SK.border}`,
+            }}>
+              <div style={{ fontSize: 10, color: SK.textMuted, marginBottom: 4, fontFamily: bodyFont, letterSpacing: '0.06em' }}>
+                Base Score
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: SK.textPrimary, fontFamily: headingFont }}>
+                +{baseCredits.toLocaleString()}
+              </div>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Kill Bonus</div>
-              <div style={{ fontSize: 18, fontWeight: 'bold', color: '#4ade80' }}>+{killBonus}</div>
+            <div style={{
+              backgroundColor: SK.cardBg,
+              padding: '10px 8px',
+              border: `1px solid ${SK.border}`,
+            }}>
+              <div style={{ fontSize: 10, color: SK.textMuted, marginBottom: 4, fontFamily: bodyFont, letterSpacing: '0.06em' }}>
+                Kill Bonus
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: SK.green, fontFamily: headingFont }}>
+                +{killBonus.toLocaleString()}
+              </div>
             </div>
-            <div>
-              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Time Bonus</div>
-              <div style={{ fontSize: 18, fontWeight: 'bold', color: '#a855f7' }}>+{timeBonus}</div>
+            <div style={{
+              backgroundColor: SK.cardBg,
+              padding: '10px 8px',
+              border: `1px solid ${SK.border}`,
+            }}>
+              <div style={{ fontSize: 10, color: SK.textMuted, marginBottom: 4, fontFamily: bodyFont, letterSpacing: '0.06em' }}>
+                Time Bonus
+              </div>
+              <div style={{ fontSize: 16, fontWeight: 700, color: SK.blue, fontFamily: headingFont }}>
+                +{timeBonus.toLocaleString()}
+              </div>
             </div>
           </div>
+
+          {/* Total */}
           <div style={{
-            marginTop: 16,
             paddingTop: 12,
-            borderTop: '1px solid rgba(234,179,8,0.2)',
+            borderTop: `1px solid ${SK.border}`,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             gap: 8,
           }}>
-            <Coins style={{ width: 20, height: 20, color: '#facc15' }} />
-            <span style={{ fontSize: 24, fontWeight: 'bold', color: '#facc15' }}>+{totalCredits}</span>
-            <span style={{ fontSize: 14, color: '#9ca3af' }}>Credits</span>
+            <Coins style={{ width: 20, height: 20, color: SK.gold }} />
+            <span style={{
+              fontSize: 24,
+              fontWeight: 700,
+              fontFamily: headingFont,
+              color: SK.gold,
+            }}>
+              +{totalCredits.toLocaleString()}
+            </span>
+            <span style={{ fontSize: 13, color: SK.textMuted, fontFamily: bodyFont }}>
+              Credits
+            </span>
           </div>
         </div>
 
-        {/* Action Buttons */}
-        <div style={{ display: 'flex', gap: 16 }}>
-          <button
-            onClick={onExitToLobby}
-            style={{
-              flex: 1,
-              paddingTop: 12,
-              paddingBottom: 12,
-              paddingLeft: 24,
-              paddingRight: 24,
-              fontWeight: 'bold',
-              transition: 'all 0.2s',
-              pointerEvents: 'auto',
-              cursor: 'pointer',
-              color: '#999',
-              backgroundColor: 'transparent',
-              border: '1px solid rgba(255,255,255,0.15)',
-            }}
-          >
-            EXIT TO LOBBY
-          </button>
-          <button
-            onClick={onRetry}
-            style={{
-              flex: 1,
-              paddingTop: 12,
-              paddingBottom: 12,
-              paddingLeft: 24,
-              paddingRight: 24,
-              fontWeight: 'bold',
-              transition: 'all 0.2s',
-              pointerEvents: 'auto',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 8,
-              color: '#000',
-              backgroundColor: MATRIX_GREEN,
-              border: `1px solid ${MATRIX_GREEN}`,
-            }}
-          >
-            RETRY
-            <ArrowRight style={{ width: 20, height: 20 }} />
-          </button>
-        </div>
+        {/* ── Action Buttons ── */}
+        <div style={{ padding: '20px 24px 16px' }}>
+          <div style={{ display: 'flex', gap: 12 }}>
+            <button
+              onClick={onExitToLobby}
+              style={{
+                flex: 1,
+                paddingTop: 12,
+                paddingBottom: 12,
+                paddingLeft: 24,
+                paddingRight: 24,
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: '0.06em',
+                fontFamily: bodyFont,
+                transition: 'all 0.2s',
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                color: SK.textSecondary,
+                backgroundColor: 'transparent',
+                border: `1px solid ${SK.border}`,
+                borderRadius: 0,
+              }}
+            >
+              EXIT TO LOBBY
+            </button>
+            <button
+              onClick={onRetry}
+              style={{
+                flex: 1,
+                paddingTop: 12,
+                paddingBottom: 12,
+                paddingLeft: 24,
+                paddingRight: 24,
+                fontWeight: 700,
+                fontSize: 13,
+                letterSpacing: '0.06em',
+                fontFamily: bodyFont,
+                transition: 'all 0.2s',
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+                color: SK.bg,
+                backgroundColor: SK.accent,
+                border: `1px solid ${SK.accent}`,
+                borderRadius: 0,
+                clipPath: apexClip.sm,
+              }}
+            >
+              RETRY
+              <ArrowRight style={{ width: 16, height: 16 }} />
+            </button>
+          </div>
 
-        {/* Keyboard hints */}
-        <p style={{ fontSize: 10, color: '#4b5563', letterSpacing: '0.05em', textAlign: 'center', marginTop: 12 }}>
-          ENTER to retry | ESC to exit
-        </p>
+          {/* Keyboard hints */}
+          <p style={{
+            fontSize: 10,
+            color: SK.textMuted,
+            letterSpacing: '0.08em',
+            textAlign: 'center',
+            marginTop: 12,
+            marginBottom: 0,
+            fontFamily: bodyFont,
+          }}>
+            ENTER to retry | ESC to exit
+          </p>
+        </div>
       </div>
     </div>
   );
