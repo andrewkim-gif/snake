@@ -306,25 +306,38 @@ export class IsoCitizenLayer {
     return this.sheetsLoaded;
   }
 
-  /** 리소스 정리 */
+  /** 리소스 정리 — Phase 8: AnimatedSprite stop + removeFromParent 강화 */
   destroy(): void {
+    // 활성 시민 비주얼 정리
     for (const rs of this.citizenStates.values()) {
       this.destroyCitizenVisual(rs);
     }
     this.citizenStates.clear();
 
+    // AnimatedSprite 풀 정리 — 반드시 stop() 후 destroy()
     for (const s of this.spritePool) {
+      if (s.playing) s.stop();
+      if (s.parent) s.parent.removeChild(s);
       s.destroy();
     }
     this.spritePool = [];
 
+    // Graphics 풀 정리
     for (const g of this.graphicsPool) {
+      if (g.parent) g.parent.removeChild(g);
       g.destroy();
     }
     this.graphicsPool = [];
 
+    // 프레임 캐시 해제
     this.animFrameCache.clear();
+
+    // Phase 8: Spritesheet 인스턴스 정리 (텍스처 메모리 해제)
+    for (const sheet of this.loadedSheets) {
+      sheet.destroy(true); // true = baseTexture도 파괴
+    }
     this.loadedSheets = [];
+
     this.container.destroy({ children: true });
   }
 

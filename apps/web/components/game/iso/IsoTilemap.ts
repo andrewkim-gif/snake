@@ -1,5 +1,5 @@
 /**
- * v27 Phase 2+3+4+5 — IsoTilemap (완전 재작성)
+ * v27 Phase 2+3+4+5+8 — IsoTilemap (완전 재작성)
  *
  * 15-Layer Sprite 기반 아이소메트릭 렌더링 엔진
  * - PixiJS 8 Sprite 기반 (기존 Graphics 기반에서 교체)
@@ -29,7 +29,15 @@
  * - WindMill AnimatedSprite: Farm 인접 풍차 2종×17프레임, 6fps
  * - 뷰포트 밖 물결/풍차 stop(), 안에서만 play() (성능 최적화)
  *
- * @rewrite 2026-03-09 Phase 2+3+4+5
+ * Phase 8: LOD 시스템 & 성능 최적화
+ * - 3단계 LOD: zoom <0.3 (조감), 0.3~0.7 (중거리), >=0.7 (근접)
+ * - 줌 레벨에 따라 레이어 visibility 즉시 토글
+ * - LOD 0: Ground만 표시 (최소 draw calls)
+ * - LOD 1: Ground + Wall + Roof + Tree + Shadow 표시
+ * - LOD 2: 전체 15레이어 표시
+ * - AnimatedSprite 정리 강화 (stop + removeFromParent)
+ *
+ * @rewrite 2026-03-09 Phase 2+3+4+5+8
  */
 
 import { Container, Graphics, Sprite, AnimatedSprite } from 'pixi.js';
@@ -108,6 +116,56 @@ import { IsoChestManager } from './IsoChestManager';
 // ─── 상수 ───
 const LAYER_COUNT = 15;
 const DEFAULT_MAP_SIZE = 32;
+
+// ─── Phase 8: LOD 레벨 상수 ───
+
+/**
+ * LOD 레벨 정의
+ * LOD 0 (조감): zoom < 0.3 — Ground만 visible
+ * LOD 1 (중거리): 0.3 <= zoom < 0.7 — Ground + Wall + Roof + Tree + Shadow
+ * LOD 2 (근접): zoom >= 0.7 — 전체 레이어 visible
+ */
+const enum LodLevel {
+  Birdseye = 0,  // 조감 (zoom < 0.3)
+  Mid = 1,       // 중거리 (0.3 <= zoom < 0.7)
+  Close = 2,     // 근접 (zoom >= 0.7)
+}
+
+/** LOD 줌 임계값 */
+const LOD_THRESHOLD_LOW = 0.3;   // 이 미만이면 LOD 0
+const LOD_THRESHOLD_HIGH = 0.7;  // 이 이상이면 LOD 2
+
+/**
+ * LOD 레벨별 표시할 레이어 인덱스 집합
+ * LOD 0: Ground(0) + Cloud(13)
+ * LOD 1: Ground(0) + StonePath(2) + Shadow(3) + Wall(5) + Tree(7) + Roof(9) + Cloud(13)
+ * LOD 2: 전체 (0~14)
+ */
+const LOD_VISIBLE_LAYERS: ReadonlySet<number>[] = [
+  // LOD 0 (조감): Ground만
+  new Set([IsoLayer.Ground, IsoLayer.Cloud, IsoLayer.UIOverlay]),
+  // LOD 1 (중거리): Ground + 건물 + 나무
+  new Set([
+    IsoLayer.Ground, IsoLayer.StonePath, IsoLayer.Shadow,
+    IsoLayer.Wall, IsoLayer.Tree, IsoLayer.Roof,
+    IsoLayer.Cloud, IsoLayer.UIOverlay,
+  ]),
+  // LOD 2 (근접): 전체
+  new Set([
+    IsoLayer.Ground, IsoLayer.WaterAnim, IsoLayer.StonePath,
+    IsoLayer.Shadow, IsoLayer.Flora, IsoLayer.Wall,
+    IsoLayer.Misc, IsoLayer.Tree, IsoLayer.WallFlora,
+    IsoLayer.Roof, IsoLayer.Chest, IsoLayer.Citizens,
+    IsoLayer.Effects, IsoLayer.Cloud, IsoLayer.UIOverlay,
+  ]),
+];
+
+/** 줌 레벨 → LOD 레벨 변환 */
+function zoomToLod(zoom: number): LodLevel {
+  if (zoom < LOD_THRESHOLD_LOW) return LodLevel.Birdseye;
+  if (zoom < LOD_THRESHOLD_HIGH) return LodLevel.Mid;
+  return LodLevel.Close;
+}
 
 // ─── 좌표 변환 유틸 ───
 
@@ -253,6 +311,9 @@ export class IsoTilemap {
 
   /** Phase 7: Chest 매니저 */
   private chestManager: IsoChestManager | null = null;
+
+  /** Phase 8: 현재 LOD 레벨 (-1 = 아직 적용 안 됨) */
+  private currentLod: LodLevel = -1 as unknown as LodLevel;
 
   constructor(
     tier: MapTier = 'C',
@@ -1240,17 +1301,22 @@ export class IsoTilemap {
    * 게임 루프에서 applyCamera() 이후에 호출할 것
    */
   update(screenWidth: number, screenHeight: number): void {
-    // ── 구름 패럴랙스 이동 ──
-    for (const cloud of this.cloudInstances) {
-      cloud.sprite.x += cloud.speed;
-      // 화면 오른쪽을 벗어나면 왼쪽에서 재등장
-      if (cloud.sprite.x > screenWidth + 100) {
-        cloud.sprite.x = -cloud.sprite.width - 100;
+    // ── 구름 패럴랙스 이동 (Cloud 레이어가 visible일 때만) ──
+    if (this.layers[IsoLayer.Cloud].visible) {
+      for (const cloud of this.cloudInstances) {
+        cloud.sprite.x += cloud.speed;
+        // 화면 오른쪽을 벗어나면 왼쪽에서 재등장
+        if (cloud.sprite.x > screenWidth + 100) {
+          cloud.sprite.x = -cloud.sprite.width - 100;
+        }
       }
     }
 
     // ── Water AnimatedSprite 뷰포트 컬링 ──
-    this.cullWaterAnimations(screenWidth, screenHeight);
+    // Phase 8: LOD 0/1에서는 WaterAnim 레이어가 hidden이므로 스킵
+    if (this.layers[IsoLayer.WaterAnim].visible) {
+      this.cullWaterAnimations(screenWidth, screenHeight);
+    }
   }
 
   /**
@@ -1326,12 +1392,15 @@ export class IsoTilemap {
     this.camera.y += (centerY - this.camera.y) * (1 - 1 / zoomRatio);
   }
 
-  /** 카메라를 컨테이너에 적용 + 뷰포트 컬링 */
+  /** 카메라를 컨테이너에 적용 + 뷰포트 컬링 + LOD */
   applyCamera(screenWidth: number, screenHeight: number): void {
     // 월드 컨테이너에 카메라 적용
     this.worldContainer.scale.set(this.camera.zoom);
     this.worldContainer.x = screenWidth / 2 - this.camera.x * this.camera.zoom;
     this.worldContainer.y = screenHeight / 2 - this.camera.y * this.camera.zoom;
+
+    // Phase 8: LOD 적용 — 줌 레벨에 따라 레이어 visibility 즉시 토글
+    this.applyLod(this.camera.zoom);
 
     // 뷰포트 컬링 — Ground 레이어 (O(mapSize^2) but fast visibility toggle)
     this.cullViewport(screenWidth, screenHeight);
@@ -1366,8 +1435,10 @@ export class IsoTilemap {
     }
 
     // 다른 레이어의 children도 컬링 (StonePath~Chest, Layer 2~10)
+    // Phase 8: LOD에 의해 hidden인 레이어는 컬링 스킵 (성능 최적화)
     for (let layerIdx = IsoLayer.StonePath; layerIdx <= IsoLayer.Chest; layerIdx++) {
       const layer = this.layers[layerIdx];
+      if (!layer.visible) continue; // LOD hidden → 컬링 불필요
       const children = layer.children;
       for (let i = 0; i < children.length; i++) {
         const child = children[i];
@@ -1382,6 +1453,55 @@ export class IsoTilemap {
 
     // Phase 7: Props 뷰포트 컬링 (루프 애니메이션 stop/play)
     this.propManager?.cullViewport(viewLeft, viewRight, viewTop, viewBottom);
+  }
+
+  // ─── Phase 8: LOD 시스템 ───
+
+  /**
+   * LOD 레벨 적용 — 줌 레벨에 따라 레이어 visibility 즉시 토글
+   *
+   * LOD 0 (조감, zoom < 0.3):
+   *   - Ground(0) + Cloud(13) + UIOverlay(14)만 visible
+   *   - 모든 장식/건물/시민/이펙트 hidden → 최소 draw calls
+   *
+   * LOD 1 (중거리, 0.3 <= zoom < 0.7):
+   *   - Ground + StonePath + Shadow + Wall + Tree + Roof + Cloud + UIOverlay
+   *   - Flora/Misc/WallFlora/Citizens/Effects/Chest/WaterAnim hidden
+   *
+   * LOD 2 (근접, zoom >= 0.7):
+   *   - 전체 15레이어 visible
+   *
+   * 전환은 즉시 (페이드 불필요).
+   * LOD 변경 시 Water/Windmill AnimatedSprite도 stop/play 제어.
+   */
+  private applyLod(zoom: number): void {
+    const newLod = zoomToLod(zoom);
+    if (newLod === this.currentLod) return; // 변경 없으면 스킵
+
+    this.currentLod = newLod;
+    const visibleSet = LOD_VISIBLE_LAYERS[newLod];
+
+    // worldContainer 내 레이어 (0~12) visibility 토글
+    for (let i = 0; i <= IsoLayer.Effects; i++) {
+      this.layers[i].visible = visibleSet.has(i);
+    }
+
+    // screenContainer 내 레이어 (13~14) visibility 토글
+    this.layers[IsoLayer.Cloud].visible = visibleSet.has(IsoLayer.Cloud);
+    this.layers[IsoLayer.UIOverlay].visible = visibleSet.has(IsoLayer.UIOverlay);
+
+    // LOD < 2 일 때 Water/Windmill 애니메이션 정지 (GPU 절약)
+    if (newLod < LodLevel.Close) {
+      for (const anim of this.waterAnimSprites) {
+        if (anim.playing) anim.stop();
+      }
+      for (const anim of this.windmillAnimSprites) {
+        if (anim.playing) anim.stop();
+      }
+    }
+    // LOD 2로 복귀 시 뷰포트 컬링이 다시 play() 호출하므로 여기서 안 해도 됨
+
+    console.log(`[IsoTilemap] LOD changed to ${newLod} (zoom=${zoom.toFixed(2)})`);
   }
 
   // ─── 마우스 인터랙션 ───
@@ -1839,15 +1959,26 @@ export class IsoTilemap {
   // ─── 정리 ───
 
   destroy(): void {
-    // Phase 5: 애니메이션 정리
+    // Phase 5+8: AnimatedSprite 정리 — stop + removeFromParent + 참조 해제
     for (const anim of this.waterAnimSprites) {
       anim.stop();
-    }
-    for (const anim of this.windmillAnimSprites) {
-      anim.stop();
+      if (anim.parent) anim.parent.removeChild(anim);
+      anim.destroy();
     }
     this.waterAnimSprites = [];
+
+    for (const anim of this.windmillAnimSprites) {
+      anim.stop();
+      if (anim.parent) anim.parent.removeChild(anim);
+      anim.destroy();
+    }
     this.windmillAnimSprites = [];
+
+    // Cloud Sprite 정리
+    for (const cloud of this.cloudInstances) {
+      if (cloud.sprite.parent) cloud.sprite.parent.removeChild(cloud.sprite);
+      cloud.sprite.destroy();
+    }
     this.cloudInstances = [];
 
     // Phase 7: 매니저 정리
@@ -1858,9 +1989,21 @@ export class IsoTilemap {
     this.chestManager?.destroy();
     this.chestManager = null;
 
+    // Ground 스프라이트 참조 해제
+    this.groundSprites = [];
+
+    // Phase 8: LOD 상태 리셋
+    this.currentLod = -1 as unknown as LodLevel;
+
+    // Phase 8: isoGrid 참조 해제 (GC 지원)
+    this.isoGrid = [];
+
+    // Phase 8: hoverGraphic 정리 (container.destroy가 처리하지만 명시적 참조 해제)
+    this.hoverGraphic.clear();
+
+    // 모든 컨테이너 및 자식 파괴
     this.container.destroy({ children: true });
     this.buildings = [];
     this.occupancy.clear();
-    this.groundSprites = [];
   }
 }

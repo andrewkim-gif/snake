@@ -23,7 +23,7 @@ import {
 import type { CitizenSnapshot, Building } from '@agent-survivor/shared/types/city';
 import { SK, bodyFont } from '@/lib/sketch-ui';
 import { useCityStore } from '@/stores/cityStore';
-import { preloadBiomeTextures } from '@/lib/iso/iso-texture-loader';
+import { preloadBiomeTextures, unloadBiomeTextures, getCurrentBiome } from '@/lib/iso/iso-texture-loader';
 import { getCountryBiome } from '@/lib/iso/country-biome-map';
 
 // Phase 4+5 UI 컴포넌트
@@ -179,6 +179,14 @@ export function IsoCanvas({
       if (appRef.current) {
         appRef.current.destroy(true, { children: true });
         appRef.current = null;
+      }
+
+      // Phase 8: 국가 전환 시 이전 바이옴 텍스처 언로드 (메모리 해제)
+      const currentBiome = getCurrentBiome();
+      if (currentBiome) {
+        unloadBiomeTextures(currentBiome).catch(() => {
+          // 언로드 실패 시 무시 (이미 해제되었거나 로드 안 된 경우)
+        });
       }
     };
   }, [countryIso3, mapTier]);
