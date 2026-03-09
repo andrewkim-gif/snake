@@ -306,3 +306,35 @@ export const REDUCED_MOTION = {
  * Phase 1에서는 타입만 정의하고, 실제 prop 리네임은 각 Phase에서 수행.
  */
 export type CountryCentroidsMap = Map<string, [number, number]>;
+
+// ===================================================================
+// 12. Sound Cue Interface (v24 Phase 7: hook point for future audio)
+// ===================================================================
+
+/**
+ * 사운드 큐 이벤트 타입.
+ * 3D 이펙트 발생 시 사운드 시스템에 전달하는 오디오 큐.
+ * 실제 사운드 구현은 별도 버전에서 — 여기는 인터페이스만 정의.
+ *
+ * 사용 패턴:
+ *   <GlobeWarEffects onSoundCue={(cue) => audioManager.play(cue)} ... />
+ */
+export interface SoundCue {
+  /** 사운드 이벤트 유형 */
+  type: 'war_declared' | 'nuke_launched' | 'epoch_change' | 'alliance_formed' | 'trade_started';
+  /** 사운드 강도 (0: 무음 ~ 1: 최대) */
+  intensity: number;
+  /** 사운드 발생 좌표 [lat, lng] — 3D 공간 오디오용 (optional) */
+  position?: [number, number];
+}
+
+/**
+ * 사운드 큐 콜백 타입.
+ * 이펙트 컴포넌트에서 prop으로 전달받아 사운드 시스템과 연결.
+ *
+ * 예시:
+ *   const handleSoundCue: OnSoundCue = (cue) => {
+ *     if (cue.type === 'nuke_launched') playNukeSound(cue.intensity);
+ *   };
+ */
+export type OnSoundCue = (cue: SoundCue) => void;
