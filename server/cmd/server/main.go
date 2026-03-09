@@ -15,6 +15,7 @@ import (
 	"github.com/andrewkim-gif/snake/server/config"
 	"github.com/andrewkim-gif/snake/server/internal/api"
 	"github.com/andrewkim-gif/snake/server/internal/blockchain"
+	"github.com/andrewkim-gif/snake/server/internal/blockchain/ramp"
 	"github.com/andrewkim-gif/snake/server/internal/cache"
 	"github.com/andrewkim-gif/snake/server/internal/db"
 	"github.com/andrewkim-gif/snake/server/internal/domain"
@@ -751,6 +752,8 @@ func main() {
 		V14TickProfiler:    tickProfiler,
 		V14BandwidthMon:    bandwidthMonitor,
 		V14ArenaReaper:     v14ArenaReaper,
+		// CROSS Ramp webhook
+		RampWebhook: ramp.NewRampWebhookHandler(),
 	})
 
 	// ================================================================

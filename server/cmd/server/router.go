@@ -12,6 +12,7 @@ import (
 	"github.com/andrewkim-gif/snake/server/config"
 	"github.com/andrewkim-gif/snake/server/internal/api"
 	"github.com/andrewkim-gif/snake/server/internal/auth"
+	"github.com/andrewkim-gif/snake/server/internal/blockchain/ramp"
 	"github.com/andrewkim-gif/snake/server/internal/db"
 	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/meta"
@@ -93,6 +94,9 @@ type RouterDeps struct {
 
 	// Observability
 	Metrics *observability.Metrics
+
+	// CROSS Ramp webhook handler
+	RampWebhook *ramp.RampWebhookHandler
 
 	// v14 in-game systems
 	V14ArenaManager    *game.CountryArenaManager
@@ -836,6 +840,15 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 			})
 		}
 	})
+
+	// ==============================================================
+	// CROSS Ramp Webhook Endpoints (Token Economy)
+	// Called by CROSS Ramp platform for asset exchange operations.
+	// No auth middleware — Ramp platform authenticates via HMAC.
+	// ==============================================================
+	if d.RampWebhook != nil {
+		r.Mount("/api/ramp", d.RampWebhook.Routes())
+	}
 
 	return r
 }
