@@ -1,5 +1,5 @@
 /**
- * v27 Phase 2+3 — IsoTilemap (완전 재작성)
+ * v27 Phase 2+3+4 — IsoTilemap (완전 재작성)
  *
  * 15-Layer Sprite 기반 아이소메트릭 렌더링 엔진
  * - PixiJS 8 Sprite 기반 (기존 Graphics 기반에서 교체)
@@ -15,7 +15,14 @@
  * - Misc 소품 (Layer 6): 건물 인접 맥락적 + 필드 5-10% 밀도
  * - 깊이 정렬: sortableChildren + zIndex = tileY * mapWidth + tileX
  *
- * @rewrite 2026-03-09 Phase 2+3
+ * Phase 4: 건물 컴포지트 시스템
+ * - Wall+Door+Roof 오버레이 레이어링 (같은 타일 좌표에 겹침)
+ * - 53 건물 → 6 시각 등급 매핑 (building-composites.ts)
+ * - 기후대별 Wall/Roof 시리즈 오버라이드 (iso-biome-defs.ts)
+ * - WallFlora (Layer 8): 10-20% 확률 담쟁이/덩굴 오버레이
+ * - 건물 배치 UI: CLIENT_BUILDING_DEFS 53종 전체 사용 (B-5 버그 수정)
+ *
+ * @rewrite 2026-03-09 Phase 2+3+4
  */
 
 import { Container, Graphics, Sprite } from 'pixi.js';
@@ -41,6 +48,7 @@ import {
   type BiomeType,
   type BiomeDef,
   type IsoTile,
+  type BuildingComposite,
 } from './types';
 import { getCountryBiome } from '@/lib/iso/country-biome-map';
 import { BIOME_DEFS } from '@/lib/iso/iso-biome-defs';
@@ -52,6 +60,10 @@ import {
   getStoneTexture,
   getShadowTexture,
   getMiscTexture,
+  getWallTexture,
+  getRoofTexture,
+  getDoorTexture,
+  getWallFloraTexture,
   isTexturesLoaded as isV27TexturesLoaded,
 } from '@/lib/iso/iso-texture-loader';
 import {
@@ -66,7 +78,14 @@ import {
   MISC_SERIES,
   type MiscSeries,
   MISC_B_SUBCATEGORY,
+  WALLFLORA_SERIES,
 } from '@/lib/iso/iso-asset-catalog';
+import { getBuildingComposite } from '@/lib/iso/building-composites';
+import {
+  CLIENT_BUILDING_DEFS,
+  BUILDING_DEF_MAP,
+  type ClientBuildingDef,
+} from './ui/buildingDefs';
 
 // ─── 상수 ───
 const LAYER_COUNT = 15;
@@ -523,6 +542,8 @@ export class IsoTilemap {
     this.layers[IsoLayer.StonePath].removeChildren();
     this.layers[IsoLayer.Shadow].removeChildren();
     this.layers[IsoLayer.Misc].removeChildren();
+    this.layers[IsoLayer.WallFlora].removeChildren();
+    this.layers[IsoLayer.Roof].removeChildren();
 
     // 배치 순서 중요: Stone → Shadow → Flora → Tree → Misc
     this.placeStonePaths(biomeDef);
@@ -531,6 +552,33 @@ export class IsoTilemap {
     this.placeMiscProps(biomeDef);
     // Shadow는 Tree/건물 배치 후
     this.placeShadows();
+
+    // Phase 4: 건물 재렌더 (Wall+Door+Roof 텍스처 기반)
+    this.reRenderBuildings();
+  }
+
+  /**
+   * 건물 전체 재렌더 — 텍스처 로드 후 호출
+   * Wall/Roof 레이어를 클리어하고 모든 건물을 재배치
+   */
+  private reRenderBuildings(): void {
+    // Wall 레이어에서 건물 관련 children만 제거 (장식 Misc가 아닌 것들)
+    const wallLayer = this.layers[IsoLayer.Wall];
+    const toRemove: any[] = [];
+    for (const child of wallLayer.children) {
+      const label = (child as any).label as string | undefined;
+      if (label && (label.startsWith('wall_') || label.startsWith('door_') || label.startsWith('building_'))) {
+        toRemove.push(child);
+      }
+    }
+    for (const child of toRemove) {
+      wallLayer.removeChild(child);
+    }
+
+    // 모든 건물 재렌더
+    for (const building of this.buildings) {
+      this.renderBuilding(building);
+    }
   }
 
   /**
@@ -1053,11 +1101,28 @@ export class IsoTilemap {
 
   // ─── 건물 배치 ───
 
-  /** 배치 모드 시작 */
+  /** 배치 모드 시작 — CLIENT_BUILDING_DEFS (53종) 참조 (B-5 버그 수정) */
   startPlacing(buildingDefId: string): void {
-    const def = BUILDING_DEFS.find(d => d.id === buildingDefId);
-    if (def) {
+    // 먼저 CLIENT_BUILDING_DEFS(53종)에서 검색
+    const clientDef = BUILDING_DEF_MAP[buildingDefId];
+    if (clientDef) {
+      // ClientBuildingDef → BuildingDef 변환 (렌더링에 필요한 필드만)
+      const def: BuildingDef = {
+        id: clientDef.id,
+        name: clientDef.name,
+        category: 'residential' as any, // 카테고리는 배치 시 미사용
+        sizeW: clientDef.sizeW,
+        sizeH: clientDef.sizeH,
+        color: 0x888888,     // fallback 프로시저럴 색상
+        roofColor: 0x666666, // fallback 프로시저럴 색상
+      };
       this.placingBuilding = def;
+      return;
+    }
+    // 레거시 fallback
+    const legacyDef = BUILDING_DEFS.find(d => d.id === buildingDefId);
+    if (legacyDef) {
+      this.placingBuilding = legacyDef;
     }
   }
 
@@ -1111,24 +1176,148 @@ export class IsoTilemap {
     return building;
   }
 
-  /** 건물 그래픽 렌더 (Phase 2: fallback 프로시저럴) */
+  /**
+   * 건물 그래픽 렌더 — Phase 4: Wall+Door+Roof 오버레이 레이어링
+   *
+   * 같은 타일 좌표에 순서대로 스프라이트 겹침:
+   *   1. Wall  (Layer 5) — 건물 벽면
+   *   2. Door  (Layer 5) — 문 오버레이 (Wall 위)
+   *   3. Roof  (Layer 9) — 지붕 (최상단)
+   *   4. WallFlora (Layer 8) — 10-20% 확률 담쟁이/덩굴
+   *
+   * 모든 에셋이 256×256 캔버스 내에서 같은 기준점에 맞춰 제작되어 있으므로,
+   * 같은 tileToScreen(x,y) 좌표에 anchor=(0.5, 1.0)로 배치하면 자동 정렬됨.
+   */
   private renderBuilding(building: BuildingInstance): void {
-    const def = BUILDING_DEFS.find(d => d.id === building.defId);
-    if (!def) return;
-
-    const hw = ISO_TILE_WIDTH / 2;
-    const hh = ISO_TILE_HEIGHT / 2;
-
     const centerTileX = building.tileX + (building.sizeW - 1) / 2;
     const centerTileY = building.tileY + (building.sizeH - 1) / 2;
     const { sx, sy } = tileToScreen(centerTileX, centerTileY);
+    const posY = sy + ISO_TILE_HEIGHT / 2;
+    const zIdx = Math.floor(centerTileY) * this.mapSize + Math.floor(centerTileX);
+    const tileSeed = hashTile(building.tileX, building.tileY, this.seed + 7777);
 
-    // Phase 2: 프로시저럴 건물 (Phase 4에서 BuildingComposite로 교체 예정)
-    const g = new Graphics();
+    // BuildingComposite 조회 (바이옴별 오버라이드 적용)
+    const comp = getBuildingComposite(
+      building.defId,
+      this.biome,
+      building.sizeW,
+      building.sizeH,
+      tileSeed,
+    );
 
+    // 텍스처 로드 상태 확인
+    const useTextures = this.texturesReady;
+
+    if (useTextures) {
+      // ── 1. Wall (Layer 5) ──
+      const wallTex = getWallTexture(comp.wallSeries, comp.wallVariant);
+      if (wallTex) {
+        const wallSprite = new Sprite(wallTex);
+        wallSprite.anchor.set(0.5, 1.0);
+        wallSprite.scale.set(ISO_TILE_SCALE);
+        wallSprite.x = sx;
+        wallSprite.y = posY;
+        wallSprite.zIndex = zIdx;
+        wallSprite.label = `wall_${building.id}`;
+        this.layers[IsoLayer.Wall].addChild(wallSprite);
+      }
+
+      // ── 2. Door (Layer 5, Wall 위에 겹침) ──
+      const doorTex = getDoorTexture(comp.doorSeries, comp.doorVariant);
+      if (doorTex) {
+        const doorSprite = new Sprite(doorTex);
+        doorSprite.anchor.set(0.5, 1.0);
+        doorSprite.scale.set(ISO_TILE_SCALE);
+        doorSprite.x = sx;
+        doorSprite.y = posY;
+        doorSprite.zIndex = zIdx;
+        doorSprite.label = `door_${building.id}`;
+        this.layers[IsoLayer.Wall].addChild(doorSprite);
+      }
+
+      // ── 3. Roof (Layer 9) ──
+      const roofTex = getRoofTexture(comp.roofSeries, comp.roofVariant);
+      if (roofTex) {
+        const roofSprite = new Sprite(roofTex);
+        roofSprite.anchor.set(0.5, 1.0);
+        roofSprite.scale.set(ISO_TILE_SCALE);
+        roofSprite.x = sx;
+        roofSprite.y = posY;
+        roofSprite.zIndex = zIdx;
+        roofSprite.label = `roof_${building.id}`;
+        this.layers[IsoLayer.Roof].addChild(roofSprite);
+      }
+
+      // ── 4. WallFlora (Layer 8) — 10-20% 확률 ──
+      this.maybeAddWallFlora(building, sx, posY, zIdx, tileSeed);
+
+      // 텍스처가 하나도 없으면 fallback
+      if (!wallTex && !roofTex) {
+        this.renderBuildingFallback(building, sx, sy, zIdx);
+      }
+    } else {
+      // 텍스처 미로드 시 프로시저럴 fallback
+      this.renderBuildingFallback(building, sx, sy, zIdx);
+    }
+  }
+
+  /**
+   * WallFlora 적용 — 10-20% 확률로 건물 벽에 담쟁이/덩굴 오버레이
+   * Temperate, Mediterranean, Tropical 바이옴에서만 적용
+   */
+  private maybeAddWallFlora(
+    building: BuildingInstance,
+    sx: number,
+    posY: number,
+    zIdx: number,
+    seed: number,
+  ): void {
+    // WallFlora는 특정 바이옴에서만
+    const floraEligible = ['temperate', 'mediterranean', 'tropical'].includes(this.biome);
+    if (!floraEligible) return;
+
+    // 10-20% 확률 (seed 기반)
+    const chance = (seed % 100);
+    if (chance >= 15) return; // ~15% 확률
+
+    const variants = WALLFLORA_SERIES.variants;
+    const variant = variants[seed % variants.length];
+
+    const texture = getWallFloraTexture(variant);
+    if (!texture) return;
+
+    const sprite = new Sprite(texture);
+    sprite.anchor.set(0.5, 1.0);
+    sprite.scale.set(ISO_TILE_SCALE);
+    sprite.x = sx;
+    sprite.y = posY;
+    sprite.zIndex = zIdx;
+    sprite.label = `wallflora_${building.id}`;
+    this.layers[IsoLayer.WallFlora].addChild(sprite);
+  }
+
+  /**
+   * 프로시저럴 건물 fallback (텍스처 미로드 시)
+   * 기존 Phase 2 Graphics 기반 렌더링
+   */
+  private renderBuildingFallback(
+    building: BuildingInstance,
+    sx: number,
+    sy: number,
+    zIdx: number,
+  ): void {
+    // 레거시 BUILDING_DEFS에서 색상 조회 (fallback용)
+    const legacyDef = BUILDING_DEFS.find(d => d.id === building.defId);
+    const color = legacyDef?.color ?? 0x888888;
+    const roofColor = legacyDef?.roofColor ?? 0x666666;
+
+    const hw = ISO_TILE_WIDTH / 2;
+    const hh = ISO_TILE_HEIGHT / 2;
     const bw = hw * building.sizeW;
     const bh = hh * building.sizeH;
     const buildingHeight = 16 + building.sizeW * 4;
+
+    const g = new Graphics();
 
     // 좌측 면
     g.poly([
@@ -1136,7 +1325,7 @@ export class IsoTilemap {
       sx, sy + bh,
       sx, sy + bh - buildingHeight,
       sx - bw, sy - buildingHeight,
-    ]).fill(this.darkenColor(def.color, 0.25));
+    ]).fill(this.darkenColor(color, 0.25));
 
     // 우측 면
     g.poly([
@@ -1144,7 +1333,7 @@ export class IsoTilemap {
       sx, sy + bh,
       sx, sy + bh - buildingHeight,
       sx + bw, sy - buildingHeight,
-    ]).fill(this.darkenColor(def.color, 0.1));
+    ]).fill(this.darkenColor(color, 0.1));
 
     // 지붕
     g.poly([
@@ -1152,7 +1341,7 @@ export class IsoTilemap {
       sx + bw, sy - buildingHeight,
       sx, sy + bh - buildingHeight,
       sx - bw, sy - buildingHeight,
-    ]).fill(def.roofColor);
+    ]).fill(roofColor);
 
     // 테두리
     g.poly([
@@ -1164,7 +1353,7 @@ export class IsoTilemap {
 
     g.x = 0;
     g.y = 0;
-    g.zIndex = centerTileX + centerTileY;
+    g.zIndex = zIdx;
     g.label = `building_${building.id}`;
 
     this.layers[IsoLayer.Wall].addChild(g);
