@@ -1,5 +1,5 @@
 /**
- * v27 Phase 2 — IsoTilemap (완전 재작성)
+ * v27 Phase 2+3 — IsoTilemap (완전 재작성)
  *
  * 15-Layer Sprite 기반 아이소메트릭 렌더링 엔진
  * - PixiJS 8 Sprite 기반 (기존 Graphics 기반에서 교체)
@@ -7,7 +7,15 @@
  * - 128×64 타일 좌표계 (256px 에셋 × 0.5 스케일)
  * - 뷰포트 컬링 O(visible)
  *
- * @rewrite 2026-03-09 Phase 2
+ * Phase 3: 장식 레이어 배치
+ * - Flora 배치 (Layer 4): 바이옴별 꽃/풀/덤불 15-25% 밀도
+ * - Tree 배치 (Layer 7): 바이옴별 나무 종류, anchor(0.5, 0.85)
+ * - Stone/Path (Layer 2): 건물 주변 돌바닥 포장
+ * - Shadow (Layer 3): 나무/건물 SE방향 그림자 alpha=0.3
+ * - Misc 소품 (Layer 6): 건물 인접 맥락적 + 필드 5-10% 밀도
+ * - 깊이 정렬: sortableChildren + zIndex = tileY * mapWidth + tileX
+ *
+ * @rewrite 2026-03-09 Phase 2+3
  */
 
 import { Container, Graphics, Sprite } from 'pixi.js';
@@ -31,6 +39,7 @@ import {
   IsoLayer,
   ISO_LAYER_NAMES,
   type BiomeType,
+  type BiomeDef,
   type IsoTile,
 } from './types';
 import { getCountryBiome } from '@/lib/iso/country-biome-map';
@@ -38,6 +47,11 @@ import { BIOME_DEFS } from '@/lib/iso/iso-biome-defs';
 import {
   getSafeGroundTexture,
   getGroundTexture,
+  getFloraTexture,
+  getTreeTexture,
+  getStoneTexture,
+  getShadowTexture,
+  getMiscTexture,
   isTexturesLoaded as isV27TexturesLoaded,
 } from '@/lib/iso/iso-texture-loader';
 import {
@@ -45,6 +59,13 @@ import {
   GROUND_A_BOUNDARY_MAP,
   type GroundSeries,
   type BoundaryDirection,
+  FLORA_SERIES,
+  type FloraSeries,
+  TREE_SERIES,
+  type TreeSeries,
+  MISC_SERIES,
+  type MiscSeries,
+  MISC_B_SUBCATEGORY,
 } from '@/lib/iso/iso-asset-catalog';
 
 // ─── 상수 ───
@@ -235,6 +256,9 @@ export class IsoTilemap {
 
     // 초기 렌더 (Graphics fallback)
     this.renderTiles();
+
+    // Phase 3: 장식 레이어 배치 (텍스처 로드 후)
+    this.renderDecorations();
   }
 
   // ─── v27 IsoGrid 빌드 ───
@@ -350,6 +374,9 @@ export class IsoTilemap {
     if (useTextures) {
       this.renderBoundaryOverlays();
     }
+
+    // Phase 3: 장식 레이어 재렌더 (텍스처 상태 변경 시)
+    this.renderDecorations();
   }
 
   /** 경계 오버레이 렌더링 (2단계 Auto-Tiling) */
@@ -480,6 +507,406 @@ export class IsoTilemap {
     return (r << 16) | (g << 8) | b;
   }
 
+  // ─── Phase 3: 장식 레이어 배치 ───
+
+  /**
+   * 전체 장식 레이어 오케스트레이터
+   * Flora, Tree, Stone, Shadow, Misc를 시드 기반으로 배치
+   */
+  renderDecorations(): void {
+    if (!this.texturesReady) return;
+    const biomeDef = BIOME_DEFS[this.biome];
+
+    // 기존 장식 클리어
+    this.layers[IsoLayer.Flora].removeChildren();
+    this.layers[IsoLayer.Tree].removeChildren();
+    this.layers[IsoLayer.StonePath].removeChildren();
+    this.layers[IsoLayer.Shadow].removeChildren();
+    this.layers[IsoLayer.Misc].removeChildren();
+
+    // 배치 순서 중요: Stone → Shadow → Flora → Tree → Misc
+    this.placeStonePaths(biomeDef);
+    this.placeFlora(biomeDef);
+    this.placeTrees(biomeDef);
+    this.placeMiscProps(biomeDef);
+    // Shadow는 Tree/건물 배치 후
+    this.placeShadows();
+  }
+
+  /**
+   * Flora 배치 엔진
+   * 바이옴별 Flora 시리즈(A=꽃/풀, B=덤불)를 빈 타일에 랜덤 배치
+   * 밀도: 15-25% (IsoTile.hasFlora로 사전 결정됨)
+   */
+  private placeFlora(biomeDef: BiomeDef): void {
+    if (biomeDef.flora.length === 0) return;
+
+    const floraLayer = this.layers[IsoLayer.Flora];
+
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        if (!tile.hasFlora) continue;
+        if (tile.type === TileType.Water || tile.type === TileType.Mountain) continue;
+        if (this.occupancy.has(`${x},${y}`)) continue;
+
+        const h = hashTile(x, y, this.seed + 1000);
+
+        // 바이옴 Flora 시리즈 선택
+        const seriesIdx = h % biomeDef.flora.length;
+        const series = biomeDef.flora[seriesIdx] as FloraSeries;
+        const floraDef = FLORA_SERIES[series];
+        if (!floraDef) continue;
+
+        // 변형 선택
+        const variantIdx = hashTile(x, y, this.seed + 1001) % floraDef.variants.length;
+        const variant = floraDef.variants[variantIdx];
+
+        const texture = getFloraTexture(series, variant);
+        if (!texture) continue;
+
+        const { sx, sy } = tileToScreen(x, y);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 1.0);
+        sprite.scale.set(ISO_TILE_SCALE);
+        sprite.x = sx;
+        sprite.y = sy + ISO_TILE_HEIGHT / 2;
+        sprite.zIndex = y * this.mapSize + x;
+
+        floraLayer.addChild(sprite);
+      }
+    }
+  }
+
+  /**
+   * Tree 배치 엔진
+   * 바이옴별 Tree 시리즈 배치
+   * 밀도: IsoTile.hasTree로 사전 결정 (Forest=100%, Grass=8%)
+   */
+  private placeTrees(biomeDef: BiomeDef): void {
+    if (biomeDef.trees.length === 0) return;
+
+    const treeLayer = this.layers[IsoLayer.Tree];
+
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        if (!tile.hasTree) continue;
+        if (tile.type === TileType.Water) continue;
+        if (this.occupancy.has(`${x},${y}`)) continue;
+
+        const h = hashTile(x, y, this.seed + 2000);
+
+        // 바이옴 Tree 시리즈 선택
+        const seriesIdx = h % biomeDef.trees.length;
+        const series = biomeDef.trees[seriesIdx] as TreeSeries;
+        const treeDef = TREE_SERIES[series];
+        if (!treeDef) continue;
+
+        // 변형 선택
+        const variantIdx = hashTile(x, y, this.seed + 2001) % treeDef.variants.length;
+        const variant = treeDef.variants[variantIdx];
+
+        const texture = getTreeTexture(series, variant);
+        if (!texture) continue;
+
+        const { sx, sy } = tileToScreen(x, y);
+        const sprite = new Sprite(texture);
+        // 나무는 지면에서 위로 솟음 — anchor.set(0.5, 0.85)
+        sprite.anchor.set(0.5, 0.85);
+        sprite.scale.set(ISO_TILE_SCALE);
+        sprite.x = sx;
+        sprite.y = sy + ISO_TILE_HEIGHT / 2;
+        sprite.zIndex = y * this.mapSize + x;
+
+        treeLayer.addChild(sprite);
+      }
+    }
+  }
+
+  /**
+   * Stone/Path 배치 엔진
+   * 건물 주변/도로 타일에 Stone A 시리즈 배치
+   * IsoLayer.StonePath(2)
+   */
+  private placeStonePaths(biomeDef: BiomeDef): void {
+    const stoneLayer = this.layers[IsoLayer.StonePath];
+    // Stone "full" 변형 (1,2,3,5,10,15)
+    const stoneFullVariants = [1, 2, 3, 5, 10, 15];
+
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        if (tile.type === TileType.Water) continue;
+
+        // 건물 인접 타일 또는 road 건물 타일에 Stone 배치
+        const isNearBuilding = this.isAdjacentToBuilding(x, y);
+        const isRoad = this.occupancy.has(`${x},${y}`) &&
+          this.buildings.some(b => b.defId === 'road' && b.tileX === x && b.tileY === y);
+
+        if (!isNearBuilding && !isRoad && !tile.hasStonePath) continue;
+
+        const h = hashTile(x, y, this.seed + 3000);
+        const variant = stoneFullVariants[h % stoneFullVariants.length];
+
+        const texture = getStoneTexture(variant);
+        if (!texture) continue;
+
+        const { sx, sy } = tileToScreen(x, y);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 1.0);
+        sprite.scale.set(ISO_TILE_SCALE);
+        sprite.x = sx;
+        sprite.y = sy + ISO_TILE_HEIGHT / 2;
+
+        stoneLayer.addChild(sprite);
+      }
+    }
+  }
+
+  /**
+   * Shadow 자동 배치
+   * Tree/건물의 SE 방향(+1,+1)에 Shadow 스프라이트 배치
+   * alpha=0.3
+   */
+  private placeShadows(): void {
+    const shadowLayer = this.layers[IsoLayer.Shadow];
+    const placed = new Set<string>(); // 중복 방지
+
+    // Tree 그림자
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        if (!tile.hasTree) continue;
+        if (tile.type === TileType.Water) continue;
+        if (this.occupancy.has(`${x},${y}`)) continue;
+
+        // 그림자는 SE 방향 (같은 타일 또는 +1,+1)
+        const shadowX = x;
+        const shadowY = y;
+        const key = `${shadowX},${shadowY}`;
+        if (placed.has(key)) continue;
+        placed.add(key);
+
+        const h = hashTile(x, y, this.seed + 4000);
+        // 나무: 소~중형 Shadow (1~6)
+        const variant = (h % 6) + 1;
+
+        const texture = getShadowTexture(variant);
+        if (!texture) continue;
+
+        const { sx, sy } = tileToScreen(shadowX, shadowY);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 1.0);
+        sprite.scale.set(ISO_TILE_SCALE);
+        sprite.x = sx;
+        sprite.y = sy + ISO_TILE_HEIGHT / 2;
+        sprite.alpha = 0.3;
+        sprite.zIndex = shadowY * this.mapSize + shadowX;
+
+        shadowLayer.addChild(sprite);
+      }
+    }
+
+    // 건물 그림자
+    for (const building of this.buildings) {
+      const bx = building.tileX;
+      const by = building.tileY;
+      // 건물 크기에 따라 Shadow 변형 선택
+      const area = building.sizeW * building.sizeH;
+      let variant: number;
+      if (area >= 6) variant = 13;       // 3x3 → 최대형
+      else if (area >= 4) variant = 9;   // 2x2 → 초대형
+      else if (area >= 2) variant = 7;   // 2x1 → 넓은
+      else variant = 3;                  // 1x1 → 중형
+
+      // SE 방향으로 오프셋 (+1, +1)
+      const shadowX = bx + 1;
+      const shadowY = by + 1;
+      if (shadowX >= this.mapSize || shadowY >= this.mapSize) continue;
+      const key = `${shadowX},${shadowY}`;
+      if (placed.has(key)) continue;
+      placed.add(key);
+
+      const texture = getShadowTexture(variant);
+      if (!texture) continue;
+
+      const { sx, sy } = tileToScreen(shadowX, shadowY);
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 1.0);
+      sprite.scale.set(ISO_TILE_SCALE);
+      sprite.x = sx;
+      sprite.y = sy + ISO_TILE_HEIGHT / 2;
+      sprite.alpha = 0.3;
+      sprite.zIndex = shadowY * this.mapSize + shadowX;
+
+      shadowLayer.addChild(sprite);
+    }
+  }
+
+  /**
+   * Misc 소품 배치 엔진
+   * 바이옴/건물 특성에 따라 소품 랜덤 배치
+   * 밀도: 5-10%
+   */
+  private placeMiscProps(biomeDef: BiomeDef): void {
+    const miscLayer = this.layers[IsoLayer.Misc];
+
+    // 1) 건물 인접 맥락적 소품 배치
+    for (const building of this.buildings) {
+      this.placeBuildingMisc(building, miscLayer);
+    }
+
+    // 2) 일반 필드 소품 (5~10% 밀도)
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        if (tile.type === TileType.Water || tile.type === TileType.Mountain) continue;
+        if (this.occupancy.has(`${x},${y}`)) continue;
+        if (tile.hasTree || tile.hasFlora) continue; // 이미 장식 있으면 스킵
+
+        const h = hashTile(x, y, this.seed + 5000);
+        // 5~10% 밀도
+        if ((h % 100) >= 8) continue;
+
+        // 바이옴별 일반 소품 선택
+        const miscInfo = this.pickFieldMisc(h, biomeDef);
+        if (!miscInfo) continue;
+
+        const texture = getMiscTexture(miscInfo.series, miscInfo.variant);
+        if (!texture) continue;
+
+        const { sx, sy } = tileToScreen(x, y);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 1.0);
+        sprite.scale.set(ISO_TILE_SCALE);
+        sprite.x = sx;
+        sprite.y = sy + ISO_TILE_HEIGHT / 2;
+        sprite.zIndex = y * this.mapSize + x;
+
+        miscLayer.addChild(sprite);
+      }
+    }
+  }
+
+  /**
+   * 건물 인접 타일에 맥락적 소품 배치
+   */
+  private placeBuildingMisc(building: BuildingInstance, layer: Container): void {
+    // 건물 주변 4방향(+1) 확인
+    const adjacentTiles: TileCoord[] = [];
+    for (let dy = -1; dy <= building.sizeH; dy++) {
+      for (let dx = -1; dx <= building.sizeW; dx++) {
+        // 건물 내부는 건너뜀
+        if (dx >= 0 && dx < building.sizeW && dy >= 0 && dy < building.sizeH) continue;
+        const tx = building.tileX + dx;
+        const ty = building.tileY + dy;
+        if (tx < 0 || tx >= this.mapSize || ty < 0 || ty >= this.mapSize) continue;
+        if (this.occupancy.has(`${tx},${ty}`)) continue;
+        const tile = this.isoGrid[ty][tx];
+        if (tile.type === TileType.Water) continue;
+        adjacentTiles.push({ tileX: tx, tileY: ty });
+      }
+    }
+
+    // 최대 2개 소품만 배치
+    const count = Math.min(2, adjacentTiles.length);
+    for (let i = 0; i < count; i++) {
+      const pos = adjacentTiles[i];
+      const h = hashTile(pos.tileX, pos.tileY, this.seed + 5500 + i);
+      // 50% 확률로 배치
+      if ((h % 100) >= 50) continue;
+
+      const miscInfo = this.pickBuildingMisc(building.defId, h);
+      if (!miscInfo) continue;
+
+      const texture = getMiscTexture(miscInfo.series, miscInfo.variant);
+      if (!texture) continue;
+
+      const { sx, sy } = tileToScreen(pos.tileX, pos.tileY);
+      const sprite = new Sprite(texture);
+      sprite.anchor.set(0.5, 1.0);
+      sprite.scale.set(ISO_TILE_SCALE);
+      sprite.x = sx;
+      sprite.y = sy + ISO_TILE_HEIGHT / 2;
+      sprite.zIndex = pos.tileY * this.mapSize + pos.tileX;
+
+      layer.addChild(sprite);
+    }
+  }
+
+  /**
+   * 건물 유형에 따른 소품 선택
+   */
+  private pickBuildingMisc(defId: string, h: number): { series: MiscSeries; variant: number } | null {
+    // 건물→Misc 매핑
+    switch (defId) {
+      case 'market': {
+        // 상자/배럴
+        const variants = MISC_B_SUBCATEGORY.crates;
+        return { series: 'B', variant: variants[h % variants.length] };
+      }
+      case 'farm': {
+        // 음식/농산물 또는 수레
+        if (h % 2 === 0) {
+          const sub = MISC_B_SUBCATEGORY.food;
+          return { series: 'B', variant: sub[h % sub.length] };
+        } else {
+          const sub = MISC_SERIES.E.variants;
+          return { series: 'E', variant: sub[h % sub.length] };
+        }
+      }
+      case 'barracks': {
+        // 무기/도구
+        const variants = MISC_SERIES.C.variants;
+        return { series: 'C', variant: variants[h % variants.length] };
+      }
+      case 'house': {
+        // 가구
+        const variants = MISC_B_SUBCATEGORY.furniture;
+        return { series: 'B', variant: variants[h % variants.length] };
+      }
+      default: {
+        // 기본: 배럴/상자
+        const variants = MISC_B_SUBCATEGORY.barrels;
+        return { series: 'B', variant: variants[h % variants.length] };
+      }
+    }
+  }
+
+  /**
+   * 필드 일반 소품 선택 (바이옴별)
+   */
+  private pickFieldMisc(h: number, biomeDef: BiomeDef): { series: MiscSeries; variant: number } | null {
+    // Urban: 표지판/가구
+    if (biomeDef.id === 'urban') {
+      const sub = (h % 3 === 0) ? MISC_SERIES.A.variants : MISC_B_SUBCATEGORY.miscItems;
+      const series: MiscSeries = (h % 3 === 0) ? 'A' : 'B';
+      return { series, variant: sub[h % sub.length] };
+    }
+    // Arid: 장식
+    if (biomeDef.id === 'arid') {
+      const variants = MISC_SERIES.D.variants;
+      return { series: 'D', variant: variants[h % variants.length] };
+    }
+    // Default: 잡동사니
+    const variants = MISC_B_SUBCATEGORY.miscItems;
+    return { series: 'B', variant: variants[h % variants.length] };
+  }
+
+  /**
+   * 건물 인접 여부 확인
+   */
+  private isAdjacentToBuilding(x: number, y: number): boolean {
+    for (let dy = -1; dy <= 1; dy++) {
+      for (let dx = -1; dx <= 1; dx++) {
+        if (dx === 0 && dy === 0) continue;
+        if (this.occupancy.has(`${x + dx},${y + dy}`)) return true;
+      }
+    }
+    return false;
+  }
+
   // ─── 카메라 컨트롤 ───
 
   /** 카메라 이동 (팬) */
@@ -541,8 +968,8 @@ export class IsoTilemap {
       }
     }
 
-    // 다른 레이어의 children도 컬링 (Shadow~Chest)
-    for (let layerIdx = IsoLayer.Shadow; layerIdx <= IsoLayer.Chest; layerIdx++) {
+    // 다른 레이어의 children도 컬링 (StonePath~Chest, Layer 2~10)
+    for (let layerIdx = IsoLayer.StonePath; layerIdx <= IsoLayer.Chest; layerIdx++) {
       const layer = this.layers[layerIdx];
       const children = layer.children;
       for (let i = 0; i < children.length; i++) {
