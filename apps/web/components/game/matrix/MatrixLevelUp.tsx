@@ -10,6 +10,8 @@
  * - Auto-select timer (Vibe Coding)
  * - Keyboard shortcuts (1-4)
  * - Matrix green theme (#00FF41)
+ *
+ * v29b: All Tailwind className converted to inline styles.
  */
 
 import React, { useEffect, useState, useCallback, memo } from 'react';
@@ -370,21 +372,59 @@ function MatrixLevelUpInner({
   };
 
   return (
-    <div data-testid="levelup-modal" className="absolute inset-0 z-[70] flex items-center justify-center bg-black/90 p-2 md:p-4 animate-fade-in">
-      <div className="w-full max-w-lg bg-black/95 border-2 border-gray-700 flex flex-col max-h-[95vh] overflow-hidden">
+    <div data-testid="levelup-modal" style={{
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 70,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0,0,0,0.9)',
+      padding: 8,
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 512,
+        backgroundColor: 'rgba(0,0,0,0.95)',
+        border: '2px solid #374151',
+        display: 'flex',
+        flexDirection: 'column',
+        maxHeight: '95vh',
+        overflow: 'hidden',
+      }}>
 
         {/* Header */}
-        <div className="bg-black/80 px-4 py-3 border-b border-gray-700 flex justify-between items-center">
-          <div className="flex items-center gap-3">
+        <div style={{
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          paddingLeft: 16,
+          paddingRight: 16,
+          paddingTop: 12,
+          paddingBottom: 12,
+          borderBottom: '1px solid #374151',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
             <div
-              className="w-10 h-10 border-2 flex items-center justify-center"
-              style={{ borderColor: MATRIX_GREEN, backgroundColor: `${MATRIX_GREEN}20` }}
+              style={{
+                width: 40,
+                height: 40,
+                border: `2px solid ${MATRIX_GREEN}`,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                backgroundColor: `${MATRIX_GREEN}20`,
+              }}
             >
               <Zap size={20} style={{ color: MATRIX_GREEN }} />
             </div>
             <div>
-              <h2 className="text-lg font-bold tracking-wider" style={{ color: MATRIX_GREEN }}>LEVEL UP</h2>
-              <p className="text-gray-500 text-[10px]">Select an upgrade</p>
+              <h2 style={{ fontSize: 18, fontWeight: 'bold', letterSpacing: '0.05em', color: MATRIX_GREEN, margin: 0 }}>LEVEL UP</h2>
+              <p style={{ color: '#6b7280', fontSize: 10, margin: 0 }}>Select an upgrade</p>
             </div>
           </div>
 
@@ -392,17 +432,25 @@ function MatrixLevelUpInner({
             <button
               onClick={handleRerollClick}
               disabled={rerollsLeft <= 0 || (options[0]?.isGoldReward ?? false)}
-              className={`
-                flex items-center gap-2 px-3 py-2 border transition-all active:scale-95
-                ${rerollsLeft > 0 && !(options[0]?.isGoldReward)
-                  ? 'bg-purple-600 hover:bg-purple-500 border-purple-400'
-                  : 'bg-black/60 border-gray-700 cursor-not-allowed opacity-50'}
-              `}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                paddingLeft: 12,
+                paddingRight: 12,
+                paddingTop: 8,
+                paddingBottom: 8,
+                transition: 'all 0.2s',
+                cursor: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 'pointer' : 'not-allowed',
+                opacity: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? 1 : 0.5,
+                backgroundColor: rerollsLeft > 0 && !(options[0]?.isGoldReward) ? '#9333ea' : 'rgba(0,0,0,0.6)',
+                border: `1px solid ${rerollsLeft > 0 && !(options[0]?.isGoldReward) ? '#a855f7' : '#374151'}`,
+              }}
             >
-              <Dice5 className="text-white w-5 h-5" />
-              <div className="flex flex-col text-left">
-                <span className="text-[8px] text-purple-200 leading-none mb-0.5">REROLL</span>
-                <span className="text-sm font-bold text-white leading-none">{rerollsLeft}</span>
+              <Dice5 style={{ color: 'white', width: 20, height: 20 }} />
+              <div style={{ display: 'flex', flexDirection: 'column', textAlign: 'left' }}>
+                <span style={{ fontSize: 8, color: '#e9d5ff', lineHeight: 1, marginBottom: 2 }}>REROLL</span>
+                <span style={{ fontSize: 14, fontWeight: 'bold', color: 'white', lineHeight: 1 }}>{rerollsLeft}</span>
               </div>
             </button>
           )}
@@ -410,38 +458,75 @@ function MatrixLevelUpInner({
 
         {/* Dev Mode Banner */}
         {isDevMode && (
-          <div className="bg-orange-900/40 border-b border-orange-500/50 px-3 py-1.5 flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Settings size={14} className="text-orange-400 animate-spin" style={{ animationDuration: '3s' }} />
-              <span className="text-orange-400 text-xs tracking-wider">DEV MODE</span>
+          <div style={{
+            backgroundColor: 'rgba(124,45,18,0.4)',
+            borderBottom: '1px solid rgba(249,115,22,0.5)',
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 6,
+            paddingBottom: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Settings size={14} style={{ color: '#fb923c', animation: 'spin 3s linear infinite' }} />
+              <span style={{ color: '#fb923c', fontSize: 12, letterSpacing: '0.05em' }}>DEV MODE</span>
             </div>
-            <span className="text-orange-300 text-[10px]">{options.length} skills</span>
+            <span style={{ color: '#fdba74', fontSize: 10 }}>{options.length} skills</span>
           </div>
         )}
 
         {/* Auto Hunt Banner */}
         {!isDevMode && isAutoHunt && autoSelectTimer !== null && (
-          <div className={`border-b px-3 py-1.5 flex items-center justify-between transition-colors ${
-            isHoveringOptions
-              ? 'bg-yellow-900/40 border-yellow-500/50'
-              : 'bg-green-900/40 border-green-500/50'
-          }`}>
-            <div className="flex items-center gap-2">
-              <Bot size={14} className={isHoveringOptions ? 'text-yellow-400' : 'text-green-400'} />
-              <span className={`text-xs tracking-wider ${isHoveringOptions ? 'text-yellow-400' : 'text-green-400'}`}>
+          <div style={{
+            borderBottom: '1px solid',
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 6,
+            paddingBottom: 6,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            transition: 'all 0.2s',
+            ...(isHoveringOptions
+              ? { backgroundColor: 'rgba(113,63,18,0.4)', borderBottomColor: 'rgba(234,179,8,0.5)' }
+              : { backgroundColor: 'rgba(20,83,45,0.4)', borderBottomColor: 'rgba(34,197,94,0.5)' }
+            ),
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Bot size={14} style={{ color: isHoveringOptions ? '#facc15' : '#4ade80' }} />
+              <span style={{
+                fontSize: 12,
+                letterSpacing: '0.05em',
+                color: isHoveringOptions ? '#facc15' : '#4ade80',
+              }}>
                 {isHoveringOptions ? 'PAUSED' : 'VIBE CODING'}
               </span>
             </div>
-            <div className="flex items-center gap-2">
-              <div className={`w-16 h-1.5 bg-black/80 border overflow-hidden ${
-                isHoveringOptions ? 'border-yellow-700/50' : 'border-green-700/50'
-              }`}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div style={{
+                width: 64,
+                height: 6,
+                backgroundColor: 'rgba(0,0,0,0.8)',
+                border: `1px solid ${isHoveringOptions ? 'rgba(161,98,7,0.5)' : 'rgba(21,128,61,0.5)'}`,
+                overflow: 'hidden',
+              }}>
                 <div
-                  className={`h-full ${isHoveringOptions ? 'bg-yellow-500' : 'bg-green-500'}`}
-                  style={{ width: `${(autoSelectTimer / 5) * 100}%`, transition: isHoveringOptions ? 'none' : 'width 1s linear' }}
+                  style={{
+                    height: '100%',
+                    backgroundColor: isHoveringOptions ? '#eab308' : '#22c55e',
+                    width: `${(autoSelectTimer / 5) * 100}%`,
+                    transition: isHoveringOptions ? 'none' : 'width 1s linear',
+                  }}
                 />
               </div>
-              <span className={`text-sm min-w-[16px] text-center ${isHoveringOptions ? 'text-yellow-400' : 'text-green-400'}`}>
+              <span style={{
+                fontSize: 14,
+                minWidth: 16,
+                textAlign: 'center',
+                color: isHoveringOptions ? '#facc15' : '#4ade80',
+              }}>
                 {autoSelectTimer}
               </span>
             </div>
@@ -450,11 +535,17 @@ function MatrixLevelUpInner({
 
         {/* Options List */}
         <div
-          className="flex-1 overflow-y-auto overflow-x-hidden p-4 bg-black/60"
+          style={{
+            flex: 1,
+            overflowY: 'auto',
+            overflowX: 'hidden',
+            padding: 16,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+          }}
           onMouseEnter={() => setIsHoveringOptions(true)}
           onMouseLeave={() => setIsHoveringOptions(false)}
         >
-          <div className="flex flex-col gap-2 max-w-md mx-auto">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 448, marginLeft: 'auto', marginRight: 'auto' }}>
             {options.map((opt, idx) => {
               const Icon = WEAPON_ICONS[opt.type] || Zap;
               const isUltimateUpgrade = opt.isUltimate;
@@ -464,60 +555,143 @@ function MatrixLevelUpInner({
                   key={opt.type + idx}
                   data-testid={`levelup-option-${idx}`}
                   onClick={() => onSelect(opt.type)}
-                  className={`
-                    relative p-3 flex items-center gap-4 transition-all active:scale-[0.98] group pointer-events-auto
-                    ${isUltimateUpgrade
-                      ? 'bg-yellow-900/30 border-2 border-yellow-500'
+                  style={{
+                    position: 'relative',
+                    padding: 12,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 16,
+                    transition: 'all 0.2s',
+                    pointerEvents: 'auto',
+                    cursor: 'pointer',
+                    textAlign: 'left',
+                    ...(isUltimateUpgrade
+                      ? { backgroundColor: 'rgba(113,63,18,0.3)', border: '2px solid #eab308' }
                       : opt.isGoldReward
-                        ? 'bg-green-900/30 border-2 border-green-500'
-                        : 'bg-black/60 border border-gray-700 hover:bg-gray-900/60 hover:border-gray-500'}
-                  `}
+                        ? { backgroundColor: 'rgba(20,83,45,0.3)', border: '2px solid #22c55e' }
+                        : { backgroundColor: 'rgba(0,0,0,0.6)', border: '1px solid #374151' }
+                    ),
+                  }}
                 >
                   {/* Left: Icon + Level */}
-                  <div className="relative shrink-0">
+                  <div style={{ position: 'relative', flexShrink: 0 }}>
                     <div
-                      className={`w-12 h-12 border-2 flex items-center justify-center ${isUltimateUpgrade ? 'bg-yellow-900/40' : 'bg-black/80'}`}
-                      style={{ borderColor: opt.color }}
+                      style={{
+                        width: 48,
+                        height: 48,
+                        border: `2px solid ${opt.color}`,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        backgroundColor: isUltimateUpgrade ? 'rgba(113,63,18,0.4)' : 'rgba(0,0,0,0.8)',
+                      }}
                     >
                       <Icon size={24} style={{ color: opt.color }} />
                     </div>
                     {isUltimateUpgrade && (
-                      <Crown className="absolute -top-2 -right-2 text-yellow-400 w-4 h-4" />
+                      <Crown style={{
+                        position: 'absolute',
+                        top: -8,
+                        right: -8,
+                        color: '#facc15',
+                        width: 16,
+                        height: 16,
+                      }} />
                     )}
                     {opt.isNew && (
-                      <div className="absolute -top-1 -left-1 bg-red-500 border border-red-400 text-white text-[8px] px-1 py-0.5">
+                      <div style={{
+                        position: 'absolute',
+                        top: -4,
+                        left: -4,
+                        backgroundColor: '#ef4444',
+                        border: '1px solid #f87171',
+                        color: 'white',
+                        fontSize: 8,
+                        paddingLeft: 4,
+                        paddingRight: 4,
+                        paddingTop: 2,
+                        paddingBottom: 2,
+                      }}>
                         NEW
                       </div>
                     )}
                     {!opt.isGoldReward && (
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 flex items-center gap-0.5 bg-black/90 border border-gray-700 px-1.5 py-0.5 text-[9px]">
-                        <span className="text-gray-500">{opt.currentLevel}</span>
-                        <ArrowRight size={8} className="text-gray-600" />
+                      <div style={{
+                        position: 'absolute',
+                        bottom: -4,
+                        left: '50%',
+                        transform: 'translateX(-50%)',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 2,
+                        backgroundColor: 'rgba(0,0,0,0.9)',
+                        border: '1px solid #374151',
+                        paddingLeft: 6,
+                        paddingRight: 6,
+                        paddingTop: 2,
+                        paddingBottom: 2,
+                        fontSize: 9,
+                      }}>
+                        <span style={{ color: '#6b7280' }}>{opt.currentLevel}</span>
+                        <ArrowRight size={8} style={{ color: '#4b5563' }} />
                         <span style={{ color: isUltimateUpgrade ? '#facc15' : MATRIX_GREEN }}>{opt.nextLevel}</span>
                       </div>
                     )}
                   </div>
 
                   {/* Center: Name + Description + Stats */}
-                  <div className="flex-1 text-left min-w-0">
-                    <div className="flex items-center gap-2 mb-0.5">
-                      <span className="text-base tracking-wide truncate font-bold" style={{ color: opt.color }}>
+                  <div style={{ flex: 1, textAlign: 'left', minWidth: 0 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 2 }}>
+                      <span style={{
+                        fontSize: 16,
+                        letterSpacing: '0.025em',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontWeight: 'bold',
+                        color: opt.color,
+                      }}>
                         {opt.name}
                       </span>
                     </div>
-                    <p className="text-gray-500 text-[10px] leading-snug mb-1 line-clamp-2">
+                    <p style={{
+                      color: '#6b7280',
+                      fontSize: 10,
+                      lineHeight: 1.375,
+                      marginBottom: 4,
+                      margin: 0,
+                      marginTop: 0,
+                      display: '-webkit-box',
+                      WebkitLineClamp: 2,
+                      WebkitBoxOrient: 'vertical',
+                      overflow: 'hidden',
+                    }}>
                       {opt.description}
                     </p>
                     <span
-                      className="text-[10px]"
-                      style={{ color: isUltimateUpgrade ? '#facc15' : MATRIX_GREEN }}
+                      style={{
+                        fontSize: 10,
+                        color: isUltimateUpgrade ? '#facc15' : MATRIX_GREEN,
+                      }}
                     >
                       {opt.statChanges}
                     </span>
                   </div>
 
                   {/* Right: Keyboard hint */}
-                  <div className="shrink-0 w-7 h-7 bg-black/80 border border-gray-600 text-sm text-gray-400 flex items-center justify-center font-bold">
+                  <div style={{
+                    flexShrink: 0,
+                    width: 28,
+                    height: 28,
+                    backgroundColor: 'rgba(0,0,0,0.8)',
+                    border: '1px solid #4b5563',
+                    fontSize: 14,
+                    color: '#9ca3af',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontWeight: 'bold',
+                  }}>
                     {idx + 1}
                   </div>
                 </button>
@@ -527,7 +701,17 @@ function MatrixLevelUpInner({
         </div>
 
         {/* Footer */}
-        <div className="px-4 py-2 text-center text-gray-600 text-[9px] bg-black/80 border-t border-gray-700">
+        <div style={{
+          paddingLeft: 16,
+          paddingRight: 16,
+          paddingTop: 8,
+          paddingBottom: 8,
+          textAlign: 'center',
+          color: '#4b5563',
+          fontSize: 9,
+          backgroundColor: 'rgba(0,0,0,0.8)',
+          borderTop: '1px solid #374151',
+        }}>
           Press 1, 2, 3, 4 for quick select
         </div>
 

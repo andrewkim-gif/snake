@@ -11,6 +11,8 @@
  * - Keyboard shortcuts (Enter = retry, Escape = exit)
  *
  * Matrix green (#00FF41) theme.
+ *
+ * v29b: All Tailwind className converted to inline styles.
  */
 
 import React, { useCallback, useEffect, memo } from 'react';
@@ -127,28 +129,48 @@ function MatrixResultInner({
   const totalCredits = baseCredits + killBonus + timeBonus;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" style={{ fontFamily: 'monospace' }}>
-      <div className="w-full max-w-2xl mx-4 p-6 bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-700">
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      zIndex: 50,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: 'rgba(0,0,0,0.9)',
+      fontFamily: 'monospace',
+    }}>
+      <div style={{
+        width: '100%',
+        maxWidth: 672,
+        marginLeft: 16,
+        marginRight: 16,
+        padding: 24,
+        background: 'linear-gradient(to bottom, #111827, #030712)',
+        border: '1px solid #374151',
+      }}>
 
         {/* Title */}
-        <div className="text-center mb-6">
+        <div style={{ textAlign: 'center', marginBottom: 24 }}>
           {survived ? (
-            <div className="flex flex-col items-center gap-2">
-              <Crown className="w-16 h-16 text-yellow-400 animate-pulse" />
-              <h1 className="text-4xl font-bold" style={{ color: MATRIX_GREEN }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <Crown style={{ width: 64, height: 64, color: '#facc15' }} />
+              <h1 style={{ fontSize: 36, fontWeight: 'bold', color: MATRIX_GREEN, margin: 0 }}>
                 SURVIVED
               </h1>
-              <p className="text-xs text-gray-500 tracking-wider">
+              <p style={{ fontSize: 12, color: '#6b7280', letterSpacing: '0.05em', margin: 0 }}>
                 YOU HAVE ESCAPED THE MATRIX
               </p>
             </div>
           ) : (
-            <div className="flex flex-col items-center gap-2">
-              <Skull className="w-12 h-12 text-red-400" />
-              <h1 className="text-3xl font-bold text-red-400">
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8 }}>
+              <Skull style={{ width: 48, height: 48, color: '#f87171' }} />
+              <h1 style={{ fontSize: 30, fontWeight: 'bold', color: '#f87171', margin: 0 }}>
                 GAME OVER
               </h1>
-              <p className="text-xs text-gray-500 tracking-wider">
+              <p style={{ fontSize: 12, color: '#6b7280', letterSpacing: '0.05em', margin: 0 }}>
                 CONNECTION TERMINATED
               </p>
             </div>
@@ -156,32 +178,37 @@ function MatrixResultInner({
         </div>
 
         {/* My Stats */}
-        <div className="bg-black/40 p-4 mb-6 border" style={{ borderColor: survived ? `${MATRIX_GREEN}50` : 'rgba(239,68,68,0.3)' }}>
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-3">
+        <div style={{
+          backgroundColor: 'rgba(0,0,0,0.4)',
+          padding: 16,
+          marginBottom: 24,
+          border: `1px solid ${survived ? `${MATRIX_GREEN}50` : 'rgba(239,68,68,0.3)'}`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <div>
-                <div className="text-lg font-bold" style={{ color: MATRIX_GREEN }}>
+                <div style={{ fontSize: 18, fontWeight: 'bold', color: MATRIX_GREEN }}>
                   Level {level}
                 </div>
               </div>
             </div>
-            <div className="flex items-center gap-6">
-              <div className="text-center">
-                <div className="text-2xl font-bold text-green-400">{kills}</div>
-                <div className="text-xs text-gray-400 flex items-center gap-1">
-                  <Target className="w-3 h-3" /> Kills
+            <div style={{ display: 'flex', alignItems: 'center', gap: 24 }}>
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#4ade80' }}>{kills}</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Target style={{ width: 12, height: 12 }} /> Kills
                 </div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-cyan-400">{formatTime(survivalTime)}</div>
-                <div className="text-xs text-gray-400 flex items-center gap-1">
-                  <Clock className="w-3 h-3" /> Time
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#22d3ee' }}>{formatTime(survivalTime)}</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Clock style={{ width: 12, height: 12 }} /> Time
                 </div>
               </div>
-              <div className="text-center">
-                <div className="text-2xl font-bold text-yellow-400">{score.toLocaleString()}</div>
-                <div className="text-xs text-gray-400 flex items-center gap-1">
-                  <Star className="w-3 h-3" /> Score
+              <div style={{ textAlign: 'center' }}>
+                <div style={{ fontSize: 24, fontWeight: 'bold', color: '#facc15' }}>{score.toLocaleString()}</div>
+                <div style={{ fontSize: 12, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <Star style={{ width: 12, height: 12 }} /> Score
                 </div>
               </div>
             </div>
@@ -190,17 +217,23 @@ function MatrixResultInner({
 
         {/* Weapons Acquired */}
         {weapons.length > 0 && (
-          <div className="mb-6">
-            <h2 className="text-sm font-bold text-gray-400 mb-2 flex items-center gap-2">
-              <Trophy className="w-4 h-4" /> WEAPONS ACQUIRED
+          <div style={{ marginBottom: 24 }}>
+            <h2 style={{ fontSize: 14, fontWeight: 'bold', color: '#9ca3af', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <Trophy style={{ width: 16, height: 16 }} /> WEAPONS ACQUIRED
             </h2>
-            <div className="bg-black/30 p-3">
-              <div className="flex flex-wrap gap-2">
+            <div style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: 12 }}>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
                 {weapons.map((w, i) => (
                   <span
                     key={`${w}-${i}`}
-                    className="text-[10px] px-2.5 py-1 tracking-wider font-bold"
                     style={{
+                      fontSize: 10,
+                      paddingLeft: 10,
+                      paddingRight: 10,
+                      paddingTop: 4,
+                      paddingBottom: 4,
+                      letterSpacing: '0.05em',
+                      fontWeight: 'bold',
                       color: MATRIX_GREEN,
                       backgroundColor: 'rgba(0, 255, 65, 0.08)',
                       border: '1px solid rgba(0, 255, 65, 0.2)',
@@ -215,37 +248,63 @@ function MatrixResultInner({
         )}
 
         {/* Rewards */}
-        <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 p-4 mb-6 border border-yellow-500/30">
-          <h2 className="text-sm font-bold text-yellow-400 mb-3 flex items-center gap-2">
-            <Star className="w-4 h-4" /> REWARDS
+        <div style={{
+          background: 'linear-gradient(to right, rgba(234,179,8,0.1), rgba(249,115,22,0.1))',
+          padding: 16,
+          marginBottom: 24,
+          border: '1px solid rgba(234,179,8,0.3)',
+        }}>
+          <h2 style={{ fontSize: 14, fontWeight: 'bold', color: '#facc15', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Star style={{ width: 16, height: 16 }} /> REWARDS
           </h2>
-          <div className="grid grid-cols-3 gap-4 text-center">
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: 'repeat(3, 1fr)',
+            gap: 16,
+            textAlign: 'center',
+          }}>
             <div>
-              <div className="text-xs text-gray-400 mb-1">Base Score</div>
-              <div className="text-lg font-bold text-cyan-400">+{baseCredits}</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Base Score</div>
+              <div style={{ fontSize: 18, fontWeight: 'bold', color: '#22d3ee' }}>+{baseCredits}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-400 mb-1">Kill Bonus</div>
-              <div className="text-lg font-bold text-green-400">+{killBonus}</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Kill Bonus</div>
+              <div style={{ fontSize: 18, fontWeight: 'bold', color: '#4ade80' }}>+{killBonus}</div>
             </div>
             <div>
-              <div className="text-xs text-gray-400 mb-1">Time Bonus</div>
-              <div className="text-lg font-bold text-purple-400">+{timeBonus}</div>
+              <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Time Bonus</div>
+              <div style={{ fontSize: 18, fontWeight: 'bold', color: '#a855f7' }}>+{timeBonus}</div>
             </div>
           </div>
-          <div className="mt-4 pt-3 border-t border-yellow-500/20 flex items-center justify-center gap-2">
-            <Coins className="w-5 h-5 text-yellow-400" />
-            <span className="text-2xl font-bold text-yellow-400">+{totalCredits}</span>
-            <span className="text-sm text-gray-400">Credits</span>
+          <div style={{
+            marginTop: 16,
+            paddingTop: 12,
+            borderTop: '1px solid rgba(234,179,8,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 8,
+          }}>
+            <Coins style={{ width: 20, height: 20, color: '#facc15' }} />
+            <span style={{ fontSize: 24, fontWeight: 'bold', color: '#facc15' }}>+{totalCredits}</span>
+            <span style={{ fontSize: 14, color: '#9ca3af' }}>Credits</span>
           </div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-4">
+        <div style={{ display: 'flex', gap: 16 }}>
           <button
             onClick={onExitToLobby}
-            className="flex-1 py-3 px-6 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] pointer-events-auto cursor-pointer"
             style={{
+              flex: 1,
+              paddingTop: 12,
+              paddingBottom: 12,
+              paddingLeft: 24,
+              paddingRight: 24,
+              fontWeight: 'bold',
+              transition: 'all 0.2s',
+              pointerEvents: 'auto',
+              cursor: 'pointer',
               color: '#999',
               backgroundColor: 'transparent',
               border: '1px solid rgba(255,255,255,0.15)',
@@ -255,20 +314,32 @@ function MatrixResultInner({
           </button>
           <button
             onClick={onRetry}
-            className="flex-1 py-3 px-6 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] pointer-events-auto cursor-pointer flex items-center justify-center gap-2"
             style={{
+              flex: 1,
+              paddingTop: 12,
+              paddingBottom: 12,
+              paddingLeft: 24,
+              paddingRight: 24,
+              fontWeight: 'bold',
+              transition: 'all 0.2s',
+              pointerEvents: 'auto',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: 8,
               color: '#000',
               backgroundColor: MATRIX_GREEN,
               border: `1px solid ${MATRIX_GREEN}`,
             }}
           >
             RETRY
-            <ArrowRight className="w-5 h-5" />
+            <ArrowRight style={{ width: 20, height: 20 }} />
           </button>
         </div>
 
         {/* Keyboard hints */}
-        <p className="text-[10px] text-gray-600 tracking-wider text-center mt-3">
+        <p style={{ fontSize: 10, color: '#4b5563', letterSpacing: '0.05em', textAlign: 'center', marginTop: 12 }}>
           ENTER to retry | ESC to exit
         </p>
       </div>

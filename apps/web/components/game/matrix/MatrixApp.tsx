@@ -77,6 +77,10 @@ export interface MatrixAppProps {
   onExitToLobby: () => void;
   /** 초기 캐릭터 (기본값: 'neo') */
   initialClass?: PlayerClass;
+  /** v29b Phase 2: 진입 국가 ISO3 코드 (예: 'KOR', 'USA') */
+  countryIso3?: string;
+  /** v29b Phase 2: 진입 국가 이름 (예: 'South Korea', 'United States') */
+  countryName?: string;
 }
 
 // ============================================
@@ -106,7 +110,7 @@ const DEFAULT_CHARACTER_BONUS = {
 // 컴포넌트
 // ============================================
 
-export function MatrixApp({ onExitToLobby, initialClass = 'neo' }: MatrixAppProps) {
+export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, countryName }: MatrixAppProps) {
   // ─────────────────────────────────────────
   // 게임 훅 호출
   // ─────────────────────────────────────────
@@ -428,7 +432,14 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo' }: MatrixAppProp
   // ─────────────────────────────────────────
 
   return (
-    <div className="relative w-full h-[100dvh] overflow-hidden bg-black select-none">
+    <div style={{
+      position: 'relative',
+      width: '100%',
+      height: '100dvh',
+      overflow: 'hidden',
+      backgroundColor: 'black',
+      userSelect: 'none',
+    }}>
 
       {/* ─── MatrixCanvas: 68개 props 바인딩 ─── */}
       <MatrixCanvas

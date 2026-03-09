@@ -11,6 +11,8 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 interface MatrixIntroProps {
   onComplete: () => void;
   duration?: number; // ms (기본 2500)
+  /** v29b Phase 2: 진입 국가 이름 (표시용) */
+  countryName?: string;
 }
 
 // Matrix rain 문자셋 (카타카나 + 숫자 + 기호)
@@ -25,12 +27,14 @@ interface RainColumn {
   opacity: number;
 }
 
-export function MatrixIntro({ onComplete, duration = 2500 }: MatrixIntroProps) {
+export function MatrixIntro({ onComplete, duration = 2500, countryName }: MatrixIntroProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
   const startTimeRef = useRef(0);
   const columnsRef = useRef<RainColumn[]>([]);
-  const [glitchText, setGlitchText] = useState('THE MATRIX');
+  // v29b Phase 2: 국가명이 있으면 "BATTLE FOR [국가명]", 없으면 "THE MATRIX"
+  const displayTitle = countryName ? `BATTLE FOR ${countryName.toUpperCase()}` : 'THE MATRIX';
+  const [glitchText, setGlitchText] = useState(displayTitle);
   const completedRef = useRef(false);
 
   // 글리치 문자 생성
@@ -40,7 +44,7 @@ export function MatrixIntro({ onComplete, duration = 2500 }: MatrixIntroProps) {
 
   // 글리치 효과 (텍스트 일부를 랜덤 문자로 치환)
   useEffect(() => {
-    const original = 'THE MATRIX';
+    const original = displayTitle;
     const interval = setInterval(() => {
       const now = Date.now() - startTimeRef.current;
       // 처음 1.5초: 강한 글리치, 이후: 안정화
@@ -249,7 +253,7 @@ export function MatrixIntro({ onComplete, duration = 2500 }: MatrixIntroProps) {
           letterSpacing: '0.3em',
           textTransform: 'uppercase',
         }}>
-          survival protocol initiated
+          {countryName ? 'deploying combat agents' : 'survival protocol initiated'}
         </p>
 
         {/* 스킵 안내 */}

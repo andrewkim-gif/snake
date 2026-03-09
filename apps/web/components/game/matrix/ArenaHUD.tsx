@@ -11,6 +11,8 @@
  * - Agent HP bar when damaged
  *
  * Matrix green (#00FF41) theme applied.
+ *
+ * v29b: All Tailwind className converted to inline styles.
  */
 
 import React, { memo, useMemo } from 'react';
@@ -115,20 +117,38 @@ function ArenaHUDInner({
   }, [sortedAll, leaderboard.length]);
 
   return (
-    <div className="absolute inset-x-0 top-0 pointer-events-none" style={{ fontFamily: 'monospace', zIndex: 20 }}>
+    <div style={{
+      position: 'absolute',
+      left: 0,
+      right: 0,
+      top: 0,
+      pointerEvents: 'none',
+      fontFamily: 'monospace',
+      zIndex: 20,
+    }}>
 
       {/* Top Center: Timer + Phase */}
-      <div className="flex justify-center pt-4">
-        <div className="flex flex-col items-center gap-1">
+      <div style={{ display: 'flex', justifyContent: 'center', paddingTop: 16 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
           {/* Timer */}
-          <div className={`flex items-center gap-2 px-4 py-2 bg-black/60 border ${
-            isLowTime ? 'border-red-500 animate-pulse' : 'border-green-500/50'
-          }`}>
-            <Timer className={`w-5 h-5 ${isLowTime ? 'text-red-400' : 'text-green-400'}`} />
-            <span className={`text-2xl font-bold tabular-nums ${
-              isLowTime ? 'text-red-400' : 'text-green-400'
-            }`}
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            paddingLeft: 16,
+            paddingRight: 16,
+            paddingTop: 8,
+            paddingBottom: 8,
+            backgroundColor: 'rgba(0,0,0,0.6)',
+            border: `1px solid ${isLowTime ? '#ef4444' : 'rgba(34,197,94,0.5)'}`,
+          }}>
+            <Timer style={{ width: 20, height: 20, color: isLowTime ? '#f87171' : '#4ade80' }} />
+            <span
               style={{
+                fontSize: 24,
+                fontWeight: 'bold',
+                fontVariantNumeric: 'tabular-nums',
+                color: isLowTime ? '#f87171' : '#4ade80',
                 textShadow: isLowTime
                   ? '0 0 10px rgba(255, 0, 0, 0.5)'
                   : '0 0 10px rgba(0, 255, 65, 0.3)',
@@ -137,26 +157,42 @@ function ArenaHUDInner({
               {timeStr}
             </span>
             {/* Alive count */}
-            <div className="flex items-center gap-1.5 ml-2 pl-2 border-l border-gray-600">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: MATRIX_GREEN }} />
-              <span className="text-sm font-bold" style={{ color: MATRIX_GREEN }}>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginLeft: 8,
+              paddingLeft: 8,
+              borderLeft: '1px solid #4b5563',
+            }}>
+              <div style={{ width: 8, height: 8, borderRadius: 9999, backgroundColor: MATRIX_GREEN }} />
+              <span style={{ fontSize: 14, fontWeight: 'bold', color: MATRIX_GREEN }}>
                 {aliveCount}/{totalCount}
               </span>
             </div>
           </div>
 
           {/* Safe Zone Status */}
-          <div className={`flex items-center gap-2 px-3 py-1 text-xs ${
-            isShrinking
-              ? 'bg-red-500/80 text-white animate-pulse'
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            paddingLeft: 12,
+            paddingRight: 12,
+            paddingTop: 4,
+            paddingBottom: 4,
+            fontSize: 12,
+            ...(isShrinking
+              ? { backgroundColor: 'rgba(239,68,68,0.8)', color: 'white' }
               : isWarning
-                ? 'bg-orange-500/80 text-white'
-                : 'bg-green-500/50 text-green-100'
-          }`}>
+                ? { backgroundColor: 'rgba(249,115,22,0.8)', color: 'white' }
+                : { backgroundColor: 'rgba(34,197,94,0.5)', color: '#dcfce7' }
+            ),
+          }}>
             {isShrinking ? (
-              <AlertTriangle className="w-3 h-3" />
+              <AlertTriangle style={{ width: 12, height: 12 }} />
             ) : (
-              <Shield className="w-3 h-3" />
+              <Shield style={{ width: 12, height: 12 }} />
             )}
             <span>{getSafeZoneStatus(isShrinking, isWarning, currentPhase)}</span>
           </div>
@@ -164,64 +200,101 @@ function ArenaHUDInner({
       </div>
 
       {/* Top Left: Kill/Death Stats */}
-      <div className="absolute top-4 left-4">
-        <div className="flex flex-col gap-2 bg-black/60 p-3 border border-gray-600/50">
-          <div className="flex items-center gap-2">
-            <Skull className="w-4 h-4 text-red-400" />
-            <span className="text-white">
-              <span className="text-green-400 font-bold">{playerKills}</span>
-              <span className="text-gray-400"> / </span>
-              <span className="text-red-400">{playerDeaths}</span>
+      <div style={{ position: 'absolute', top: 16, left: 16 }}>
+        <div style={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 8,
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          padding: 12,
+          border: '1px solid rgba(75,85,99,0.5)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Skull style={{ width: 16, height: 16, color: '#f87171' }} />
+            <span style={{ color: 'white' }}>
+              <span style={{ color: '#4ade80', fontWeight: 'bold' }}>{playerKills}</span>
+              <span style={{ color: '#9ca3af' }}> / </span>
+              <span style={{ color: '#f87171' }}>{playerDeaths}</span>
             </span>
           </div>
-          <div className="flex items-center gap-2 text-xs text-gray-400">
-            <Trophy className="w-3 h-3 text-yellow-400" />
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, color: '#9ca3af' }}>
+            <Trophy style={{ width: 12, height: 12, color: '#facc15' }} />
             <span>Rank #{myRank}</span>
           </div>
         </div>
       </div>
 
       {/* Top Right: Mini Leaderboard */}
-      <div className="absolute top-4 right-4">
-        <div className="bg-black/60 p-3 border border-gray-600/50 min-w-[160px]">
-          <div className="flex items-center gap-2 mb-2 text-xs text-gray-400">
-            <Trophy className="w-3 h-3" />
+      <div style={{ position: 'absolute', top: 16, right: 16 }}>
+        <div style={{
+          backgroundColor: 'rgba(0,0,0,0.6)',
+          padding: 12,
+          border: '1px solid rgba(75,85,99,0.5)',
+          minWidth: 160,
+        }}>
+          <div style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+            fontSize: 12,
+            color: '#9ca3af',
+          }}>
+            <Trophy style={{ width: 12, height: 12 }} />
             <span>LEADERBOARD</span>
           </div>
-          <div className="flex flex-col gap-1">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             {top5.map((entry, index) => (
               <div
                 key={entry.agentId}
-                className={`flex items-center justify-between text-xs ${
-                  entry.isPlayer ? 'text-green-400 font-bold' : 'text-gray-300'
-                }`}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  fontSize: 12,
+                  color: entry.isPlayer ? '#4ade80' : '#d1d5db',
+                  fontWeight: entry.isPlayer ? 'bold' : 'normal',
+                }}
               >
-                <div className="flex items-center gap-1.5">
-                  <span className={`w-4 ${
-                    index === 0 ? 'text-yellow-400' :
-                    index === 1 ? 'text-gray-300' :
-                    index === 2 ? 'text-orange-400' :
-                    'text-gray-500'
-                  }`}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <span style={{
+                    width: 16,
+                    color: index === 0 ? '#facc15'
+                      : index === 1 ? '#d1d5db'
+                      : index === 2 ? '#fb923c'
+                      : '#6b7280',
+                  }}>
                     {index + 1}.
                   </span>
                   {/* Color dot */}
                   <div
-                    className="w-1.5 h-1.5 rounded-full flex-shrink-0"
                     style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 9999,
+                      flexShrink: 0,
                       backgroundColor: entry.color,
                       opacity: entry.isAlive ? 1 : 0.3,
                     }}
                   />
-                  <span className="truncate max-w-[70px]" style={{
+                  <span style={{
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
+                    maxWidth: 70,
                     textDecoration: entry.isAlive ? 'none' : 'line-through',
                   }}>
                     {entry.isPlayer ? 'YOU' : entry.displayName}
                   </span>
                 </div>
-                <div className="flex items-center gap-2">
-                  <span className="text-green-400">{entry.kills}K</span>
-                  <span className="tabular-nums w-8 text-right" style={{ color: 'rgba(0,255,65,0.7)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ color: '#4ade80' }}>{entry.kills}K</span>
+                  <span style={{
+                    fontVariantNumeric: 'tabular-nums',
+                    width: 32,
+                    textAlign: 'right',
+                    color: 'rgba(0,255,65,0.7)',
+                  }}>
                     {entry.score > 999 ? `${(entry.score / 1000).toFixed(1)}k` : entry.score}
                   </span>
                 </div>
@@ -233,18 +306,29 @@ function ArenaHUDInner({
 
       {/* Zone DPS warning (when outside) */}
       {playerOutsideZone && (
-        <div className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 animate-pulse pointer-events-none">
+        <div style={{
+          position: 'fixed',
+          bottom: 96,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 50,
+          pointerEvents: 'none',
+        }}>
           <div
-            className="px-6 py-3 text-center"
             style={{
+              paddingLeft: 24,
+              paddingRight: 24,
+              paddingTop: 12,
+              paddingBottom: 12,
+              textAlign: 'center',
               backgroundColor: 'rgba(255, 0, 0, 0.2)',
               border: '2px solid rgba(255, 0, 0, 0.6)',
             }}
           >
-            <div className="text-lg font-bold" style={{ color: '#ff4444' }}>
+            <div style={{ fontSize: 18, fontWeight: 'bold', color: '#ff4444' }}>
               OUTSIDE SAFE ZONE
             </div>
-            <div className="text-sm" style={{ color: 'rgba(255, 100, 100, 0.8)' }}>
+            <div style={{ fontSize: 14, color: 'rgba(255, 100, 100, 0.8)' }}>
               -{zoneDps.toFixed(0)} HP/s
             </div>
           </div>

@@ -2,12 +2,16 @@
   "pipeline": "da:work",
   "execution_mode": "plan",
   "pipeline_mode": "turbo",
-  "plan_file": "docs/designs/v29-matrix-faithful-port-plan.md",
+  "plan_file": "docs/designs/v29b-hud-and-country-entry-plan.md",
   "project_type": "GAME",
-  "current_stage": 5,
-  "current_phase": 6,
-  "total_phases": 6,
-  "phases_status": {"1": "done", "2": "done", "3": "done", "4": "done", "5": "done", "6": "done"},
-  "last_skill": "all_done",
-  "last_update": "2026-03-09T15:30:00Z"
+  "current_stage": 3,
+  "current_phase": 2,
+  "total_phases": 2,
+  "phases": [
+    {"name": "Phase 1: HUD inline style 변환", "design_needed": false, "status": "done", "tasks": ["MatrixHUD 변환", "ArenaHUD 변환", "MatrixLevelUp 변환", "MatrixResult 변환", "MatrixApp 변환", "MatrixPause 변환"]},
+    {"name": "Phase 2: 국가 선택 → Matrix 진입 연결", "design_needed": false, "status": "pending", "tasks": ["page.tsx 상태 추가", "handleManageCountry 수정", "MatrixApp props 확장", "page.tsx MatrixApp 연결", "MatrixIntro 국가 표시", "디버그 버튼 제거", "IsoCanvas 경로 보존"]}
+  ],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
+  "last_skill": "phase1_done",
+  "last_update": "2026-03-10T12:00:00Z"
 }

@@ -21,6 +21,12 @@ import { NationalitySelector, loadNationality, saveNationality } from '@/compone
 import { Tutorial } from '@/components/game/Tutorial';
 import { NewsFeed, type NewsEventType } from '@/components/lobby/NewsFeed';
 import { GameSystemPopup } from '@/components/hub/GameSystemPopup';
+import { EconomyPopup } from '@/components/hub/EconomyPopup';
+import { FactionPopup } from '@/components/hub/FactionPopup';
+import { GovernancePopup } from '@/components/hub/GovernancePopup';
+import { HallOfFamePopup } from '@/components/hub/HallOfFamePopup';
+import { SettingsPopup } from '@/components/hub/SettingsPopup';
+import { usePopup } from '@/hooks/usePopup';
 import { IntroSequence } from '@/components/lobby/IntroSequence';
 import { BgmPlayer } from '@/components/lobby/BgmPlayer';
 import type { IntroPhase } from '@/components/lobby/IntroSequence';
@@ -29,7 +35,7 @@ import type { GameMode } from '@/providers/SocketProvider';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { OVERLAY, KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 import type { MainTabKey } from '@/components/hub/PopupTabNav';
-import { ChevronRight, Minus, Settings, Globe } from 'lucide-react';
+import { ChevronRight, Minus, Settings, Globe, TrendingUp, Swords, Landmark, Trophy } from 'lucide-react';
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 import type { TradeRouteData } from '@/hooks/useSocket';
 
@@ -65,6 +71,8 @@ export default function Home() {
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso' | 'matrix'>('lobby');
   // v26: 아이소메트릭 국가 관리 대상 (Phase 8: spectating 플래그 추가)
   const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string; spectating?: boolean } | null>(null);
+  // v29b Phase 2: Matrix 진입 시 국가 정보
+  const [matrixCountry, setMatrixCountry] = useState<{ iso3: string; name: string } | null>(null);
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
   const [appearance, setAppearance] = useState<CubelingAppearance>(createDefaultAppearance);
@@ -110,13 +118,21 @@ export default function Home() {
     setIntroPhase(phase);
   }, []);
 
-  // 게임 시스템 팝업 상태
+  // v31: 새 팝업 시스템 (usePopup 훅)
+  const { activePopup, activeSection: popupSection, openPopup, closePopup, setSection: setPopupSection } = usePopup();
+
+  // 레거시 게임 시스템 팝업 상태 (Phase 4에서 제거 예정)
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelTab, setPanelTab] = useState<MainTabKey>('economy');
   const [panelSubTab, setPanelSubTab] = useState<string | undefined>();
 
-  // URL ?panel= 파라미터로 자동 오픈
+  // URL ?panel= 파라미터로 자동 오픈 (레거시 — 새 팝업이 활성화되지 않았을 때만)
   useEffect(() => {
+    // 새 팝업 시스템이 활성화되어 있으면 레거시 팝업 비활성화
+    if (activePopup) {
+      setPanelOpen(false);
+      return;
+    }
     const panel = searchParams.get('panel');
     if (panel) {
       setPanelTab(panel as MainTabKey);
@@ -124,7 +140,7 @@ export default function Home() {
       setPanelSubTab(sub);
       setPanelOpen(true);
     }
-  }, [searchParams]);
+  }, [searchParams, activePopup]);
 
   const handleOpenPanel = useCallback((tab?: MainTabKey) => {
     if (tab) setPanelTab(tab);
@@ -299,9 +315,14 @@ export default function Home() {
   // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
-  // v26: Globe → Isometric 전환 (Manage Country)
-  // Phase 8: 자기 국적 국가 = 관리 모드, 다른 나라 = 관전 모드
+  // v29b Phase 2: Globe → Matrix 진입 (국가 선택 → MatrixIntro → MatrixApp)
   const handleManageCountry = useCallback((iso3: string, name: string) => {
+    setMatrixCountry({ iso3, name });
+    setShowMatrixIntro(true);
+  }, []);
+
+  // v26: Globe → Isometric 전환 (Manage City — CountryPanel 전용)
+  const handleManageCity = useCallback((iso3: string, name: string) => {
     const isOwnCountry = nationality === iso3;
     setIsoCountry({ iso3, name, spectating: !isOwnCountry });
     setFadeOut(true);
@@ -395,6 +416,7 @@ export default function Home() {
   if (showMatrixIntro) {
     return (
       <MatrixIntro
+        countryName={matrixCountry?.name}
         onComplete={() => {
           setShowMatrixIntro(false);
           setMode('matrix');
@@ -413,9 +435,15 @@ export default function Home() {
         transition: 'opacity 300ms ease',
       }}>
         <MatrixApp
+          countryIso3={matrixCountry?.iso3}
+          countryName={matrixCountry?.name}
           onExitToLobby={() => {
             setFadeOut(true);
-            setTimeout(() => { setMode('lobby'); setFadeOut(false); }, 300);
+            setTimeout(() => {
+              setMode('lobby');
+              setMatrixCountry(null);
+              setFadeOut(false);
+            }, 300);
           }}
         />
       </div>
@@ -486,6 +514,7 @@ export default function Home() {
         onEnterArena={handleQuickEnterArena}
         onSpectate={handleSpectate}
         onManageCountry={handleManageCountry}
+        onManageCity={handleManageCity}
         bottomOffset={NEWS_FEED_HEIGHT}
         dominationStates={uiState.dominationStates}
         wars={activeWars}
@@ -501,7 +530,7 @@ export default function Home() {
         nukes={[]}
       />
 
-      {/* 온라인 상태 — 우상단 잔존 */}
+      {/* 우상단: ONLINE 인디케이터 + 명예의전당 + 설정 버튼 */}
       <div style={{
         position: 'absolute',
         top: 12,
@@ -509,30 +538,129 @@ export default function Home() {
         zIndex: 70,
         display: 'flex',
         alignItems: 'center',
-        gap: '6px',
-        pointerEvents: 'none',
+        gap: '8px',
         opacity: showHeader ? 1 : 0,
         transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
+        {/* ONLINE 인디케이터 */}
         <div style={{
-          width: '6px',
-          height: '6px',
-          borderRadius: '50%',
-          backgroundColor: uiState.connected ? SK.statusOnline : SK.statusOffline,
-          boxShadow: uiState.connected
-            ? `0 0 8px ${SK.green}80`
-            : `0 0 8px ${SK.red}60`,
-        }} />
-        <span style={{
-          fontFamily: bodyFont,
-          fontWeight: 600,
-          fontSize: '9px',
-          color: uiState.connected ? SK.green : SK.red,
-          letterSpacing: '1px',
-          textTransform: 'uppercase',
+          display: 'flex',
+          alignItems: 'center',
+          gap: '6px',
+          pointerEvents: 'none',
         }}>
-          {uiState.connected ? tLobby('online') : tLobby('offline')}
-        </span>
+          <div style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            backgroundColor: uiState.connected ? SK.statusOnline : SK.statusOffline,
+            boxShadow: uiState.connected
+              ? `0 0 8px ${SK.green}80`
+              : `0 0 8px ${SK.red}60`,
+          }} />
+          <span style={{
+            fontFamily: bodyFont,
+            fontWeight: 600,
+            fontSize: '9px',
+            color: uiState.connected ? SK.green : SK.red,
+            letterSpacing: '1px',
+            textTransform: 'uppercase',
+          }}>
+            {uiState.connected ? tLobby('online') : tLobby('offline')}
+          </span>
+        </div>
+
+        {/* v31 Phase 3: 명예의전당 버튼 */}
+        <button
+          onClick={() => openPopup('hallOfFame')}
+          title="HALL OF FAME"
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            border: activePopup === 'hallOfFame'
+              ? `2px solid ${SK.gold}`
+              : '1px solid rgba(255, 255, 255, 0.1)',
+            background: activePopup === 'hallOfFame'
+              ? `${SK.gold}20`
+              : 'rgba(9, 9, 11, 0.6)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 200ms ease',
+            pointerEvents: 'auto',
+            boxShadow: activePopup === 'hallOfFame'
+              ? `0 0 12px ${SK.gold}40`
+              : 'none',
+          }}
+          onMouseEnter={(e) => {
+            if (activePopup !== 'hallOfFame') {
+              e.currentTarget.style.borderColor = SK.gold;
+              e.currentTarget.style.background = `${SK.gold}15`;
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activePopup !== 'hallOfFame') {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.background = 'rgba(9, 9, 11, 0.6)';
+            }
+          }}
+        >
+          <Trophy
+            size={16}
+            strokeWidth={2}
+            color={activePopup === 'hallOfFame' ? SK.gold : SK.textSecondary}
+          />
+        </button>
+
+        {/* v31 Phase 3: 설정 버튼 */}
+        <button
+          onClick={() => openPopup('settings', 'profile')}
+          title="SETTINGS"
+          style={{
+            width: '36px',
+            height: '36px',
+            borderRadius: '50%',
+            border: activePopup === 'settings'
+              ? `2px solid ${SK.textSecondary}`
+              : '1px solid rgba(255, 255, 255, 0.1)',
+            background: activePopup === 'settings'
+              ? 'rgba(139, 141, 152, 0.2)'
+              : 'rgba(9, 9, 11, 0.6)',
+            backdropFilter: 'blur(8px)',
+            WebkitBackdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            transition: 'all 200ms ease',
+            pointerEvents: 'auto',
+            boxShadow: activePopup === 'settings'
+              ? `0 0 12px rgba(139, 141, 152, 0.3)`
+              : 'none',
+          }}
+          onMouseEnter={(e) => {
+            if (activePopup !== 'settings') {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+            }
+          }}
+          onMouseLeave={(e) => {
+            if (activePopup !== 'settings') {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+              e.currentTarget.style.background = 'rgba(9, 9, 11, 0.6)';
+            }
+          }}
+        >
+          <Settings
+            size={16}
+            strokeWidth={2}
+            color={activePopup === 'settings' ? SK.textPrimary : SK.textSecondary}
+          />
+        </button>
       </div>
 
       {/* v14 S36: 에포크 상태 요약 (로비 복귀 시) */}
@@ -652,9 +780,9 @@ export default function Home() {
             {tLobby('agentSetup')}
           </button>
 
-          {/* GAME SYSTEM 버튼 — 메인 컬러 통일 */}
+          {/* v31: ECONOMY 버튼 — 메인 레드 */}
           <button
-            onClick={() => handleOpenPanel()}
+            onClick={() => openPopup('economy', 'tokens')}
             style={{
               position: 'relative',
               fontFamily: bodyFont,
@@ -666,7 +794,7 @@ export default function Home() {
               padding: '10px 20px',
               border: 'none',
               borderRadius: 0,
-              backgroundColor: SK.accent,
+              backgroundColor: activePopup === 'economy' ? SK.accent : `rgba(239, 68, 68, 0.7)`,
               cursor: 'pointer',
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
@@ -674,29 +802,31 @@ export default function Home() {
               gap: '8px',
               pointerEvents: 'auto',
               clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
-              boxShadow: '0 0 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
+              boxShadow: activePopup === 'economy'
+                ? '0 0 24px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
+                : '0 0 16px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
+              borderLeft: `3px solid ${SK.accent}`,
             }}
           >
-            <Globe size={14} color="#FFFFFF" strokeWidth={2.5} />
-            <span>GAME SYSTEM</span>
-            <ChevronRight size={14} strokeWidth={2.5} color="#FFFFFF" />
+            <TrendingUp size={14} color="#FFFFFF" strokeWidth={2.5} />
+            ECONOMY
           </button>
 
-          {/* v28: Enter Matrix 디버그 버튼 */}
+          {/* v31: FACTIONS 버튼 — 메인 레드 */}
           <button
-            onClick={() => setShowMatrixIntro(true)}
+            onClick={() => openPopup('factions', 'overview')}
             style={{
               position: 'relative',
               fontFamily: bodyFont,
               fontWeight: 700,
               fontSize: '13px',
-              color: '#00FF41',
+              color: '#FFFFFF',
               letterSpacing: '1px',
               textTransform: 'uppercase',
               padding: '10px 20px',
-              border: '1px solid rgba(0, 255, 65, 0.4)',
+              border: 'none',
               borderRadius: 0,
-              backgroundColor: 'rgba(0, 255, 65, 0.1)',
+              backgroundColor: activePopup === 'factions' ? SK.accent : `rgba(239, 68, 68, 0.7)`,
               cursor: 'pointer',
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
@@ -704,11 +834,46 @@ export default function Home() {
               gap: '8px',
               pointerEvents: 'auto',
               clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
-              boxShadow: '0 0 20px rgba(0, 255, 65, 0.15), inset 0 1px 0 rgba(0, 255, 65, 0.15)',
+              boxShadow: activePopup === 'factions'
+                ? '0 0 24px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
+                : '0 0 16px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
+              borderLeft: `3px solid ${SK.accent}`,
             }}
           >
-            <span style={{ fontSize: '16px' }}>&#9654;</span>
-            ENTER MATRIX
+            <Swords size={14} color="#FFFFFF" strokeWidth={2.5} />
+            FACTIONS
+          </button>
+
+          {/* v31: GOVERNANCE 버튼 — 메인 레드 */}
+          <button
+            onClick={() => openPopup('governance', 'proposals')}
+            style={{
+              position: 'relative',
+              fontFamily: bodyFont,
+              fontWeight: 700,
+              fontSize: '13px',
+              color: '#FFFFFF',
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: 0,
+              backgroundColor: activePopup === 'governance' ? SK.accent : `rgba(239, 68, 68, 0.7)`,
+              cursor: 'pointer',
+              transition: `all ${OVERLAY.transition}`,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              pointerEvents: 'auto',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              boxShadow: activePopup === 'governance'
+                ? '0 0 24px rgba(239, 68, 68, 0.5), inset 0 1px 0 rgba(255,255,255,0.2)'
+                : '0 0 16px rgba(239, 68, 68, 0.2), inset 0 1px 0 rgba(255,255,255,0.1)',
+              borderLeft: `3px solid ${SK.accent}`,
+            }}
+          >
+            <Landmark size={14} color="#FFFFFF" strokeWidth={2.5} />
+            GOVERNANCE
           </button>
 
           {/* 언어 설정 */}
@@ -871,9 +1036,43 @@ export default function Home() {
         />
       </div>
 
-      {/* 게임 시스템 팝업 — 글로브 위 오버레이 */}
+      {/* v31: 독립 팝업 시스템 (Phase 2) */}
+      <EconomyPopup
+        isOpen={activePopup === 'economy'}
+        onClose={closePopup}
+        activeSection={activePopup === 'economy' ? popupSection : null}
+        onSectionChange={setPopupSection}
+      />
+      <FactionPopup
+        isOpen={activePopup === 'factions'}
+        onClose={closePopup}
+        activeSection={activePopup === 'factions' ? popupSection : null}
+        onSectionChange={setPopupSection}
+      />
+      <GovernancePopup
+        isOpen={activePopup === 'governance'}
+        onClose={closePopup}
+        activeSection={activePopup === 'governance' ? popupSection : null}
+        onSectionChange={setPopupSection}
+      />
+
+      {/* v31 Phase 3: 명예의전당 팝업 */}
+      <HallOfFamePopup
+        isOpen={activePopup === 'hallOfFame'}
+        onClose={closePopup}
+      />
+
+      {/* v31 Phase 3: 설정 통합 팝업 (profile/dashboard/settings 탭) */}
+      <SettingsPopup
+        isOpen={activePopup === 'settings'}
+        onClose={closePopup}
+        activeTab={activePopup === 'settings' ? popupSection : null}
+        onTabChange={setPopupSection}
+      />
+
+      {/* 레거시 게임 시스템 팝업 — 새 팝업 시스템이 비활성일 때만 표시 (Phase 4에서 제거 예정) */}
       <GameSystemPopup
-        open={panelOpen}
+        open={panelOpen && !activePopup}
         onClose={handleClosePanel}
         initialTab={panelTab}
         initialSubTab={panelSubTab}

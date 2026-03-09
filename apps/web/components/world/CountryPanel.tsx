@@ -48,8 +48,10 @@ interface CountryPanelProps {
   onClose: () => void;
   onEnterArena?: (iso3: string) => void;
   onSpectate?: (iso3: string) => void;
-  /** v26: Globe → Isometric 도시 관리 전환 */
+  /** v29b: Globe → Matrix 게임 진입 */
   onManageCountry?: (iso3: string) => void;
+  /** v29b: Globe → Isometric 도시 관리 전환 (별도 경로 보존) */
+  onManageCity?: (iso3: string) => void;
 }
 
 // ─── API Data Helpers ────────────────────────────────────
@@ -770,6 +772,7 @@ export function CountryPanel({
   onEnterArena,
   onSpectate,
   onManageCountry,
+  onManageCity,
 }: CountryPanelProps) {
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<CountryTab>('OVERVIEW');
@@ -960,7 +963,11 @@ export function CountryPanel({
     <div style={{
       padding: '14px 20px 20px',
       borderTop: `1px solid rgba(239, 68, 68, 0.15)`,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '8px',
     }}>
+      {/* v29b: Matrix 게임 진입 버튼 (메인) */}
       <McButton
         variant="green"
         onClick={() => country?.iso3 && onManageCountry?.(country.iso3)}
@@ -978,6 +985,45 @@ export function CountryPanel({
       >
         <Building2 size={16} strokeWidth={2} /> ENTER {country?.name?.toUpperCase() || 'COUNTRY'}
       </McButton>
+
+      {/* v29b: Iso 도시 관리 버튼 (보조 — 경로 보존) */}
+      {onManageCity && (
+        <button
+          onClick={() => country?.iso3 && onManageCity(country.iso3)}
+          disabled={!country}
+          style={{
+            width: '100%',
+            padding: '10px 16px',
+            border: `1px solid ${SK.textMuted}40`,
+            borderRadius: 0,
+            background: 'rgba(255, 255, 255, 0.03)',
+            color: SK.textSecondary,
+            fontFamily: bodyFont,
+            fontSize: SKFont.xs,
+            fontWeight: 600,
+            letterSpacing: '1.5px',
+            cursor: 'pointer',
+            transition: 'all 150ms ease',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '6px',
+            textTransform: 'uppercase' as const,
+          }}
+          onMouseEnter={(e) => {
+            e.currentTarget.style.borderColor = `${SK.textSecondary}60`;
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+            e.currentTarget.style.color = SK.textPrimary;
+          }}
+          onMouseLeave={(e) => {
+            e.currentTarget.style.borderColor = `${SK.textMuted}40`;
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+            e.currentTarget.style.color = SK.textSecondary;
+          }}
+        >
+          <Building2 size={13} strokeWidth={2} /> MANAGE CITY
+        </button>
+      )}
     </div>
   );
 
