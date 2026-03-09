@@ -283,6 +283,40 @@ export function getCloudTexture(index: number): Texture | null {
 }
 
 /**
+ * Water Ripple 프레임 텍스처 배열 반환 (AnimatedSprite용)
+ * @param rippleIndex 리플 시리즈 (1~13)
+ * @returns 16개 Texture 배열 또는 null
+ */
+export function getWaterRippleFrames(rippleIndex: number): Texture[] | null {
+  if (_fallbackMode) return null;
+  const frames: Texture[] = [];
+  for (let i = 0; i < 16; i++) {
+    const alias = `water_ripple_${rippleIndex}_${i}`;
+    const tex = Assets.get<Texture>(alias);
+    if (!tex) return null; // 하나라도 없으면 실패
+    frames.push(tex);
+  }
+  return frames;
+}
+
+/**
+ * WindMill 프레임 텍스처 배열 반환 (AnimatedSprite용)
+ * @param millIndex 풍차 시리즈 (1~2)
+ * @returns 17개 Texture 배열 또는 null
+ */
+export function getWindmillFrames(millIndex: number): Texture[] | null {
+  if (_fallbackMode) return null;
+  const frames: Texture[] = [];
+  for (let i = 0; i < 17; i++) {
+    const alias = `windmill_${millIndex}_${i}`;
+    const tex = Assets.get<Texture>(alias);
+    if (!tex) return null;
+    frames.push(tex);
+  }
+  return frames;
+}
+
+/**
  * 특수 에셋 텍스처 반환
  */
 export function getSpecialTexture(name: string): Texture | null {

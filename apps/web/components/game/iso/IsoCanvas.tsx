@@ -142,10 +142,12 @@ export function IsoCanvas({
         // 텍스처 로드 실패 시 기존 Graphics fallback 유지
       });
 
-      // 게임 루프: 카메라 + 시민 보간 업데이트
+      // 게임 루프: 카메라 + 구름/물결 + 시민 보간 업데이트
       app.ticker.add(() => {
         if (tilemapRef.current) {
           tilemapRef.current.applyCamera(app.screen.width, app.screen.height);
+          // Phase 5: 구름 패럴랙스 이동 + 물결/풍차 뷰포트 컬링
+          tilemapRef.current.update(app.screen.width, app.screen.height);
         }
         if (citizenLayerRef.current) {
           citizenLayerRef.current.tick();

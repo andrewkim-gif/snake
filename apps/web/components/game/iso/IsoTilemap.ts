@@ -1,5 +1,5 @@
 /**
- * v27 Phase 2+3+4 — IsoTilemap (완전 재작성)
+ * v27 Phase 2+3+4+5 — IsoTilemap (완전 재작성)
  *
  * 15-Layer Sprite 기반 아이소메트릭 렌더링 엔진
  * - PixiJS 8 Sprite 기반 (기존 Graphics 기반에서 교체)
@@ -22,10 +22,17 @@
  * - WallFlora (Layer 8): 10-20% 확률 담쟁이/덩굴 오버레이
  * - 건물 배치 UI: CLIENT_BUILDING_DEFS 53종 전체 사용 (B-5 버그 수정)
  *
- * @rewrite 2026-03-09 Phase 2+3+4
+ * Phase 5: 물 애니메이션 & 구름 패럴랙스 & 풍차
+ * - Water Ripples AnimatedSprite (Layer 1): 13종×16프레임, 8fps
+ * - 해안선 전환 타일: Ground J 시리즈 오버레이 (물-육지 경계)
+ * - Cloud 패럴랙스 (Layer 13/screenContainer): 3~5개 구름, 카메라 독립 이동
+ * - WindMill AnimatedSprite: Farm 인접 풍차 2종×17프레임, 6fps
+ * - 뷰포트 밖 물결/풍차 stop(), 안에서만 play() (성능 최적화)
+ *
+ * @rewrite 2026-03-09 Phase 2+3+4+5
  */
 
-import { Container, Graphics, Sprite } from 'pixi.js';
+import { Container, Graphics, Sprite, AnimatedSprite } from 'pixi.js';
 import {
   TileType,
   TILE_DEFS,
@@ -64,6 +71,9 @@ import {
   getRoofTexture,
   getDoorTexture,
   getWallFloraTexture,
+  getCloudTexture,
+  getWaterRippleFrames,
+  getWindmillFrames,
   isTexturesLoaded as isV27TexturesLoaded,
 } from '@/lib/iso/iso-texture-loader';
 import {
@@ -79,6 +89,11 @@ import {
   type MiscSeries,
   MISC_B_SUBCATEGORY,
   WALLFLORA_SERIES,
+  WATER_RIPPLE_COUNT,
+  WATER_RIPPLE_FPS,
+  WINDMILL_COUNT,
+  WINDMILL_FPS,
+  CLOUD_ASSETS,
 } from '@/lib/iso/iso-asset-catalog';
 import { getBuildingComposite } from '@/lib/iso/building-composites';
 import {
@@ -215,6 +230,15 @@ export class IsoTilemap {
   /** Ground 스프라이트 참조 (컬링 최적화용) — [y][x] */
   private groundSprites: (Sprite | Graphics)[][] = [];
 
+  /** Phase 5: Water Ripple AnimatedSprite 참조 (뷰포트 컬링용) */
+  private waterAnimSprites: AnimatedSprite[] = [];
+
+  /** Phase 5: WindMill AnimatedSprite 참조 */
+  private windmillAnimSprites: AnimatedSprite[] = [];
+
+  /** Phase 5: Cloud 인스턴스 (패럴랙스) */
+  private cloudInstances: { sprite: Sprite; speed: number; opacity: number }[] = [];
+
   /** 텍스처 로드 완료 여부 */
   private texturesReady = false;
 
@@ -278,6 +302,9 @@ export class IsoTilemap {
 
     // Phase 3: 장식 레이어 배치 (텍스처 로드 후)
     this.renderDecorations();
+
+    // Phase 5: 구름 패럴랙스 초기화 (텍스처 무관하게 시도)
+    this.initClouds();
   }
 
   // ─── v27 IsoGrid 빌드 ───
@@ -544,6 +571,10 @@ export class IsoTilemap {
     this.layers[IsoLayer.Misc].removeChildren();
     this.layers[IsoLayer.WallFlora].removeChildren();
     this.layers[IsoLayer.Roof].removeChildren();
+    // Phase 5: 물 애니메이션 레이어 클리어
+    this.layers[IsoLayer.WaterAnim].removeChildren();
+    this.waterAnimSprites = [];
+    this.windmillAnimSprites = [];
 
     // 배치 순서 중요: Stone → Shadow → Flora → Tree → Misc
     this.placeStonePaths(biomeDef);
@@ -555,6 +586,11 @@ export class IsoTilemap {
 
     // Phase 4: 건물 재렌더 (Wall+Door+Roof 텍스처 기반)
     this.reRenderBuildings();
+
+    // Phase 5: 물 애니메이션 + 해안선 + 풍차
+    this.placeWaterRipples();
+    this.placeCoastlineTransitions();
+    this.placeWindmills();
   }
 
   /**
@@ -953,6 +989,304 @@ export class IsoTilemap {
       }
     }
     return false;
+  }
+
+  // ─── Phase 5: 물 애니메이션 & 구름 패럴랙스 & 풍차 ───
+
+  /**
+   * Water Ripples AnimatedSprite 배치
+   * 물 타일(TileType.Water)에 13종 리플 애니메이션 오버레이
+   * IsoLayer.WaterAnim(1)에 배치, 8fps
+   */
+  private placeWaterRipples(): void {
+    const waterAnimLayer = this.layers[IsoLayer.WaterAnim];
+
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        if (tile.type !== TileType.Water) continue;
+
+        const h = hashTile(x, y, this.seed + 8000);
+        const rippleIndex = (h % WATER_RIPPLE_COUNT) + 1; // 1~13
+
+        const frames = getWaterRippleFrames(rippleIndex);
+        if (!frames || frames.length === 0) continue;
+
+        const anim = new AnimatedSprite(frames);
+        anim.animationSpeed = WATER_RIPPLE_FPS / 60; // 8fps at 60fps ticker
+        anim.loop = true;
+        anim.anchor.set(0.5, 1.0);
+        anim.scale.set(ISO_TILE_SCALE);
+
+        const { sx, sy } = tileToScreen(x, y);
+        anim.x = sx;
+        anim.y = sy + ISO_TILE_HEIGHT / 2;
+
+        // 시드 기반 랜덤 시작 프레임 (모든 물결이 동기화되지 않도록)
+        anim.gotoAndPlay(h % frames.length);
+
+        waterAnimLayer.addChild(anim);
+        this.waterAnimSprites.push(anim);
+      }
+    }
+
+    console.log(`[IsoTilemap] Placed ${this.waterAnimSprites.length} water ripple animations`);
+  }
+
+  /**
+   * 해안선 전환 타일
+   * 물-육지 경계에서 Ground J 시리즈(해안 에지)를 오버레이
+   * Ground 레이어(0)에 추가
+   */
+  private placeCoastlineTransitions(): void {
+    const groundLayer = this.layers[IsoLayer.Ground];
+    let count = 0;
+
+    for (let y = 0; y < this.mapSize; y++) {
+      for (let x = 0; x < this.mapSize; x++) {
+        const tile = this.isoGrid[y][x];
+        // 물 타일이 육지와 인접하면 해안선 전환 표시
+        if (tile.type !== TileType.Water) continue;
+
+        // 4방향 이웃 중 육지가 있는지 확인
+        const hasLandNeighbor = this.hasAdjacentLand(x, y);
+        if (!hasLandNeighbor) continue;
+
+        // Ground J 시리즈 (해안 에지) 오버레이
+        const h = hashTile(x, y, this.seed + 8500);
+        const jVariants = GROUND_SAFE_FULL_VARIANTS['J' as GroundSeries] ?? [1, 2, 3];
+        const variant = jVariants[h % jVariants.length];
+
+        const texture = getGroundTexture('J', variant);
+        if (!texture) continue;
+
+        const { sx, sy } = tileToScreen(x, y);
+        const sprite = new Sprite(texture);
+        sprite.anchor.set(0.5, 1.0);
+        sprite.scale.set(ISO_TILE_SCALE);
+        sprite.x = sx;
+        sprite.y = sy + ISO_TILE_HEIGHT / 2;
+        sprite.alpha = 0.85; // 약간 투명하게 블렌딩
+
+        groundLayer.addChild(sprite);
+        count++;
+      }
+    }
+
+    if (count > 0) {
+      console.log(`[IsoTilemap] Placed ${count} coastline transition tiles`);
+    }
+  }
+
+  /**
+   * 인접 타일 중 육지가 있는지 확인
+   */
+  private hasAdjacentLand(x: number, y: number): boolean {
+    const neighbors = [
+      [x - 1, y], [x + 1, y], [x, y - 1], [x, y + 1],
+      // 대각선도 포함하여 부드러운 전환
+      [x - 1, y - 1], [x + 1, y - 1], [x - 1, y + 1], [x + 1, y + 1],
+    ];
+    for (const [nx, ny] of neighbors) {
+      if (nx < 0 || nx >= this.mapSize || ny < 0 || ny >= this.mapSize) continue;
+      if (this.isoGrid[ny][nx].type !== TileType.Water) return true;
+    }
+    return false;
+  }
+
+  /**
+   * WindMill AnimatedSprite 배치
+   * Temperate/Mediterranean 바이옴의 Farm 건물 인접 타일에 풍차 배치
+   * 맵당 최대 5개
+   */
+  private placeWindmills(): void {
+    // Temperate, Mediterranean에서만 풍차 표시
+    if (!['temperate', 'mediterranean'].includes(this.biome)) return;
+
+    const treeLayer = this.layers[IsoLayer.Tree]; // 나무 높이와 비슷하므로 Tree 레이어에 배치
+    let placed = 0;
+    const maxWindmills = 5;
+
+    for (const building of this.buildings) {
+      if (placed >= maxWindmills) break;
+      // Farm 건물만 대상
+      if (building.defId !== 'farm') continue;
+
+      // 건물 주변에 빈 타일 찾기
+      const adjacent = this.findEmptyAdjacentTile(building);
+      if (!adjacent) continue;
+
+      const h = hashTile(adjacent.tileX, adjacent.tileY, this.seed + 9000);
+      const millIndex = (h % WINDMILL_COUNT) + 1; // 1~2
+
+      const frames = getWindmillFrames(millIndex);
+      if (!frames || frames.length === 0) continue;
+
+      const anim = new AnimatedSprite(frames);
+      anim.animationSpeed = WINDMILL_FPS / 60; // 6fps at 60fps ticker
+      anim.loop = true;
+      anim.anchor.set(0.5, 0.85); // 나무와 동일한 anchor
+      anim.scale.set(ISO_TILE_SCALE);
+
+      const { sx, sy } = tileToScreen(adjacent.tileX, adjacent.tileY);
+      anim.x = sx;
+      anim.y = sy + ISO_TILE_HEIGHT / 2;
+      anim.zIndex = adjacent.tileY * this.mapSize + adjacent.tileX;
+
+      // 시드 기반 랜덤 시작 프레임
+      anim.gotoAndPlay(h % frames.length);
+
+      treeLayer.addChild(anim);
+      this.windmillAnimSprites.push(anim);
+      placed++;
+    }
+
+    if (placed > 0) {
+      console.log(`[IsoTilemap] Placed ${placed} windmill animations`);
+    }
+  }
+
+  /**
+   * 건물 주변에서 빈 타일(건물/나무 없는) 찾기
+   */
+  private findEmptyAdjacentTile(building: BuildingInstance): TileCoord | null {
+    const candidates: TileCoord[] = [];
+    for (let dy = -1; dy <= building.sizeH; dy++) {
+      for (let dx = -1; dx <= building.sizeW; dx++) {
+        if (dx >= 0 && dx < building.sizeW && dy >= 0 && dy < building.sizeH) continue;
+        const tx = building.tileX + dx;
+        const ty = building.tileY + dy;
+        if (tx < 0 || tx >= this.mapSize || ty < 0 || ty >= this.mapSize) continue;
+        if (this.occupancy.has(`${tx},${ty}`)) continue;
+        const tile = this.isoGrid[ty][tx];
+        if (tile.type === TileType.Water || tile.type === TileType.Mountain) continue;
+        if (tile.hasTree) continue; // 나무 있는 곳은 제외
+        candidates.push({ tileX: tx, tileY: ty });
+      }
+    }
+    if (candidates.length === 0) return null;
+    const h = hashTile(building.tileX, building.tileY, this.seed + 9100);
+    return candidates[h % candidates.length];
+  }
+
+  /**
+   * 구름 패럴랙스 초기화
+   * Cloud 1~3 스프라이트를 screenContainer의 Cloud 레이어(13)에 배치
+   * 3~5개 구름을 화면 위에 천천히 이동
+   */
+  private initClouds(): void {
+    const cloudLayer = this.layers[IsoLayer.Cloud];
+    cloudLayer.removeChildren();
+    this.cloudInstances = [];
+
+    // 3~5개 구름 인스턴스 생성
+    const cloudCount = 3 + (this.seed % 3); // 3~5개
+    const screenWidth = 1400; // 초기 추정 화면 폭 (update에서 보정됨)
+
+    for (let i = 0; i < cloudCount; i++) {
+      const cloudIdx = (i % 3) + 1; // 1~3 순환
+      const texture = getCloudTexture(cloudIdx);
+
+      let sprite: Sprite;
+      if (texture) {
+        sprite = new Sprite(texture);
+      } else {
+        // fallback: 텍스처 없으면 반투명 흰색 타원 (Graphics → Sprite는 불가하므로 빈 스프라이트)
+        continue;
+      }
+
+      // 구름 크기 조절 (1200x300 원본 → 약 400-600px 표시 폭)
+      const scale = 0.3 + (hashTile(i, 0, this.seed + 9500) % 20) / 100; // 0.3~0.5
+      sprite.scale.set(scale);
+
+      // 초기 위치: 화면 전체에 걸쳐 분포
+      const h = hashTile(i, 1, this.seed + 9600);
+      sprite.x = (h % (screenWidth + 400)) - 200;
+      sprite.y = 30 + (i * 120) + (h % 80); // Y: 30~500 범위에 분포
+
+      // 투명도
+      const opacity = 0.4 + ((h % 20) / 100); // 0.4~0.6
+      sprite.alpha = opacity;
+
+      // 속도
+      const speed = 0.2 + ((h % 30) / 100); // 0.2~0.5 px/frame
+
+      cloudLayer.addChild(sprite);
+      this.cloudInstances.push({ sprite, speed, opacity });
+    }
+
+    if (this.cloudInstances.length > 0) {
+      console.log(`[IsoTilemap] Initialized ${this.cloudInstances.length} cloud parallax sprites`);
+    }
+  }
+
+  /**
+   * 매 프레임 호출 — 구름 이동 + 물 애니메이션 뷰포트 컬링
+   * 게임 루프에서 applyCamera() 이후에 호출할 것
+   */
+  update(screenWidth: number, screenHeight: number): void {
+    // ── 구름 패럴랙스 이동 ──
+    for (const cloud of this.cloudInstances) {
+      cloud.sprite.x += cloud.speed;
+      // 화면 오른쪽을 벗어나면 왼쪽에서 재등장
+      if (cloud.sprite.x > screenWidth + 100) {
+        cloud.sprite.x = -cloud.sprite.width - 100;
+      }
+    }
+
+    // ── Water AnimatedSprite 뷰포트 컬링 ──
+    this.cullWaterAnimations(screenWidth, screenHeight);
+  }
+
+  /**
+   * 뷰포트 밖 Water AnimatedSprite는 stop(), 안에 있으면 play()
+   * 성능 최적화: 보이지 않는 물결은 재생하지 않음
+   */
+  private cullWaterAnimations(screenWidth: number, screenHeight: number): void {
+    if (this.waterAnimSprites.length === 0) return;
+
+    const pad = ISO_TILE_WIDTH * 2;
+    const invZoom = 1 / this.camera.zoom;
+
+    const viewLeft = this.camera.x - (screenWidth / 2) * invZoom - pad;
+    const viewRight = this.camera.x + (screenWidth / 2) * invZoom + pad;
+    const viewTop = this.camera.y - (screenHeight / 2) * invZoom - pad;
+    const viewBottom = this.camera.y + (screenHeight / 2) * invZoom + pad;
+
+    for (const anim of this.waterAnimSprites) {
+      const inView = (
+        anim.x + ISO_TILE_WIDTH > viewLeft &&
+        anim.x - ISO_TILE_WIDTH < viewRight &&
+        anim.y + ISO_TILE_HEIGHT > viewTop &&
+        anim.y - ISO_TILE_HEIGHT < viewBottom
+      );
+
+      if (inView) {
+        anim.visible = true;
+        if (!anim.playing) anim.play();
+      } else {
+        anim.visible = false;
+        if (anim.playing) anim.stop();
+      }
+    }
+
+    // 풍차도 동일하게 컬링
+    for (const anim of this.windmillAnimSprites) {
+      const inView = (
+        anim.x + ISO_TILE_WIDTH > viewLeft &&
+        anim.x - ISO_TILE_WIDTH < viewRight &&
+        anim.y + ISO_TILE_HEIGHT * 3 > viewTop &&
+        anim.y - ISO_TILE_HEIGHT < viewBottom
+      );
+
+      if (inView) {
+        anim.visible = true;
+        if (!anim.playing) anim.play();
+      } else {
+        anim.visible = false;
+        if (anim.playing) anim.stop();
+      }
+    }
   }
 
   // ─── 카메라 컨트롤 ───
@@ -1413,6 +1747,17 @@ export class IsoTilemap {
   // ─── 정리 ───
 
   destroy(): void {
+    // Phase 5: 애니메이션 정리
+    for (const anim of this.waterAnimSprites) {
+      anim.stop();
+    }
+    for (const anim of this.windmillAnimSprites) {
+      anim.stop();
+    }
+    this.waterAnimSprites = [];
+    this.windmillAnimSprites = [];
+    this.cloudInstances = [];
+
     this.container.destroy({ children: true });
     this.buildings = [];
     this.occupancy.clear();

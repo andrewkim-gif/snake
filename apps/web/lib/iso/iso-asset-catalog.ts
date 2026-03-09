@@ -1038,10 +1038,20 @@ export const WATER_RIPPLE_COUNT = 13;
 export const WATER_RIPPLE_FRAMES = 16;
 export const WATER_RIPPLE_FPS = 8;
 
-export function waterRipplePath(rippleIndex: number, frame: number): string {
-  // 디렉토리 형태: "Animated Tiles/Water Ripples {N}/{frame}.png"
+/**
+ * Water Ripple 프레임 번호 목록 (실제 파일명: 0001, 0003, ... 0031)
+ * 홀수 번호 × 4자리 zero-pad
+ */
+export const WATER_RIPPLE_FRAME_NUMBERS: readonly string[] = Array.from(
+  { length: WATER_RIPPLE_FRAMES },
+  (_, i) => String(i * 2 + 1).padStart(4, '0'),
+);
+
+export function waterRipplePath(rippleIndex: number, frameIdx: number): string {
+  // 프레임 인덱스(0~15) → 실제 파일명 (0001, 0003, ... 0031)
+  const frameNum = WATER_RIPPLE_FRAME_NUMBERS[frameIdx] ?? '0001';
   const dir = `Animated Tiles/Water Ripples ${rippleIndex}`;
-  return `${ANIM_BASE_PATH}/${encodeURIComponent(dir)}/${frame}.png`;
+  return `${ANIM_BASE_PATH}/${encodeURIComponent(dir)}/${frameNum}.png`;
 }
 
 /**
@@ -1051,6 +1061,21 @@ export function waterRipplePath(rippleIndex: number, frame: number): string {
 export const WINDMILL_COUNT = 2;
 export const WINDMILL_FRAMES = 17;
 export const WINDMILL_FPS = 6;
+
+/**
+ * WindMill 프레임 번호 목록 (실제 파일명: 0001, 0003, ... 0033)
+ */
+export const WINDMILL_FRAME_NUMBERS: readonly string[] = Array.from(
+  { length: WINDMILL_FRAMES },
+  (_, i) => String(i * 2 + 1).padStart(4, '0'),
+);
+
+export function windmillPath(windmillIndex: number, frameIdx: number): string {
+  // 프레임 인덱스(0~16) → 실제 파일명 (0001, 0003, ... 0033)
+  const frameNum = WINDMILL_FRAME_NUMBERS[frameIdx] ?? '0001';
+  const dir = `Animated Tiles/WindMill${windmillIndex}`;
+  return `${ANIM_BASE_PATH}/${encodeURIComponent(dir)}/${frameNum}.png`;
+}
 
 /**
  * Destructible Tiles — 파괴 애니메이션 (17종)

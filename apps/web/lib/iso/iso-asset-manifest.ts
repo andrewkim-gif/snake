@@ -19,6 +19,9 @@ import {
   SHADOW_VARIANTS, DOOR_SERIES, CHEST_SERIES,
   CLOUD_ASSETS, SPECIAL_ASSETS, OTHER_ASSETS,
   envAssetPath, shadowAssetPath,
+  waterRipplePath, windmillPath,
+  WATER_RIPPLE_COUNT, WATER_RIPPLE_FRAMES,
+  WINDMILL_COUNT, WINDMILL_FRAMES,
   type GroundSeries, type WallSeries, type RoofSeries,
   type TreeSeries, type FloraSeries, type MiscSeries,
   type DoorSeries, type ChestSeries,
@@ -312,7 +315,41 @@ function buildShadowAssets(): BundleAsset[] {
 }
 
 /**
- * 공통 에셋 (구름, 특수 타일)
+ * Water Ripples 애니메이션 프레임 에셋 — 13종 × 16프레임 = 208 파일
+ * 모든 바이옴에서 물 타일이 있으면 사용
+ */
+function buildWaterRippleAssets(): BundleAsset[] {
+  const assets: BundleAsset[] = [];
+  for (let ripple = 1; ripple <= WATER_RIPPLE_COUNT; ripple++) {
+    for (let frame = 0; frame < WATER_RIPPLE_FRAMES; frame++) {
+      assets.push({
+        alias: `water_ripple_${ripple}_${frame}`,
+        src: waterRipplePath(ripple, frame),
+      });
+    }
+  }
+  return assets;
+}
+
+/**
+ * WindMill 애니메이션 프레임 에셋 — 2종 × 17프레임 = 34 파일
+ * Temperate/Mediterranean 바이옴에서 Farm 인접에 사용
+ */
+function buildWindmillAssets(): BundleAsset[] {
+  const assets: BundleAsset[] = [];
+  for (let mill = 1; mill <= WINDMILL_COUNT; mill++) {
+    for (let frame = 0; frame < WINDMILL_FRAMES; frame++) {
+      assets.push({
+        alias: `windmill_${mill}_${frame}`,
+        src: windmillPath(mill, frame),
+      });
+    }
+  }
+  return assets;
+}
+
+/**
+ * 공통 에셋 (구름, 특수 타일, 애니메이션)
  */
 function buildCommonAssets(): BundleAsset[] {
   const assets: BundleAsset[] = [];
@@ -335,6 +372,12 @@ function buildCommonAssets(): BundleAsset[] {
     { alias: 'other_god_ray', src: OTHER_ASSETS.godRay },
     { alias: 'other_dash_line', src: OTHER_ASSETS.dashLine },
   );
+
+  // Water Ripples 애니메이션 (13종 × 16프레임)
+  assets.push(...buildWaterRippleAssets());
+
+  // WindMill 애니메이션 (2종 × 17프레임)
+  assets.push(...buildWindmillAssets());
 
   return assets;
 }
