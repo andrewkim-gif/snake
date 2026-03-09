@@ -26,6 +26,12 @@
  *   - iso3 해시 기반 결정론적 Y축 회전 (인스턴스별 방향 변형)
  *   - ±10% 스케일 미세 변형 (iso3 시드 기반 결정론적 jitter)
  *   - 바이옴별 밤 이미시브 강도 차등화 (urban 0.9, arctic 0.2)
+ *
+ * v29 Phase 5 추가:
+ *   - 바이옴별 ambient/diffuse 조정 (diffuseBoost: arctic 밝은 반사, tropical 부드러운 그림자)
+ *   - Blinn-Phong 스페큘러 (밝은 블록=금속/크리스탈 proxy, 0.3 max 강도)
+ *   - 창문 깜빡임 애니메이션 (uTime + vAgeSeed 위상차, 밤에만 동작)
+ *   - vWorldPos varying (스페큘러 view direction 계산용)
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
@@ -91,6 +97,8 @@ const biomeTintArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].tint);
 const biomeFogArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].fog);
 // v29 Phase 4: 바이옴별 밤 이미시브 강도 배열
 const biomeNightEmissiveArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].nightEmissive);
+// v29 Phase 5: 바이옴별 디퓨즈 부스트 배열
+const biomeDiffuseBoostArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].diffuseBoost);
 
 // ─── Types ───
 
@@ -124,6 +132,7 @@ const landmarkVertexShader = /* glsl */ `
   varying float vBiomeIdx;   // v29: fragment로 전달
   varying float vAgeSeed;    // v29: fragment로 전달
   varying float vCamDist;    // v29: 카메라 거리 (환경 안개용)
+  varying vec3 vWorldPos;    // v29 Phase 5: 월드 좌표 (스페큘러용)
   void main() {
     vUv = uv;
     vColor = color;
@@ -131,8 +140,9 @@ const landmarkVertexShader = /* glsl */ `
     vAgeSeed = aAgeSeed;
     // InstancedMesh: instanceMatrix * vec4(normal, 0.0) 로 월드 노멀 계산
     vWorldNormal = normalize((modelMatrix * instanceMatrix * vec4(normal, 0.0)).xyz);
-    // v29: 카메라 거리 계산 (환경 안개)
+    // v29: 카메라 거리 계산 (환경 안개) + v29 Phase 5: worldPos varying
     vec4 worldPos = modelMatrix * instanceMatrix * vec4(position, 1.0);
+    vWorldPos = worldPos.xyz;
     vCamDist = length(worldPos.xyz - cameraPosition);
     gl_Position = projectionMatrix * modelViewMatrix * instanceMatrix * vec4(position, 1.0);
   }
@@ -144,12 +154,15 @@ const landmarkFragmentShader = /* glsl */ `
   uniform vec3 uBiomeTints[6];   // v29: 6개 바이옴 tint 색상
   uniform vec3 uBiomeFogs[6];    // v29: 6개 바이옴 fog 색상
   uniform float uBiomeNightEmissive[6]; // v29 Phase 4: 바이옴별 밤 이미시브 강도
+  uniform float uBiomeDiffuseBoost[6]; // v29 Phase 5: 바이옴별 디퓨즈 부스트
+  uniform float uTime;           // v29 Phase 5: 시간 (초, 창문 깜빡임용)
   varying vec3 vWorldNormal;
   varying vec2 vUv;
   varying vec3 vColor;           // 면별 밝기 (AO)
   varying float vBiomeIdx;       // v29: 바이옴 인덱스
   varying float vAgeSeed;        // v29: 풍화 시드
   varying float vCamDist;        // v29: 카메라 거리
+  varying vec3 vWorldPos;        // v29 Phase 5: 월드 좌표 (스페큘러용)
 
   // v29: 간단한 해시 함수 (풍화 노이즈용)
   float hash21(vec2 p) {
@@ -162,12 +175,19 @@ const landmarkFragmentShader = /* glsl */ `
     vec3 N = normalize(vWorldNormal);
     float NdotL = dot(N, uSunDir);
 
+    // v29 Phase 2+5: 바이옴 인덱스 (early declaration for diffuse boost)
+    int biomeId = int(vBiomeIdx + 0.5);
+    biomeId = clamp(biomeId, 0, 5);
+
     // 텍스처 색상 (sRGB → 선형으로 근사 변환하여 라이팅 계산)
     vec4 texColor = texture2D(uMap, vUv);
     vec3 albedo = pow(texColor.rgb, vec3(2.2));
 
-    // 디퓨즈 라이팅 — 밝은 쪽 0.9, 어두운 쪽 ambient 0.25
-    float diffuse = max(NdotL, 0.0) * 0.65 + 0.25;
+    // v29 Phase 5: 바이옴별 ambient/diffuse 조정
+    // arctic: 높은 ambient (눈 반사), tropical: 낮은 ambient (부드러운 그림자), arid: 강한 대비
+    float biomeDiffuse = uBiomeDiffuseBoost[biomeId];
+    float ambient = 0.25 + biomeDiffuse * 0.15;
+    float diffuse = max(NdotL, 0.0) * (0.65 + biomeDiffuse * 0.1) + ambient;
 
     // 면별 AO (vertex color) — 부드럽게 적용 (0.5~1.0 → 0.7~1.0)
     float ao = mix(0.7, 1.0, vColor.r);
@@ -179,10 +199,15 @@ const landmarkFragmentShader = /* glsl */ `
     float skyFactor = max(-NdotL, 0.0) * 0.08;
     color += albedo * vec3(0.5, 0.6, 0.9) * skyFactor;
 
+    // v29 Phase 5: 스페큘러 하이라이트 (금속/크리스탈 블록 — Blinn-Phong)
+    // 밝은 블록만 반짝임 (texColor.r 기반 shininess proxy)
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+    vec3 halfDir = normalize(uSunDir + viewDir);
+    float spec = pow(max(dot(N, halfDir), 0.0), 32.0);
+    float shininess = smoothstep(0.6, 0.9, texColor.r) * 0.3;
+    color += vec3(1.0, 0.95, 0.85) * spec * shininess * max(NdotL, 0.0);
+
     // v29 Phase 2: 바이옴 틴트 적용 (서틀하게 MC 미학 보존)
-    int biomeId = int(vBiomeIdx + 0.5);
-    // 배열 인덱스를 안전하게 클램프
-    biomeId = clamp(biomeId, 0, 5);
     vec3 biomeTint = uBiomeTints[biomeId];
     color = mix(color, color * biomeTint, 0.25);
 
@@ -192,10 +217,12 @@ const landmarkFragmentShader = /* glsl */ `
 
     // 야간 emissive: 밤면에서 창문 불빛 (따뜻한 글로우)
     // v29 Phase 4: 바이옴별 밤 이미시브 강도 적용
+    // v29 Phase 5: 창문 깜빡임 애니메이션 (uTime + vAgeSeed로 인스턴스별 위상차)
     float biomeNightEmissive = uBiomeNightEmissive[biomeId];
     float nightFactor = smoothstep(0.1, -0.3, NdotL);
+    float flicker = 0.85 + 0.15 * sin(uTime * 2.0 + vAgeSeed * 50.0);
     float windowLight = texColor.r * 0.25 * biomeNightEmissive;
-    vec3 emissive = vec3(1.0, 0.85, 0.5) * windowLight * nightFactor;
+    vec3 emissive = vec3(1.0, 0.85, 0.5) * windowLight * nightFactor * flicker;
     color += emissive;
 
     // v29 Phase 2: 환경 안개(Atmospheric Fog) — 거리 기반 바이옴 안개
@@ -226,6 +253,9 @@ function getSharedMaterial(): THREE.ShaderMaterial {
       uBiomeFogs: { value: biomeFogArray },
       // v29 Phase 4: 바이옴별 밤 이미시브 강도
       uBiomeNightEmissive: { value: biomeNightEmissiveArray },
+      // v29 Phase 5: 바이옴별 디퓨즈 부스트 + 시간
+      uBiomeDiffuseBoost: { value: biomeDiffuseBoostArray },
+      uTime: { value: 0 },
     },
     vertexShader: landmarkVertexShader,
     fragmentShader: landmarkFragmentShader,
@@ -487,7 +517,7 @@ export function LandmarkMeshes({
 
   // v22: useFrame에서 태양 방향 갱신 (UTC 기반, EarthSphere와 동일 계산)
   // sharedMaterial 하나를 모든 ArchetypeInstancedMesh가 공유 → uniform 한 번만 갱신
-  useFrame(() => {
+  useFrame((state) => {
     if (!sharedMaterial) return;
     const now = new Date();
     const start = new Date(now.getFullYear(), 0, 0);
@@ -501,6 +531,8 @@ export function LandmarkMeshes({
     const sy = Math.sin(decRad);
     const sz = Math.cos(decRad) * Math.sin(ha);
     sharedMaterial.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+    // v29 Phase 5: 시간 uniform 갱신 (창문 깜빡임 애니메이션)
+    sharedMaterial.uniforms.uTime.value = state.clock.elapsedTime;
   });
 
   // 언마운트 시 geometry cache + 공유 머티리얼 정리
