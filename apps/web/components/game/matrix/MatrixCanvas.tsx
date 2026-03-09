@@ -2,12 +2,14 @@
 
 /**
  * MatrixCanvas.tsx - v28 Matrix 자동전투 서바이벌 게임 캔버스
- * Phase 6: AI 에이전트 + 배틀로얄 시스템
+ * Phase 7: 보조 시스템 + 폴리싱 + 빌드 검증
  *
  * 핵심 구조:
  * 1. Web Worker → update(deltaTime) : 물리, 충돌, 무기 쿨다운, 에이전트 AI
  * 2. requestAnimationFrame → draw(ctx) : 렌더링만 (세이프존 + 에이전트 포함)
  * 3. React refs로 상태 관리 (0 re-render)
+ * 4. LOD 시스템: updateRenderContext로 엔티티 수에 따른 렌더링 품질 자동 조절
+ * 5. 오브젝트 풀링: 투사체/파티클/폭발/번개에 MAX 상한 적용
  */
 
 import { useRef, useEffect, useCallback, useState } from 'react';
@@ -31,15 +33,12 @@ import type {
   Vector2,
   WeaponType,
   WeaponInstance,
-  StatusEffect,
+  WeaponStats,
 } from '@/lib/matrix/types';
 import {
   GAME_CONFIG,
-  WEAPON_DATA,
   XP_THRESHOLDS,
   getWaveForTime,
-  getEnemyConfig,
-  isRangedEnemy,
 } from '@/lib/matrix/constants';
 import { processManualInput, processKnockback } from '@/lib/matrix/systems/movement';
 import type { InputState } from '@/lib/matrix/systems/movement';
@@ -51,9 +50,7 @@ import { updatePlayerProjectiles } from '@/lib/matrix/systems/projectile';
 import type { ProjectileSystemContext } from '@/lib/matrix/systems/projectile';
 import { spawnEnemy } from '@/lib/matrix/systems/spawning';
 import { updateBlasts } from '@/lib/matrix/systems/projectile';
-import { SpatialHashGrid } from '@/lib/matrix/systems/spatial-hash';
-import { drawEnemy, drawProjectile, drawCatSprite, drawFloorTile } from '@/lib/matrix/rendering';
-import { updateRenderContext } from '@/lib/matrix/rendering/index';
+import { drawEnemy, drawProjectile, drawCatSprite, updateRenderContext } from '@/lib/matrix/rendering';
 import type { ExtendedParticle } from '@/lib/matrix/systems/game-context';
 import { distance } from '@/lib/matrix/utils/math';
 
@@ -61,7 +58,6 @@ import { distance } from '@/lib/matrix/utils/math';
 import {
   createAgents,
   updateAllAgents,
-  getAliveAgentCount,
   getLeaderboard,
 } from '@/lib/matrix/systems/agent-combat';
 import type { ArenaAgent, LeaderboardEntry } from '@/lib/matrix/systems/agent-combat';
@@ -108,7 +104,7 @@ interface MatrixCanvasProps {
 export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number>(0);
-  const [showHUD, setShowHUD] = useState(true);
+  const showHUD = true; // HUD는 항상 표시 (React 오버레이)
   const [isPaused, setIsPaused] = useState(false);
   const [showLevelUp, setShowLevelUp] = useState(false);
   const [levelUpOptions, setLevelUpOptions] = useState<LevelUpOption[]>([]);
@@ -568,7 +564,7 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
             damageEnemy(enemy, dmg, kb, srcPos, wpnType, isUlt);
           },
         };
-        fireWeapon(cdKey, stats as any, fireCtx);
+        fireWeapon(cdKey, stats as WeaponStats, fireCtx);
         stats.timer = stats.cooldown * (player.statMultipliers?.cooldown ?? 1);
       } else {
         stats.timer = newTimer;
@@ -590,14 +586,25 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       deltaTime,
     );
 
+    // ---- 투사체 상한 제한 (성능 보호) ----
+    if (projectilesRef.current.length > GAME_CONFIG.MAX_PROJECTILES) {
+      projectilesRef.current.length = GAME_CONFIG.MAX_PROJECTILES;
+    }
+
     // ---- 폭발 업데이트 ----
     blastsRef.current = updateBlasts(blastsRef.current, deltaTime);
+    if (blastsRef.current.length > GAME_CONFIG.MAX_BLASTS) {
+      blastsRef.current.length = GAME_CONFIG.MAX_BLASTS;
+    }
 
     // ---- 번개 업데이트 ----
     const bolts = lightningBoltsRef.current;
     for (let i = bolts.length - 1; i >= 0; i--) {
       bolts[i].life -= deltaTime;
       if (bolts[i].life <= 0) bolts.splice(i, 1);
+    }
+    if (bolts.length > GAME_CONFIG.MAX_LIGHTNING_BOLTS) {
+      bolts.length = GAME_CONFIG.MAX_LIGHTNING_BOLTS;
     }
 
     // ---- 데미지 넘버 업데이트 ----
@@ -616,6 +623,9 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       particles[i].position.x += particles[i].velocity.x * deltaTime;
       particles[i].position.y += particles[i].velocity.y * deltaTime;
       if (particles[i].life <= 0) particles.splice(i, 1);
+    }
+    if (particles.length > GAME_CONFIG.MAX_PARTICLES) {
+      particles.length = GAME_CONFIG.MAX_PARTICLES;
     }
 
     // ---- Arena: 세이프존 데미지 (플레이어) ----
@@ -792,31 +802,6 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       particles.length,
     );
   }, [addXP, damageEnemy, triggerGameOver]);
-
-  // ============================================
-  // 게임 리셋
-  // ============================================
-
-  const resetGame = useCallback(() => {
-    playerRef.current = createInitialPlayer();
-    enemiesRef.current = [];
-    projectilesRef.current = [];
-    enemyProjectilesRef.current = [];
-    gemsRef.current = [];
-    pickupsRef.current = [];
-    blastsRef.current = [];
-    lightningBoltsRef.current = [];
-    particlesRef.current = [];
-    damageNumbersRef.current = [];
-    gameTimeRef.current = 0;
-    frameCountRef.current = 0;
-    lastSpawnTimeRef.current = 0;
-    cameraRef.current = { x: 0, y: 0 };
-
-    // Arena / Agent 리셋
-    agentsRef.current = createAgents(ARENA_CONFIG.WORLD_SIZE);
-    arenaStateRef.current = createArenaState(ARENA_CONFIG.AGENT_COUNT + 1);
-  }, []);
 
   // ============================================
   // DRAW 루프 (렌더링)
@@ -1097,79 +1082,6 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
 
     ctx.globalAlpha = 1;
     ctx.restore();
-  }
-
-  // ============================================
-  // HUD 렌더링
-  // ============================================
-
-  function drawHUD(ctx: CanvasRenderingContext2D, w: number, h: number, player: Player) {
-    const padding = 16;
-
-    // HP 바
-    const barW = 200;
-    const barH = 12;
-    const barX = padding;
-    const barY = padding;
-    const hpRatio = player.health / player.maxHealth;
-
-    // 배경
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(barX - 2, barY - 2, barW + 4, barH + 4);
-    // HP
-    ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
-    ctx.fillRect(barX, barY, barW * hpRatio, barH);
-    // HP 텍스트
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '11px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(`HP ${Math.ceil(player.health)}/${player.maxHealth}`, barX, barY + barH + 14);
-
-    // XP 바
-    const xpY = barY + barH + 24;
-    const xpRatio = player.nextLevelXp > 0 ? player.xp / player.nextLevelXp : 0;
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(barX - 2, xpY - 2, barW + 4, 8 + 4);
-    ctx.fillStyle = '#6366f1';
-    ctx.fillRect(barX, xpY, barW * xpRatio, 8);
-    ctx.fillStyle = '#a5b4fc';
-    ctx.font = '11px monospace';
-    ctx.fillText(`Lv.${player.level}  XP ${player.xp}/${player.nextLevelXp}`, barX, xpY + 8 + 14);
-
-    // 게임 시간 (우측 상단)
-    const minutes = Math.floor(gameTimeRef.current / 60);
-    const seconds = Math.floor(gameTimeRef.current % 60);
-    const timeStr = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    ctx.fillStyle = '#00FF41';
-    ctx.font = 'bold 20px monospace';
-    ctx.textAlign = 'right';
-    ctx.fillText(timeStr, w - padding, padding + 16);
-
-    // 점수 (우측 상단 아래)
-    ctx.fillStyle = '#ffffff';
-    ctx.font = '14px monospace';
-    ctx.fillText(`Score: ${player.score}`, w - padding, padding + 38);
-
-    // 적 수
-    ctx.fillStyle = '#888888';
-    ctx.font = '12px monospace';
-    ctx.fillText(`Enemies: ${enemiesRef.current.length}`, w - padding, padding + 56);
-
-    // ESC 안내 (하단 중앙)
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'center';
-    ctx.fillText('ESC to exit  |  TAB to toggle Auto Hunt', w / 2, h - padding);
-
-    // Auto Hunt 표시
-    ctx.fillStyle = autoHuntEnabled.current ? '#00FF41' : '#666666';
-    ctx.font = '12px monospace';
-    ctx.textAlign = 'left';
-    ctx.fillText(
-      autoHuntEnabled.current ? '[AUTO HUNT: ON]' : '[AUTO HUNT: OFF]',
-      barX,
-      xpY + 8 + 34,
-    );
   }
 
   // ============================================
