@@ -147,6 +147,9 @@ export function GlobeCountryLabels({
   maxLabels = MAX_COUNTRIES,
 }: GlobeCountryLabelsProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const meshRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; meshRef.current = mesh; }
+  }, []);
   const { camera } = useThree();
   const prevLodRef = useRef(0);
 
@@ -511,7 +514,7 @@ export function GlobeCountryLabels({
 
   return (
     <instancedMesh
-      ref={meshRef}
+      ref={meshRefCb}
       args={[geometry, material, MAX_COUNTRIES]}
       frustumCulled={false}
       renderOrder={100}

@@ -1282,9 +1282,10 @@ export function GlobeWarEffects({
     for (const war of wars) {
       if (!prevWarIds.has(war.warId) && (war.state === 'preparation' || war.state === 'active')) {
         if (autoRotateCamera && onCameraTarget) {
-          const midpoint = getBorderCenter(war.attacker, war.defender);
-          if (midpoint) {
-            onCameraTarget(midpoint, CAMERA_PRIORITY.war);
+          // v24: 방어국에 포커스 (전쟁선포 → 방어국이 공격받는 곳)
+          const defenderPos = getCountryPosition(war.defender);
+          if (defenderPos) {
+            onCameraTarget(defenderPos, CAMERA_PRIORITY.war);
           }
         }
         break; // only handle first new war

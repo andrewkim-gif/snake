@@ -140,11 +140,11 @@ func (fm *FactionManager) CreateFaction(id, name, tag, color, leaderID string) (
 		LeaderID:    leaderID,
 		Treasury: ResourceBundle{
 			Gold:      5000,
-			Oil:       500,
-			Minerals:  500,
-			Food:      500,
-			Tech:      500,
-			Influence: 200,
+			Oil:       1000,
+			Minerals:  1000,
+			Food:      1000,
+			Tech:      1000,
+			Influence: 500,
 		},
 		Prestige:    0,
 		MemberCount: 1,
@@ -219,19 +219,33 @@ func (fm *FactionManager) JoinFaction(factionID, userID string) error {
 		return fmt.Errorf("faction %s not found", factionID)
 	}
 
-	if _, exists := fm.userFaction[userID]; exists {
+	if existingFID, exists := fm.userFaction[userID]; exists {
+		// 이미 같은 팩션의 멤버 → Member를 Council로 자동 승격 (시뮬레이션 호환)
+		if existingFID == factionID {
+			members := fm.members[factionID]
+			for i := range members {
+				if members[i].UserID == userID && members[i].Role == RoleMember {
+					members[i].Role = RoleCouncil
+					slog.Info("auto-promoted existing member to Council", "user", userID, "faction", factionID)
+					go fm.persistFactionAsync(factionID)
+				}
+			}
+			return nil
+		}
 		return fmt.Errorf("user %s already belongs to a faction", userID)
 	}
 
-	// Auto-promote to SupremeLeader if:
-	// 1. Faction has no members (clean state)
-	// 2. Faction has only 1 member (original creator now disconnected, sim restarted)
-	// 3. Joiner is the recorded leader (same userID reconnect)
-	// This handles agent reconnection after sim restart while server still holds faction state.
+	// Auto-promote logic:
+	// - SupremeLeader: faction has 0-1 members OR joiner is the recorded leader
+	// - Council: members 2~5 (early joiners get policy/war permissions)
+	// - Member: 6th+ joiners
+	memberCount := len(fm.members[factionID])
 	role := RoleMember
-	if len(fm.members[factionID]) <= 1 || faction.LeaderID == userID {
+	if memberCount <= 1 || faction.LeaderID == userID {
 		role = RoleSupremeLeader
 		faction.LeaderID = userID
+	} else if memberCount < 5 {
+		role = RoleCouncil
 	}
 
 	fm.members[factionID] = append(fm.members[factionID], FactionMember{

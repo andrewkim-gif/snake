@@ -16,7 +16,7 @@
  *   - 야간 emissive: NdotL < 0 → 창문 불빛 (warm glow)
  */
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
@@ -127,6 +127,7 @@ function getSharedMaterial(): THREE.ShaderMaterial {
     vertexShader: landmarkVertexShader,
     fragmentShader: landmarkFragmentShader,
     transparent: true,
+    depthWrite: false,
   });
   return sharedMaterial;
 }
@@ -142,6 +143,9 @@ interface ArchetypeInstancedMeshProps {
 
 function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstancedMeshProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const meshRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; meshRef.current = mesh; }
+  }, []);
   const edgeRef = useRef<THREE.LineSegments>(null!);
 
   const geometry = useMemo(() => {
@@ -216,6 +220,8 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
       const fade = THREE.MathUtils.clamp(
         (dot - BACKFACE_THRESHOLD) / BACKFACE_FADE_RANGE, 0, 1,
       );
+      // ★ 너무 작은 스케일은 검은 점으로 보이므로 스킵
+      if (fade < 0.15) continue;
 
       // 구면 정렬: Y축(위)를 법선 방향으로 회전
       _quat.setFromUnitVectors(_up, normal);
@@ -252,7 +258,7 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
   return (
     <>
       <instancedMesh
-        ref={meshRef}
+        ref={meshRefCb}
         args={[geometry, material, group.landmarks.length]}
         frustumCulled={false}
         renderOrder={95}

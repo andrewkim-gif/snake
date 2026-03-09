@@ -1795,6 +1795,7 @@ function GlobeScene({
           tradeRoutes={tradeRoutes}
           countryCentroids={centroidsMap}
           globeRadius={RADIUS}
+          onCameraTarget={handleCameraTarget}
         />
       )}
 
@@ -1856,6 +1857,7 @@ function GlobeScene({
           nukes={nukes}
           centroidsMap={centroidsMap}
           globeRadius={RADIUS}
+          onCameraTarget={handleCameraTarget}
         />
       )}
 

@@ -225,6 +225,13 @@ func main() {
 
 	// --- Season ---
 	seasonCfg := meta.DefaultSeasonConfig()
+	// v25: SEASON_DURATION env var for simulation (e.g. "1h" for 1-hour season → 15min per era)
+	if sdEnv := os.Getenv("SEASON_DURATION"); sdEnv != "" {
+		if d, err := time.ParseDuration(sdEnv); err == nil {
+			seasonCfg.SeasonDuration = d
+			slog.Info("season duration override", "duration", d)
+		}
+	}
 	seasonEngine := meta.NewSeasonEngine(seasonCfg)
 
 	// --- Season Reset ---
@@ -631,6 +638,11 @@ func main() {
 	slog.Info("wired", "engine", "EconomyEngine.FactionManager")
 	economyEngine.SetDiplomacyEngine(diplomacyEngine)
 	slog.Info("wired", "engine", "EconomyEngine.DiplomacyEngine")
+	economyEngine.SetTechTreeManager(techTreeManager)
+	economyEngine.SetSeasonEngine(seasonEngine)
+	economyEngine.SetEventEngine(eventEngine)
+	economyEngine.SetUNCouncil(unCouncil)
+	slog.Info("wired", "engine", "EconomyEngine.BonusSystems", "modules", []string{"TechTree", "Season", "Events", "UNCouncil"})
 
 	// IntelSystem ← FactionManager, TechTreeManager
 	intelSystem.SetFactionManager(factionManager)

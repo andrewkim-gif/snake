@@ -15,7 +15,7 @@
  * 최적화: GPU 1 드로콜, ~30 삼각형 (15 스프라이트 x 2 tri)
  */
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
@@ -345,6 +345,9 @@ export function LandmarkSprites({
   maxSprites = 15,
 }: LandmarkSpritesProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const meshRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; meshRef.current = mesh; }
+  }, []);
   const { camera } = useThree();
 
   // 아틀라스 텍스처 (1회 생성)
@@ -468,7 +471,7 @@ export function LandmarkSprites({
 
   return (
     <instancedMesh
-      ref={meshRef}
+      ref={meshRefCb}
       args={[geometry, material, MAX_SPRITES]}
       frustumCulled={false}
       renderOrder={98}

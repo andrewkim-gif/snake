@@ -13,7 +13,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
-import { COLORS_3D, SURFACE_ALT, RENDER_ORDER } from '@/lib/effect-constants';
+import { COLORS_3D, SURFACE_ALT, RENDER_ORDER, CAMERA_PRIORITY } from '@/lib/effect-constants';
 
 // ─── Types ───
 
@@ -27,6 +27,8 @@ export interface GlobeNukeEffectProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
+  /** v24: 핵실험 발생 시 카메라 포커스 콜백 (priority=5, 최고 우선순위) */
+  onCameraTarget?: (position: THREE.Vector3, priority?: number) => void;
 }
 
 // ─── Constants ───
@@ -89,10 +91,12 @@ export function GlobeNukeEffect({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
+  onCameraTarget,
 }: GlobeNukeEffectProps) {
   const groupRef = useRef<THREE.Group>(null);
   const dataRef = useRef<NukeRenderData[]>([]);
   const clockRef = useRef(0);
+  const prevNukeKeysRef = useRef<Set<string>>(new Set());
 
   // 공유 geometry
   const ringGeo = useMemo(
@@ -107,6 +111,26 @@ export function GlobeNukeEffect({
     () => new THREE.SphereGeometry(PARTICLE_RADIUS, 8, 8),
     [],
   );
+
+  // v24: 새 핵실험 감지 시 카메라 포커스 (priority 5 = 최고)
+  useEffect(() => {
+    const currentKeys = new Set(nukes.map((n) => `${n.country}_${n.timestamp}`));
+    const prevKeys = prevNukeKeysRef.current;
+
+    for (const nuke of nukes) {
+      const key = `${nuke.country}_${nuke.timestamp}`;
+      if (!prevKeys.has(key) && onCameraTarget) {
+        const centroid = centroidsMap.get(nuke.country);
+        if (centroid) {
+          const pos = latLngToVector3(centroid[0], centroid[1], globeRadius * 1.01);
+          onCameraTarget(pos, CAMERA_PRIORITY.nuke);
+        }
+        break; // 첫 번째 새 핵실험만 포커스
+      }
+    }
+
+    prevNukeKeysRef.current = currentKeys;
+  }, [nukes, centroidsMap, globeRadius, onCameraTarget]);
 
   // nukes 변경 시 재구축
   useEffect(() => {

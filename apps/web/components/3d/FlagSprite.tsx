@@ -60,6 +60,9 @@ interface FlagSpriteProps {
 
 export function FlagSprite({ agentsRef, playerIdRef, playerNationality }: FlagSpriteProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
+  const meshRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
+    if (mesh) { mesh.count = 0; meshRef.current = mesh; }
+  }, []);
   const { camera } = useThree();
 
   // 아틀라스 캔버스 + 텍스처
@@ -264,7 +267,7 @@ export function FlagSprite({ agentsRef, playerIdRef, playerNationality }: FlagSp
 
   return (
     <instancedMesh
-      ref={meshRef}
+      ref={meshRefCb}
       args={[geometry, material, MAX_AGENTS]}
       frustumCulled={false}
       renderOrder={999}

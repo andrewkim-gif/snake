@@ -16,7 +16,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
 import { createArcPoints } from '@/lib/effect-utils';
-import { ARC_HEIGHT, COLORS_BASE, RENDER_ORDER } from '@/lib/effect-constants';
+import { ARC_HEIGHT, COLORS_BASE, RENDER_ORDER, CAMERA_PRIORITY } from '@/lib/effect-constants';
 import type { TradeRouteData } from '@/hooks/useSocket';
 
 // ─── Types ───
@@ -30,6 +30,8 @@ export interface GlobeTradeRoutesProps {
   globeRadius?: number;
   /** Visibility toggle */
   visible?: boolean;
+  /** v24: 새 교역 루트 시 카메라 포커스 콜백 (priority=1, 최저 우선순위) */
+  onCameraTarget?: (position: THREE.Vector3, priority?: number) => void;
 }
 
 // ─── Constants ───
@@ -139,12 +141,14 @@ export function GlobeTradeRoutes({
   countryCentroids,
   globeRadius = DEFAULT_GLOBE_RADIUS,
   visible = true,
+  onCameraTarget,
 }: GlobeTradeRoutesProps) {
   const groupRef = useRef<THREE.Group>(null);
   const linesRef = useRef<THREE.Line[]>([]);
   const cargosRef = useRef<THREE.Mesh[]>([]);
   const routeDataRef = useRef<RouteRenderData[]>([]);
   const materialsRef = useRef<THREE.ShaderMaterial[]>([]);
+  const prevRouteCountRef = useRef(0);
   // v23: 자원별 cargo geometry + material 캐시 (생성된 것 추적하여 cleanup)
   const cargoGeosRef = useRef<Map<ResourceType, THREE.BufferGeometry>>(new Map());
   const cargoMatsRef = useRef<Map<ResourceType, THREE.MeshBasicMaterial>>(new Map());
@@ -168,6 +172,24 @@ export function GlobeTradeRoutes({
     }
     return mat;
   };
+
+  // v24: 새 교역 루트 감지 시 목적지(to) 국가로 카메라 포커스 (priority 1 = 최저)
+  useEffect(() => {
+    if (tradeRoutes.length <= prevRouteCountRef.current || !onCameraTarget) {
+      prevRouteCountRef.current = tradeRoutes.length;
+      return;
+    }
+
+    // 새로 추가된 루트 중 마지막 하나의 목적지에 포커스
+    const newRoute = tradeRoutes[tradeRoutes.length - 1];
+    const toCentroid = countryCentroids.get(newRoute.to);
+    if (toCentroid) {
+      const pos = latLngToVector3(toCentroid[0], toCentroid[1], globeRadius * 1.01);
+      onCameraTarget(pos, CAMERA_PRIORITY.trade);
+    }
+
+    prevRouteCountRef.current = tradeRoutes.length;
+  }, [tradeRoutes, countryCentroids, globeRadius, onCameraTarget]);
 
   // 라인 셰이더 머티리얼 (점선/실선 구분)
   const createLineMaterial = useMemo(() => (isSea: boolean) => {

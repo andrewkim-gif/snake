@@ -75,24 +75,30 @@ export class GameSocket {
     };
 
     this.ws.onmessage = (event: MessageEvent) => {
-      try {
-        const frame: WSFrame = JSON.parse(event.data);
-        if (!frame.e) return;
+      // 서버 WritePump이 여러 JSON을 \n으로 연결해서 배치 전송할 수 있음
+      const parts = (event.data as string).split('\n');
+      for (const part of parts) {
+        const trimmed = part.trim();
+        if (!trimmed) continue;
+        try {
+          const frame: WSFrame = JSON.parse(trimmed);
+          if (!frame.e) continue;
 
-        // 내부 pong 핸들링 (latency 측정)
-        if (frame.e === 'pong' && frame.d?.t) {
-          this._latency = Date.now() - frame.d.t;
-        }
-
-        // 등록된 리스너에 디스패치
-        const handlers = this.listeners.get(frame.e);
-        if (handlers) {
-          for (const fn of handlers) {
-            fn(frame.d);
+          // 내부 pong 핸들링 (latency 측정)
+          if (frame.e === 'pong' && frame.d?.t) {
+            this._latency = Date.now() - frame.d.t;
           }
+
+          // 등록된 리스너에 디스패치
+          const handlers = this.listeners.get(frame.e);
+          if (handlers) {
+            for (const fn of handlers) {
+              fn(frame.d);
+            }
+          }
+        } catch {
+          // JSON 파싱 실패 무시 (binary 메시지 등)
         }
-      } catch {
-        // JSON 파싱 실패 무시 (binary 메시지 등)
       }
     };
 

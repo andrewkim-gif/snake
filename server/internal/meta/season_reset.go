@@ -465,6 +465,20 @@ func (sre *SeasonResetEngine) distributeRewardsLocked(snapshot *SeasonSnapshot) 
 		})
 	}
 
+	// Actually deposit resource rewards to faction treasuries (v25)
+	if sre.factionManager != nil {
+		deposited := 0
+		for _, reward := range sre.rewards {
+			if reward.Resources.Gold > 0 || reward.Resources.Oil > 0 || reward.Resources.Minerals > 0 ||
+				reward.Resources.Food > 0 || reward.Resources.Tech > 0 || reward.Resources.Influence > 0 {
+				if err := sre.factionManager.DepositToTreasury(reward.RecipientID, reward.Resources); err == nil {
+					deposited++
+				}
+			}
+		}
+		slog.Info("season reward resources deposited", "count", deposited)
+	}
+
 	slog.Info("season rewards distributed", "count", len(sre.rewards), "season", snapshot.SeasonName)
 }
 
