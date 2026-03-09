@@ -461,16 +461,6 @@ export default function Home() {
     }, 300);
   }, []);
 
-  // v26: Globe → Isometric 전환 (Manage City — CountryPanel 전용)
-  const handleManageCity = useCallback((iso3: string, name: string) => {
-    const isOwnCountry = nationality === iso3;
-    setIsoCountry({ iso3, name, spectating: !isOwnCountry });
-    setFadeOut(true);
-    setTimeout(() => {
-      setMode('iso');
-      setFadeOut(false);
-    }, 300);
-  }, [nationality]);
 
   // v26: Iso → Globe 복귀
   const handleBackToGlobe = useCallback(() => {
@@ -649,7 +639,6 @@ export default function Home() {
         onEnterArena={handleQuickEnterArena}
         onSpectate={handleSpectate}
         onManageCountry={handleManageCountry}
-        onManageCity={handleManageCity}
         bottomOffset={NEWS_FEED_HEIGHT}
         dominationStates={uiState.dominationStates}
         wars={activeWars}
