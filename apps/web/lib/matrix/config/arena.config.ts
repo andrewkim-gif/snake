@@ -5,7 +5,7 @@
  * Ported from app_ingame/config/arena.config.ts
  */
 
-import { EnemyType, SafeZone, ArenaPhase } from '../types';
+import { EnemyType, SafeZone } from '../types';
 
 // ===== Arena Game Settings =====
 export const ARENA_CONFIG = {
@@ -40,7 +40,7 @@ export const ARENA_CONFIG = {
 
 // ===== Safe Zone Phases =====
 export const SAFE_ZONE_PHASES: {
-  phase: ArenaPhase;
+  phase: number;
   startTime: number;
   warningDuration: number;
   shrinkDuration: number;

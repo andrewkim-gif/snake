@@ -1,32 +1,10 @@
 /**
  * definitions.ts - Complete Skill Definitions
  * 55 Skills (25 Existing + 30 New) organized by Category
- *
- * Ported from app_ingame/config/skills/definitions.ts
- * SkillDefinition/SkillCategory inlined from missing skill.types
  */
 
-import { WeaponType } from '../../types';
-
-// ============================================
-// Inlined types from skill.types (does not exist in source)
-// ============================================
-
-export type SkillCategory = 'CODE' | 'DATA' | 'NETWORK' | 'SECURITY' | 'AI' | 'SYSTEM';
-
-export interface SkillDefinition {
-  id: WeaponType;
-  name: string;
-  nameEn: string;
-  description: string;
-  descriptionEn: string;
-  category: SkillCategory;
-  tier: 'basic' | 'advanced' | 'elite';
-  icon: string;
-  color: string;
-  synergyTags?: string[];
-  recommendedWith?: string[];
-}
+import { type SkillDefinition, type SkillCategory, type WeaponType } from '../../types';
+export type { SkillDefinition, SkillCategory };
 
 // ============================================
 // CODE Category Skills (10 skills)
@@ -172,16 +150,138 @@ export const CODE_SKILLS: SkillDefinition[] = [
 // ============================================
 
 export const DATA_SKILLS: SkillDefinition[] = [
-  { id: 'bible' as WeaponType, name: '문서화', nameEn: 'Documentation', description: '문서가 주위를 회전하며 적을 공격. 지속 데미지', descriptionEn: 'Documentation orbits and attacks enemies. Sustained damage', category: 'DATA', tier: 'basic', icon: 'BookOpen', color: '#06B6D4', synergyTags: ['orbit', 'sustained', 'basic'], recommendedWith: ['garlic', 'pool'] },
-  { id: 'pool' as WeaponType, name: '방화벽 존', nameEn: 'Firewall Zone', description: '발 밑에 방화벽 영역 생성. 영역 내 적에게 지속 피해', descriptionEn: 'Create firewall zone below. Damages enemies in area', category: 'DATA', tier: 'basic', icon: 'Flame', color: '#F97316', synergyTags: ['aoe', 'zone', 'sustained'], recommendedWith: ['bible', 'garlic'] },
-  { id: 'shard' as WeaponType, name: '데이터 샤드', nameEn: 'Data Shard', description: '데이터 조각을 흩뿌려 다수의 적 공격', descriptionEn: 'Scatter data shards to attack multiple enemies', category: 'DATA', tier: 'advanced', icon: 'Sparkles', color: '#06B6D4', synergyTags: ['projectile', 'multi', 'scatter'], recommendedWith: ['knife', 'fork'] },
-  { id: 'airdrop' as WeaponType, name: '에어드랍', nameEn: 'Airdrop', description: '하늘에서 데이터 폭탄 투하. 넓은 범위 폭발', descriptionEn: 'Drop data bombs from sky. Wide area explosion', category: 'DATA', tier: 'advanced', icon: 'Plane', color: '#06B6D4', synergyTags: ['aoe', 'explosion', 'ranged'], recommendedWith: ['pool', 'tcp_flood'] },
-  { id: 'json_bomb' as WeaponType, name: 'JSON 폭탄', nameEn: 'JSON Bomb', description: '거대한 JSON 객체를 던져 폭발. 중첩 데이터로 연쇄 폭발', descriptionEn: 'Throw giant JSON object to explode. Chain explosion with nested data', category: 'DATA', tier: 'basic', icon: 'Braces', color: '#F59E0B', synergyTags: ['aoe', 'chain', 'explosion'], recommendedWith: ['csv_spray', 'sql_injection'] },
-  { id: 'csv_spray' as WeaponType, name: 'CSV 스프레이', nameEn: 'CSV Spray', description: '쉼표로 구분된 데이터를 난사. 빠른 연사 속도', descriptionEn: 'Spray comma-separated data. High fire rate', category: 'DATA', tier: 'basic', icon: 'Table', color: '#06B6D4', synergyTags: ['projectile', 'rapid', 'multi'], recommendedWith: ['json_bomb', 'knife'] },
-  { id: 'sql_injection' as WeaponType, name: 'SQL 인젝션', nameEn: 'SQL Injection', description: '악성 쿼리를 주입하여 적의 방어력 무시. 보스 특효', descriptionEn: 'Inject malicious query to ignore defense. Effective vs bosses', category: 'DATA', tier: 'advanced', icon: 'Database', color: '#EF4444', synergyTags: ['debuff', 'pierce', 'boss_killer'], recommendedWith: ['debugger_skill', 'encryption'] },
-  { id: 'regex' as WeaponType, name: '정규 표현식', nameEn: 'Regex', description: '패턴 매칭으로 특정 적 타입에 추가 데미지', descriptionEn: 'Pattern matching for bonus damage to specific enemy types', category: 'DATA', tier: 'advanced', icon: 'Search', color: '#8B5CF6', synergyTags: ['precise', 'conditional', 'utility'], recommendedWith: ['neural_net', 'debugger_skill'] },
-  { id: 'binary' as WeaponType, name: '바이너리 스트림', nameEn: 'Binary Stream', description: '0과 1의 물결로 적을 밀어내며 데미지', descriptionEn: 'Wave of 0s and 1s pushes enemies while dealing damage', category: 'DATA', tier: 'elite', icon: 'Binary', color: '#00FF41', synergyTags: ['wave', 'knockback', 'sustained'], recommendedWith: ['beam', 'laser'] },
-  { id: 'big_data' as WeaponType, name: '빅데이터', nameEn: 'Big Data', description: '축적된 데이터로 폭발. 처치한 적 수에 비례하여 강해짐', descriptionEn: 'Explode with accumulated data. Stronger based on kill count', category: 'DATA', tier: 'elite', icon: 'BarChart3', color: '#06B6D4', synergyTags: ['scaling', 'aoe', 'powerful'], recommendedWith: ['json_bomb', 'airdrop'] },
+  // === Existing ===
+  {
+    id: 'bible' as WeaponType,
+    name: '문서화',
+    nameEn: 'Documentation',
+    description: '문서가 주위를 회전하며 적을 공격. 지속 데미지',
+    descriptionEn: 'Documentation orbits and attacks enemies. Sustained damage',
+    category: 'DATA',
+    tier: 'basic',
+    icon: 'BookOpen',
+    color: '#06B6D4',
+    synergyTags: ['orbit', 'sustained', 'basic'],
+    recommendedWith: ['garlic', 'pool'],
+  },
+  {
+    id: 'pool' as WeaponType,
+    name: '방화벽 존',
+    nameEn: 'Firewall Zone',
+    description: '발 밑에 방화벽 영역 생성. 영역 내 적에게 지속 피해',
+    descriptionEn: 'Create firewall zone below. Damages enemies in area',
+    category: 'DATA',
+    tier: 'basic',
+    icon: 'Flame',
+    color: '#F97316',
+    synergyTags: ['aoe', 'zone', 'sustained'],
+    recommendedWith: ['bible', 'garlic'],
+  },
+  {
+    id: 'shard' as WeaponType,
+    name: '데이터 샤드',
+    nameEn: 'Data Shard',
+    description: '데이터 조각을 흩뿌려 다수의 적 공격',
+    descriptionEn: 'Scatter data shards to attack multiple enemies',
+    category: 'DATA',
+    tier: 'advanced',
+    icon: 'Sparkles',
+    color: '#06B6D4',
+    synergyTags: ['projectile', 'multi', 'scatter'],
+    recommendedWith: ['knife', 'fork'],
+  },
+  {
+    id: 'airdrop' as WeaponType,
+    name: '에어드랍',
+    nameEn: 'Airdrop',
+    description: '하늘에서 데이터 폭탄 투하. 넓은 범위 폭발',
+    descriptionEn: 'Drop data bombs from sky. Wide area explosion',
+    category: 'DATA',
+    tier: 'advanced',
+    icon: 'Plane',
+    color: '#06B6D4',
+    synergyTags: ['aoe', 'explosion', 'ranged'],
+    recommendedWith: ['pool', 'tcp_flood'],
+  },
+  // === New Skills ===
+  {
+    id: 'json_bomb' as WeaponType,
+    name: 'JSON 폭탄',
+    nameEn: 'JSON Bomb',
+    description: '거대한 JSON 객체를 던져 폭발. 중첩 데이터로 연쇄 폭발',
+    descriptionEn: 'Throw giant JSON object to explode. Chain explosion with nested data',
+    category: 'DATA',
+    tier: 'basic',
+    icon: 'Braces',
+    color: '#F59E0B',
+    synergyTags: ['aoe', 'chain', 'explosion'],
+    recommendedWith: ['csv_spray', 'sql_injection'],
+  },
+  {
+    id: 'csv_spray' as WeaponType,
+    name: 'CSV 스프레이',
+    nameEn: 'CSV Spray',
+    description: '쉼표로 구분된 데이터를 난사. 빠른 연사 속도',
+    descriptionEn: 'Spray comma-separated data. High fire rate',
+    category: 'DATA',
+    tier: 'basic',
+    icon: 'Table',
+    color: '#06B6D4',
+    synergyTags: ['projectile', 'rapid', 'multi'],
+    recommendedWith: ['json_bomb', 'knife'],
+  },
+  {
+    id: 'sql_injection' as WeaponType,
+    name: 'SQL 인젝션',
+    nameEn: 'SQL Injection',
+    description: '악성 쿼리를 주입하여 적의 방어력 무시. 보스 특효',
+    descriptionEn: 'Inject malicious query to ignore defense. Effective vs bosses',
+    category: 'DATA',
+    tier: 'advanced',
+    icon: 'Database',
+    color: '#EF4444',
+    synergyTags: ['debuff', 'pierce', 'boss_killer'],
+    recommendedWith: ['debugger_skill', 'encryption'],
+  },
+  {
+    id: 'regex' as WeaponType,
+    name: '정규 표현식',
+    nameEn: 'Regex',
+    description: '패턴 매칭으로 특정 적 타입에 추가 데미지',
+    descriptionEn: 'Pattern matching for bonus damage to specific enemy types',
+    category: 'DATA',
+    tier: 'advanced',
+    icon: 'Search',
+    color: '#8B5CF6',
+    synergyTags: ['precise', 'conditional', 'utility'],
+    recommendedWith: ['neural_net', 'debugger_skill'],
+  },
+  {
+    id: 'binary' as WeaponType,
+    name: '바이너리 스트림',
+    nameEn: 'Binary Stream',
+    description: '0과 1의 물결로 적을 밀어내며 데미지',
+    descriptionEn: 'Wave of 0s and 1s pushes enemies while dealing damage',
+    category: 'DATA',
+    tier: 'elite',
+    icon: 'Binary',
+    color: '#00FF41',
+    synergyTags: ['wave', 'knockback', 'sustained'],
+    recommendedWith: ['beam', 'laser'],
+  },
+  {
+    id: 'big_data' as WeaponType,
+    name: '빅데이터',
+    nameEn: 'Big Data',
+    description: '축적된 데이터로 폭발. 처치한 적 수에 비례하여 강해짐',
+    descriptionEn: 'Explode with accumulated data. Stronger based on kill count',
+    category: 'DATA',
+    tier: 'elite',
+    icon: 'BarChart3',
+    color: '#06B6D4',
+    synergyTags: ['scaling', 'aoe', 'powerful'],
+    recommendedWith: ['json_bomb', 'airdrop'],
+  },
 ];
 
 // ============================================
@@ -189,16 +289,138 @@ export const DATA_SKILLS: SkillDefinition[] = [
 // ============================================
 
 export const NETWORK_SKILLS: SkillDefinition[] = [
-  { id: 'bridge' as WeaponType, name: 'MCP 서버', nameEn: 'MCP Server', description: '적들을 체인으로 연결하여 데미지 공유', descriptionEn: 'Chain enemies together to share damage', category: 'NETWORK', tier: 'basic', icon: 'Link', color: '#8B5CF6', synergyTags: ['chain', 'multi', 'basic'], recommendedWith: ['ping', 'websocket'] },
-  { id: 'ping' as WeaponType, name: 'Ping 패킷', nameEn: 'Ping Packet', description: '빠른 핑 패킷으로 적을 탐지하고 공격', descriptionEn: 'Fast ping packets detect and attack enemies', category: 'NETWORK', tier: 'basic', icon: 'Radio', color: '#8B5CF6', synergyTags: ['fast', 'homing', 'basic'], recommendedWith: ['bridge', 'knife'] },
-  { id: 'fork' as WeaponType, name: '프로세스 포크', nameEn: 'Process Fork', description: '투사체가 분열하여 여러 적 동시 공격', descriptionEn: 'Projectiles split to attack multiple enemies simultaneously', category: 'NETWORK', tier: 'advanced', icon: 'GitFork', color: '#8B5CF6', synergyTags: ['split', 'multi', 'projectile'], recommendedWith: ['shard', 'knife'] },
-  { id: 'websocket' as WeaponType, name: '웹소켓', nameEn: 'WebSocket', description: '실시간 연결로 지속적인 데미지. 연결 유지 시 강해짐', descriptionEn: 'Real-time connection for sustained damage. Stronger while connected', category: 'NETWORK', tier: 'basic', icon: 'Plug', color: '#8B5CF6', synergyTags: ['beam', 'sustained', 'scaling'], recommendedWith: ['bridge', 'beam'] },
-  { id: 'tcp_flood' as WeaponType, name: 'TCP 플러드', nameEn: 'TCP Flood', description: '대량의 패킷으로 영역 공격. 적을 슬로우', descriptionEn: 'Flood area with packets. Slows enemies', category: 'NETWORK', tier: 'advanced', icon: 'Waves', color: '#3B82F6', synergyTags: ['aoe', 'slow', 'flood'], recommendedWith: ['pool', 'airdrop'] },
-  { id: 'dns_spoof' as WeaponType, name: 'DNS 스푸핑', nameEn: 'DNS Spoofing', description: '적의 목표를 혼란시켜 서로 공격하게 함', descriptionEn: 'Confuse enemy targeting to attack each other', category: 'NETWORK', tier: 'advanced', icon: 'Shuffle', color: '#F59E0B', synergyTags: ['debuff', 'confusion', 'utility'], recommendedWith: ['deepfake', 'encryption'] },
-  { id: 'packet_loss' as WeaponType, name: '패킷 손실', nameEn: 'Packet Loss', description: '적의 공격 패킷을 드랍시켜 피해 무효화 확률', descriptionEn: 'Drop enemy attack packets for damage nullification chance', category: 'NETWORK', tier: 'advanced', icon: 'WifiOff', color: '#EF4444', synergyTags: ['defensive', 'evasion', 'utility'], recommendedWith: ['firewall_surge', 'sandbox'] },
-  { id: 'vpn_tunnel' as WeaponType, name: 'VPN 터널', nameEn: 'VPN Tunnel', description: '순간이동 대시. 지나간 자리에 데미지 존 생성', descriptionEn: 'Teleport dash. Leave damage zone in path', category: 'NETWORK', tier: 'elite', icon: 'Route', color: '#10B981', synergyTags: ['mobility', 'zone', 'escape'], recommendedWith: ['pool', 'overclock'] },
-  { id: 'ddos' as WeaponType, name: 'DDoS 공격', nameEn: 'DDoS Attack', description: '화면 전체에 대규모 패킷 공격. 긴 쿨다운', descriptionEn: 'Massive packet attack on entire screen. Long cooldown', category: 'NETWORK', tier: 'elite', icon: 'Bomb', color: '#EF4444', synergyTags: ['ultimate', 'aoe', 'powerful'], recommendedWith: ['tcp_flood', 'airdrop'] },
-  { id: 'p2p' as WeaponType, name: 'P2P 네트워크', nameEn: 'P2P Network', description: '처치한 적이 아군으로 변환되어 함께 싸움', descriptionEn: 'Killed enemies convert to allies that fight with you', category: 'NETWORK', tier: 'elite', icon: 'Users', color: '#8B5CF6', synergyTags: ['summon', 'conversion', 'scaling'], recommendedWith: ['neural_net', 'autopilot'] },
+  // === Existing ===
+  {
+    id: 'bridge' as WeaponType,
+    name: 'MCP 서버',
+    nameEn: 'MCP Server',
+    description: '적들을 체인으로 연결하여 데미지 공유',
+    descriptionEn: 'Chain enemies together to share damage',
+    category: 'NETWORK',
+    tier: 'basic',
+    icon: 'Link',
+    color: '#8B5CF6',
+    synergyTags: ['chain', 'multi', 'basic'],
+    recommendedWith: ['ping', 'websocket'],
+  },
+  {
+    id: 'ping' as WeaponType,
+    name: 'Ping 패킷',
+    nameEn: 'Ping Packet',
+    description: '빠른 핑 패킷으로 적을 탐지하고 공격',
+    descriptionEn: 'Fast ping packets detect and attack enemies',
+    category: 'NETWORK',
+    tier: 'basic',
+    icon: 'Radio',
+    color: '#8B5CF6',
+    synergyTags: ['fast', 'homing', 'basic'],
+    recommendedWith: ['bridge', 'knife'],
+  },
+  {
+    id: 'fork' as WeaponType,
+    name: '프로세스 포크',
+    nameEn: 'Process Fork',
+    description: '투사체가 분열하여 여러 적 동시 공격',
+    descriptionEn: 'Projectiles split to attack multiple enemies simultaneously',
+    category: 'NETWORK',
+    tier: 'advanced',
+    icon: 'GitFork',
+    color: '#8B5CF6',
+    synergyTags: ['split', 'multi', 'projectile'],
+    recommendedWith: ['shard', 'knife'],
+  },
+  // === New Skills ===
+  {
+    id: 'websocket' as WeaponType,
+    name: '웹소켓',
+    nameEn: 'WebSocket',
+    description: '실시간 연결로 지속적인 데미지. 연결 유지 시 강해짐',
+    descriptionEn: 'Real-time connection for sustained damage. Stronger while connected',
+    category: 'NETWORK',
+    tier: 'basic',
+    icon: 'Plug',
+    color: '#8B5CF6',
+    synergyTags: ['beam', 'sustained', 'scaling'],
+    recommendedWith: ['bridge', 'beam'],
+  },
+  {
+    id: 'tcp_flood' as WeaponType,
+    name: 'TCP 플러드',
+    nameEn: 'TCP Flood',
+    description: '대량의 패킷으로 영역 공격. 적을 슬로우',
+    descriptionEn: 'Flood area with packets. Slows enemies',
+    category: 'NETWORK',
+    tier: 'advanced',
+    icon: 'Waves',
+    color: '#3B82F6',
+    synergyTags: ['aoe', 'slow', 'flood'],
+    recommendedWith: ['pool', 'airdrop'],
+  },
+  {
+    id: 'dns_spoof' as WeaponType,
+    name: 'DNS 스푸핑',
+    nameEn: 'DNS Spoofing',
+    description: '적의 목표를 혼란시켜 서로 공격하게 함',
+    descriptionEn: 'Confuse enemy targeting to attack each other',
+    category: 'NETWORK',
+    tier: 'advanced',
+    icon: 'Shuffle',
+    color: '#F59E0B',
+    synergyTags: ['debuff', 'confusion', 'utility'],
+    recommendedWith: ['deepfake', 'encryption'],
+  },
+  {
+    id: 'packet_loss' as WeaponType,
+    name: '패킷 손실',
+    nameEn: 'Packet Loss',
+    description: '적의 공격 패킷을 드랍시켜 피해 무효화 확률',
+    descriptionEn: 'Drop enemy attack packets for damage nullification chance',
+    category: 'NETWORK',
+    tier: 'advanced',
+    icon: 'WifiOff',
+    color: '#EF4444',
+    synergyTags: ['defensive', 'evasion', 'utility'],
+    recommendedWith: ['firewall_surge', 'sandbox'],
+  },
+  {
+    id: 'vpn_tunnel' as WeaponType,
+    name: 'VPN 터널',
+    nameEn: 'VPN Tunnel',
+    description: '순간이동 대시. 지나간 자리에 데미지 존 생성',
+    descriptionEn: 'Teleport dash. Leave damage zone in path',
+    category: 'NETWORK',
+    tier: 'elite',
+    icon: 'Route',
+    color: '#10B981',
+    synergyTags: ['mobility', 'zone', 'escape'],
+    recommendedWith: ['pool', 'overclock'],
+  },
+  {
+    id: 'ddos' as WeaponType,
+    name: 'DDoS 공격',
+    nameEn: 'DDoS Attack',
+    description: '화면 전체에 대규모 패킷 공격. 긴 쿨다운',
+    descriptionEn: 'Massive packet attack on entire screen. Long cooldown',
+    category: 'NETWORK',
+    tier: 'elite',
+    icon: 'Bomb',
+    color: '#EF4444',
+    synergyTags: ['ultimate', 'aoe', 'powerful'],
+    recommendedWith: ['tcp_flood', 'airdrop'],
+  },
+  {
+    id: 'p2p' as WeaponType,
+    name: 'P2P 네트워크',
+    nameEn: 'P2P Network',
+    description: '처치한 적이 아군으로 변환되어 함께 싸움',
+    descriptionEn: 'Killed enemies convert to allies that fight with you',
+    category: 'NETWORK',
+    tier: 'elite',
+    icon: 'Users',
+    color: '#8B5CF6',
+    synergyTags: ['summon', 'conversion', 'scaling'],
+    recommendedWith: ['neural_net', 'autopilot'],
+  },
 ];
 
 // ============================================
@@ -206,15 +428,125 @@ export const NETWORK_SKILLS: SkillDefinition[] = [
 // ============================================
 
 export const SECURITY_SKILLS: SkillDefinition[] = [
-  { id: 'garlic' as WeaponType, name: '디버그 오라', nameEn: 'Debug Aura', description: '주변에 디버깅 영역 생성. 접근하는 적에게 지속 피해', descriptionEn: 'Create debugging zone around you. Damages approaching enemies', category: 'SECURITY', tier: 'basic', icon: 'Shield', color: '#EF4444', synergyTags: ['aura', 'defensive', 'sustained'], recommendedWith: ['bible', 'pool'] },
-  { id: 'antivirus' as WeaponType, name: '안티바이러스', nameEn: 'Antivirus', description: '주기적으로 바이러스를 제거하여 디버프 해제 + 회복', descriptionEn: 'Periodically remove viruses to cleanse debuffs + heal', category: 'SECURITY', tier: 'basic', icon: 'ShieldCheck', color: '#10B981', synergyTags: ['heal', 'cleanse', 'defensive'], recommendedWith: ['hotfix', 'garlic'] },
-  { id: 'sandbox' as WeaponType, name: '샌드박스', nameEn: 'Sandbox', description: '적을 격리하여 이동 불가. 격리된 적에게 추가 데미지', descriptionEn: 'Isolate enemies to prevent movement. Bonus damage to isolated', category: 'SECURITY', tier: 'basic', icon: 'Box', color: '#F59E0B', synergyTags: ['cc', 'trap', 'utility'], recommendedWith: ['pool', 'tcp_flood'] },
-  { id: 'encryption' as WeaponType, name: '암호화', nameEn: 'Encryption', description: '받는 데미지를 암호화하여 감소. 일정 확률로 완전 무효화', descriptionEn: 'Encrypt incoming damage to reduce. Chance to nullify completely', category: 'SECURITY', tier: 'advanced', icon: 'Lock', color: '#8B5CF6', synergyTags: ['defensive', 'damage_reduction', 'evasion'], recommendedWith: ['packet_loss', 'firewall_surge'] },
-  { id: 'firewall_surge' as WeaponType, name: '방화벽 서지', nameEn: 'Firewall Surge', description: '방화벽을 폭발시켜 주변 적에게 피해 + 밀어내기', descriptionEn: 'Explode firewall to damage nearby enemies + knockback', category: 'SECURITY', tier: 'advanced', icon: 'Flame', color: '#EF4444', synergyTags: ['aoe', 'knockback', 'burst'], recommendedWith: ['garlic', 'pool'] },
-  { id: 'zero_trust' as WeaponType, name: '제로 트러스트', nameEn: 'Zero Trust', description: '모든 접근을 검증. 적의 첫 공격을 항상 무효화', descriptionEn: 'Verify all access. Always nullify enemy first attack', category: 'SECURITY', tier: 'advanced', icon: 'ShieldAlert', color: '#06B6D4', synergyTags: ['defensive', 'immunity', 'utility'], recommendedWith: ['encryption', 'antivirus'] },
-  { id: 'honeypot' as WeaponType, name: '허니팟', nameEn: 'Honeypot', description: '미끼를 설치하여 적을 유인. 유인된 적에게 추가 데미지', descriptionEn: 'Deploy decoy to lure enemies. Bonus damage to lured enemies', category: 'SECURITY', tier: 'elite', icon: 'Target', color: '#F59E0B', synergyTags: ['trap', 'lure', 'utility'], recommendedWith: ['sandbox', 'pool'] },
-  { id: 'incident_response' as WeaponType, name: '인시던트 대응', nameEn: 'Incident Response', description: '체력이 낮을 때 자동 발동. 대량 회복 + 무적 시간', descriptionEn: 'Auto-trigger when low HP. Massive heal + invincibility', category: 'SECURITY', tier: 'elite', icon: 'Siren', color: '#EF4444', synergyTags: ['heal', 'emergency', 'survival'], recommendedWith: ['hotfix', 'antivirus'] },
-  { id: 'backup' as WeaponType, name: '백업 시스템', nameEn: 'Backup System', description: '사망 시 1회 부활. 부활 시 무적 + 폭발 데미지', descriptionEn: 'Revive once on death. Invincibility + explosion on revive', category: 'SECURITY', tier: 'elite', icon: 'RotateCcw', color: '#10B981', synergyTags: ['revive', 'emergency', 'survival'], recommendedWith: ['incident_response', 'hotfix'] },
+  // === Existing ===
+  {
+    id: 'garlic' as WeaponType,
+    name: '디버그 오라',
+    nameEn: 'Debug Aura',
+    description: '주변에 디버깅 영역 생성. 접근하는 적에게 지속 피해',
+    descriptionEn: 'Create debugging zone around you. Damages approaching enemies',
+    category: 'SECURITY',
+    tier: 'basic',
+    icon: 'Shield',
+    color: '#EF4444',
+    synergyTags: ['aura', 'defensive', 'sustained'],
+    recommendedWith: ['bible', 'pool'],
+  },
+  // === New Skills ===
+  {
+    id: 'antivirus' as WeaponType,
+    name: '안티바이러스',
+    nameEn: 'Antivirus',
+    description: '주기적으로 바이러스를 제거하여 디버프 해제 + 회복',
+    descriptionEn: 'Periodically remove viruses to cleanse debuffs + heal',
+    category: 'SECURITY',
+    tier: 'basic',
+    icon: 'ShieldCheck',
+    color: '#10B981',
+    synergyTags: ['heal', 'cleanse', 'defensive'],
+    recommendedWith: ['hotfix', 'garlic'],
+  },
+  {
+    id: 'sandbox' as WeaponType,
+    name: '샌드박스',
+    nameEn: 'Sandbox',
+    description: '적을 격리하여 이동 불가. 격리된 적에게 추가 데미지',
+    descriptionEn: 'Isolate enemies to prevent movement. Bonus damage to isolated',
+    category: 'SECURITY',
+    tier: 'basic',
+    icon: 'Box',
+    color: '#F59E0B',
+    synergyTags: ['cc', 'trap', 'utility'],
+    recommendedWith: ['pool', 'tcp_flood'],
+  },
+  {
+    id: 'encryption' as WeaponType,
+    name: '암호화',
+    nameEn: 'Encryption',
+    description: '받는 데미지를 암호화하여 감소. 일정 확률로 완전 무효화',
+    descriptionEn: 'Encrypt incoming damage to reduce. Chance to nullify completely',
+    category: 'SECURITY',
+    tier: 'advanced',
+    icon: 'Lock',
+    color: '#8B5CF6',
+    synergyTags: ['defensive', 'damage_reduction', 'evasion'],
+    recommendedWith: ['packet_loss', 'firewall_surge'],
+  },
+  {
+    id: 'firewall_surge' as WeaponType,
+    name: '방화벽 서지',
+    nameEn: 'Firewall Surge',
+    description: '방화벽을 폭발시켜 주변 적에게 피해 + 밀어내기',
+    descriptionEn: 'Explode firewall to damage nearby enemies + knockback',
+    category: 'SECURITY',
+    tier: 'advanced',
+    icon: 'Flame',
+    color: '#EF4444',
+    synergyTags: ['aoe', 'knockback', 'burst'],
+    recommendedWith: ['garlic', 'pool'],
+  },
+  {
+    id: 'zero_trust' as WeaponType,
+    name: '제로 트러스트',
+    nameEn: 'Zero Trust',
+    description: '모든 접근을 검증. 적의 첫 공격을 항상 무효화',
+    descriptionEn: 'Verify all access. Always nullify enemy first attack',
+    category: 'SECURITY',
+    tier: 'advanced',
+    icon: 'ShieldAlert',
+    color: '#06B6D4',
+    synergyTags: ['defensive', 'immunity', 'utility'],
+    recommendedWith: ['encryption', 'antivirus'],
+  },
+  {
+    id: 'honeypot' as WeaponType,
+    name: '허니팟',
+    nameEn: 'Honeypot',
+    description: '미끼를 설치하여 적을 유인. 유인된 적에게 추가 데미지',
+    descriptionEn: 'Deploy decoy to lure enemies. Bonus damage to lured enemies',
+    category: 'SECURITY',
+    tier: 'elite',
+    icon: 'Target',
+    color: '#F59E0B',
+    synergyTags: ['trap', 'lure', 'utility'],
+    recommendedWith: ['sandbox', 'pool'],
+  },
+  {
+    id: 'incident_response' as WeaponType,
+    name: '인시던트 대응',
+    nameEn: 'Incident Response',
+    description: '체력이 낮을 때 자동 발동. 대량 회복 + 무적 시간',
+    descriptionEn: 'Auto-trigger when low HP. Massive heal + invincibility',
+    category: 'SECURITY',
+    tier: 'elite',
+    icon: 'Siren',
+    color: '#EF4444',
+    synergyTags: ['heal', 'emergency', 'survival'],
+    recommendedWith: ['hotfix', 'antivirus'],
+  },
+  {
+    id: 'backup' as WeaponType,
+    name: '백업 시스템',
+    nameEn: 'Backup System',
+    description: '사망 시 1회 부활. 부활 시 무적 + 폭발 데미지',
+    descriptionEn: 'Revive once on death. Invincibility + explosion on revive',
+    category: 'SECURITY',
+    tier: 'elite',
+    icon: 'RotateCcw',
+    color: '#10B981',
+    synergyTags: ['revive', 'emergency', 'survival'],
+    recommendedWith: ['incident_response', 'hotfix'],
+  },
 ];
 
 // ============================================
@@ -222,15 +554,125 @@ export const SECURITY_SKILLS: SkillDefinition[] = [
 // ============================================
 
 export const AI_SKILLS: SkillDefinition[] = [
-  { id: 'lightning' as WeaponType, name: 'Claude 어시스트', nameEn: 'Claude Assist', description: 'AI가 자동으로 적을 추적하여 번개 공격', descriptionEn: 'AI automatically tracks enemies with lightning attack', category: 'AI', tier: 'basic', icon: 'Zap', color: '#F59E0B', synergyTags: ['auto', 'homing', 'chain'], recommendedWith: ['wand', 'neural_net'] },
-  { id: 'beam' as WeaponType, name: '스택 트레이스', nameEn: 'Stack Trace', description: '스택을 추적하여 관통 빔 발사. 적을 뚫고 지나감', descriptionEn: 'Trace stack to fire piercing beam. Passes through enemies', category: 'AI', tier: 'advanced', icon: 'Layers', color: '#F59E0B', synergyTags: ['beam', 'pierce', 'sustained'], recommendedWith: ['laser', 'compiler'] },
-  { id: 'laser' as WeaponType, name: '재귀 루프', nameEn: 'Recursive Loop', description: '회전하며 연속 발사. 적을 스쳐 지나가며 데미지', descriptionEn: 'Rotate while firing continuously. Damage enemies in path', category: 'AI', tier: 'advanced', icon: 'Repeat', color: '#F59E0B', synergyTags: ['spin', 'sustained', 'sweep'], recommendedWith: ['beam', 'whip'] },
-  { id: 'neural_net' as WeaponType, name: '뉴럴 네트워크', nameEn: 'Neural Network', description: 'AI가 패턴을 학습하여 점점 강해짐. 시간에 비례 강화', descriptionEn: 'AI learns patterns to get stronger. Scales with time', category: 'AI', tier: 'basic', icon: 'Brain', color: '#F59E0B', synergyTags: ['scaling', 'auto', 'passive'], recommendedWith: ['lightning', 'autopilot'] },
-  { id: 'chatgpt' as WeaponType, name: 'ChatGPT', nameEn: 'ChatGPT', description: '적에게 말을 걸어 혼란 유발. 일정 시간 행동 정지', descriptionEn: 'Talk to enemies to cause confusion. Stun for duration', category: 'AI', tier: 'advanced', icon: 'MessageSquare', color: '#10B981', synergyTags: ['cc', 'stun', 'debuff'], recommendedWith: ['dns_spoof', 'sandbox'] },
-  { id: 'autopilot' as WeaponType, name: '오토파일럿', nameEn: 'Autopilot', description: '자율주행 드론 소환. 자동으로 적 추적 공격', descriptionEn: 'Summon autopilot drone. Automatically tracks and attacks enemies', category: 'AI', tier: 'basic', icon: 'Plane', color: '#06B6D4', synergyTags: ['summon', 'auto', 'homing'], recommendedWith: ['lightning', 'neural_net'] },
-  { id: 'deepfake' as WeaponType, name: '딥페이크', nameEn: 'Deepfake', description: '분신 생성. 분신도 공격 가능하며 적의 타겟이 됨', descriptionEn: 'Create clone. Clone can attack and draws enemy aggro', category: 'AI', tier: 'advanced', icon: 'Copy', color: '#8B5CF6', synergyTags: ['summon', 'decoy', 'utility'], recommendedWith: ['honeypot', 'p2p'] },
-  { id: 'singularity_core' as WeaponType, name: '싱귤래리티 코어', nameEn: 'Singularity Core', description: '블랙홀 생성. 적을 빨아들여 집중 데미지', descriptionEn: 'Create black hole. Pull enemies for concentrated damage', category: 'AI', tier: 'elite', icon: 'Circle', color: '#1F2937', synergyTags: ['pull', 'aoe', 'powerful'], recommendedWith: ['ddos', 'big_data'] },
-  { id: 'agi' as WeaponType, name: 'AGI', nameEn: 'AGI', description: '모든 AI 스킬 시너지 발동. AI 스킬 데미지 2배', descriptionEn: 'Activate all AI skill synergies. Double AI skill damage', category: 'AI', tier: 'elite', icon: 'Sparkles', color: '#F59E0B', synergyTags: ['ultimate', 'buff', 'synergy'], recommendedWith: ['neural_net', 'singularity_core'] },
+  // === Existing ===
+  {
+    id: 'lightning' as WeaponType,
+    name: 'Claude 어시스트',
+    nameEn: 'Claude Assist',
+    description: 'AI가 자동으로 적을 추적하여 번개 공격',
+    descriptionEn: 'AI automatically tracks enemies with lightning attack',
+    category: 'AI',
+    tier: 'basic',
+    icon: 'Zap',
+    color: '#F59E0B',
+    synergyTags: ['auto', 'homing', 'chain'],
+    recommendedWith: ['wand', 'neural_net'],
+  },
+  {
+    id: 'beam' as WeaponType,
+    name: '스택 트레이스',
+    nameEn: 'Stack Trace',
+    description: '스택을 추적하여 관통 빔 발사. 적을 뚫고 지나감',
+    descriptionEn: 'Trace stack to fire piercing beam. Passes through enemies',
+    category: 'AI',
+    tier: 'advanced',
+    icon: 'Layers',
+    color: '#F59E0B',
+    synergyTags: ['beam', 'pierce', 'sustained'],
+    recommendedWith: ['laser', 'compiler'],
+  },
+  {
+    id: 'laser' as WeaponType,
+    name: '재귀 루프',
+    nameEn: 'Recursive Loop',
+    description: '회전하며 연속 발사. 적을 스쳐 지나가며 데미지',
+    descriptionEn: 'Rotate while firing continuously. Damage enemies in path',
+    category: 'AI',
+    tier: 'advanced',
+    icon: 'Repeat',
+    color: '#F59E0B',
+    synergyTags: ['spin', 'sustained', 'sweep'],
+    recommendedWith: ['beam', 'whip'],
+  },
+  // === New Skills ===
+  {
+    id: 'neural_net' as WeaponType,
+    name: '뉴럴 네트워크',
+    nameEn: 'Neural Network',
+    description: 'AI가 패턴을 학습하여 점점 강해짐. 시간에 비례 강화',
+    descriptionEn: 'AI learns patterns to get stronger. Scales with time',
+    category: 'AI',
+    tier: 'basic',
+    icon: 'Brain',
+    color: '#F59E0B',
+    synergyTags: ['scaling', 'auto', 'passive'],
+    recommendedWith: ['lightning', 'autopilot'],
+  },
+  {
+    id: 'chatgpt' as WeaponType,
+    name: 'ChatGPT',
+    nameEn: 'ChatGPT',
+    description: '적에게 말을 걸어 혼란 유발. 일정 시간 행동 정지',
+    descriptionEn: 'Talk to enemies to cause confusion. Stun for duration',
+    category: 'AI',
+    tier: 'advanced',
+    icon: 'MessageSquare',
+    color: '#10B981',
+    synergyTags: ['cc', 'stun', 'debuff'],
+    recommendedWith: ['dns_spoof', 'sandbox'],
+  },
+  {
+    id: 'autopilot' as WeaponType,
+    name: '오토파일럿',
+    nameEn: 'Autopilot',
+    description: '자율주행 드론 소환. 자동으로 적 추적 공격',
+    descriptionEn: 'Summon autopilot drone. Automatically tracks and attacks enemies',
+    category: 'AI',
+    tier: 'basic',
+    icon: 'Plane',
+    color: '#06B6D4',
+    synergyTags: ['summon', 'auto', 'homing'],
+    recommendedWith: ['lightning', 'neural_net'],
+  },
+  {
+    id: 'deepfake' as WeaponType,
+    name: '딥페이크',
+    nameEn: 'Deepfake',
+    description: '분신 생성. 분신도 공격 가능하며 적의 타겟이 됨',
+    descriptionEn: 'Create clone. Clone can attack and draws enemy aggro',
+    category: 'AI',
+    tier: 'advanced',
+    icon: 'Copy',
+    color: '#8B5CF6',
+    synergyTags: ['summon', 'decoy', 'utility'],
+    recommendedWith: ['honeypot', 'p2p'],
+  },
+  {
+    id: 'singularity_core' as WeaponType,
+    name: '싱귤래리티 코어',
+    nameEn: 'Singularity Core',
+    description: '블랙홀 생성. 적을 빨아들여 집중 데미지',
+    descriptionEn: 'Create black hole. Pull enemies for concentrated damage',
+    category: 'AI',
+    tier: 'elite',
+    icon: 'Circle',
+    color: '#1F2937',
+    synergyTags: ['pull', 'aoe', 'powerful'],
+    recommendedWith: ['ddos', 'big_data'],
+  },
+  {
+    id: 'agi' as WeaponType,
+    name: 'AGI',
+    nameEn: 'AGI',
+    description: '모든 AI 스킬 시너지 발동. AI 스킬 데미지 2배',
+    descriptionEn: 'Activate all AI skill synergies. Double AI skill damage',
+    category: 'AI',
+    tier: 'elite',
+    icon: 'Sparkles',
+    color: '#F59E0B',
+    synergyTags: ['ultimate', 'buff', 'synergy'],
+    recommendedWith: ['neural_net', 'singularity_core'],
+  },
 ];
 
 // ============================================
@@ -238,22 +680,134 @@ export const AI_SKILLS: SkillDefinition[] = [
 // ============================================
 
 export const SYSTEM_SKILLS: SkillDefinition[] = [
-  { id: 'punch' as WeaponType, name: '키보드 펀치', nameEn: 'Keyboard Punch', description: '키보드로 강하게 타격. 넉백 효과', descriptionEn: 'Strike hard with keyboard. Knockback effect', category: 'SYSTEM', tier: 'basic', icon: 'Keyboard', color: '#10B981', synergyTags: ['melee', 'knockback', 'basic'], recommendedWith: ['whip', 'sword'] },
-  { id: 'sword' as WeaponType, name: '타입 안전성', nameEn: 'Type Safety', description: '타입을 검사하며 베기. 높은 크리티컬 확률', descriptionEn: 'Slash while checking types. High critical chance', category: 'SYSTEM', tier: 'advanced', icon: 'Sword', color: '#10B981', synergyTags: ['melee', 'crit', 'precise'], recommendedWith: ['punch', 'focus'] },
-  { id: 'focus' as WeaponType, name: '딥워크', nameEn: 'Deep Work', description: '집중 모드 진입. 크리티컬 확률 대폭 증가', descriptionEn: 'Enter focus mode. Greatly increase critical chance', category: 'SYSTEM', tier: 'basic', icon: 'Focus', color: '#10B981', synergyTags: ['buff', 'crit', 'passive'], recommendedWith: ['sword', 'overclock'] },
-  { id: 'overclock' as WeaponType, name: '오버클럭', nameEn: 'Overclock', description: '시스템 오버클럭. 이동 속도 증가', descriptionEn: 'Overclock system. Increase movement speed', category: 'SYSTEM', tier: 'basic', icon: 'Gauge', color: '#10B981', synergyTags: ['buff', 'speed', 'passive'], recommendedWith: ['focus', 'ram_upgrade'] },
-  { id: 'ram_upgrade' as WeaponType, name: 'RAM 업그레이드', nameEn: 'RAM Upgrade', description: '메모리 확장으로 최대 체력 증가', descriptionEn: 'Expand memory to increase max HP', category: 'SYSTEM', tier: 'basic', icon: 'HardDrive', color: '#06B6D4', synergyTags: ['buff', 'hp', 'passive'], recommendedWith: ['overclock', 'cpu_boost'] },
-  { id: 'cpu_boost' as WeaponType, name: 'CPU 부스트', nameEn: 'CPU Boost', description: '프로세서 성능 향상. 공격 속도 증가', descriptionEn: 'Boost processor performance. Increase attack speed', category: 'SYSTEM', tier: 'advanced', icon: 'Cpu', color: '#EF4444', synergyTags: ['buff', 'attack_speed', 'passive'], recommendedWith: ['overclock', 'multithreading'] },
-  { id: 'cache' as WeaponType, name: '캐시', nameEn: 'Cache', description: '캐시 히트 시 스킬 쿨다운 감소. 연속 공격 강화', descriptionEn: 'Cache hit reduces skill cooldown. Boost consecutive attacks', category: 'SYSTEM', tier: 'advanced', icon: 'Database', color: '#8B5CF6', synergyTags: ['buff', 'cooldown', 'combo'], recommendedWith: ['refactor', 'cpu_boost'] },
-  { id: 'multithreading' as WeaponType, name: '멀티스레딩', nameEn: 'Multithreading', description: '동시에 여러 공격 실행. 투사체 개수 증가', descriptionEn: 'Execute multiple attacks simultaneously. Increase projectile count', category: 'SYSTEM', tier: 'elite', icon: 'Layers', color: '#F59E0B', synergyTags: ['buff', 'multi', 'passive'], recommendedWith: ['fork', 'shard'] },
-  { id: 'garbage_collection' as WeaponType, name: '가비지 컬렉션', nameEn: 'Garbage Collection', description: '주기적으로 적 처치 시 체력 회복 + 경험치 보너스', descriptionEn: 'Periodically heal on kill + bonus EXP', category: 'SYSTEM', tier: 'elite', icon: 'Trash2', color: '#10B981', synergyTags: ['heal', 'exp', 'scaling'], recommendedWith: ['antivirus', 'ram_upgrade'] },
+  // === Existing ===
+  {
+    id: 'punch' as WeaponType,
+    name: '키보드 펀치',
+    nameEn: 'Keyboard Punch',
+    description: '키보드로 강하게 타격. 넉백 효과',
+    descriptionEn: 'Strike hard with keyboard. Knockback effect',
+    category: 'SYSTEM',
+    tier: 'basic',
+    icon: 'Keyboard',
+    color: '#10B981',
+    synergyTags: ['melee', 'knockback', 'basic'],
+    recommendedWith: ['whip', 'sword'],
+  },
+  {
+    id: 'sword' as WeaponType,
+    name: '타입 안전성',
+    nameEn: 'Type Safety',
+    description: '타입을 검사하며 베기. 높은 크리티컬 확률',
+    descriptionEn: 'Slash while checking types. High critical chance',
+    category: 'SYSTEM',
+    tier: 'advanced',
+    icon: 'Sword',
+    color: '#10B981',
+    synergyTags: ['melee', 'crit', 'precise'],
+    recommendedWith: ['punch', 'focus'],
+  },
+  {
+    id: 'focus' as WeaponType,
+    name: '딥워크',
+    nameEn: 'Deep Work',
+    description: '집중 모드 진입. 크리티컬 확률 대폭 증가',
+    descriptionEn: 'Enter focus mode. Greatly increase critical chance',
+    category: 'SYSTEM',
+    tier: 'basic',
+    icon: 'Focus',
+    color: '#10B981',
+    synergyTags: ['buff', 'crit', 'passive'],
+    recommendedWith: ['sword', 'overclock'],
+  },
+  {
+    id: 'overclock' as WeaponType,
+    name: '오버클럭',
+    nameEn: 'Overclock',
+    description: '시스템 오버클럭. 이동 속도 증가',
+    descriptionEn: 'Overclock system. Increase movement speed',
+    category: 'SYSTEM',
+    tier: 'basic',
+    icon: 'Gauge',
+    color: '#10B981',
+    synergyTags: ['buff', 'speed', 'passive'],
+    recommendedWith: ['focus', 'ram_upgrade'],
+  },
+  // === New Skills ===
+  {
+    id: 'ram_upgrade' as WeaponType,
+    name: 'RAM 업그레이드',
+    nameEn: 'RAM Upgrade',
+    description: '메모리 확장으로 최대 체력 증가',
+    descriptionEn: 'Expand memory to increase max HP',
+    category: 'SYSTEM',
+    tier: 'basic',
+    icon: 'HardDrive',
+    color: '#06B6D4',
+    synergyTags: ['buff', 'hp', 'passive'],
+    recommendedWith: ['overclock', 'cpu_boost'],
+  },
+  {
+    id: 'cpu_boost' as WeaponType,
+    name: 'CPU 부스트',
+    nameEn: 'CPU Boost',
+    description: '프로세서 성능 향상. 공격 속도 증가',
+    descriptionEn: 'Boost processor performance. Increase attack speed',
+    category: 'SYSTEM',
+    tier: 'advanced',
+    icon: 'Cpu',
+    color: '#EF4444',
+    synergyTags: ['buff', 'attack_speed', 'passive'],
+    recommendedWith: ['overclock', 'multithreading'],
+  },
+  {
+    id: 'cache' as WeaponType,
+    name: '캐시',
+    nameEn: 'Cache',
+    description: '캐시 히트 시 스킬 쿨다운 감소. 연속 공격 강화',
+    descriptionEn: 'Cache hit reduces skill cooldown. Boost consecutive attacks',
+    category: 'SYSTEM',
+    tier: 'advanced',
+    icon: 'Database',
+    color: '#8B5CF6',
+    synergyTags: ['buff', 'cooldown', 'combo'],
+    recommendedWith: ['refactor', 'cpu_boost'],
+  },
+  {
+    id: 'multithreading' as WeaponType,
+    name: '멀티스레딩',
+    nameEn: 'Multithreading',
+    description: '동시에 여러 공격 실행. 투사체 개수 증가',
+    descriptionEn: 'Execute multiple attacks simultaneously. Increase projectile count',
+    category: 'SYSTEM',
+    tier: 'elite',
+    icon: 'Layers',
+    color: '#F59E0B',
+    synergyTags: ['buff', 'multi', 'passive'],
+    recommendedWith: ['fork', 'shard'],
+  },
+  {
+    id: 'garbage_collection' as WeaponType,
+    name: '가비지 컬렉션',
+    nameEn: 'Garbage Collection',
+    description: '주기적으로 적 처치 시 체력 회복 + 경험치 보너스',
+    descriptionEn: 'Periodically heal on kill + bonus EXP',
+    category: 'SYSTEM',
+    tier: 'elite',
+    icon: 'Trash2',
+    color: '#10B981',
+    synergyTags: ['heal', 'exp', 'scaling'],
+    recommendedWith: ['antivirus', 'ram_upgrade'],
+  },
 ];
 
 // ============================================
 // Aggregated Exports
 // ============================================
 
-/** 모든 스킬 정의 (55개) */
+/**
+ * 모든 스킬 정의 (55개)
+ */
 export const ALL_SKILLS: SkillDefinition[] = [
   ...CODE_SKILLS,
   ...DATA_SKILLS,
@@ -263,7 +817,9 @@ export const ALL_SKILLS: SkillDefinition[] = [
   ...SYSTEM_SKILLS,
 ];
 
-/** 카테고리별 스킬 맵 */
+/**
+ * 카테고리별 스킬 맵
+ */
 export const SKILLS_BY_CATEGORY: Record<SkillCategory, SkillDefinition[]> = {
   CODE: CODE_SKILLS,
   DATA: DATA_SKILLS,
@@ -273,16 +829,22 @@ export const SKILLS_BY_CATEGORY: Record<SkillCategory, SkillDefinition[]> = {
   SYSTEM: SYSTEM_SKILLS,
 };
 
-/** 스킬 ID로 정의 찾기 */
+/**
+ * 스킬 ID로 정의 찾기
+ */
 export const SKILL_MAP: Record<string, SkillDefinition> = Object.fromEntries(
   ALL_SKILLS.map(skill => [skill.id, skill])
 );
 
-/** 티어별 스킬 필터링 */
+/**
+ * 티어별 스킬 필터링
+ */
 export const getSkillsByTier = (tier: 'basic' | 'advanced' | 'elite'): SkillDefinition[] =>
   ALL_SKILLS.filter(skill => skill.tier === tier);
 
-/** 시너지 태그로 스킬 찾기 */
+/**
+ * 시너지 태그로 스킬 찾기
+ */
 export const getSkillsBySynergyTag = (tag: string): SkillDefinition[] =>
   ALL_SKILLS.filter(skill => skill.synergyTags?.includes(tag));
 

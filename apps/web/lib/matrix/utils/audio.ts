@@ -63,7 +63,7 @@ class SoundManager {
   // 히트 SFX (combat.ts에서 호출)
   playHitSFX(
     _name: string,
-    _options?: {
+    _optionsOrCritical?: boolean | {
       pitch?: number;
       volume?: number;
       intensity?: number;

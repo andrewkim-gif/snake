@@ -26,7 +26,7 @@ export function drawComboAboveCharacter(
   if (combo.count === 0) return;
 
   const tierConfig = combo.tier !== 'none'
-    ? COMBO_CONFIG.tiers[combo.tier]
+    ? (COMBO_CONFIG.tiers as Record<string, { name: string; color: string; minCount: number; multiplier: number }>)[combo.tier]
     : null;
 
   const tierColor = tierConfig?.color || '#ffffff';
@@ -131,7 +131,7 @@ export function drawComboTimer(
   if (combo.count === 0 || combo.timer <= 0) return;
 
   const tierConfig = combo.tier !== 'none'
-    ? COMBO_CONFIG.tiers[combo.tier]
+    ? (COMBO_CONFIG.tiers as Record<string, { name: string; color: string; minCount: number; multiplier: number }>)[combo.tier]
     : null;
 
   const tierColor = tierConfig?.color || '#ffffff';

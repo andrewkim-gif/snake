@@ -9,7 +9,7 @@ export interface EnemyRenderData {
   velocity: { x: number; y: number };
   color: string;
   enemyType: string;
-  state: 'idle' | 'moving' | 'attacking' | 'stunned' | 'dying' | 'chasing';
+  state: 'idle' | 'moving' | 'attacking' | 'stunned' | 'dying' | 'chasing' | 'dashing';
   attackCooldown?: number;
   isBoss?: boolean;
   isFrozen?: boolean;

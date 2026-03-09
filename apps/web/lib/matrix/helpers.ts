@@ -4,68 +4,17 @@
  *
  * v7.0: 맵 오브젝트 시스템 통합
  * v7.25: collision 모듈 사용으로 좌표계 혼동 방지
- *
- * [이식 노트] obstacle/map 관련 외부 의존성 stub 처리
  */
 
-import { Vector2, Enemy, Player, EntityCollisionBox } from './types';
+import { Vector2, Enemy, Player, CollisionBox } from './types';
 import { distance, normalize, distanceSquared } from './utils/math';
-
-// --- Stub: obstacles.config (원본 ../config/obstacles.config) ---
-export interface ObstacleConfig {
-  width: number;
-  height: number;
-}
-
-// Arena 모드에서는 맵 오브젝트/장애물 미사용 → 항상 false 반환
-export const getObstacleAtGrid = (_col: number, _row: number, _stageId?: number): { x: number; y: number; config: ObstacleConfig } | null => null;
-const isPointInObstacle = (_x: number, _y: number, _ox: number, _oy: number, _config: ObstacleConfig, _buffer: number): boolean => false;
-const isCircleInObstacle = (_cx: number, _cy: number, _r: number, _ox: number, _oy: number, _config: ObstacleConfig): boolean => false;
-
-// --- Stub: map module ---
-interface MapObject {
-  x: number;
-  y: number;
-  def: { width: number; height: number; collisionWidth?: number; collisionHeight?: number; hasCollision?: boolean };
-}
-
-interface CollisionResult {
-  collided: boolean;
-  object?: MapObject;
-  pushX?: number;
-  pushY?: number;
-}
-
-const findCollidingObjects = (_cx: number, _cy: number, _r: number, _stageId: number, _gameMode: string, _seed: number): CollisionResult => ({ collided: false });
-const isObjectAt = (_x: number, _y: number, _stageId: number, _gameMode: string, _seed: number): boolean => false;
-const getObjectAtGrid = (_col: number, _row: number, _stageId: number, _gameMode: string, _seed: number): MapObject | null => null;
-
-// --- Stub: collision module ---
-interface ModuleCollisionBox {
-  left: number;
-  right: number;
-  top: number;
-  bottom: number;
-  centerX: number;
-  centerY: number;
-  width: number;
-  height: number;
-}
-
-const getObjectCollisionBox = (x: number, y: number, w: number, h: number): ModuleCollisionBox => ({
-  left: x - w / 2,
-  right: x + w / 2,
-  top: y - h,
-  bottom: y,
-  centerX: x,
-  centerY: y - h / 2,
-  width: w,
-  height: h,
-});
-
-const checkAABBCollision = (a: ModuleCollisionBox, b: ModuleCollisionBox): boolean => {
-  return a.left < b.right && a.right > b.left && a.top < b.bottom && a.bottom > b.top;
-};
+import { getObstacleAtGrid, isPointInObstacle, isCircleInObstacle, ObstacleConfig } from './config/obstacles.config';
+import { findCollidingObjects, isObjectAt, getObjectAtGrid, type MapObject, type CollisionResult } from './map';
+import {
+  getObjectCollisionBox,
+  checkAABBCollision,
+  type CollisionBox as ModuleCollisionBox,
+} from './collision';
 
 const GRID_SIZE = 32;
 
@@ -133,7 +82,7 @@ export const isObstacleAt = (x: number, y: number, bufferRadius: number = 0): bo
 
       const obstacle = getObstacleAtGrid(col, row, currentStageId);
       if (obstacle) {
-        if (isPointInObstacle(x, y, obstacle.x, obstacle.y, obstacle.config, bufferRadius)) {
+        if (isPointInObstacle(x, y, obstacle.x, obstacle.y, obstacle.config as any, bufferRadius)) {
           return true;
         }
       }
@@ -344,6 +293,11 @@ export const calculateAutoHuntDirection = (
 /**
  * 축별 장애물 충돌 체크 (다양한 크기 지원)
  * 플레이어 이동 시 X축/Y축 개별 충돌 검사
+ *
+ * v7.22: 박스 충돌 지원 (collisionBox 파라미터 추가)
+ * v7.25: collision 모듈 사용으로 좌표계 혼동 방지
+ *
+ * ⚠️ 렌더링 오프셋(screenY -= height * 0.85)은 절대 여기서 사용하지 마세요!
  */
 export const checkAxisCollision = (
   nextPos: number,
@@ -351,11 +305,12 @@ export const checkAxisCollision = (
   playerRadius: number,
   axis: 'x' | 'y',
   checkRadiusGrid: number = 3,
-  collisionBox?: EntityCollisionBox
+  collisionBox?: Pick<CollisionBox, 'width' | 'height' | 'offsetX' | 'offsetY'> // v7.22: 박스 충돌 지원
 ): boolean => {
   const col = axis === 'x' ? Math.floor(nextPos / GRID_SIZE) : Math.floor(fixedPos / GRID_SIZE);
   const row = axis === 'x' ? Math.floor(fixedPos / GRID_SIZE) : Math.floor(nextPos / GRID_SIZE);
 
+  // v7.22: 플레이어 충돌 영역 계산 (박스 또는 원)
   const checkX = axis === 'x' ? nextPos : fixedPos;
   const checkY = axis === 'x' ? fixedPos : nextPos;
 
@@ -363,10 +318,12 @@ export const checkAxisCollision = (
   let playerBox: ModuleCollisionBox;
 
   if (collisionBox) {
+    // v7.22 FIX: 박스 중심 기준 오프셋 (X, Y 모두 지원)
+    // position.x,y는 캐릭터 발 위치
     const halfW = collisionBox.width / 2;
     const halfH = collisionBox.height / 2;
     const centerX = checkX + (collisionBox.offsetX || 0);
-    const centerY = checkY + collisionBox.offsetY;
+    const centerY = checkY + (collisionBox.offsetY || 0);
     playerBox = {
       left: centerX - halfW,
       right: centerX + halfW,
@@ -378,6 +335,7 @@ export const checkAxisCollision = (
       height: collisionBox.height,
     };
   } else {
+    // 원형 충돌 (레거시 호환) - AABB로 변환
     playerBox = {
       left: checkX - playerRadius,
       right: checkX + playerRadius,
@@ -400,6 +358,7 @@ export const checkAxisCollision = (
       const halfW = config.width / 2;
       const halfH = config.height / 2;
 
+      // terrain은 중심 기준 박스
       const obstacleBox: ModuleCollisionBox = {
         left: ox - halfW,
         right: ox + halfW,
@@ -417,7 +376,7 @@ export const checkAxisCollision = (
     }
   }
 
-  // 2. v7.25: 맵 오브젝트 충돌 체크
+  // 2. v7.25: 맵 오브젝트 충돌 체크 (collision 모듈 사용)
   const effectiveSeed = currentMapSeed + currentStageId * 1000;
 
   for (let c = col - checkRadiusGrid; c <= col + checkRadiusGrid; c++) {
@@ -425,9 +384,10 @@ export const checkAxisCollision = (
       const mapObj = getObjectAtGrid(c, r, currentStageId, currentGameMode, effectiveSeed);
       if (!mapObj || !mapObj.def.hasCollision) continue;
 
+      // collision 모듈로 충돌 박스 계산 (월드 좌표 기반)
       const objBox = getObjectCollisionBox(
-        mapObj.x,
-        mapObj.y,
+        mapObj.x,  // 발 위치 X (월드)
+        mapObj.y,  // 발 위치 Y (월드)
         mapObj.def.collisionWidth ?? mapObj.def.width,
         mapObj.def.collisionHeight ?? mapObj.def.height
       );
@@ -462,3 +422,6 @@ export const applyKnockback = (
     y: dir.y * knockbackForce
   };
 };
+
+// Re-export for movement.ts compatibility
+export { getObstacleAtGrid };

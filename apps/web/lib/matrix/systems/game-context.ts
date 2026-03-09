@@ -18,25 +18,9 @@ import {
   Vector2,
 } from '../types';
 
-// ExtendedParticle 타입
-export interface ExtendedParticle {
-  position: Vector2;
-  velocity: Vector2;
-  radius: number;
-  color: string;
-  life: number;
-  maxLife: number;
-  type?: 'square' | 'text' | 'ring' | 'line' | 'smoke';
-  text?: string;
-  width?: number;
-  rotation?: number;
-  rotSpeed?: number;
-  // 몬스터별 특화 효과
-  burstStyle?: 'data' | 'pixel' | 'slime' | 'spark' | 'smoke' | 'shatter' | 'electric' | 'gold' | 'code' | 'debug' | 'api' | 'git';
-  gravity?: number;      // slime용 중력
-  flickerRate?: number;  // electric용 깜빡임
-  scale?: number;        // 크기 배율
-}
+// ExtendedParticle 타입 (useGameRefs에서 정의된 것을 re-export)
+import type { ExtendedParticle } from '../hooks/useGameRefs';
+export type { ExtendedParticle };
 
 /**
  * 게임 전체에서 공유되는 상태 refs

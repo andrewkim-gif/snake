@@ -168,7 +168,7 @@ export function refreshWavePool(
  */
 export function createSpawnState(stageNum: number): SpawnState {
   const config = getConfigForStage(stageNum);
-  const uniqueEnemies: EnemyType[] = ARENA_MONSTERS;
+  const uniqueEnemies: EnemyType[] = ARENA_MONSTERS.slice(0, Math.min(stageNum + 3, ARENA_MONSTERS.length));
 
   const formationInterval = config.formationInterval[0] +
     Math.random() * (config.formationInterval[1] - config.formationInterval[0]);
@@ -432,7 +432,7 @@ export function updateSpawnController(
   gameTime: number
 ): SpawnResult {
   const config = getConfigForStage(stageNum);
-  const uniqueEnemies: EnemyType[] = ARENA_MONSTERS;
+  const uniqueEnemies: EnemyType[] = ARENA_MONSTERS.slice(0, Math.min(stageNum + 3, ARENA_MONSTERS.length));
 
   let poolChanged = false;
   let formationTriggered = false;

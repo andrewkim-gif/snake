@@ -606,7 +606,7 @@ const findNextChainTarget = (
 
   for (const enemy of enemies) {
     if (hitEnemies.has(enemy)) continue;
-    if (enemy.health <= 0) continue;
+    if ((enemy.hp ?? enemy.health) <= 0) continue;
 
     const dx = enemy.position.x - fromPos.x;
     const dy = enemy.position.y - fromPos.y;
@@ -1235,7 +1235,7 @@ export const canFireWeapon = (player: Player, weaponType: WeaponType): boolean =
  * 무기 색상 결정
  */
 export const getWeaponColor = (weaponType: WeaponType, isUltimate: boolean): string => {
-  return isUltimate ? '#facc15' : WEAPON_DATA[weaponType].color;
+  return isUltimate ? '#facc15' : (WEAPON_DATA[weaponType]?.color || '#ffffff');
 };
 
 /**
@@ -1270,7 +1270,7 @@ export const fireWeapon = (
 
   const isUltimate = stats.isUltimate || false;
   const color = getWeaponColor(type, isUltimate);
-  const damage = stats.damage * (ctx.player.statMultipliers?.damage ?? 1);
+  const damage = stats.damage * (ctx.player.statMultipliers?.damage || 1);
 
   // 실제로 무언가 발사/생성되었는지 추적
   let didFire = false;

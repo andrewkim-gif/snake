@@ -175,7 +175,7 @@ export const updatePlayerProjectiles = (
       if (proj.orbitAngle !== undefined) {
         const weaponStats = player.weapons.bible;
         if (weaponStats) {
-          const speed = WEAPON_DATA.bible.stats[weaponStats.level - 1].speed *
+          const speed = WEAPON_DATA.bible!.stats[weaponStats.level - 1].speed *
             (proj.isUltimate && proj.startPos?.x === 180 ? -1.2 : 1.0);
           proj.orbitAngle += speed * deltaTime;
           const dist = proj.startPos ? proj.startPos.x : 120;

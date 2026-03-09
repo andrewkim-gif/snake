@@ -12,6 +12,7 @@ export const CLASS_DATA: Record<PlayerClass, {
   desc: string;
   hpMult: number;
   speedMult: number;
+  speed?: number;
   startWeapon: WeaponType;
   specialName: string;
   specialDesc: string;

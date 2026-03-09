@@ -32,11 +32,6 @@ import type { MainTabKey } from '@/components/hub/PopupTabNav';
 import { ChevronRight, Minus, Settings, Globe } from 'lucide-react';
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 import type { TradeRouteData } from '@/hooks/useSocket';
-import type { AllianceData } from '@/components/3d/GlobeAllianceBeam';
-import type { SanctionData } from '@/components/3d/GlobeSanctionBarrier';
-import type { ResourceData } from '@/components/3d/GlobeResourceGlow';
-import type { SpyOpData } from '@/components/3d/GlobeSpyTrail';
-import type { NukeData } from '@/components/3d/GlobeNukeEffect';
 
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
@@ -51,9 +46,9 @@ const IsoCanvas = dynamic(
   () => import('@/components/game/iso/IsoCanvas').then(m => ({ default: m.IsoCanvas })),
   { ssr: false },
 );
-// v28: Matrix 자동전투 서바이벌 캔버스 — dynamic import, ssr: false
-const MatrixCanvas = dynamic(
-  () => import('@/components/game/matrix/MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
+// v29: MatrixApp 오케스트레이터 (게임 훅 + MatrixCanvas + 오버레이 통합)
+const MatrixApp = dynamic(
+  () => import('@/components/game/matrix/MatrixApp').then(m => ({ default: m.MatrixApp })),
   { ssr: false },
 );
 // v28: Matrix 인트로 연출
@@ -147,15 +142,9 @@ export default function Home() {
     arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice,
   } = useSocketContext();
 
-  // ─── DEV: 테스트용 더미 전쟁/교역/v23 이벤트 (1분 주기) ───
+  // ─── DEV: 테스트용 더미 전쟁/교역 (1분 주기) ───
   const [testWars, setTestWars] = useState<WarEffectData[]>([]);
   const [testTrades, setTestTrades] = useState<TradeRouteData[]>([]);
-  // v23 Phase 5: 신규 이벤트 테스트 데이터
-  const [testAlliances, setTestAlliances] = useState<AllianceData[]>([]);
-  const [testSanctions, setTestSanctions] = useState<SanctionData[]>([]);
-  const [testResources, setTestResources] = useState<ResourceData[]>([]);
-  const [testSpyOps, setTestSpyOps] = useState<SpyOpData[]>([]);
-  const [testNukes, setTestNukes] = useState<NukeData[]>([]);
 
   useEffect(() => {
     const SAMPLE_COUNTRIES = [
@@ -168,8 +157,6 @@ export default function Home() {
       while (b === a) b = SAMPLE_COUNTRIES[Math.floor(Math.random() * SAMPLE_COUNTRIES.length)];
       return [a, b] as const;
     };
-    const pickOne = () => SAMPLE_COUNTRIES[Math.floor(Math.random() * SAMPLE_COUNTRIES.length)];
-
     const generate = () => {
       const now = Date.now();
 
@@ -204,53 +191,6 @@ export default function Home() {
         });
       }
       setTestTrades(trades);
-
-      // v23 Phase 5: 1~2개 동맹
-      const allianceCount = 1 + Math.floor(Math.random() * 2);
-      const alliances: AllianceData[] = [];
-      for (let i = 0; i < allianceCount; i++) {
-        const [from, to] = pick();
-        alliances.push({ from, to, timestamp: now });
-      }
-      setTestAlliances(alliances);
-
-      // v23 Phase 5: 1~2개 제재
-      const sanctionCount = 1 + Math.floor(Math.random() * 2);
-      const sanctions: SanctionData[] = [];
-      for (let i = 0; i < sanctionCount; i++) {
-        const [from, to] = pick();
-        sanctions.push({ from, to, timestamp: now });
-      }
-      setTestSanctions(sanctions);
-
-      // v23 Phase 5: 1~2개 자원 채굴
-      const resourceCount = 1 + Math.floor(Math.random() * 2);
-      const resources: ResourceData[] = [];
-      for (let i = 0; i < resourceCount; i++) {
-        resources.push({
-          country: pickOne(),
-          resourceType: ['oil', 'tech', 'food', 'metal'][Math.floor(Math.random() * 4)],
-          timestamp: now,
-        });
-      }
-      setTestResources(resources);
-
-      // v23 Phase 5: 1~2개 첩보
-      const spyCount = 1 + Math.floor(Math.random() * 2);
-      const spyOps: SpyOpData[] = [];
-      for (let i = 0; i < spyCount; i++) {
-        const [from, to] = pick();
-        spyOps.push({ from, to, timestamp: now });
-      }
-      setTestSpyOps(spyOps);
-
-      // v23 Phase 5: 0~1개 핵실험 (드물게)
-      const nukeCount = Math.random() > 0.5 ? 1 : 0;
-      const nukes: NukeData[] = [];
-      for (let i = 0; i < nukeCount; i++) {
-        nukes.push({ country: pickOne(), timestamp: now });
-      }
-      setTestNukes(nukes);
     };
 
     generate(); // 즉시 1회 실행
@@ -463,7 +403,7 @@ export default function Home() {
     );
   }
 
-  // --- v28: Matrix 자동전투 서바이벌 화면 ---
+  // --- v29: MatrixApp 오케스트레이터 (게임 훅 + 캔버스 + 오버레이 통합) ---
   if (mode === 'matrix') {
     return (
       <div style={{
@@ -472,8 +412,8 @@ export default function Home() {
         opacity: fadeOut ? 0 : 1,
         transition: 'opacity 300ms ease',
       }}>
-        <MatrixCanvas
-          onExit={() => {
+        <MatrixApp
+          onExitToLobby={() => {
             setFadeOut(true);
             setTimeout(() => { setMode('lobby'); setFadeOut(false); }, 300);
           }}
@@ -554,11 +494,11 @@ export default function Home() {
         introActive={introActive}
         onIntroComplete={() => {}} // 카메라 완료는 GlobeIntroCamera가 처리
         activeConflictCountries={uiState.activeConflictCountries}
-        alliances={testAlliances}
-        sanctions={testSanctions}
-        resources={testResources}
-        spyOps={testSpyOps}
-        nukes={testNukes}
+        alliances={[]}
+        sanctions={[]}
+        resources={[]}
+        spyOps={[]}
+        nukes={[]}
       />
 
       {/* 온라인 상태 — 우상단 잔존 */}

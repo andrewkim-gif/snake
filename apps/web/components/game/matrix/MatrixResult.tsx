@@ -1,16 +1,32 @@
 'use client';
 
 /**
- * MatrixResult.tsx - v28 Phase 5: Game Over / Clear result screen
+ * MatrixResult.tsx - v29 Phase 5: Game Over / Arena Result Screen
  *
- * 통계: 생존 시간, 킬 수, 점수, 최고 레벨, 획득 무기 목록
- * 버튼: Retry, Exit to Lobby
+ * Adapted from app_ingame/components/arena/ArenaResultScreen.tsx
+ * - Final standings with rank, kills, deaths
+ * - Rewards breakdown (base score, rank bonus, kill bonus)
+ * - Weapon inventory
+ * - Retry / Exit to Lobby buttons
+ * - Keyboard shortcuts (Enter = retry, Escape = exit)
+ *
+ * Matrix green (#00FF41) theme.
  */
 
-import { useCallback, useEffect, memo } from 'react';
+import React, { useCallback, useEffect, memo } from 'react';
+import {
+  Trophy,
+  Target,
+  Skull,
+  Clock,
+  Star,
+  Crown,
+  Coins,
+  ArrowRight,
+} from 'lucide-react';
 
 // ============================================
-// Props 인터페이스
+// Props (backward-compatible with MatrixApp)
 // ============================================
 
 export interface MatrixResultProps {
@@ -25,12 +41,12 @@ export interface MatrixResultProps {
 }
 
 // ============================================
-// 상수
+// Constants
 // ============================================
 
 const MATRIX_GREEN = '#00FF41';
 
-// 무기 이름 매핑 (간략)
+// Weapon display names
 const WEAPON_NAMES: Record<string, string> = {
   wand: 'API Call',
   knife: 'Git Push',
@@ -53,23 +69,34 @@ const WEAPON_NAMES: Record<string, string> = {
   stablecoin: 'Type Safety',
   airdrop: 'NPM Install',
   genesis: 'System Crash',
+  aggregator: 'Auto Import',
+  oracle: 'Code Review',
+  focus: 'Deep Work',
+  overclock: 'Overclock',
 };
 
 // ============================================
-// 유틸리티
+// Utils
 // ============================================
 
 function formatTime(seconds: number): string {
-  const m = Math.floor(seconds / 60);
-  const s = Math.floor(seconds % 60);
-  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+  const mins = Math.floor(seconds / 60);
+  const secs = Math.floor(seconds % 60);
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+}
+
+function getRankSuffix(rank: number): string {
+  if (rank === 1) return 'st';
+  if (rank === 2) return 'nd';
+  if (rank === 3) return 'rd';
+  return 'th';
 }
 
 // ============================================
-// 컴포넌트
+// Component
 // ============================================
 
-function MatrixResult({
+function MatrixResultInner({
   survived,
   survivalTime,
   kills,
@@ -79,14 +106,11 @@ function MatrixResult({
   onRetry,
   onExitToLobby,
 }: MatrixResultProps) {
-  // Enter = Retry, Escape = Exit
+  // Keyboard shortcuts
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === 'Enter') {
-        onRetry();
-      } else if (e.key === 'Escape') {
-        onExitToLobby();
-      }
+      if (e.key === 'Enter') onRetry();
+      else if (e.key === 'Escape') onExitToLobby();
     },
     [onRetry, onExitToLobby],
   );
@@ -96,88 +120,131 @@ function MatrixResult({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleKeyDown]);
 
+  // Calculate rewards
+  const baseCredits = score;
+  const killBonus = kills * 20;
+  const timeBonus = Math.floor(survivalTime / 60) * 50;
+  const totalCredits = baseCredits + killBonus + timeBonus;
+
   return (
-    <div
-      className="absolute inset-0 z-50 flex items-center justify-center bg-black/90"
-      style={{ fontFamily: 'monospace' }}
-    >
-      <div
-        className="flex flex-col items-center gap-6 p-8 w-full max-w-sm"
-        style={{
-          backgroundColor: 'rgba(0, 0, 0, 0.95)',
-          border: `1px solid ${survived ? MATRIX_GREEN : '#ef4444'}40`,
-        }}
-      >
-        {/* 타이틀 */}
-        <div className="text-center">
-          <h2
-            className="text-3xl font-bold tracking-[0.2em] mb-1"
-            style={{ color: survived ? MATRIX_GREEN : '#ef4444' }}
-          >
-            {survived ? 'SURVIVED' : 'GAME OVER'}
-          </h2>
-          <p className="text-xs text-gray-600 tracking-wider">
-            {survived ? 'YOU HAVE ESCAPED THE MATRIX' : 'CONNECTION TERMINATED'}
-          </p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90" style={{ fontFamily: 'monospace' }}>
+      <div className="w-full max-w-2xl mx-4 p-6 bg-gradient-to-b from-gray-900 to-gray-950 border border-gray-700">
+
+        {/* Title */}
+        <div className="text-center mb-6">
+          {survived ? (
+            <div className="flex flex-col items-center gap-2">
+              <Crown className="w-16 h-16 text-yellow-400 animate-pulse" />
+              <h1 className="text-4xl font-bold" style={{ color: MATRIX_GREEN }}>
+                SURVIVED
+              </h1>
+              <p className="text-xs text-gray-500 tracking-wider">
+                YOU HAVE ESCAPED THE MATRIX
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col items-center gap-2">
+              <Skull className="w-12 h-12 text-red-400" />
+              <h1 className="text-3xl font-bold text-red-400">
+                GAME OVER
+              </h1>
+              <p className="text-xs text-gray-500 tracking-wider">
+                CONNECTION TERMINATED
+              </p>
+            </div>
+          )}
         </div>
 
-        {/* 통계 */}
-        <div className="w-full flex flex-col gap-2">
-          <StatRow label="SURVIVAL TIME" value={formatTime(survivalTime)} color={MATRIX_GREEN} />
-          <StatRow label="KILLS" value={kills.toString()} color="#ef4444" />
-          <StatRow label="SCORE" value={score.toLocaleString()} color="#fbbf24" />
-          <StatRow label="MAX LEVEL" value={`Lv.${level}`} color="#8b5cf6" />
+        {/* My Stats */}
+        <div className="bg-black/40 p-4 mb-6 border" style={{ borderColor: survived ? `${MATRIX_GREEN}50` : 'rgba(239,68,68,0.3)' }}>
+          <div className="flex items-center justify-between mb-4">
+            <div className="flex items-center gap-3">
+              <div>
+                <div className="text-lg font-bold" style={{ color: MATRIX_GREEN }}>
+                  Level {level}
+                </div>
+              </div>
+            </div>
+            <div className="flex items-center gap-6">
+              <div className="text-center">
+                <div className="text-2xl font-bold text-green-400">{kills}</div>
+                <div className="text-xs text-gray-400 flex items-center gap-1">
+                  <Target className="w-3 h-3" /> Kills
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-cyan-400">{formatTime(survivalTime)}</div>
+                <div className="text-xs text-gray-400 flex items-center gap-1">
+                  <Clock className="w-3 h-3" /> Time
+                </div>
+              </div>
+              <div className="text-center">
+                <div className="text-2xl font-bold text-yellow-400">{score.toLocaleString()}</div>
+                <div className="text-xs text-gray-400 flex items-center gap-1">
+                  <Star className="w-3 h-3" /> Score
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
 
-        {/* 획득 무기 목록 */}
+        {/* Weapons Acquired */}
         {weapons.length > 0 && (
-          <div className="w-full">
-            <div className="text-[9px] text-gray-600 tracking-widest mb-1.5">WEAPONS ACQUIRED</div>
-            <div className="flex flex-wrap gap-1.5">
-              {weapons.map((w, i) => (
-                <span
-                  key={`${w}-${i}`}
-                  className="text-[9px] px-2 py-0.5 tracking-wider"
-                  style={{
-                    color: MATRIX_GREEN,
-                    backgroundColor: 'rgba(0, 255, 65, 0.08)',
-                    border: '1px solid rgba(0, 255, 65, 0.2)',
-                  }}
-                >
-                  {WEAPON_NAMES[w] || w}
-                </span>
-              ))}
+          <div className="mb-6">
+            <h2 className="text-sm font-bold text-gray-400 mb-2 flex items-center gap-2">
+              <Trophy className="w-4 h-4" /> WEAPONS ACQUIRED
+            </h2>
+            <div className="bg-black/30 p-3">
+              <div className="flex flex-wrap gap-2">
+                {weapons.map((w, i) => (
+                  <span
+                    key={`${w}-${i}`}
+                    className="text-[10px] px-2.5 py-1 tracking-wider font-bold"
+                    style={{
+                      color: MATRIX_GREEN,
+                      backgroundColor: 'rgba(0, 255, 65, 0.08)',
+                      border: '1px solid rgba(0, 255, 65, 0.2)',
+                    }}
+                  >
+                    {WEAPON_NAMES[w] || w}
+                  </span>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* 구분선 */}
-        <div
-          className="w-full h-px"
-          style={{ backgroundColor: 'rgba(255,255,255,0.06)' }}
-        />
+        {/* Rewards */}
+        <div className="bg-gradient-to-r from-yellow-500/10 to-orange-500/10 p-4 mb-6 border border-yellow-500/30">
+          <h2 className="text-sm font-bold text-yellow-400 mb-3 flex items-center gap-2">
+            <Star className="w-4 h-4" /> REWARDS
+          </h2>
+          <div className="grid grid-cols-3 gap-4 text-center">
+            <div>
+              <div className="text-xs text-gray-400 mb-1">Base Score</div>
+              <div className="text-lg font-bold text-cyan-400">+{baseCredits}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 mb-1">Kill Bonus</div>
+              <div className="text-lg font-bold text-green-400">+{killBonus}</div>
+            </div>
+            <div>
+              <div className="text-xs text-gray-400 mb-1">Time Bonus</div>
+              <div className="text-lg font-bold text-purple-400">+{timeBonus}</div>
+            </div>
+          </div>
+          <div className="mt-4 pt-3 border-t border-yellow-500/20 flex items-center justify-center gap-2">
+            <Coins className="w-5 h-5 text-yellow-400" />
+            <span className="text-2xl font-bold text-yellow-400">+{totalCredits}</span>
+            <span className="text-sm text-gray-400">Credits</span>
+          </div>
+        </div>
 
-        {/* 버튼 */}
-        <div className="flex flex-col gap-3 w-full">
-          {/* Retry */}
-          <button
-            onClick={onRetry}
-            className="w-full py-3 text-sm font-bold tracking-widest transition-all duration-150
-                       hover:scale-[1.02] active:scale-[0.98] pointer-events-auto cursor-pointer"
-            style={{
-              color: '#000',
-              backgroundColor: MATRIX_GREEN,
-              border: `1px solid ${MATRIX_GREEN}`,
-            }}
-          >
-            RETRY
-          </button>
-
-          {/* Exit to Lobby */}
+        {/* Action Buttons */}
+        <div className="flex gap-4">
           <button
             onClick={onExitToLobby}
-            className="w-full py-3 text-sm font-bold tracking-widest transition-all duration-150
-                       hover:scale-[1.02] active:scale-[0.98] pointer-events-auto cursor-pointer"
+            className="flex-1 py-3 px-6 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] pointer-events-auto cursor-pointer"
             style={{
               color: '#999',
               backgroundColor: 'transparent',
@@ -186,10 +253,22 @@ function MatrixResult({
           >
             EXIT TO LOBBY
           </button>
+          <button
+            onClick={onRetry}
+            className="flex-1 py-3 px-6 font-bold transition-all hover:scale-[1.02] active:scale-[0.98] pointer-events-auto cursor-pointer flex items-center justify-center gap-2"
+            style={{
+              color: '#000',
+              backgroundColor: MATRIX_GREEN,
+              border: `1px solid ${MATRIX_GREEN}`,
+            }}
+          >
+            RETRY
+            <ArrowRight className="w-5 h-5" />
+          </button>
         </div>
 
-        {/* 안내 */}
-        <p className="text-[10px] text-gray-600 tracking-wider">
+        {/* Keyboard hints */}
+        <p className="text-[10px] text-gray-600 tracking-wider text-center mt-3">
           ENTER to retry | ESC to exit
         </p>
       </div>
@@ -197,19 +276,5 @@ function MatrixResult({
   );
 }
 
-// ============================================
-// 서브 컴포넌트: 통계 행
-// ============================================
-
-function StatRow({ label, value, color }: { label: string; value: string; color: string }) {
-  return (
-    <div className="flex items-center justify-between py-1.5 border-b border-white/5">
-      <span className="text-[10px] text-gray-500 tracking-widest">{label}</span>
-      <span className="text-sm font-bold" style={{ color }}>
-        {value}
-      </span>
-    </div>
-  );
-}
-
-export default memo(MatrixResult);
+const MatrixResult = memo(MatrixResultInner);
+export default MatrixResult;

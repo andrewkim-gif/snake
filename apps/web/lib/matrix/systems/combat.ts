@@ -4,7 +4,7 @@
  */
 
 import React from 'react';
-import { Enemy, Player, Vector2, WeaponType, Gem, Pickup, PickupType, EnemyType, StatusEffect, CriticalEffect } from '../types';
+import { Enemy, Player, Vector2, WeaponType, Gem, Pickup, PickupType, EnemyType, StatusEffect, CriticalEffect, Particle } from '../types';
 import { ENEMY_TYPES, GAME_CONFIG } from '../constants';
 // STAGE_CONFIGS removed for Arena mode
 import { angleBetween, randomRange } from '../utils/math';
@@ -16,7 +16,7 @@ import { isoKnockback, ISO_Y_SCALE } from '../isometric';
 const CRITICAL_TEXTS = ['펑!', '쾅!', '퍽!', '팍!', '쿵!', '빵!', '탕!', '땅!'];
 
 // 무기별 크리티컬 이펙트 색상
-const CRITICAL_COLORS: Partial<Record<WeaponType | 'bomb' | 'special', string>> = {
+const CRITICAL_COLORS: Partial<Record<WeaponType | 'bomb' | 'special', string>> & Record<string, string> = {
   whip: '#a855f7',      // 보라
   wand: '#3b82f6',      // 파랑
   knife: '#facc15',     // 노랑
@@ -41,9 +41,6 @@ const CRITICAL_COLORS: Partial<Record<WeaponType | 'bomb' | 'special', string>> 
   genesis: '#eab308',   // 골드
   gold_reward: '#facc15',// 노랑
   focus: '#f472b6',     // 핑크
-  laser: '#f43f5e',     // 로즈
-  crossbow: '#78716c',  // 브라운
-  overclock: '#f97316', // 주황
   bomb: '#ef4444',      // 빨강
   special: '#ffffff',   // 흰색
 };
@@ -321,7 +318,7 @@ export const createHitEffect = (
   }
 
   // 스킬별 타격 사운드 재생 - 도파민 폭발!
-  soundManager.playHitSFX(weaponType, { isCritical: isUltimate });
+  soundManager.playHitSFX(weaponType, isUltimate);
 
   // 1. 외부 충격파 링 (큰 범위)
   particlesRef.current.push({
@@ -1160,12 +1157,12 @@ export const createHitEffectByEnemy = (
 
   // 파티클 300개 초과 시 이펙트 스킵
   if (particlesRef.current.length > 350) {
-    soundManager.playHitSFX(weaponType, { isCritical: isUltimate });
+    soundManager.playHitSFX(weaponType, isUltimate);
     return;
   }
 
   // 스킬별 타격 사운드 재생 - 도파민 폭발!
-  soundManager.playHitSFX(weaponType, { isCritical: isUltimate });
+  soundManager.playHitSFX(weaponType, isUltimate);
 
   const config = getMonsterHitConfig(enemyType);
   const { primaryColor, secondaryColor, tertiaryColor, burstStyle, text, baseSize, debrisCount, ringCount } = config;
@@ -1723,7 +1720,7 @@ export const damageEnemy = (
 
   if (isCritical) {
     // 크리티컬 데미지 = 기본 데미지 × 배율 (v3 배율 이미 적용됨)
-    finalDamage = Math.floor(finalDamage * (ctx.player.current.criticalMultiplier ?? 2.0));
+    finalDamage = Math.floor(finalDamage * (ctx.player.current.criticalMultiplier || 2.0));
     // 크리티컬 넉백 = 기본 넉백 × 1.5
     finalKnockback = knockback * 1.5;
 
@@ -1783,8 +1780,8 @@ export const damageEnemy = (
 
     const typeConfig = ENEMY_TYPES[enemy.enemyType];
     // Arena mode: use base values (no stage multipliers)
-    const xpValue = Math.ceil(typeConfig?.xp ?? 5);
-    const scoreValue = Math.ceil(typeConfig?.score ?? 10);
+    const xpValue = Math.ceil(typeConfig.xp);
+    const scoreValue = Math.ceil(typeConfig.score);
 
     // Update score
     ctx.player.current.score += scoreValue;
@@ -2056,7 +2053,7 @@ export const consolidateGems = (
  * 일반 히트보다 2배 큰 이펙트 + CRITICAL 텍스트
  */
 export const createCriticalHitEffect = (
-  particlesRef: React.MutableRefObject<ExtendedParticle[]>,
+  particlesRef: React.MutableRefObject<Particle[]>,
   position: Vector2,
   hitAngle: number
 ): void => {
@@ -2134,7 +2131,7 @@ export const createCriticalHitEffect = (
  * genesis (System Crash) 무기 특수 효과
  */
 export const createSystemCrashEffect = (
-  particlesRef: React.MutableRefObject<ExtendedParticle[]>,
+  particlesRef: React.MutableRefObject<Particle[]>,
   position: Vector2
 ): void => {
   const pos = { ...position };
@@ -2206,7 +2203,7 @@ export const createSystemCrashEffect = (
  * phishing (MCP Server) 무기 특수 효과
  */
 export const createMCPClearEffect = (
-  particlesRef: React.MutableRefObject<ExtendedParticle[]>,
+  particlesRef: React.MutableRefObject<Particle[]>,
   position: Vector2
 ): void => {
   const pos = { ...position };
@@ -2290,7 +2287,7 @@ export const createMCPClearEffect = (
  * garlic (Debug Aura) 무기의 지속 데미지 효과
  */
 export const createDebugAuraTick = (
-  particlesRef: React.MutableRefObject<ExtendedParticle[]>,
+  particlesRef: React.MutableRefObject<Particle[]>,
   position: Vector2
 ): void => {
   const pos = { ...position };
@@ -2334,7 +2331,7 @@ export const createDebugAuraTick = (
  * lightning (Claude Assist) 무기 특수 효과
  */
 export const createClaudeAssistEffect = (
-  particlesRef: React.MutableRefObject<ExtendedParticle[]>,
+  particlesRef: React.MutableRefObject<Particle[]>,
   startPos: Vector2,
   endPos: Vector2
 ): void => {
@@ -2416,7 +2413,7 @@ export const createClaudeAssistEffect = (
  * fork (Git Fork) 무기의 분기 공격 효과
  */
 export const createGitForkEffect = (
-  particlesRef: React.MutableRefObject<ExtendedParticle[]>,
+  particlesRef: React.MutableRefObject<Particle[]>,
   position: Vector2,
   branchCount: number = 3
 ): void => {

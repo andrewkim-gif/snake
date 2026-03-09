@@ -93,6 +93,7 @@ export type WeaponType =
   | 'packet_loss'     // 패킷 로스
   // 패시브 스킬
   | 'focus'       // 딥워크 (크리티컬 확률)
+  | 'mempool'     // v29: 멤풀 (원본 GameCanvas 호환)
   | 'overclock';  // 오버클럭 (이동속도)
 
 // ============================================
@@ -212,14 +213,18 @@ export type BossSkillType =
   | 'teleport'       // 순간이동
   | 'shield'         // 보호막
   | 'enrage'         // 광폭화
-  | 'ranged';        // 원거리 공격
+  | 'ranged'         // 원거리 공격
+  | 'shoot'          // v29: 발사 (singularity boss)
+  | 'nova'           // v29: 노바 (singularity boss)
+  | 'laser'          // v29: 레이저 (singularity boss)
+  | 'spiral';        // v29: 나선 (singularity boss)
 
 // ============================================
 // 8. BossTier - 보스 등급
 // ============================================
 
 /** 보스 등급 */
-export type BossTier = 'mini' | 'stage' | 'chapter' | 'final';
+export type BossTier = 'mini' | 'stage' | 'chapter' | 'final' | 'elite' | 'legendary';
 
 // ============================================
 // 9. EliteTier - 엘리트 몬스터 등급
@@ -267,6 +272,9 @@ export interface WeaponInstance {
 
 /** 플레이어 엔티티 */
 export interface Player {
+  // 식별
+  id: string;
+
   // 기본 속성
   position: Vector2;
   velocity: Vector2;
@@ -276,25 +284,31 @@ export interface Player {
   maxHealth: number;                // 최대 HP
   level: number;                    // 현재 레벨
   xp: number;                       // 현재 경험치
-  nextXp: number;                   // 다음 레벨 필요 경험치 (alias: nextLevelXp)
+  nextXp?: number;                  // 다음 레벨 필요 경험치 (alias: nextLevelXp)
   nextLevelXp: number;              // 다음 레벨 필요 경험치 (원본 필드명)
   score: number;                    // 점수
+  angle: number;                    // 플레이어 각도
+  color: string;                    // 플레이어 색상
 
   // 전투 속성
   shield: number;                   // 현재 쉴드 수
   maxShield: number;                // 최대 쉴드 수
   criticalChance: number;           // 크리티컬 확률 (기본 0.05 = 5%)
+  criticalMultiplier: number;       // 크리티컬 데미지 배율
   invulnerabilityTimer: number;     // 무적 타이머 (초)
 
   // 무기 시스템 (보유 중인 무기 목록)
   weapons: Partial<Record<WeaponType, WeaponInstance>>;
+  weaponCooldowns: Partial<Record<WeaponType, number>>;
 
   // 스킬 시스템
   specialCooldown: number;          // 특수 스킬 쿨다운
+  maxSpecialCooldown: number;       // 최대 특수 스킬 쿨다운
   specialAnim?: number;             // 특수 스킬 애니메이션 진행도 (0-1)
 
   // 캐릭터 정보
   selectedClass?: PlayerClass;      // 선택된 캐릭터
+  playerClass?: PlayerClass;        // 캐릭터 클래스 (selectedClass alias)
 
   // 충돌 박스 (아이소메트릭 충돌용)
   collisionBox?: {
@@ -322,13 +336,9 @@ export interface Player {
   knockback: Vector2;               // 현재 넉백 벡터
   hitFlashTimer: number;            // 피격 플래시 타이머
 
-  // 크리티컬 배율 (combat에서 사용)
-  criticalMultiplier?: number;      // 크리티컬 데미지 배율
-
-  // 캐릭터 클래스 + 스탯 (weapons에서 사용)
-  playerClass?: PlayerClass;        // 캐릭터 클래스 (selectedClass alias)
+  // 스탯 배율
+  statMultipliers: { speed: number; cooldown: number; damage: number; health: number };
   stance?: string;                  // 전투 스탠스
-  statMultipliers?: Record<string, number>; // 스탯 배율
 }
 
 // ============================================
@@ -336,7 +346,7 @@ export interface Player {
 // ============================================
 
 /** 적 상태 */
-export type EnemyState = 'chasing' | 'stunned' | 'dying';
+export type EnemyState = 'chasing' | 'stunned' | 'dying' | 'dashing';
 
 /** 적 엔티티 */
 export interface Enemy {
@@ -392,6 +402,11 @@ export interface Enemy {
 
   // 호환성 alias
   hp?: number;                           // health alias (일부 시스템에서 사용)
+  type?: string;                         // enemyType alias (v29 GameCanvas 호환)
+
+  // 엘리트 비주얼 (elite-monster.ts에서 사용)
+  eliteGlow?: number;
+  eliteDropCount?: number;
 }
 
 // ============================================
@@ -486,6 +501,10 @@ export interface Projectile {
   // 체인 라이트닝 추가 필드
   chainDamageMultiplier?: number; // 체인 데미지 배율
   isSingleBolt?: boolean;        // 단일 번개줄기 렌더링 힌트
+
+  // 독 데미지 (터렛 시스템)
+  poisonDamage?: number;
+  poisonDuration?: number;
 }
 
 // ============================================
@@ -573,6 +592,7 @@ export interface DamageNumber {
   life: number;            // 남은 표시 시간
   maxLife?: number;        // 초기 표시 시간
   velocity?: Vector2;      // 이동 속도 (위로 떠오름)
+  isCritical?: boolean;    // v29: 크리티컬 데미지 표시
 }
 
 // ============================================
@@ -635,6 +655,10 @@ export interface CollisionBox {
   width: number;
   /** 박스 높이 */
   height: number;
+  /** 렌더링 오프셋 X */
+  offsetX?: number;
+  /** 렌더링 오프셋 Y */
+  offsetY?: number;
 }
 
 // ============================================
@@ -691,11 +715,14 @@ export interface CircleCollider {
 // ============================================
 
 // ============================================
-// 24. ArenaPhase - 안전 구역 페이즈 번호
+// 24. ArenaPhase - 아레나 게임 상태
 // ============================================
 
-/** Arena safe zone phase number (1-4) */
-export type ArenaPhase = 1 | 2 | 3 | 4;
+/** Arena game phase */
+export type ArenaPhase = 'waiting' | 'countdown' | 'playing' | 'ending' | 'result';
+
+/** Arena safe zone phase number (legacy compat) */
+export type SafeZonePhaseNumber = 1 | 2 | 3 | 4;
 
 // ============================================
 // 25. SafeZone - 안전 구역 상태
@@ -703,20 +730,24 @@ export type ArenaPhase = 1 | 2 | 3 | 4;
 
 /** Arena safe zone state */
 export interface SafeZone {
+  /** 안전 구역 중심 좌표 */
+  center: Vector2;
   /** 현재 안전 구역 반경 */
   currentRadius: number;
   /** 목표 안전 구역 반경 */
   targetRadius: number;
+  /** 축소 속도 */
+  shrinkSpeed: number;
+  /** 구역 밖 초당 피해량 */
+  damagePerSecond: number;
+  /** 현재 페이즈 번호 */
+  phase: number;
+  /** 다음 축소까지 남은 시간 */
+  nextShrinkTime: number;
   /** 경고 표시 여부 */
   isWarning: boolean;
   /** 축소 중 여부 */
   isShrinking: boolean;
-  /** 구역 밖 초당 피해량 */
-  damagePerSecond?: number;
-  /** 안전 구역 중심 좌표 */
-  center?: Vector2;
-  /** 현재 페이즈 번호 */
-  phase?: ArenaPhase;
 }
 
 // ============================================
@@ -752,6 +783,9 @@ export interface PlacedTurret {
   spawnAnimation: number;
   hitFlash: number;
   facingAngle?: number;
+  targetFacingAngle?: number;
+  lastFireTime?: number;
+  level?: number;
 }
 
 /** 터렛 투사체 */
@@ -773,6 +807,7 @@ export interface TurretProjectile {
 
 /** 터렛 AOE 효과 */
 export interface TurretAoeEffect {
+  id?: string;
   x: number;
   y: number;
   radius: number;
@@ -781,6 +816,13 @@ export interface TurretAoeEffect {
   maxLife: number;
   abilityType?: string;
   rotation?: number;
+  damage?: number;
+  slowPercent?: number;
+  tickRate?: number;
+  lastTickTime?: number;
+  weaponType?: WeaponType;
+  turretId?: string;
+  knockback?: number;
 }
 
 /** 희귀도별 색상 설정 */
@@ -798,16 +840,49 @@ export const RARITY_COLORS: Record<string, { primary: string; border: string; gl
 
 /** Arena 에이전트 정보 */
 export interface Agent {
+  id: string;
   agentId: string;
+  playerClass: PlayerClass;
+  isLocalPlayer: boolean;
+  aiPersonality: AIPersonality;
+
   position: Vector2;
   velocity: Vector2;
+  radius: number;
+  color: string;
   health: number;
   maxHealth: number;
-  level: number;
-  selectedClass?: PlayerClass;
-  score: number;
+  speed: number;
+
   kills: number;
   deaths: number;
+  score: number;
+
+  isAlive: boolean;
+  respawnTimer: number;
+  respawnInvincibility: number;
+
+  weapons: Record<string, WeaponStats>;
+  weaponCooldowns: Record<string, number>;
+
+  level: number;
+  xp: number;
+  nextLevelXp: number;
+
+  statMultipliers: {
+    speed: number;
+    cooldown: number;
+    damage: number;
+    health: number;
+  };
+
+  state: 'idle' | 'moving' | 'attacking' | 'dying' | 'dead';
+
+  // optional display
+  lastDamagedBy?: string;
+  targetAgentId?: string;
+  displayName?: string;
+  selectedClass?: PlayerClass;
 }
 
 // ============================================
@@ -815,17 +890,582 @@ export interface Agent {
 // ============================================
 
 /** 콤보 티어 */
-export type ComboTier = 'none' | 'bronze' | 'silver' | 'gold' | 'diamond';
+export type ComboTier = 'none' | 'bronze' | 'silver' | 'gold' | 'diamond' | 'platinum' | 'master' | 'grandmaster' | 'legend' | 'mythic' | 'transcendent';
+
+/** 콤보 티어 설정 */
+export interface ComboTierConfig {
+  threshold: number;
+  name: string;
+  effect: { type: string; value: number; isActive: boolean };
+  sound: string;
+  color: string;
+}
 
 /** 콤보 상태 */
 export interface ComboState {
   count: number;
-  tier: ComboTier;
+  maxCount: number;
   timer: number;
   maxTimer: number;
-  multiplier: number;
-  tierUpAnimation?: number;
+  tier: ComboTier;
+  multipliers: {
+    xp: number;
+    speed: number;
+    damage: number;
+  };
+  effects: ComboEffect[];
+  lastKillTime: number;
+  tierUpAnimation: number;
 }
 
 /** 번역 키 타입 (i18n stub) */
 export type TranslationKeys = Record<string, any>;
+
+/** 파티클 (ExtendedParticle alias - combat.ts 호환) */
+export interface Particle {
+  // combat.ts 스타일 필드 (Vector2 기반)
+  position: Vector2;
+  velocity: Vector2;
+  radius: number;
+  color: string;
+  life: number;
+  maxLife: number;
+  type?: string;
+  // 선택적 추가 필드
+  text?: string;
+  rotation?: number;
+  rotSpeed?: number;
+  width?: number;
+  alpha?: number;
+  fontSize?: number;
+  fontColor?: string;
+  size?: number;
+  // 레거시 flat 필드 호환
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+  [key: string]: any;
+}
+
+// ============================================
+// TurretConfig - 터렛 설정 (turrets.config.ts에서 사용)
+// ============================================
+
+/** 터렛 희귀도별 가격 */
+export const RARITY_PRICES: Record<TurretRarity, number> = {
+  common: 500,
+  rare: 1200,
+  epic: 3000,
+  legendary: 8000,
+  mythic: 20000,
+};
+
+/** 터렛 희귀도별 최대 레벨 */
+export const RARITY_MAX_LEVELS: Record<TurretRarity, number> = {
+  common: 5,
+  rare: 8,
+  epic: 12,
+  legendary: 15,
+  mythic: 20,
+};
+
+/** 터렛 설정 인터페이스 */
+export interface TurretConfig {
+  id: string;
+  name: string;
+  nameKo: string;
+  description: string;
+  descriptionKo: string;
+  type: 'agent' | 'skill';
+  rarity: TurretRarity;
+  weaponType: WeaponType;
+  hp: number;
+  range: number;
+  baseDamage: number;
+  damagePerLevel: number;
+  cooldown: number;
+  color: string;
+  glowColor: string;
+  price: number;
+  upgradePrice: number;
+  maxLevel: number;
+  pierce?: number;
+  projectileCount?: number;
+  projectileSpeed?: number;
+  aoe?: boolean;
+  aoeRadius?: number;
+  slowEffect?: number;
+  chainCount?: number;
+  burstCount?: number;
+  knockback?: number;
+}
+
+// ============================================
+// AgentConfig - 에이전트 설정 (agents.config.ts에서 사용)
+// ============================================
+
+/** 에이전트 희귀도 */
+export type AgentRarity = 'common' | 'rare' | 'epic' | 'legendary' | 'mythic';
+
+/** 에이전트 설정 인터페이스 */
+export interface AgentConfig {
+  id: string;
+  name: string;
+  nameKo: string;
+  description: string;
+  descriptionKo: string;
+  rarity: AgentRarity;
+  weaponType: WeaponType;
+  hp: number;
+  range: number;
+  baseDamage: number;
+  damagePerLevel: number;
+  cooldown: number;
+  color: string;
+  glowColor: string;
+  price: number;
+  upgradePrice: number;
+  maxLevel: number;
+  pierce?: number;
+  projectileCount?: number;
+  projectileSpeed?: number;
+  aoe?: boolean;
+  aoeRadius?: number;
+  slowEffect?: number;
+  chainCount?: number;
+  burstCount?: number;
+}
+
+// ============================================
+// AIPersonality - AI 성격 유형 (arena-agents.config.ts에서 사용)
+// ============================================
+
+/** AI 에이전트 성격 유형 */
+export type AIPersonality = 'aggressive' | 'defensive' | 'balanced' | 'assassin' | 'support' | 'collector';
+
+// ============================================
+// BreakTimeState - 데이터 버스트 상태 (breaktime.config.ts에서 사용)
+// ============================================
+
+/** 데이터 버스트(쉬는 시간) 시스템 상태 */
+export interface BreakTimeState {
+  isActive: boolean;
+  gauge: number;
+  timer: number;
+  nextBreakTime: number;
+  warningTimer: number;
+  isWarning: boolean;
+  ultimateReady: boolean;
+  totalBreaks: number;
+  killsDuringBreak: number;
+}
+
+// ============================================
+// SkillDefinition / SkillCategory - 스킬 시스템 타입
+// ============================================
+
+/** 스킬 카테고리 */
+export type SkillCategory = 'CODE' | 'DATA' | 'NETWORK' | 'SECURITY' | 'AI' | 'SYSTEM';
+
+/** 스킬 티어 */
+export type SkillTier = 'basic' | 'advanced' | 'expert' | 'elite' | 'ultimate';
+
+/** 스킬 정의 인터페이스 */
+export interface SkillDefinition {
+  id: WeaponType;
+  name: string;
+  nameEn: string;
+  description: string;
+  descriptionEn: string;
+  category: SkillCategory;
+  tier: SkillTier;
+  icon: string;
+  color: string;
+  synergyTags: string[];
+  recommendedWith: string[];
+}
+
+// ============================================
+// Entity - 게임 엔티티 기본 인터페이스
+// ============================================
+
+/** 게임 엔티티 공통 인터페이스 */
+export interface Entity {
+  position: Vector2;
+  velocity?: Vector2;
+  radius: number;
+  health?: number;
+  maxHealth?: number;
+}
+
+// ============================================
+// ChatTrigger - 채팅 트리거 타입 (arena-agents.config.ts에서 정의)
+// ============================================
+
+/** 채팅 트리거 타입 (arena-agents.config.ts에서 export됨) */
+export type ChatTrigger =
+  | 'spawn'
+  | 'kill_agent'
+  | 'kill_monster'
+  | 'death'
+  | 'low_health'
+  | 'level_up'
+  | 'taunt'
+  | 'observation'
+  | 'victory'
+  | 'defeat';
+
+// ============================================
+// JoystickState - 조이스틱 상태 (useInput에서 사용)
+// ============================================
+
+/** 조이스틱 입력 상태 */
+export interface JoystickState {
+  active: boolean;
+  origin: Vector2;
+  current: Vector2;
+  pointerId: number | null;
+}
+
+// ============================================
+// Skin System Types (skins.config.ts에서 사용)
+// ============================================
+
+/** 스킨 희귀도 */
+export type SkinRarity = 'common' | 'rare' | 'epic' | 'legendary';
+
+/** 스킨 정의 */
+export interface Skin {
+  id: string;
+  characterId: string;
+  name: string;
+  description: string;
+  rarity: SkinRarity;
+  unlockMethod: 'default' | 'purchase' | 'achievement' | 'event';
+  unlockCondition?: {
+    achievementId?: string;
+    price?: number;
+    eventId?: string;
+  };
+  colors: {
+    body: string;
+    pants: string;
+    hair: string;
+    accent: string;
+    shoes: string;
+    outfit: string;
+    accessoryType: string;
+    pattern: string;
+    patternColor?: string;
+    glowEffect: string;
+  };
+  hasSpecialEffect: boolean;
+  statBonus?: {
+    atkBonus?: number;
+    hpBonus?: number;
+    spdBonus?: number;
+    critBonus?: number;
+    xpBonus?: number;
+    expBonus?: number;
+    defBonus?: number;
+    goldBonus?: number;
+    dodgeBonus?: number;
+    atkSpeedBonus?: number;
+  };
+  bonusSkill?: {
+    id: string;
+    name: string;
+    description: string;
+    type: string;
+    weaponType?: WeaponType;
+    weaponLevel?: number;
+    effectParams?: Record<string, number>;
+  };
+}
+
+// ============================================
+// AutoHuntState - helpers.ts에서 사용
+// ============================================
+
+/** 자동 사냥 상태 */
+export interface AutoHuntState {
+  targetEnemy: Enemy | null;
+  targetPickup: any | null;
+  moveDirection: Vector2;
+  isEvading: boolean;
+}
+
+// ============================================
+// GameState - 게임 상태 머신 (useGameState에서 사용)
+// ============================================
+
+/** 게임 페이즈 */
+export type GamePhase = 'farming' | 'boss' | 'clear';
+
+/** 게임 상태 */
+export interface GameState {
+  isPlaying: boolean;
+  isGameOver: boolean;
+  isLevelUp: boolean;
+  isCharacterSelect: boolean;
+  gameTime: number;
+  stage: number;
+  phase: GamePhase;
+  wave: WaveNumber;
+}
+
+// ============================================
+// ComboEffect - 콤보 효과 (useCombo에서 사용)
+// ============================================
+
+/** 콤보 효과 타입 */
+export type ComboEffectType = 'xp' | 'speed' | 'damage' | 'invincible' | 'screenClear';
+
+/** 콤보 효과 */
+export interface ComboEffect {
+  type: ComboEffectType;
+  value: number;
+  duration?: number;
+  isActive: boolean;
+}
+
+// ============================================
+// Quiz System Types (useQuizChallenge에서 사용)
+// ============================================
+
+/** 퀴즈 챌린지 타입 */
+export type QuizChallengeType = 'kill' | 'survive' | 'combo' | 'time_boss' | 'no_hit';
+
+/** 퀴즈 난이도 */
+export type QuizDifficulty = 'easy' | 'medium' | 'hard';
+
+/** 퀴즈 보상 타입 */
+export type QuizRewardType = 'levelUp' | 'heal' | 'weapon' | 'buff' | 'xp' | 'gold';
+
+/** 퀴즈 보상 */
+export interface QuizReward {
+  type: QuizRewardType;
+  value: number | string;
+  label: string;
+}
+
+/** 퀴즈 챌린지 */
+export interface QuizChallenge {
+  id: string;
+  type: QuizChallengeType;
+  description: string;
+  target: number;
+  current: number;
+  timeLimit: number;
+  remaining: number;
+  difficulty: QuizDifficulty;
+  reward: QuizReward;
+  status: 'active' | 'success' | 'failed' | 'expired';
+}
+
+/** 퀴즈 상태 */
+export interface QuizState {
+  activeChallenge: QuizChallenge | null;
+  lastChallengeTime: number;
+  nextChallengeIn: number;
+  completedCount: number;
+  failedCount: number;
+  isPenaltyActive: boolean;
+  penaltyTimer: number;
+  history: QuizChallenge[];
+}
+
+// ============================================
+// V3GameSystems - 통합 시스템 상태 (useV3Systems에서 사용)
+// ============================================
+
+/** V3 통합 게임 시스템 상태 */
+export interface V3GameSystems {
+  combo: ComboState;
+  breakTime: BreakTimeState;
+  quiz: QuizState;
+}
+
+// ============================================
+// ArenaConfig / ArenaResult - 아레나 설정 및 결과 (useArena에서 사용)
+// ============================================
+
+/** 아레나 설정 */
+export interface ArenaConfig {
+  gameDuration: number;
+  maxAgents: number;
+  respawnDelay: number;
+  respawnInvincibility: number;
+  killScore: number;
+  monsterDensity: number;
+  monsterXpMultiplier: number;
+  agentKillXp: number;
+}
+
+/** 아레나 결과 */
+export interface ArenaResult {
+  ranking: {
+    agentId: string;
+    playerClass: PlayerClass;
+    kills: number;
+    deaths: number;
+    score: number;
+    isLocalPlayer: boolean;
+  }[];
+  matchDuration: number;
+  mvpAgentId: string;
+  myRank: number;
+  myKills: number;
+  myDeaths: number;
+  myScore: number;
+}
+
+// ============================================
+// Skill Build Types (useSkillBuild에서 사용)
+// ============================================
+
+/** 시너지 요구 조건 타입 */
+export type SynergyRequirementType = 'category_mastery' | 'fusion' | 'ultimate_fusion' | 'skill_combo';
+
+/** 시너지 요구 조건 */
+export interface SynergyRequirement {
+  type: SynergyRequirementType;
+  skills?: WeaponType[];
+  categories?: SkillCategory[];
+  minLevel: number;
+  categoryCount?: number;
+}
+
+/** 시너지 효과 */
+export interface SynergyEffect {
+  type: string;
+  value: number;
+  description: string;
+}
+
+/** 시너지 정의 */
+export interface SynergyDefinition {
+  id: string;
+  name: string;
+  nameEn: string;
+  description: string;
+  descriptionEn: string;
+  icon: string;
+  color: string;
+  requirements: SynergyRequirement;
+  effects: SynergyEffect[];
+  tier: 'basic' | 'advanced' | 'ultimate';
+}
+
+/** 스킬 빌드 프리셋 */
+export interface SkillBuild {
+  id: string;
+  name: string;
+  nameEn: string;
+  description: string;
+  descriptionEn: string;
+  icon: string;
+  color: string;
+  recommendedClass?: PlayerClass;
+  priorityPath: WeaponType[];
+  synergyGoals: string[];
+}
+
+/** 플레이어 스킬 진행도 */
+export interface PlayerSkillProgress {
+  unlockedSkills: WeaponType[];
+  maxLevelReached: Record<WeaponType, number>;
+  branchExperience: Record<WeaponType, { A: number; B: number }>;
+  synergyAchievements: Record<string, number>;
+  savedBuilds: SkillBuild[];
+  lastUsedBuildId: string;
+}
+
+/** 플레이어 스킬 상태 */
+export interface PlayerSkillState {
+  skills: Map<WeaponType, number>;
+  branchChoices: Map<WeaponType, 'A' | 'B'>;
+  activeSynergies: SynergyDefinition[];
+}
+
+/** 레벨업 선택지 */
+export interface LevelUpChoice {
+  skill: WeaponType;
+  isNew: boolean;
+  currentLevel: number;
+  nextLevel: number;
+  needsBranchChoice: boolean;
+  willActivateSynergy: string | null;
+  priorityScore: number;
+  source: 'priority' | 'category' | 'random';
+}
+
+/** 레벨업 선택지 설정 */
+export interface LevelUpChoiceConfig {
+  priorityWeight: number;
+  categoryWeight: number;
+  randomWeight: number;
+  choiceCount: number;
+  excludeSkills: WeaponType[];
+  maxSkillLevel: number;
+}
+
+// ============================================
+// v29: Missing types for GameCanvas full port
+// ============================================
+
+/** 게임 모드 */
+export type GameMode = 'stage' | 'singularity' | 'tutorial';
+
+/** 영구 업그레이드 */
+export interface PersistentUpgrades {
+  hpLevel: number;
+  speedLevel: number;
+  damageLevel: number;
+  defenseLevel: number;
+  xpBonusLevel: number;
+  cooldownLevel: number;
+  critLevel: number;
+  pickupLevel: number;
+  reviveLevel: number;
+  [key: string]: number;
+}
+
+/** 이벤트 로그 타입 */
+export type EventLogType =
+  | 'damage'
+  | 'heal'
+  | 'kill'
+  | 'levelup'
+  | 'pickup'
+  | 'skill'
+  | 'boss'
+  | 'milestone'
+  | 'system'
+  | 'elite'
+  | 'combo'
+  | 'achievement';
+
+/** 특이점 상태 */
+export interface SingularityState {
+  isActive: boolean;
+  time: number;
+  kills: number;
+  bossesDefeated: number;
+}
+
+/** 특이점 결과 */
+export interface SingularityResult {
+  survivalTime: number;
+  kills: number;
+  bossesDefeated: number;
+  isNewBest: boolean;
+}
+
+/** 특이점 이벤트 타입 */
+export type SingularityEventType =
+  | 'milestone'
+  | 'boss_spawn'
+  | 'boss_defeat'
+  | 'difficulty_increase';

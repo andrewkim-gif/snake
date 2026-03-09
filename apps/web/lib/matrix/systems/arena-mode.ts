@@ -5,13 +5,13 @@
  * 생존자 판정, 배틀 결과 산출을 담당.
  */
 
-import type { Vector2, SafeZone, ArenaPhase } from '../types';
+import type { Vector2, SafeZone } from '../types';
 import {
   ARENA_CONFIG,
   SAFE_ZONE_PHASES,
   calculateSafeZoneState,
 } from '../config/arena.config';
-import type { ArenaAgent } from './agent-combat';
+import type { Agent as ArenaAgent } from '../types';
 
 // ============================================
 // Arena 상태 인터페이스
@@ -64,6 +64,8 @@ export function createArenaState(totalParticipants: number): ArenaState {
       damagePerSecond: 0,
       center: { x: 0, y: 0 },
       phase: 1,
+      shrinkSpeed: 0,
+      nextShrinkTime: 0,
     },
     aliveCount: totalParticipants,
     totalCount: totalParticipants,
@@ -156,7 +158,7 @@ function updateSafeZone(state: ArenaState): void {
     }
   }
   state.currentPhase = phaseNum;
-  state.safeZone.phase = phaseNum as ArenaPhase;
+  state.safeZone.phase = phaseNum;
 
   // 경고 상태
   state.zoneWarning = state.safeZone.isWarning || state.safeZone.isShrinking;
@@ -187,7 +189,7 @@ function checkGameEnd(
       const survivor = agents.find(a => a.state !== 'dead');
       if (survivor) {
         state.winnerId = survivor.agentId;
-        state.winnerName = survivor.displayName;
+        state.winnerName = survivor.displayName || survivor.agentId;
       }
     }
     return true;
@@ -223,7 +225,7 @@ function determineWinner(
     if (agent.score > bestScore) {
       bestScore = agent.score;
       bestId = agent.agentId;
-      bestName = agent.displayName;
+      bestName = agent.displayName || agent.agentId;
     }
   }
 

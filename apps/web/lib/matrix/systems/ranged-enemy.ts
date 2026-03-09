@@ -20,7 +20,7 @@ export interface RangedEnemyCallbacks {
     damage: number,
     radius?: number
   ) => void;
-  spawnParticles: (pos: Vector2, count: number, color: string, type: string) => void;
+  spawnParticles: (pos: Vector2, count: number, color: string, type?: string, text?: string) => void;
 }
 
 /**

@@ -3,7 +3,6 @@
  *
  * Ported from app_ingame/config/index.ts
  * lucide-react icons stubbed as string identifiers
- * achievements.config and skins.config not yet ported (TODO)
  */
 
 // Game Config
@@ -44,21 +43,78 @@ export const WAVE_DURATION = 60; // seconds per wave (used for arena timing)
 
 // Singularity Bosses Config - removed for Arena mode
 
-// Achievements Config - TODO: port from app_ingame/config/achievements.config.ts
-// export {
-//   ACHIEVEMENTS,
-//   ACHIEVEMENT_CATEGORIES,
-//   getAchievementProgress,
-// } from './achievements.config';
-// export type { Achievement, AchievementCategory, AchievementCondition } from './achievements.config';
+// Achievements Config - stub (achievements.config.ts not yet ported)
+export type Achievement = any;
+export type AchievementCategory = string;
+export type AchievementCondition = any;
+export const ACHIEVEMENTS: Achievement[] = [];
+export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [];
+export function getAchievementProgress(_id: string): number { return 0; }
 
-// Skins Config - TODO: port from app_ingame/config/skins.config.ts
-// export {
-//   SKINS,
-//   SKIN_CATEGORIES,
-//   getSkinById,
-// } from './skins.config';
-// export type { Skin, SkinRarity, SkinCategory } from './skins.config';
+// Skins Config
+export {
+  SKINS,
+  SKIN_CATEGORIES,
+  getSkinById,
+} from './skins.config';
+export type { Skin, SkinRarity, SkinCategory } from './skins.config';
+
+// Turrets Config
+export {
+  AGENT_TURRETS,
+  SKILL_TURRETS,
+  ALL_TURRETS,
+  getTurretById,
+  getTurretsByType,
+  getTurretsByRarity,
+  RARITY_ORDER,
+  getSortedTurrets,
+} from './turrets.config';
+
+// Combo Config
+export {
+  COMBO_CONFIG,
+  COMBO_TIER_ORDER,
+  getComboTier,
+  getNextTierThreshold,
+  getMilestoneType,
+  createInitialComboState,
+  formatComboNumber,
+  getTierIndex,
+} from './combo.config';
+
+// Arena Agents Config
+export {
+  ARENA_AGENT_IDENTITIES,
+  getArenaAgentIdentity,
+  getArenaAgentDisplayName,
+  getRandomFallbackMessage,
+  CHAT_BUBBLE_CONFIG,
+  PERSONALITY_WEIGHTS,
+} from './arena-agents.config';
+export type { ArenaAgentIdentity, PersonalityWeights } from './arena-agents.config';
+
+// Agents Config (unified agent system)
+export {
+  ALL_AGENTS,
+  getAgentById,
+  getAgentsByRarity,
+} from './agents.config';
+
+// Breaktime Config
+export {
+  BREAK_TIME_CONFIG,
+  createInitialBreakTimeState,
+  calculateGaugeIncrease,
+} from './breaktime.config';
+
+// Quiz Config
+export {
+  QUIZ_CONFIG,
+  createInitialQuizState,
+  getRandomQuizInterval,
+  generateQuizChallenge,
+} from './quiz.config';
 
 // Arena Config (Battle Royale mode)
 export {

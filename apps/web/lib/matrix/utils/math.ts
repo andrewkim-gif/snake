@@ -104,8 +104,18 @@ export function randomRange(min: number, max: number): number {
  * 티어별 보너스 계산 — 무기 보너스 배율
  * amount를 1000으로 나눈 값 반환 (예: 3000 → 3.0 배율)
  */
-export function calcTieredBonus(amount: number): number {
-  return amount / 1000;
+export function calcTieredBonus(level: number, tiers?: number[]): number {
+  if (!tiers || tiers.length === 0) return level / 1000;
+  // v29: 원본 GameCanvas 호환 - 레벨별 계층 보너스 계산
+  const tierSize = 5;
+  let bonus = 0;
+  let remaining = level;
+  for (let i = 0; i < tiers.length && remaining > 0; i++) {
+    const levelsInTier = Math.min(remaining, tierSize);
+    bonus += levelsInTier * tiers[i];
+    remaining -= levelsInTier;
+  }
+  return bonus;
 }
 
 // ===========================================================================
