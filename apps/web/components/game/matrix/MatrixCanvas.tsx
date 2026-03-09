@@ -2,11 +2,11 @@
 
 /**
  * MatrixCanvas.tsx - v28 Matrix 자동전투 서바이벌 게임 캔버스
- * Phase 4: 완전한 게임 루프 (Web Worker tick + rAF render)
+ * Phase 6: AI 에이전트 + 배틀로얄 시스템
  *
  * 핵심 구조:
- * 1. Web Worker → update(deltaTime) : 물리, 충돌, 무기 쿨다운
- * 2. requestAnimationFrame → draw(ctx) : 렌더링만
+ * 1. Web Worker → update(deltaTime) : 물리, 충돌, 무기 쿨다운, 에이전트 AI
+ * 2. requestAnimationFrame → draw(ctx) : 렌더링만 (세이프존 + 에이전트 포함)
  * 3. React refs로 상태 관리 (0 re-render)
  */
 
@@ -17,6 +17,7 @@ import MatrixLevelUp from './MatrixLevelUp';
 import type { LevelUpOption } from './MatrixLevelUp';
 import MatrixPause from './MatrixPause';
 import MatrixResult from './MatrixResult';
+import ArenaHUD from './ArenaHUD';
 import type {
   Player,
   Enemy,
@@ -55,6 +56,24 @@ import { drawEnemy, drawProjectile, drawCatSprite, drawFloorTile } from '@/lib/m
 import { updateRenderContext } from '@/lib/matrix/rendering/index';
 import type { ExtendedParticle } from '@/lib/matrix/systems/game-context';
 import { distance } from '@/lib/matrix/utils/math';
+
+// Arena / Agent imports (Phase 6)
+import {
+  createAgents,
+  updateAllAgents,
+  getAliveAgentCount,
+  getLeaderboard,
+} from '@/lib/matrix/systems/agent-combat';
+import type { ArenaAgent, LeaderboardEntry } from '@/lib/matrix/systems/agent-combat';
+import {
+  createArenaState,
+  updateArenaState,
+  isOutsideSafeZone,
+  getZoneDamage,
+} from '@/lib/matrix/systems/arena-mode';
+import type { ArenaState } from '@/lib/matrix/systems/arena-mode';
+import { ARENA_CONFIG } from '@/lib/matrix/config/arena.config';
+import { drawSafeZoneWarning } from '@/lib/matrix/rendering/arena';
 
 // ============================================
 // 상수
@@ -146,6 +165,20 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
 
   // ---- 카메라 ----
   const cameraRef = useRef({ x: 0, y: 0 });
+
+  // ---- Arena / Agent refs (Phase 6) ----
+  const agentsRef = useRef<ArenaAgent[]>(createAgents(ARENA_CONFIG.WORLD_SIZE));
+  const arenaStateRef = useRef<ArenaState>(createArenaState(ARENA_CONFIG.AGENT_COUNT + 1)); // +1 for player
+  const [arenaHudData, setArenaHudData] = useState({
+    timeRemaining: ARENA_CONFIG.GAME_DURATION,
+    aliveCount: ARENA_CONFIG.AGENT_COUNT + 1,
+    totalCount: ARENA_CONFIG.AGENT_COUNT + 1,
+    currentPhase: 0,
+    zoneWarning: false,
+    zoneDps: 0,
+    leaderboard: [] as LeaderboardEntry[],
+    playerOutsideZone: false,
+  });
 
   // ============================================
   // 플레이어 초기화
@@ -285,6 +318,10 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
     lastSpawnTimeRef.current = 0;
     killsRef.current = 0;
     weaponNamesRef.current = [];
+
+    // Arena / Agent 리셋
+    agentsRef.current = createAgents(ARENA_CONFIG.WORLD_SIZE);
+    arenaStateRef.current = createArenaState(ARENA_CONFIG.AGENT_COUNT + 1);
 
     setGameOver(false);
     setIsPaused(false);
@@ -499,12 +536,7 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
           player.health -= enemy.damage * deltaTime;
           player.hitFlashTimer = 0.15;
           player.invulnerabilityTimer = 0.1;
-          if (player.health <= 0) {
-            player.health = 0;
-            // Game Over 처리는 간단히 — 즉시 리셋
-            resetGame();
-            return;
-          }
+          // 사망은 아래에서 일괄 체크
         }
       }
 
@@ -586,9 +618,127 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       if (particles[i].life <= 0) particles.splice(i, 1);
     }
 
+    // ---- Arena: 세이프존 데미지 (플레이어) ----
+    const arenaState = arenaStateRef.current;
+    const safeZone = arenaState.safeZone;
+    const zoneDmg = getZoneDamage(player.position, safeZone, deltaTime);
+    if (zoneDmg > 0 && player.invulnerabilityTimer <= 0) {
+      player.health -= zoneDmg;
+      player.hitFlashTimer = 0.1;
+    }
+
+    // ---- Arena: AI 에이전트 업데이트 ----
+    const agents = agentsRef.current;
+    const szCenter = safeZone.center ?? { x: 0, y: 0 };
+    const szRadius = safeZone.currentRadius;
+    const szDps = safeZone.damagePerSecond ?? 0;
+    updateAllAgents(
+      agents,
+      enemies,
+      projectilesRef.current,
+      szCenter,
+      szRadius,
+      szDps,
+      deltaTime,
+    );
+
+    // ---- Arena: 플레이어 투사체 ↔ 에이전트 충돌 (플레이어 소유 투사체) ----
+    // 이미 updateAllAgents에서 모든 투사체(플레이어 포함)를 처리하지만,
+    // 플레이어 투사체의 ownerId='player'를 별도 처리
+    for (const proj of projectilesRef.current) {
+      if (proj.life <= 0 || proj.pierce <= 0) continue;
+      if (proj.ownerId && proj.ownerId !== 'player') continue; // 에이전트 소유 투사체는 위에서 처리됨
+      // 플레이어 투사체: ownerId가 없거나 'player'
+      for (const agent of agents) {
+        if (agent.state === 'dead' || agent.respawnInvincibility > 0) continue;
+        const dx = proj.position.x - agent.position.x;
+        const dy = proj.position.y - agent.position.y;
+        const distSq = dx * dx + dy * dy;
+        const radiusSum = proj.radius + agent.radius;
+        if (distSq < radiusSum * radiusSum) {
+          // 데미지 적용
+          const pvpDmg = Math.floor(proj.damage * 0.5);
+          agent.health -= pvpDmg;
+          agent.lastDamagedBy = 'player';
+
+          // 데미지 넘버
+          if (damageNumbersRef.current.length < GAME_CONFIG.MAX_DAMAGE_NUMBERS) {
+            damageNumbersRef.current.push({
+              id: Math.random().toString(),
+              position: { x: agent.position.x + (Math.random() - 0.5) * 10, y: agent.position.y - 15 },
+              value: pvpDmg,
+              color: '#ff6b6b',
+              life: GAME_CONFIG.DAMAGE_TEXT_LIFESPAN,
+              maxLife: GAME_CONFIG.DAMAGE_TEXT_LIFESPAN,
+              velocity: { x: (Math.random() - 0.5) * 30, y: -60 },
+            });
+          }
+
+          if (agent.health <= 0) {
+            agent.health = 0;
+            agent.state = 'dead';
+            agent.deaths += 1;
+            killsRef.current += 1;
+            player.score += 100;
+            addXP(50);
+          }
+
+          proj.pierce -= 1;
+          if (proj.pierce <= 0) {
+            proj.life = 0;
+            break;
+          }
+        }
+      }
+    }
+
+    // ---- Arena: 에이전트 투사체 → 플레이어 충돌 ----
+    for (const proj of projectilesRef.current) {
+      if (proj.life <= 0 || proj.pierce <= 0) continue;
+      if (!proj.ownerId || !proj.ownerId.startsWith('agent_')) continue;
+      if (player.invulnerabilityTimer > 0) continue;
+
+      const dx = proj.position.x - player.position.x;
+      const dy = proj.position.y - player.position.y;
+      const distSq = dx * dx + dy * dy;
+      const radiusSum = proj.radius + player.radius;
+      if (distSq < radiusSum * radiusSum) {
+        const pvpDmg = Math.floor(proj.damage * 0.5);
+        player.health -= pvpDmg;
+        player.hitFlashTimer = 0.15;
+        player.invulnerabilityTimer = 0.3;
+
+        if (damageNumbersRef.current.length < GAME_CONFIG.MAX_DAMAGE_NUMBERS) {
+          damageNumbersRef.current.push({
+            id: Math.random().toString(),
+            position: { x: player.position.x + (Math.random() - 0.5) * 10, y: player.position.y - 20 },
+            value: pvpDmg,
+            color: '#ff4444',
+            life: GAME_CONFIG.DAMAGE_TEXT_LIFESPAN,
+            maxLife: GAME_CONFIG.DAMAGE_TEXT_LIFESPAN,
+            velocity: { x: (Math.random() - 0.5) * 30, y: -60 },
+          });
+        }
+
+        proj.pierce -= 1;
+        if (proj.pierce <= 0) proj.life = 0;
+      }
+    }
+
+    // ---- Arena: 상태 업데이트 (세이프존 축소 + 게임 종료 판정) ----
+    const playerAlive = player.health > 0;
+    const arenaEnded = updateArenaState(arenaState, agents, playerAlive, deltaTime);
+
     // ---- 플레이어 사망 체크 ----
     if (player.health <= 0) {
       triggerGameOver(false);
+      return;
+    }
+
+    // ---- Arena 게임 종료 (시간 초과 or 최후 1인) ----
+    if (arenaEnded) {
+      const isWinner = arenaState.winnerId === 'player';
+      triggerGameOver(isWinner);
       return;
     }
 
@@ -613,6 +763,25 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
         weaponSlots,
         enemyCount: enemies.length,
         autoHuntEnabled: autoHuntEnabled.current,
+      });
+
+      // Arena HUD 데이터 동기화
+      const leaderboard = getLeaderboard(
+        agents,
+        player.score,
+        killsRef.current,
+        player.level,
+        player.health > 0,
+      );
+      setArenaHudData({
+        timeRemaining: arenaState.timeRemaining,
+        aliveCount: arenaState.aliveCount,
+        totalCount: arenaState.totalCount,
+        currentPhase: arenaState.currentPhase,
+        zoneWarning: arenaState.zoneWarning,
+        zoneDps: arenaState.zoneDps,
+        leaderboard,
+        playerOutsideZone: isOutsideSafeZone(player.position, arenaState.safeZone),
       });
     }
 
@@ -643,6 +812,10 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
     frameCountRef.current = 0;
     lastSpawnTimeRef.current = 0;
     cameraRef.current = { x: 0, y: 0 };
+
+    // Arena / Agent 리셋
+    agentsRef.current = createAgents(ARENA_CONFIG.WORLD_SIZE);
+    arenaStateRef.current = createArenaState(ARENA_CONFIG.AGENT_COUNT + 1);
   }, []);
 
   // ============================================
@@ -674,6 +847,54 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
 
     // 그리드 배경
     drawGrid(ctx, cam.x, cam.y, width, height);
+
+    // ---- 세이프존 렌더링 (월드 좌표, 카메라 변환 내부) ----
+    const arenaState = arenaStateRef.current;
+    if (arenaState.safeZone.center) {
+      const szCenter = arenaState.safeZone.center;
+      const szRadius = arenaState.safeZone.currentRadius;
+      const szTarget = arenaState.safeZone.targetRadius;
+      const szWarning = arenaState.safeZone.isWarning;
+
+      // 안전지대 바깥: 빨간 오버레이 (큰 사각형에서 원 컷아웃)
+      ctx.save();
+      ctx.fillStyle = 'rgba(255, 0, 0, 0.12)';
+      ctx.beginPath();
+      // 큰 사각형 (월드 좌표로 화면 전체 커버)
+      const bigR = 5000;
+      ctx.rect(szCenter.x - bigR, szCenter.y - bigR, bigR * 2, bigR * 2);
+      // 안전지대 원 (반시계 방향 = 컷아웃)
+      ctx.arc(szCenter.x, szCenter.y, szRadius, 0, Math.PI * 2, true);
+      ctx.fill();
+      ctx.restore();
+
+      // 안전지대 테두리
+      ctx.save();
+      ctx.strokeStyle = szWarning ? 'rgba(255, 165, 0, 0.7)' : 'rgba(0, 255, 65, 0.3)';
+      ctx.lineWidth = 3;
+      if (szWarning) {
+        ctx.setLineDash([10, 5]);
+        const pulse = Math.sin(Date.now() / 200) * 0.3 + 0.7;
+        ctx.globalAlpha = pulse;
+      }
+      ctx.beginPath();
+      ctx.arc(szCenter.x, szCenter.y, szRadius, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+      ctx.setLineDash([]);
+
+      // 목표 반경 (축소 중일 때)
+      if (szRadius > szTarget) {
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.25)';
+        ctx.lineWidth = 2;
+        ctx.setLineDash([5, 10]);
+        ctx.beginPath();
+        ctx.arc(szCenter.x, szCenter.y, szTarget, 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.setLineDash([]);
+      }
+      ctx.restore();
+    }
 
     // ---- 젬 ----
     const gems = gemsRef.current;
@@ -737,6 +958,13 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       ctx.globalAlpha = 1;
     }
 
+    // ---- AI 에이전트 렌더링 ----
+    const agents = agentsRef.current;
+    for (const agent of agents) {
+      if (agent.state === 'dead') continue;
+      drawAgent(ctx, agent);
+    }
+
     // ---- 플레이어 ----
     ctx.save();
     // 피격 플래시
@@ -776,7 +1004,18 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
 
     ctx.restore(); // 카메라 변환 종료
 
-    // ---- HUD는 React 오버레이로 대체 (MatrixHUD) ----
+    // ---- 세이프존 경고 (스크린 좌표, 카메라 변환 외부) ----
+    if (arenaState.safeZone.center) {
+      drawSafeZoneWarning(
+        ctx,
+        player.position,
+        arenaState.safeZone,
+        width,
+        height,
+      );
+    }
+
+    // ---- HUD는 React 오버레이로 대체 (MatrixHUD + ArenaHUD) ----
   }, []);
 
   // ============================================
@@ -803,6 +1042,61 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
       ctx.lineTo(endX, y);
     }
     ctx.stroke();
+  }
+
+  // ============================================
+  // AI 에이전트 렌더링
+  // ============================================
+
+  function drawAgent(ctx: CanvasRenderingContext2D, agent: ArenaAgent) {
+    const { position, color, radius, health, maxHealth, displayName, respawnInvincibility, level } = agent;
+
+    ctx.save();
+
+    // 무적 상태 시 깜빡임
+    if (respawnInvincibility > 0) {
+      ctx.globalAlpha = 0.3 + Math.sin(Date.now() / 80) * 0.3;
+    }
+
+    // 몸체 (원형 + 내부 색상)
+    ctx.beginPath();
+    ctx.arc(position.x, position.y, radius, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+
+    // 외곽선
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+
+    // 내부 아이콘 (클래스 표시)
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+    ctx.font = `bold ${Math.max(8, radius - 2)}px monospace`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(displayName.charAt(0), position.x, position.y + 1);
+
+    // HP 바
+    const hpBarWidth = radius * 2.5;
+    const hpBarHeight = 3;
+    const hpBarY = position.y - radius - 8;
+    const hpRatio = Math.max(0, health / maxHealth);
+
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(position.x - hpBarWidth / 2 - 1, hpBarY - 1, hpBarWidth + 2, hpBarHeight + 2);
+    ctx.fillStyle = hpRatio > 0.5 ? '#22c55e' : hpRatio > 0.25 ? '#f59e0b' : '#ef4444';
+    ctx.fillRect(position.x - hpBarWidth / 2, hpBarY, hpBarWidth * hpRatio, hpBarHeight);
+
+    // 이름표
+    ctx.fillStyle = color;
+    ctx.font = '9px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.globalAlpha = 0.8;
+    ctx.fillText(`${displayName} Lv${level}`, position.x, hpBarY - 3);
+
+    ctx.globalAlpha = 1;
+    ctx.restore();
   }
 
   // ============================================
@@ -1037,20 +1331,32 @@ export function MatrixCanvas({ onExit }: MatrixCanvasProps) {
 
       {/* React HUD 오버레이 */}
       {showHUD && !gameOver && (
-        <MatrixHUD
-          health={hudData.health}
-          maxHealth={hudData.maxHealth}
-          xp={hudData.xp}
-          xpToNext={hudData.xpToNext}
-          level={hudData.level}
-          score={hudData.score}
-          kills={hudData.kills}
-          gameTime={hudData.gameTime}
-          weaponSlots={hudData.weaponSlots}
-          enemyCount={hudData.enemyCount}
-          autoHuntEnabled={hudData.autoHuntEnabled}
-          isPaused={isPaused}
-        />
+        <>
+          <MatrixHUD
+            health={hudData.health}
+            maxHealth={hudData.maxHealth}
+            xp={hudData.xp}
+            xpToNext={hudData.xpToNext}
+            level={hudData.level}
+            score={hudData.score}
+            kills={hudData.kills}
+            gameTime={hudData.gameTime}
+            weaponSlots={hudData.weaponSlots}
+            enemyCount={hudData.enemyCount}
+            autoHuntEnabled={hudData.autoHuntEnabled}
+            isPaused={isPaused}
+          />
+          <ArenaHUD
+            timeRemaining={arenaHudData.timeRemaining}
+            aliveCount={arenaHudData.aliveCount}
+            totalCount={arenaHudData.totalCount}
+            currentPhase={arenaHudData.currentPhase}
+            zoneWarning={arenaHudData.zoneWarning}
+            zoneDps={arenaHudData.zoneDps}
+            leaderboard={arenaHudData.leaderboard}
+            playerOutsideZone={arenaHudData.playerOutsideZone}
+          />
+        </>
       )}
 
       {/* 레벨업 모달 */}
