@@ -20,6 +20,12 @@
  *   - 바이옴 틴트 (6색 uniform 배열, 알베도와 0.25 소프트 믹스)
  *   - 풍화 노이즈 (hash21 기반 per-pixel 0.12 강도)
  *   - 환경 안개 (바이옴별 fog 색상, 카메라 거리 100~350 범위 0.2 블렌딩)
+ *
+ * v29 Phase 4 추가:
+ *   - Tier 기반 스케일 차등화 (TIER_1=1.8, TIER_2=1.4, TIER_3=1.0)
+ *   - iso3 해시 기반 결정론적 Y축 회전 (인스턴스별 방향 변형)
+ *   - ±10% 스케일 미세 변형 (iso3 시드 기반 결정론적 jitter)
+ *   - 바이옴별 밤 이미시브 강도 차등화 (urban 0.9, arctic 0.2)
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
@@ -38,7 +44,13 @@ import { BIOME_LANDMARK_TINTS, BIOME_INDEX } from '@/lib/biome-landmark-tints';
 const SURFACE_ALT = 0.3;
 const BACKFACE_THRESHOLD = 0.05;
 const BACKFACE_FADE_RANGE = 0.3;
-const LANDMARK_SCALE = 1.5; // 전체 스케일 조정 (지구 반경 100 대비 ~5-8 unit 높이)
+
+// v29 Phase 4: Tier 기반 스케일 차등화 (기존 LANDMARK_SCALE=1.5 대체)
+const TIER_SCALE: Record<number, number> = {
+  1: 1.8,  // TIER_1 (S+A급 28개국) — 가장 크게
+  2: 1.4,  // TIER_2 (B급 40개국)
+  3: 1.0,  // TIER_3 (C+D급 ~127개국) — 가장 작게
+};
 
 // ─── GC 방지: 모듈 스코프 temp 객체 ───
 
@@ -58,12 +70,27 @@ function iso3HashSeed(iso3: string): number {
   return Math.abs(h % 10000) / 10000;
 }
 
+// ─── v29 Phase 4: iso3 해시 기반 결정론적 Y축 회전 ───
+
+function iso3ToRotation(iso3: string): number {
+  let hash = 0;
+  for (let i = 0; i < iso3.length; i++) {
+    hash = ((hash << 5) - hash + iso3.charCodeAt(i)) | 0;
+  }
+  return (Math.abs(hash) % 360) * (Math.PI / 180);
+}
+
+// v29 Phase 4: Y축 회전 기준 축 (GC 방지)
+const _yAxis = new THREE.Vector3(0, 1, 0);
+
 // ─── v29 Phase 2: 바이옴 uniform 배열 (정렬 순서 보장) ───
 
 const BIOME_ORDER: BiomeType[] = ['temperate', 'arid', 'tropical', 'arctic', 'mediterranean', 'urban'];
 
 const biomeTintArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].tint);
 const biomeFogArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].fog);
+// v29 Phase 4: 바이옴별 밤 이미시브 강도 배열
+const biomeNightEmissiveArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].nightEmissive);
 
 // ─── Types ───
 
@@ -81,6 +108,8 @@ interface ArchetypeGroup {
   normals: THREE.Vector3[];
   /** v29: 각 랜드마크의 바이옴 (Phase 2에서 셰이더 attribute로 전달) */
   biomes: BiomeType[];
+  /** v29 Phase 4: 각 랜드마크의 티어 (스케일 차등화용) */
+  tiers: number[];
 }
 
 // ─── Landmark Sun Lighting Shaders (v22 Phase 1) ───
@@ -114,6 +143,7 @@ const landmarkFragmentShader = /* glsl */ `
   uniform vec3 uSunDir;          // 태양 방향 (정규화)
   uniform vec3 uBiomeTints[6];   // v29: 6개 바이옴 tint 색상
   uniform vec3 uBiomeFogs[6];    // v29: 6개 바이옴 fog 색상
+  uniform float uBiomeNightEmissive[6]; // v29 Phase 4: 바이옴별 밤 이미시브 강도
   varying vec3 vWorldNormal;
   varying vec2 vUv;
   varying vec3 vColor;           // 면별 밝기 (AO)
@@ -161,8 +191,10 @@ const landmarkFragmentShader = /* glsl */ `
     color *= (1.0 - weathering);
 
     // 야간 emissive: 밤면에서 창문 불빛 (따뜻한 글로우)
+    // v29 Phase 4: 바이옴별 밤 이미시브 강도 적용
+    float biomeNightEmissive = uBiomeNightEmissive[biomeId];
     float nightFactor = smoothstep(0.1, -0.3, NdotL);
-    float windowLight = texColor.r * 0.25;
+    float windowLight = texColor.r * 0.25 * biomeNightEmissive;
     vec3 emissive = vec3(1.0, 0.85, 0.5) * windowLight * nightFactor;
     color += emissive;
 
@@ -192,6 +224,8 @@ function getSharedMaterial(): THREE.ShaderMaterial {
       // v29 Phase 2: 바이옴 틴트/안개 uniform 배열 (6개 바이옴, 정렬 순서 보장)
       uBiomeTints: { value: biomeTintArray },
       uBiomeFogs: { value: biomeFogArray },
+      // v29 Phase 4: 바이옴별 밤 이미시브 강도
+      uBiomeNightEmissive: { value: biomeNightEmissiveArray },
     },
     vertexShader: landmarkVertexShader,
     fragmentShader: landmarkFragmentShader,
@@ -242,17 +276,35 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
     return createArchetypeGeometry(group.archetype);
   }, [group.archetype]);
 
-  // v29 Phase 2: per-landmark 바이옴 인덱스 + 풍화 시드 (결정론적)
-  const biomeData = useMemo(() => {
+  // v29 Phase 2+4: per-landmark 바이옴/풍화 + 스케일/회전 (결정론적, useMemo)
+  const instanceData = useMemo(() => {
     const count = group.landmarks.length;
     const biomeIndices = new Float32Array(count);
     const ageSeeds = new Float32Array(count);
+    // v29 Phase 4: 미리 계산된 최종 스케일 (tierScale * jitter)
+    const finalScales = new Float32Array(count);
+    // v29 Phase 4: 미리 계산된 Y축 회전 quaternion
+    const yRotations = new Array<THREE.Quaternion>(count);
+
     for (let i = 0; i < count; i++) {
+      const iso3 = group.landmarks[i].iso3;
+      const tier = group.tiers[i];
+      const seed = iso3HashSeed(iso3);
+
       biomeIndices[i] = BIOME_INDEX[group.biomes[i]] ?? 0;
-      ageSeeds[i] = iso3HashSeed(group.landmarks[i].iso3);
+      ageSeeds[i] = seed;
+
+      // Phase 4 Task 1+3: tierScale × jitter (±10%)
+      const tierScale = TIER_SCALE[tier] ?? 1.0;
+      const jitterFactor = 0.9 + seed * 0.2; // 0.9 ~ 1.1
+      finalScales[i] = tierScale * jitterFactor;
+
+      // Phase 4 Task 2: iso3 기반 결정론적 Y축 회전
+      const yRotAngle = iso3ToRotation(iso3);
+      yRotations[i] = new THREE.Quaternion().setFromAxisAngle(_yAxis, yRotAngle);
     }
-    return { biomeIndices, ageSeeds };
-  }, [group.landmarks, group.biomes]);
+    return { biomeIndices, ageSeeds, finalScales, yRotations };
+  }, [group.landmarks, group.biomes, group.tiers]);
 
   // MC 외곽선용 InstancedBufferGeometry (EdgesGeometry 기반)
   const edgeGeometry = useMemo(() => {
@@ -329,19 +381,22 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
       // ★ 너무 작은 스케일은 검은 점으로 보이므로 스킵
       if (fade < 0.15) continue;
 
-      // 구면 정렬: Y축(위)를 법선 방향으로 회전
-      _quat.setFromUnitVectors(_up, normal);
+      // v29 Phase 4: Y축 회전을 먼저 적용 → surface normal alignment를 곱함
+      // surface normal이 "위"이므로, local up축 기준 회전 후 표면 정렬
+      _quat.setFromUnitVectors(_up, normal);         // surface alignment
+      _quat.multiply(instanceData.yRotations[i]);    // local Y축 회전 추가
 
       _obj.position.copy(pos);
       _obj.quaternion.copy(_quat);
-      const s = LANDMARK_SCALE * fade;
+      // v29 Phase 4: tier 스케일 × jitter × backface fade
+      const s = instanceData.finalScales[i] * fade;
       _obj.scale.set(s, s, s);
       _obj.updateMatrix();
       mesh.setMatrixAt(visibleCount, _obj.matrix);
 
-      // v29 Phase 2: per-instance 바이옴 인덱스 + 풍화 시드 설정
-      if (biomeAttr) biomeAttr.setX(visibleCount, biomeData.biomeIndices[i]);
-      if (ageAttr) ageAttr.setX(visibleCount, biomeData.ageSeeds[i]);
+      // v29 Phase 2+4: per-instance 바이옴 인덱스 + 풍화 시드 설정
+      if (biomeAttr) biomeAttr.setX(visibleCount, instanceData.biomeIndices[i]);
+      if (ageAttr) ageAttr.setX(visibleCount, instanceData.ageSeeds[i]);
 
       // 엣지 인스턴스 행렬도 동기화
       const e = _obj.matrix.elements;
@@ -413,6 +468,7 @@ export function LandmarkMeshes({
           positions: [],
           normals: [],
           biomes: [],
+          tiers: [],
         };
         groupMap.set(lm.archetype, group);
       }
@@ -423,6 +479,7 @@ export function LandmarkMeshes({
       group.positions.push(pos);
       group.normals.push(normal);
       group.biomes.push(lm.biome);
+      group.tiers.push(lm.tier);
     }
 
     return Array.from(groupMap.values());
