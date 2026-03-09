@@ -234,7 +234,8 @@ export interface Player {
   maxHealth: number;                // 최대 HP
   level: number;                    // 현재 레벨
   xp: number;                       // 현재 경험치
-  nextXp: number;                   // 다음 레벨 필요 경험치
+  nextXp: number;                   // 다음 레벨 필요 경험치 (alias: nextLevelXp)
+  nextLevelXp: number;              // 다음 레벨 필요 경험치 (원본 필드명)
   score: number;                    // 점수
 
   // 전투 속성
@@ -263,6 +264,21 @@ export interface Player {
 
   // 피격 리액션 (시각 피드백)
   hitReaction?: HitReaction;
+
+  // 레벨업 애니메이션 (Phase 3)
+  levelUpAnim?: number;             // 레벨업 애니메이션 진행도 (0-1)
+
+  // 넉백/피격 (combat, movement, projectile에서 사용)
+  knockback: Vector2;               // 현재 넉백 벡터
+  hitFlashTimer: number;            // 피격 플래시 타이머
+
+  // 크리티컬 배율 (combat에서 사용)
+  criticalMultiplier?: number;      // 크리티컬 데미지 배율
+
+  // 캐릭터 클래스 + 스탯 (weapons에서 사용)
+  playerClass?: PlayerClass;        // 캐릭터 클래스 (selectedClass alias)
+  stance?: string;                  // 전투 스탠스
+  statMultipliers?: Record<string, number>; // 스탯 배율
 }
 
 // ============================================
@@ -308,6 +324,8 @@ export interface Enemy {
   attackCooldown?: number;               // 원거리 공격 쿨다운
   projectileColor?: string;              // 투사체 색상
   projectileSpeed?: number;              // 투사체 속도
+  currentAttackCooldown?: number;        // 현재 공격 쿨다운 타이머 (남은 시간)
+  lastAttackTime?: number;               // 마지막 공격 시간
 
   // 상태이상 시스템
   statusEffects?: StatusEffect[];        // 적용 중인 상태이상 목록
@@ -316,6 +334,14 @@ export interface Enemy {
   isElite?: boolean;                     // 엘리트 여부
   eliteTier?: EliteTier;                 // 엘리트 등급
   dropCount?: number;                    // 드랍 아이템 수
+
+  // 사망 애니메이션 (combat에서 사용)
+  deathTimer?: number;                   // 사망 애니메이션 타이머
+  deathScale?: number;                   // 사망 애니메이션 스케일
+  deathVelocity?: Vector2;              // 사망 시 넉백 벡터
+
+  // 호환성 alias
+  hp?: number;                           // health alias (일부 시스템에서 사용)
 }
 
 // ============================================
@@ -382,6 +408,34 @@ export interface Projectile {
   chainCount?: number;     // 체인 횟수
   maxChain?: number;       // 최대 체인 횟수
   chainHitIds?: string[];  // 체인 히트 적 ID 배열
+
+  // 동결 (bridge)
+  freezeDuration?: number;       // 동결 지속 시간
+  freezeSpreadRadius?: number;   // 동결 확산 범위
+
+  // 분열 (shard)
+  splitDamage?: number;          // 분열 시 데미지
+
+  // 폭격 (airdrop)
+  onlyHitOnGround?: boolean;     // 착지 시에만 히트 판정
+
+  // 체인 라이트닝 (lightning)
+  isChainLightning?: boolean;    // 체인 라이트닝 여부
+
+  // 히트 카운트 (beam 등)
+  hitCount?: number;             // 누적 히트 수
+
+  // 도형 투사체 (axe 등)
+  shape?: string;                // 투사체 형태 ('rect' 등)
+  width?: number;                // 투사체 너비 (shape='rect' 시 사용)
+  height?: number;               // 투사체 높이 (shape='rect' 시 사용)
+
+  // 기본 속도 (wand 체인용)
+  baseSpeed?: number;            // 원본 투사체 속도
+
+  // 체인 라이트닝 추가 필드
+  chainDamageMultiplier?: number; // 체인 데미지 배율
+  isSingleBolt?: boolean;        // 단일 번개줄기 렌더링 힌트
 }
 
 // ============================================
@@ -487,6 +541,7 @@ export interface StatusEffect {
   tickTimer?: number;      // 현재 틱 타이머
   sourceId?: string;       // 효과 출처 ID (중복 방지)
   slowAmount?: number;     // 감속량 (slow)
+  sourceWeapon?: string;   // 효과 출처 무기 타입
 }
 
 // ============================================

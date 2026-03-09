@@ -60,6 +60,17 @@ class SoundManager {
   playBridgeSound(_opts?: { pitch?: number; intensity?: number; isCritical?: boolean }): void {}
   playSwordSound(_opts?: { pitch?: number; intensity?: number; isCritical?: boolean }): void {}
 
+  // 히트 SFX (combat.ts에서 호출)
+  playHitSFX(
+    _name: string,
+    _options?: {
+      pitch?: number;
+      volume?: number;
+      intensity?: number;
+      isCritical?: boolean;
+    }
+  ): void {}
+
   // 게임 이벤트 사운드
   playHitSound(): void {}
   playDeathSound(): void {}

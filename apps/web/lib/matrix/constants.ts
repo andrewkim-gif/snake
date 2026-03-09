@@ -5,7 +5,7 @@
  * 시스템 파일들이 '../../constants'에서 import하는 모든 심볼을 여기서 export
  */
 
-import type { EnemyType } from './types';
+import type { EnemyType, WeaponType, WeaponStats } from './types';
 
 // ============================================================
 // Game Config (game.config.ts)
@@ -118,6 +118,9 @@ export interface EnemyConfig {
   attackCooldown?: number;
   projectileSpeed?: number;
   projectileColor?: string;
+  xp?: number;                     // 처치 시 경험치
+  score?: number;                  // 처치 시 점수
+  splashRadius?: number;           // 폭발 범위 (artillery 등)
 }
 
 /**
@@ -206,3 +209,43 @@ export const ROULETTE_REWARDS: Array<{
 }> = [];
 
 export const HOJAE_HEADLINES: string[] = [];
+
+// ============================================================
+// WEAPON_DATA stub (weapons.config.ts에서 색상만 사용)
+// 시스템 파일에서 WEAPON_DATA[weaponType].color 접근에 필요
+// ============================================================
+
+export const WEAPON_DATA: Record<string, {
+  name: string;
+  desc: string;
+  stats: WeaponStats[];
+  color: string;
+}> = {
+  whip: { name: '손코딩', desc: '', color: '#00FF41', stats: [] },
+  punch: { name: '키보드 펀치', desc: '', color: '#ef4444', stats: [] },
+  wand: { name: 'API 호출', desc: '', color: '#3b82f6', stats: [] },
+  knife: { name: 'Git Push', desc: '', color: '#facc15', stats: [] },
+  axe: { name: '서버 던지기', desc: '', color: '#ef4444', stats: [] },
+  bow: { name: 'GraphQL 쿼리', desc: '', color: '#84cc16', stats: [] },
+  bible: { name: '문서화', desc: '', color: '#0ea5e9', stats: [] },
+  garlic: { name: '디버그 오라', desc: '', color: '#10b981', stats: [] },
+  pool: { name: '방화벽', desc: '', color: '#06b6d4', stats: [] },
+  genesis: { name: '시스템 크래시', desc: '', color: '#0066FF', stats: [] },
+  beam: { name: '매트릭스 비전', desc: '', color: '#00FF41', stats: [] },
+  laser: { name: '재귀 루프', desc: '', color: '#f43f5e', stats: [] },
+  lightning: { name: 'Claude 어시스트', desc: '', color: '#D97706', stats: [] },
+  phishing: { name: 'MCP 서버', desc: '', color: '#be123c', stats: [] },
+  stablecoin: { name: '타입 세이프티', desc: '', color: '#3178C6', stats: [] },
+  bridge: { name: 'Async/Await', desc: '', color: '#6366f1', stats: [] },
+  ping: { name: 'Ping 패킷', desc: '', color: '#0ea5e9', stats: [] },
+  shard: { name: '코드 조각', desc: '', color: '#8b5cf6', stats: [] },
+  airdrop: { name: 'NPM Install', desc: '', color: '#CB3837', stats: [] },
+  fork: { name: 'Git Fork', desc: '', color: '#06b6d4', stats: [] },
+  aggregator: { name: 'Auto Import', desc: '', color: '#ec4899', stats: [] },
+  oracle: { name: '코드 리뷰', desc: '', color: '#f59e0b', stats: [] },
+  focus: { name: '딥워크', desc: '', color: '#f472b6', stats: [] },
+  overclock: { name: '오버클럭', desc: '', color: '#f97316', stats: [] },
+  gold_reward: { name: '긴급 보상', desc: '', color: '#facc15', stats: [] },
+  sword: { name: '소드', desc: '', color: '#94a3b8', stats: [] },
+  crossbow: { name: '크로스보우', desc: '', color: '#78716c', stats: [] },
+};
