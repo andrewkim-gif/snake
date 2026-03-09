@@ -46,6 +46,8 @@ interface IsoCanvasProps {
   onBackToGlobe: () => void;
   /** 시민 스냅샷 (city_state에서 2Hz로 수신) */
   citizens?: CitizenSnapshot[];
+  /** Phase 8: 관전 모드 (읽기 전용) */
+  spectating?: boolean;
 }
 
 export function IsoCanvas({
@@ -54,6 +56,7 @@ export function IsoCanvas({
   mapTier = 'C',
   onBackToGlobe,
   citizens,
+  spectating = false,
 }: IsoCanvasProps) {
   const canvasContainerRef = useRef<HTMLDivElement>(null);
   const appRef = useRef<Application | null>(null);
@@ -219,6 +222,7 @@ export function IsoCanvas({
   }, []);
 
   const handleClick = useCallback((e: React.MouseEvent) => {
+    if (spectating) return; // Phase 8: 관전 모드에서는 클릭 무시
     const tilemap = tilemapRef.current;
     const app = appRef.current;
     if (!tilemap || !app) return;
@@ -232,7 +236,7 @@ export function IsoCanvas({
     if (result?.action === 'placed') {
       // 건물 배치 완료 (연속 배치 모드 유지)
     }
-  }, []);
+  }, [spectating]);
 
   const handleWheel = useCallback((e: React.WheelEvent) => {
     e.preventDefault();
@@ -321,23 +325,23 @@ export function IsoCanvas({
         onBackToGlobe();
       }
 
-      // 단축키: E = Economy, B = Build, P = Politics
+      // 단축키: E = Economy (항상 가능), B = Build, P = Politics, V = Vote (관전 시 비활성)
       if (e.key === 'e' || e.key === 'E') {
         toggleEconomyDashboard();
       }
-      if (e.key === 'b' || e.key === 'B') {
+      if (!spectating && (e.key === 'b' || e.key === 'B')) {
         toggleConstructionPanel();
       }
-      if (e.key === 'p' || e.key === 'P') {
+      if (!spectating && (e.key === 'p' || e.key === 'P')) {
         togglePoliticsPanel();
       }
-      if (e.key === 'v' || e.key === 'V') {
+      if (!spectating && (e.key === 'v' || e.key === 'V')) {
         toggleElectionPanel();
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, showPoliticsPanel, showElectionPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel, togglePoliticsPanel, toggleElectionPanel]);
+  }, [onBackToGlobe, showEconomyDashboard, selectedBuildingId, showConstructionPanel, showPoliticsPanel, showElectionPanel, toggleEconomyDashboard, selectBuilding, toggleConstructionPanel, togglePoliticsPanel, toggleElectionPanel, spectating]);
 
   return (
     <div style={{
@@ -358,6 +362,28 @@ export function IsoCanvas({
         onClick={handleClick}
         onWheel={handleWheel}
       />
+
+      {/* ──── Phase 8: 관전 모드 워터마크 ──── */}
+      {spectating && (
+        <div style={{
+          position: 'absolute',
+          top: '50%',
+          left: '50%',
+          transform: 'translate(-50%, -50%) rotate(-15deg)',
+          pointerEvents: 'none',
+          zIndex: 5,
+          fontFamily: bodyFont,
+          fontSize: '72px',
+          fontWeight: 900,
+          color: 'rgba(255, 255, 255, 0.06)',
+          letterSpacing: '12px',
+          textTransform: 'uppercase',
+          userSelect: 'none',
+          whiteSpace: 'nowrap',
+        }}>
+          SPECTATING
+        </div>
+      )}
 
       {/* ──── 상단 바: 국가 이름 + 툴바 ──── */}
       <div style={{
@@ -402,25 +428,42 @@ export function IsoCanvas({
           }}>
             {countryName} ({countryIso3})
           </span>
+          {spectating && (
+            <span style={{
+              fontFamily: bodyFont,
+              fontSize: '10px',
+              fontWeight: 700,
+              color: '#F59E0B',
+              letterSpacing: '1px',
+              textTransform: 'uppercase',
+              padding: '3px 8px',
+              backgroundColor: 'rgba(245, 158, 11, 0.12)',
+              border: '1px solid rgba(245, 158, 11, 0.25)',
+            }}>
+              SPECTATING
+            </span>
+          )}
         </div>
 
         {/* 우측: 도구 버튼 + 호버 정보 */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px', pointerEvents: 'auto' }}>
-          {/* 건설 패널 토글 */}
+          {/* 건설 패널 토글 (관전 모드에서 비활성) */}
           <button
-            onClick={toggleConstructionPanel}
+            onClick={spectating ? undefined : toggleConstructionPanel}
+            disabled={spectating}
             style={{
               fontFamily: bodyFont,
               fontSize: '10px',
               fontWeight: 700,
-              color: showConstructionPanel ? SK.gold : SK.textSecondary,
+              color: spectating ? SK.textMuted : showConstructionPanel ? SK.gold : SK.textSecondary,
               backgroundColor: showConstructionPanel ? 'rgba(245, 158, 11, 0.12)' : 'rgba(9,9,11,0.88)',
               border: `1px solid ${showConstructionPanel ? 'rgba(245, 158, 11, 0.25)' : SK.glassBorder}`,
               borderRadius: 0,
               padding: '6px 10px',
-              cursor: 'pointer',
+              cursor: spectating ? 'not-allowed' : 'pointer',
               letterSpacing: '0.5px',
               textTransform: 'uppercase',
+              opacity: spectating ? 0.5 : 1,
             }}
           >
             BUILD [B]
@@ -560,8 +603,8 @@ export function IsoCanvas({
       {/* ──── Phase 4: 자원 HUD ──── */}
       <ResourceHUD />
 
-      {/* ──── Phase 4: 건설 패널 (좌측) ──── */}
-      {showConstructionPanel && (
+      {/* ──── Phase 4: 건설 패널 (좌측) — 관전 모드에서 숨김 ──── */}
+      {showConstructionPanel && !spectating && (
         <ConstructionPanel
           onClose={toggleConstructionPanel}
           onSelectBuilding={handleConstructionSelect}
@@ -604,8 +647,8 @@ export function IsoCanvas({
         />
       )}
 
-      {/* ──── Phase 5: 정치 패널 (중앙 모달) ──── */}
-      {showPoliticsPanel && (
+      {/* ──── Phase 5: 정치 패널 (중앙 모달) — 관전 모드에서 숨김 ──── */}
+      {showPoliticsPanel && !spectating && (
         <PoliticsPanel
           onClose={togglePoliticsPanel}
           onIssueEdict={(edictId) => {
@@ -619,8 +662,8 @@ export function IsoCanvas({
         />
       )}
 
-      {/* ──── Phase 6: 선거 패널 (중앙 모달) ──── */}
-      {showElectionPanel && (
+      {/* ──── Phase 6: 선거 패널 (중앙 모달) — 관전 모드에서 숨김 ──── */}
+      {showElectionPanel && !spectating && (
         <ElectionPanel
           onClose={toggleElectionPanel}
           onVote={(candidateId) => {
@@ -630,8 +673,8 @@ export function IsoCanvas({
         />
       )}
 
-      {/* ──── 하단: 건물 팔레트 (Phase 1 — 건설 패널이 열리지 않은 경우만 표시) ──── */}
-      {!showConstructionPanel && (
+      {/* ──── 하단: 건물 팔레트 (Phase 1 — 건설 패널이 열리지 않은 경우만 표시, 관전 모드 숨김) ──── */}
+      {!showConstructionPanel && !spectating && (
         <div style={{
           position: 'absolute',
           bottom: 16,

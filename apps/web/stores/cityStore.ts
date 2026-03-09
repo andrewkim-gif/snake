@@ -80,6 +80,10 @@ interface CityState {
   /** 외교 브릿지 상태 */
   diplomacyBridge: DiplomacyBridgeState | null;
 
+  // ── Phase 8: 관전 모드 ──
+  /** 관전 모드 여부 (읽기 전용 뷰) */
+  isSpectating: boolean;
+
   // ── Phase 4: UI 상태 ──
   /** 선택된 건물 ID (건물 정보 패널용) */
   selectedBuildingId: string | null;
@@ -146,6 +150,10 @@ interface CityActions {
   /** 선거 패널 토글 */
   toggleElectionPanel: () => void;
 
+  // ── Phase 8: 관전 모드 ──
+  /** 관전 모드 설정 */
+  setSpectating: (spectating: boolean) => void;
+
   // ── Phase 4: UI 액션 ──
   /** 건물 선택 (정보 패널용) */
   selectBuilding: (buildingId: string | null) => void;
@@ -195,6 +203,9 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
   election: null,
   diplomacyBridge: null,
 
+  // 초기 상태 — Phase 8: 관전
+  isSpectating: false,
+
   // 초기 상태 — Phase 4: UI
   selectedBuildingId: null,
   showEconomyDashboard: false,
@@ -240,6 +251,8 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
       election: null,
       diplomacyBridge: null,
       showElectionPanel: false,
+      // Phase 8: 관전 초기화
+      isSpectating: false,
     }),
 
   leaveCountry: () =>
@@ -275,6 +288,8 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
       election: null,
       diplomacyBridge: null,
       showElectionPanel: false,
+      // Phase 8: 관전 초기화
+      isSpectating: false,
     }),
 
   addBuilding: (building) =>
@@ -327,6 +342,10 @@ export const useCityStore = create<CityState & CityActions>((set) => ({
 
   toggleElectionPanel: () =>
     set((state) => ({ showElectionPanel: !state.showElectionPanel })),
+
+  // ── Phase 8: 관전 모드 ──
+  setSpectating: (spectating) =>
+    set({ isSpectating: spectating }),
 
   // ── Phase 4: UI 액션 ──
   selectBuilding: (buildingId) =>

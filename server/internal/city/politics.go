@@ -294,6 +294,16 @@ func NewPoliticsEngine() *PoliticsEngine {
 	}
 }
 
+// IsEdictActive checks if an edict is currently active.
+func (p *PoliticsEngine) IsEdictActive(edictID EdictID) bool {
+	for _, ae := range p.ActiveEdicts {
+		if ae.EdictID == edictID && ae.Active {
+			return true
+		}
+	}
+	return false
+}
+
 // IssueEdict enacts a new edict. Returns error if invalid.
 func (p *PoliticsEngine) IssueEdict(edictID EdictID, treasury float64, currentTick uint64) error {
 	def := GetEdictDef(edictID)

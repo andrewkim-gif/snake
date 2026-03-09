@@ -32,6 +32,9 @@ const STATE_COLORS: Record<string, number> = {
 /** Interpolation speed (0~1, higher = faster catch-up) */
 const LERP_SPEED = 0.15;
 
+/** Phase 8: Maximum visible citizens for performance (cap rendering even if more exist) */
+const MAX_VISIBLE_CITIZENS = 100;
+
 // ─── Internal citizen position tracker for smooth movement ───
 
 /** Citizen sprite size (px) when using textures */
@@ -76,12 +79,18 @@ export class IsoCitizenLayer {
   /**
    * Update citizen positions from server snapshot.
    * Called when new city_state arrives (2Hz).
+   * Phase 8: Limits to MAX_VISIBLE_CITIZENS for performance.
    */
   updateFromSnapshot(citizens: CitizenSnapshot[]): void {
     const seenIds = new Set<string>();
     const useTextures = isTexturesLoaded();
 
-    for (const citizen of citizens) {
+    // Phase 8: Limit rendered citizens for performance
+    const visibleCitizens = citizens.length > MAX_VISIBLE_CITIZENS
+      ? citizens.slice(0, MAX_VISIBLE_CITIZENS)
+      : citizens;
+
+    for (const citizen of visibleCitizens) {
       seenIds.add(citizen.id);
 
       const { sx, sy } = tileToScreen(citizen.tileX, citizen.tileY);

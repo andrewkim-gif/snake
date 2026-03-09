@@ -89,8 +89,9 @@ const (
 	EventTradeRouteUpdate = "trade_route_update"
 
 	// v26: City simulation events (server → client)
-	EventCityState   = "city_state"   // 2Hz city state broadcast
-	EventCityEvent   = "city_event"   // city event notification (building complete, etc.)
+	EventCityState      = "city_state"       // 2Hz city state broadcast
+	EventCityEvent      = "city_event"       // city event notification (building complete, etc.)
+	EventCityGlobeSync  = "city_globe_sync"  // Phase 8: Iso→Globe data sync (GDP, pop, happiness per country)
 
 	// v26: City simulation events (client → server)
 	EventCityCommand   = "city_command"   // build/demolish/upgrade/toggle

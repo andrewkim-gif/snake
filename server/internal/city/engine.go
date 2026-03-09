@@ -96,6 +96,7 @@ type CitySimEngine struct {
 	election        *ElectionEngine
 	diplomacyBridge *DiplomacyBridge
 	tradeRoutes     []*TradeRoute
+	nationalAI      *NationalAI
 
 	// External references (interfaces for decoupling)
 	worldMgr   WorldSyncer
@@ -148,6 +149,7 @@ func NewCitySimEngine(iso3, tier string) *CitySimEngine {
 		politics:        NewPoliticsEngine(),
 		election:        NewElectionEngine(),
 		diplomacyBridge: NewDiplomacyBridge(iso3),
+		nationalAI:      NewNationalAI(rng),
 		tradeRoutes:     make([]*TradeRoute, 0),
 		tickInterval:    10 * time.Second,
 		lastTick:        time.Now(),
@@ -286,7 +288,26 @@ func (e *CitySimEngine) FullTick() {
 		}
 	}
 
-	// Step 6: Pay citizen savings (salary → savings each tick)
+	// Step 6: NationalAI tick — auto-manage AI-controlled cities
+	if e.mode == ModeAI && e.nationalAI != nil {
+		atWarForAI := e.warMgr != nil && e.warMgr.IsAtWar(e.iso3)
+		ms := mapSizeForTier(e.tier)
+		e.nationalAI.Tick(
+			e.iso3,
+			e.buildings,
+			e.stockpile,
+			&e.treasury,
+			e.citizenCount,
+			e.happiness,
+			e.militaryPower,
+			e.politics,
+			e.tickCount,
+			atWarForAI,
+			ms,
+		)
+	}
+
+	// Step 7: Pay citizen savings (salary → savings each tick)
 	e.payCitizenSalaries()
 
 	// Sync to world manager

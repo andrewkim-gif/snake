@@ -347,3 +347,19 @@ export interface DiplomacyBridgeState {
   tradePartners: number;
   sanctionedBy: number;
 }
+
+// --- Phase 8: Globe Sync Types ---
+
+/** Lightweight city summary for Globe view rendering */
+export interface CityGlobeSummary {
+  gdp: number;
+  population: number;
+  happiness: number;
+  military: number;
+  treasury: number;
+  atWar: boolean;
+  mode: ControlMode;
+}
+
+/** Globe sync payload — map of iso3 → summary */
+export type CityGlobeSyncData = Record<string, CityGlobeSummary>;

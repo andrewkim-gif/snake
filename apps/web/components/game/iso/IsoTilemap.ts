@@ -246,11 +246,35 @@ export class IsoTilemap {
     this.camera.y += (centerY - this.camera.y) * (1 - 1 / zoomRatio);
   }
 
-  /** 카메라를 컨테이너에 적용 (매 프레임 호출) */
+  /** 카메라를 컨테이너에 적용 + 뷰포트 컬링 (매 프레임 호출) */
   applyCamera(screenWidth: number, screenHeight: number): void {
     this.container.scale.set(this.camera.zoom);
     this.container.x = screenWidth / 2 - this.camera.x * this.camera.zoom;
     this.container.y = screenHeight / 2 - this.camera.y * this.camera.zoom;
+
+    // Phase 8: 뷰포트 컬링 — 화면 밖 타일 숨김
+    // 월드 좌표 기준 보이는 영역 계산 (패딩 추가)
+    const pad = ISO_TILE_WIDTH * 2; // 가장자리 여유
+    const worldLeft = this.camera.x - screenWidth / (2 * this.camera.zoom) - pad;
+    const worldRight = this.camera.x + screenWidth / (2 * this.camera.zoom) + pad;
+    const worldTop = this.camera.y - screenHeight / (2 * this.camera.zoom) - pad;
+    const worldBottom = this.camera.y + screenHeight / (2 * this.camera.zoom) + pad;
+
+    const children = this.tileLayer.children;
+    for (let i = 0; i < children.length; i++) {
+      const child = children[i];
+      const cx = child.x;
+      const cy = child.y;
+      child.visible = cx >= worldLeft && cx <= worldRight && cy >= worldTop && cy <= worldBottom;
+    }
+
+    // 건물 레이어도 컬링
+    const bChildren = this.buildingLayer.children;
+    for (let i = 0; i < bChildren.length; i++) {
+      const child = bChildren[i];
+      child.visible = child.x >= worldLeft && child.x <= worldRight &&
+                      child.y >= worldTop && child.y <= worldBottom;
+    }
   }
 
   // ─── 마우스 인터랙션 ───

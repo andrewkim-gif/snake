@@ -95,6 +95,42 @@ func (m *CityManager) ActivateCity(iso3, clientID string) error {
 	return nil
 }
 
+// SpectateCity marks a city as spectated and moves it to the active tick list.
+// Returns true if spectation was set up (city exists and is in AI mode).
+func (m *CityManager) SpectateCity(iso3, clientID string) bool {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	engine, ok := m.engines[iso3]
+	if !ok {
+		return false
+	}
+
+	// Only allow spectating AI-managed cities (not player-managed ones)
+	engine.mu.RLock()
+	currentMode := engine.mode
+	engine.mu.RUnlock()
+
+	if currentMode == ModePlayerManaged {
+		// Already player-managed; spectating is handled by the client
+		return true
+	}
+
+	engine.SetMode(ModeSpectated, clientID)
+
+	// Move to active list for full ticks while being spectated
+	m.removeFromInactive(iso3)
+	m.activeEngines = append(m.activeEngines, engine)
+
+	slog.Info("city spectated",
+		"iso3", iso3,
+		"clientId", clientID,
+		"activeCount", len(m.activeEngines),
+	)
+
+	return true
+}
+
 // DeactivateCity moves a city back to the inactive tick list.
 func (m *CityManager) DeactivateCity(iso3 string) {
 	m.mu.Lock()
@@ -249,6 +285,73 @@ func (m *CityManager) removeFromActive(iso3 string) {
 			return
 		}
 	}
+}
+
+// GlobeSummary contains aggregated city data for the Globe view.
+type GlobeSummary struct {
+	GDP        float64 `json:"gdp"`
+	Population int     `json:"population"`
+	Happiness  float64 `json:"happiness"`
+	Military   float64 `json:"military"`
+	Treasury   float64 `json:"treasury"`
+	AtWar      bool    `json:"atWar"`
+	Mode       ControlMode `json:"mode"`
+}
+
+// GetSummaryForGlobe returns a lightweight summary of a city's stats for Globe rendering.
+func (m *CityManager) GetSummaryForGlobe(iso3 string) *GlobeSummary {
+	engine := m.GetEngine(iso3)
+	if engine == nil {
+		return nil
+	}
+
+	engine.mu.RLock()
+	defer engine.mu.RUnlock()
+
+	atWar := false
+	if engine.warMgr != nil {
+		atWar = engine.warMgr.IsAtWar(iso3)
+	}
+
+	return &GlobeSummary{
+		GDP:        engine.gdp,
+		Population: engine.citizenCount,
+		Happiness:  engine.happiness,
+		Military:   engine.militaryPower,
+		Treasury:   engine.treasury,
+		AtWar:      atWar,
+		Mode:       engine.mode,
+	}
+}
+
+// GetAllGlobeSummaries returns summaries for all initialized countries.
+func (m *CityManager) GetAllGlobeSummaries() map[string]*GlobeSummary {
+	m.mu.RLock()
+	engines := make(map[string]*CitySimEngine, len(m.engines))
+	for k, v := range m.engines {
+		engines[k] = v
+	}
+	m.mu.RUnlock()
+
+	result := make(map[string]*GlobeSummary, len(engines))
+	for iso3, engine := range engines {
+		engine.mu.RLock()
+		atWar := false
+		if engine.warMgr != nil {
+			atWar = engine.warMgr.IsAtWar(iso3)
+		}
+		result[iso3] = &GlobeSummary{
+			GDP:        engine.gdp,
+			Population: engine.citizenCount,
+			Happiness:  engine.happiness,
+			Military:   engine.militaryPower,
+			Treasury:   engine.treasury,
+			AtWar:      atWar,
+			Mode:       engine.mode,
+		}
+		engine.mu.RUnlock()
+	}
+	return result
 }
 
 // removeFromInactive removes a city from the inactive list by iso3.

@@ -58,8 +58,8 @@ export default function Home() {
   const tLobby = useTranslations('lobby');
   const searchParams = useSearchParams();
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso'>('lobby');
-  // v26: 아이소메트릭 국가 관리 대상
-  const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string } | null>(null);
+  // v26: 아이소메트릭 국가 관리 대상 (Phase 8: spectating 플래그 추가)
+  const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string; spectating?: boolean } | null>(null);
   const [playerName, setPlayerName] = useState('');
   const [skinId, setSkinId] = useState(0);
   const [appearance, setAppearance] = useState<CubelingAppearance>(createDefaultAppearance);
@@ -346,14 +346,16 @@ export default function Home() {
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
   // v26: Globe → Isometric 전환 (Manage Country)
+  // Phase 8: 자기 국적 국가 = 관리 모드, 다른 나라 = 관전 모드
   const handleManageCountry = useCallback((iso3: string, name: string) => {
-    setIsoCountry({ iso3, name });
+    const isOwnCountry = nationality === iso3;
+    setIsoCountry({ iso3, name, spectating: !isOwnCountry });
     setFadeOut(true);
     setTimeout(() => {
       setMode('iso');
       setFadeOut(false);
     }, 300);
-  }, []);
+  }, [nationality]);
 
   // v26: Iso → Globe 복귀
   const handleBackToGlobe = useCallback(() => {
@@ -429,6 +431,7 @@ export default function Home() {
           countryIso3={isoCountry.iso3}
           countryName={isoCountry.name}
           onBackToGlobe={handleBackToGlobe}
+          spectating={isoCountry.spectating}
         />
       </div>
     );
@@ -596,132 +599,115 @@ export default function Home() {
         </div>
       )}
 
-      {/* 좌하단 컨트롤 바 — 로고 + 버튼들 + 언어 한줄 */}
+      {/* 좌상단 로고 */}
       <div style={{
         position: 'absolute',
-        bottom: NEWS_FEED_HEIGHT + 12,
-        left: 16,
-        zIndex: 65,
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'flex-start',
-        gap: '10px',
+        top: 16,
+        left: 20,
+        zIndex: 70,
         pointerEvents: 'none',
-        opacity: showLeftPanel ? 1 : 0,
-        transform: showLeftPanel ? 'translateX(0)' : 'translateX(-20px)',
-        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
+        opacity: showHeader ? 1 : 0,
+        transform: showHeader ? 'translateY(0)' : 'translateY(-10px)',
+        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1), transform 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
       }}>
-        {/* 로고 (작게) */}
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/assets/generated/logo-v2.png"
           alt="AI WORLD WAR"
           style={{
-            height: '22px',
+            height: '28px',
             width: 'auto',
             objectFit: 'contain',
             filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.8))',
             pointerEvents: 'auto',
           }}
         />
+      </div>
 
-        {/* 버튼 한 줄: Agent Setup + Game System + Language */}
-        <div style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: '6px',
-          pointerEvents: 'auto',
-        }}>
-          {/* Agent Setup 버튼 */}
+      {/* 좌하단 컨트롤 바 — 버튼들 + 언어 한줄 */}
+      <div style={{
+        position: 'absolute',
+        bottom: NEWS_FEED_HEIGHT + 14,
+        left: 16,
+        zIndex: 65,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px',
+        pointerEvents: 'none',
+        opacity: showLeftPanel ? 1 : 0,
+        transform: showLeftPanel ? 'translateX(0)' : 'translateX(-20px)',
+        transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s, transform 0.6s cubic-bezier(0.4, 0, 0.2, 1) 0.15s',
+      }}>
+          {/* Agent Setup 버튼 — 메인 컬러 통일 */}
           <button
             onClick={() => setSetupOpen(prev => !prev)}
             style={{
               position: 'relative',
               fontFamily: bodyFont,
-              fontWeight: 600,
-              fontSize: '11px',
-              color: SK.textSecondary,
-              letterSpacing: '0.5px',
+              fontWeight: 700,
+              fontSize: '13px',
+              color: '#FFFFFF',
+              letterSpacing: '1px',
               textTransform: 'uppercase',
-              padding: '8px 14px',
-              border: OVERLAY.border,
-              borderRadius: OVERLAY.borderRadius,
-              backgroundColor: OVERLAY.bg,
-              borderTop: '1px solid rgba(239, 68, 68, 0.4)',
-              backdropFilter: OVERLAY.blur,
-              WebkitBackdropFilter: OVERLAY.blur,
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: 0,
+              backgroundColor: SK.accent,
               cursor: 'pointer',
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+              gap: '8px',
+              pointerEvents: 'auto',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              boxShadow: '0 0 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
             }}
           >
-            <Settings size={11} color={SK.accent} strokeWidth={2} />
+            <Settings size={14} color="#FFFFFF" strokeWidth={2.5} />
             {tLobby('agentSetup')}
-            <div style={{
-              position: 'absolute',
-              bottom: -1,
-              left: -1,
-              width: 0,
-              height: 0,
-              borderLeft: '10px solid #EF4444',
-              borderTop: '10px solid transparent',
-              pointerEvents: 'none',
-            }} />
           </button>
 
-          {/* GAME SYSTEM 버튼 */}
+          {/* GAME SYSTEM 버튼 — 메인 컬러 통일 */}
           <button
             onClick={() => handleOpenPanel()}
             style={{
               position: 'relative',
               fontFamily: bodyFont,
-              fontWeight: 600,
-              fontSize: '11px',
-              color: SK.textSecondary,
-              letterSpacing: '0.5px',
+              fontWeight: 700,
+              fontSize: '13px',
+              color: '#FFFFFF',
+              letterSpacing: '1px',
               textTransform: 'uppercase',
-              padding: '8px 14px',
-              border: OVERLAY.border,
-              borderRadius: OVERLAY.borderRadius,
-              backgroundColor: OVERLAY.bg,
-              borderTop: '1px solid rgba(239, 68, 68, 0.4)',
-              backdropFilter: OVERLAY.blur,
-              WebkitBackdropFilter: OVERLAY.blur,
+              padding: '10px 20px',
+              border: 'none',
+              borderRadius: 0,
+              backgroundColor: SK.accent,
               cursor: 'pointer',
               transition: `all ${OVERLAY.transition}`,
               display: 'flex',
               alignItems: 'center',
-              gap: '6px',
-              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 10px 100%, 0 calc(100% - 10px))',
+              gap: '8px',
+              pointerEvents: 'auto',
+              clipPath: 'polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px))',
+              boxShadow: '0 0 20px rgba(239, 68, 68, 0.3), inset 0 1px 0 rgba(255,255,255,0.15)',
             }}
           >
+            <Globe size={14} color="#FFFFFF" strokeWidth={2.5} />
             <span>GAME SYSTEM</span>
-            <ChevronRight size={11} strokeWidth={2} color={SK.accent} />
-            <div style={{
-              position: 'absolute',
-              bottom: -1,
-              left: -1,
-              width: 0,
-              height: 0,
-              borderLeft: '10px solid #EF4444',
-              borderTop: '10px solid transparent',
-              pointerEvents: 'none',
-            }} />
+            <ChevronRight size={14} strokeWidth={2.5} color="#FFFFFF" />
           </button>
 
           {/* 언어 설정 */}
-          <LanguageSwitcher />
-        </div>
+          <div style={{ pointerEvents: 'auto' }}>
+            <LanguageSwitcher />
+          </div>
       </div>
 
       {/* Agent Setup 팝업 (setupOpen 시) */}
       {setupOpen && (
         <div style={{
           position: 'absolute',
-          bottom: NEWS_FEED_HEIGHT + 70,
+          bottom: NEWS_FEED_HEIGHT + 62,
           left: 16,
           zIndex: 66,
           width: 'min(300px, calc(100vw - 32px))',
