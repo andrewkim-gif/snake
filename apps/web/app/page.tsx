@@ -8,7 +8,7 @@
  * v14 S36: ESC 키 → 인게임→로비 복귀, 글로브 클릭 → 아레나 즉시 입장 (소켓 유지)
  */
 
-import { useState, useCallback, useEffect, useMemo } from 'react';
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
 import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -57,13 +57,147 @@ const MatrixApp = dynamic(
   () => import('@/components/game/matrix/MatrixApp').then(m => ({ default: m.MatrixApp })),
   { ssr: false },
 );
-// v28: Matrix 인트로 연출
-const MatrixIntro = dynamic(
-  () => import('@/components/game/matrix/MatrixIntro').then(m => ({ default: m.MatrixIntro })),
-  { ssr: false },
-);
 
 const NEWS_FEED_HEIGHT = 36;
+
+/* ── Matrix 게임 로딩 오버레이 (GlobeLoadingScreen 스타일) ── */
+const MATRIX_LOADING_TEXTS = [
+  'DEPLOYING COMBAT AGENTS',
+  'LOADING BATTLEFIELD',
+  'INITIALIZING WEAPONS SYSTEM',
+  'ESTABLISHING BATTLE LINK',
+];
+
+function MatrixLoadingOverlay({ countryName, onComplete }: { countryName: string; onComplete: () => void }) {
+  const [progress, setProgress] = useState(0);
+  const [textIndex, setTextIndex] = useState(0);
+  const [fadeOut, setFadeOut] = useState(false);
+  const progressRef = useRef(0);
+  const rafRef = useRef(0);
+  const completedRef = useRef(false);
+
+  // 프로그레스 애니메이션 (2초에 걸쳐 0→100%)
+  useEffect(() => {
+    const startTime = Date.now();
+    const DURATION = 2000;
+    const tick = () => {
+      const elapsed = Date.now() - startTime;
+      const t = Math.min(elapsed / DURATION, 1);
+      const eased = 1 - (1 - t) * (1 - t); // ease-out quadratic
+      progressRef.current = eased * 100;
+      setProgress(progressRef.current);
+      if (progressRef.current < 100) {
+        rafRef.current = requestAnimationFrame(tick);
+      }
+    };
+    rafRef.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, []);
+
+  // 텍스트 사이클
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setTextIndex((prev) => (prev + 1) % MATRIX_LOADING_TEXTS.length);
+    }, 600);
+    return () => clearInterval(interval);
+  }, []);
+
+  // 100% 도달 시 페이드아웃 → 완료
+  useEffect(() => {
+    if (progress >= 99 && !completedRef.current) {
+      completedRef.current = true;
+      const t1 = setTimeout(() => setFadeOut(true), 200);
+      const t2 = setTimeout(() => onComplete(), 800);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [progress, onComplete]);
+
+  return (
+    <div style={{
+      position: 'absolute',
+      inset: 0,
+      zIndex: 200,
+      background: SK.bg,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      opacity: fadeOut ? 0 : 1,
+      transition: 'opacity 600ms ease',
+      pointerEvents: fadeOut ? 'none' : 'auto',
+    }}>
+      <div style={{ width: 360, display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* 국가명 헤딩 */}
+        <div style={{
+          fontFamily: headingFont,
+          fontSize: 'clamp(24px, 5vw, 36px)',
+          fontWeight: 700,
+          color: SK.accent,
+          letterSpacing: '0.12em',
+          textAlign: 'center',
+          textTransform: 'uppercase',
+        }}>
+          BATTLE FOR {countryName.toUpperCase()}
+        </div>
+
+        {/* 프로그레스 바 트랙 */}
+        <div style={{
+          width: '100%',
+          height: 3,
+          background: 'rgba(255, 255, 255, 0.06)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}>
+          <div style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            height: '100%',
+            width: `${progress}%`,
+            background: `linear-gradient(90deg, ${SK.accentDark || SK.accent}, ${SK.accent})`,
+            transition: 'width 100ms linear',
+            boxShadow: `0 0 12px ${SK.accent}66, 0 0 4px ${SK.accent}44`,
+          }} />
+        </div>
+
+        {/* 하단 정보 */}
+        <div style={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: 10,
+            letterSpacing: '0.15em',
+            color: SK.textMuted,
+            textTransform: 'uppercase',
+          }}>
+            {MATRIX_LOADING_TEXTS[textIndex]}
+          </div>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: 11,
+            color: SK.textSecondary,
+            fontVariantNumeric: 'tabular-nums',
+          }}>
+            {Math.round(progress)}%
+          </div>
+        </div>
+      </div>
+
+      {/* 하단 악센트 라인 */}
+      <div style={{
+        position: 'absolute',
+        bottom: 0,
+        left: 0,
+        right: 0,
+        height: 1,
+        background: `linear-gradient(90deg, transparent, ${SK.accent}66, transparent)`,
+      }} />
+    </div>
+  );
+}
 
 export default function Home() {
   const tLobby = useTranslations('lobby');
@@ -85,8 +219,8 @@ export default function Home() {
 
   // v17: 시네마틱 인트로 상태
   const [introPhase, setIntroPhase] = useState<IntroPhase>('done');
-  // v28: Matrix 인트로 표시 여부
-  const [showMatrixIntro, setShowMatrixIntro] = useState(false);
+  // v29b: Matrix 게임 로딩 상태
+  const [matrixLoading, setMatrixLoading] = useState(false);
   const [introComplete, setIntroComplete] = useState(true);
   const [introActive, setIntroActive] = useState(false);
   const [clientReady, setClientReady] = useState(false);
@@ -315,10 +449,15 @@ export default function Home() {
   // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
-  // v29b Phase 2: Globe → Matrix 진입 (국가 선택 → MatrixIntro → MatrixApp)
+  // v29b Phase 2: Globe → Matrix 진입 (국가 선택 → 로딩바 → MatrixApp)
   const handleManageCountry = useCallback((iso3: string, name: string) => {
     setMatrixCountry({ iso3, name });
-    setShowMatrixIntro(true);
+    setMatrixLoading(true);
+    setFadeOut(true);
+    setTimeout(() => {
+      setMode('matrix');
+      setFadeOut(false);
+    }, 300);
   }, []);
 
   // v26: Globe → Isometric 전환 (Manage City — CountryPanel 전용)
@@ -412,19 +551,6 @@ export default function Home() {
     );
   }
 
-  // --- v28: Matrix 인트로 → 게임 전환 ---
-  if (showMatrixIntro) {
-    return (
-      <MatrixIntro
-        countryName={matrixCountry?.name}
-        onComplete={() => {
-          setShowMatrixIntro(false);
-          setMode('matrix');
-        }}
-      />
-    );
-  }
-
   // --- v29: MatrixApp 오케스트레이터 (게임 훅 + 캔버스 + 오버레이 통합) ---
   if (mode === 'matrix') {
     return (
@@ -442,10 +568,18 @@ export default function Home() {
             setTimeout(() => {
               setMode('lobby');
               setMatrixCountry(null);
+              setMatrixLoading(false);
               setFadeOut(false);
             }, 300);
           }}
         />
+        {/* Matrix 게임 로딩 오버레이 — GlobeLoadingScreen 스타일 */}
+        {matrixLoading && (
+          <MatrixLoadingOverlay
+            countryName={matrixCountry?.name ?? ''}
+            onComplete={() => setMatrixLoading(false)}
+          />
+        )}
       </div>
     );
   }
