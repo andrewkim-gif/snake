@@ -14,7 +14,6 @@ import { useSearchParams } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { CubelingAppearance } from '@agent-survivor/shared';
 import { createDefaultAppearance, packAppearance } from '@agent-survivor/shared';
-import { LanguageSwitcher } from '@/components/navigation/LanguageSwitcher';
 import { McInput } from '@/components/lobby/McInput';
 import { CharacterCreator } from '@/components/lobby/CharacterCreator';
 import { NationalitySelector, loadNationality, saveNationality } from '@/components/lobby/NationalitySelector';
@@ -72,45 +71,47 @@ function MatrixLoadingOverlay({ countryName, onComplete }: { countryName: string
   const [progress, setProgress] = useState(0);
   const [textIndex, setTextIndex] = useState(0);
   const [fadeOut, setFadeOut] = useState(false);
-  const progressRef = useRef(0);
-  const rafRef = useRef(0);
-  const completedRef = useRef(false);
+  const onCompleteRef = useRef(onComplete);
+  onCompleteRef.current = onComplete;
 
-  // 프로그레스 애니메이션 (2초에 걸쳐 0→100%)
+  // 단일 useEffect: 프로그레스 애니메이션 + 텍스트 사이클 + 완료 처리
+  // deps 없음 → 마운트 1회만 실행, 리렌더 영향 없음
   useEffect(() => {
     const startTime = Date.now();
     const DURATION = 2000;
+    let completed = false;
+    let rafId = 0;
+
+    // 텍스트 사이클
+    let txtIdx = 0;
+    const textInterval = setInterval(() => {
+      txtIdx = (txtIdx + 1) % MATRIX_LOADING_TEXTS.length;
+      setTextIndex(txtIdx);
+    }, 600);
+
     const tick = () => {
+      if (completed) return;
       const elapsed = Date.now() - startTime;
       const t = Math.min(elapsed / DURATION, 1);
-      const eased = 1 - (1 - t) * (1 - t); // ease-out quadratic
-      progressRef.current = eased * 100;
-      setProgress(progressRef.current);
-      if (progressRef.current < 100) {
-        rafRef.current = requestAnimationFrame(tick);
+      const eased = 1 - (1 - t) * (1 - t);
+      const p = eased * 100;
+      setProgress(p);
+
+      if (p >= 99.5 && !completed) {
+        completed = true;
+        setTimeout(() => setFadeOut(true), 200);
+        setTimeout(() => onCompleteRef.current(), 800);
+        return;
       }
+      rafId = requestAnimationFrame(tick);
     };
-    rafRef.current = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, []);
+    rafId = requestAnimationFrame(tick);
 
-  // 텍스트 사이클
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setTextIndex((prev) => (prev + 1) % MATRIX_LOADING_TEXTS.length);
-    }, 600);
-    return () => clearInterval(interval);
+    return () => {
+      cancelAnimationFrame(rafId);
+      clearInterval(textInterval);
+    };
   }, []);
-
-  // 100% 도달 시 페이드아웃 → 완료
-  useEffect(() => {
-    if (progress >= 99 && !completedRef.current) {
-      completedRef.current = true;
-      const t1 = setTimeout(() => setFadeOut(true), 200);
-      const t2 = setTimeout(() => onComplete(), 800);
-      return () => { clearTimeout(t1); clearTimeout(t2); };
-    }
-  }, [progress, onComplete]);
 
   return (
     <div style={{
@@ -704,14 +705,14 @@ export default function Home() {
           </span>
         </div>
 
-        {/* v31 Phase 3: 명예의전당 버튼 */}
+        {/* v31 Phase 3: 명예의전당 버튼 (네모) */}
         <button
           onClick={() => openPopup('hallOfFame')}
           title="HALL OF FAME"
           style={{
             width: '36px',
             height: '36px',
-            borderRadius: '50%',
+            borderRadius: 0,
             border: activePopup === 'hallOfFame'
               ? `2px solid ${SK.gold}`
               : '1px solid rgba(255, 255, 255, 0.1)',
@@ -750,14 +751,14 @@ export default function Home() {
           />
         </button>
 
-        {/* v31 Phase 3: 설정 버튼 */}
+        {/* v31 Phase 3: 설정 버튼 (네모) */}
         <button
           onClick={() => openPopup('settings', 'profile')}
           title="SETTINGS"
           style={{
             width: '36px',
             height: '36px',
-            borderRadius: '50%',
+            borderRadius: 0,
             border: activePopup === 'settings'
               ? `2px solid ${SK.textSecondary}`
               : '1px solid rgba(255, 255, 255, 0.1)',
@@ -1010,10 +1011,6 @@ export default function Home() {
             GOVERNANCE
           </button>
 
-          {/* 언어 설정 */}
-          <div style={{ pointerEvents: 'auto' }}>
-            <LanguageSwitcher />
-          </div>
       </div>
 
       {/* Agent Setup 팝업 (setupOpen 시) */}
