@@ -301,6 +301,62 @@ export const BLOCK_DEFS: Record<BlockType, BlockDef> = {
   },
 };
 
+// ─── v29 Phase 7C: 재질별 라이팅 속성 [specularStrength, weatheringFactor] ───
+
+/**
+ * 38개 블록별 재질 속성 배열.
+ * [0] specularStrength: 스페큘러 반사 강도 (0~1)
+ * [1] weatheringFactor: 풍화 계수 (바이옴 풍화값에 곱해짐)
+ *
+ * 패턴별 기본값:
+ *   crystal → specular=0.4, weathering=0.5
+ *   brick   → specular=0.0, weathering=1.5
+ *   wood    → specular=0.1, weathering=1.0
+ *   noise   → specular=0.1, weathering=1.0
+ *   plain   → specular=0.5, weathering=0.0
+ *   stripe  → specular=0.0, weathering=1.6
+ */
+export const MATERIAL_PROPS: [number, number][] = [
+  /* 0  STONE          noise   */ [0.1, 1.0],
+  /* 1  SANDSTONE      noise   */ [0.08, 1.2],
+  /* 2  OAK_PLANKS     wood    */ [0.1, 1.0],
+  /* 3  GOLD           crystal */ [0.4, 0.5],
+  /* 4  RED_BRICK      brick   */ [0.0, 1.5],
+  /* 5  NETHER_BRICK   brick   */ [0.0, 1.5],
+  /* 6  QUARTZ         noise   */ [0.15, 0.8],
+  /* 7  GLASS          plain   */ [0.5, 0.0],
+  /* 8  CLAY           noise   */ [0.05, 1.2],
+  /* 9  HAY            stripe  */ [0.0, 1.6],
+  /* 10 BAMBOO         wood    */ [0.1, 1.0],
+  /* 11 LEAVES         noise   */ [0.05, 1.3],
+  /* 12 PRISMARINE     noise   */ [0.2, 0.8],
+  /* 13 CORAL          noise   */ [0.15, 1.0],
+  /* 14 WOOL           noise   */ [0.05, 0.6],
+  /* 15 SNOW           plain   */ [0.5, 0.0],
+  /* 16 TERRACOTTA     noise   */ [0.08, 1.3],
+  /* 17 EMERALD        crystal */ [0.4, 0.5],
+  /* 18 DIAMOND        crystal */ [0.45, 0.4],
+  /* 19 IRON           crystal */ [0.35, 0.5],
+  /* 20 COPPER         noise   */ [0.2, 1.1],
+  /* 21 MOSSY_STONE    noise   */ [0.08, 1.2],
+  /* 22 OBSIDIAN       noise   */ [0.25, 0.3],
+  /* 23 REDSTONE       noise   */ [0.15, 0.9],
+  /* 24 GRASS_TOP      noise   */ [0.05, 1.3],
+  /* 25 GRASS_SIDE     stripe  */ [0.0, 1.6],
+  /* 26 SAND           noise   */ [0.05, 1.0],
+  /* 27 GRAVEL         noise   */ [0.05, 1.2],
+  /* 28 BRICK          brick   */ [0.0, 1.5],
+  /* 29 OAK_LOG        wood    */ [0.1, 1.0],
+  /* 30 DARK_OAK       wood    */ [0.08, 1.1],
+  /* 31 PACKED_ICE     noise   */ [0.35, 0.2],
+  /* 32 SNOW_STONE     noise   */ [0.12, 0.7],
+  /* 33 SAND_BRICK     brick   */ [0.0, 1.4],
+  /* 34 MOSS_WOOD      wood    */ [0.08, 1.2],
+  /* 35 GLAZED_TERRA   noise   */ [0.12, 1.3],
+  /* 36 SLATE          noise   */ [0.1, 1.0],
+  /* 37 BIRCH_WOOD     wood    */ [0.1, 0.9],
+];
+
 /** 전체 블록 수 */
 export const BLOCK_COUNT = 38;
 

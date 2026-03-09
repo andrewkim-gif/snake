@@ -14,6 +14,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { LandmarkArchetype } from './landmark-data';
 import { BlockType } from './mc-blocks';
 import { getBlockUV } from './mc-texture-atlas';
+import type { BiomeType } from '@/components/game/iso/types';
 
 // ─── 스케일 ───
 const S = 1.8;
@@ -40,20 +41,51 @@ const FACE_BRIGHTNESS = [
   0.8,  // -z
 ];
 
+// ─── v29 Phase 7G: 바이옴별 블록 치환 테이블 ───
+// arctic/arid/tropical 바이옴에서 기본 블록을 바이옴 특화 블록으로 치환
+// temperate, mediterranean, urban은 기본 블록 유지 (치환 없음)
+
+const BIOME_BLOCK_MAP: Partial<Record<BiomeType, Partial<Record<BlockType, BlockType>>>> = {
+  arctic: {
+    [BlockType.STONE]: BlockType.SNOW_STONE,
+    [BlockType.OAK_PLANKS]: BlockType.BIRCH_WOOD,
+    [BlockType.BRICK]: BlockType.PACKED_ICE,
+    [BlockType.QUARTZ]: BlockType.SNOW,
+  },
+  arid: {
+    [BlockType.STONE]: BlockType.SANDSTONE,
+    [BlockType.OAK_PLANKS]: BlockType.SAND_BRICK,
+    [BlockType.BRICK]: BlockType.GLAZED_TERRACOTTA,
+  },
+  tropical: {
+    [BlockType.STONE]: BlockType.MOSSY_STONE,
+    [BlockType.OAK_PLANKS]: BlockType.MOSS_WOOD,
+    [BlockType.QUARTZ]: BlockType.PRISMARINE,
+  },
+};
+
 // ─── buildVoxelGeometry: VoxelBox[] -> merged BufferGeometry ───
 
-export function buildVoxelGeometry(voxels: VoxelBox[]): THREE.BufferGeometry {
+export function buildVoxelGeometry(voxels: VoxelBox[], biome?: BiomeType): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
+  // v29 Phase 7G: 바이옴별 블록 치환 맵
+  const blockMap = biome ? BIOME_BLOCK_MAP[biome] : undefined;
 
   for (const vox of voxels) {
     const geo = new THREE.BoxGeometry(vox.w, vox.h, vox.d);
+
+    // v29 Phase 7G: 바이옴에 따라 블록 타입 치환
+    const effectiveBlock = blockMap?.[vox.block] ?? vox.block;
+    const effectiveTopBlock = vox.topBlock !== undefined
+      ? (blockMap?.[vox.topBlock] ?? vox.topBlock)
+      : undefined;
 
     // --- UV 리매핑: 기본 (0,0)-(1,1) -> 아틀라스 블록 셀 UV ---
     const uv = geo.getAttribute('uv') as THREE.BufferAttribute;
     const uvArray = uv.array as Float32Array;
 
-    const mainUV = getBlockUV(vox.block);
-    const topUV = vox.topBlock !== undefined ? getBlockUV(vox.topBlock) : null;
+    const mainUV = getBlockUV(effectiveBlock);
+    const topUV = effectiveTopBlock !== undefined ? getBlockUV(effectiveTopBlock) : null;
 
     // BoxGeometry 정점: 6면 x 4정점 = 24정점, UV 2개 per 정점
     // face 순서: +x(0-3), -x(4-7), +y(8-11), -y(12-15), +z(16-19), -z(20-23)
@@ -103,7 +135,7 @@ export function buildVoxelGeometry(voxels: VoxelBox[]): THREE.BufferGeometry {
 // 아키타입별 VoxelBox 데이터 (기존 20종 유지)
 // ════════════════════════════════════════════════════════════════
 
-/** TOWER: 에펠탑/도쿄타워 -- IRON(다리) + COPPER(바디) + GOLD(안테나) */
+/** TOWER: 에펠탑/도쿄타워 -- IRON(다리) + COPPER(바디) + IRON(안테나, 7A) */
 const TOWER_VOXELS: VoxelBox[] = [
   { w: 0.2*S, h: 1.2*S, d: 0.2*S, x: -0.35*S, y: 0.55*S, z: -0.35*S, block: BlockType.IRON, rotZ: 0.15 },
   { w: 0.2*S, h: 1.2*S, d: 0.2*S, x: 0.35*S, y: 0.55*S, z: -0.35*S, block: BlockType.IRON, rotZ: -0.15 },
@@ -112,25 +144,24 @@ const TOWER_VOXELS: VoxelBox[] = [
   { w: 0.7*S, h: 0.15*S, d: 0.7*S, x: 0, y: 1.0*S, z: 0, block: BlockType.COPPER },
   { w: 0.5*S, h: 0.8*S, d: 0.5*S, x: 0, y: 1.5*S, z: 0, block: BlockType.COPPER },
   { w: 0.35*S, h: 0.6*S, d: 0.35*S, x: 0, y: 2.2*S, z: 0, block: BlockType.COPPER },
-  { w: 0.1*S, h: 0.8*S, d: 0.1*S, x: 0, y: 2.9*S, z: 0, block: BlockType.GOLD },
-  { w: 0.06*S, h: 0.4*S, d: 0.06*S, x: 0, y: 3.5*S, z: 0, block: BlockType.GOLD },
+  { w: 0.1*S, h: 0.8*S, d: 0.1*S, x: 0, y: 2.9*S, z: 0, block: BlockType.IRON },
+  { w: 0.06*S, h: 0.4*S, d: 0.06*S, x: 0, y: 3.5*S, z: 0, block: BlockType.IRON },
 ];
 
-/** PYRAMID: MC 계단식 피라미드 -- SANDSTONE(전체) + GOLD(꼭대기) */
+/** PYRAMID: MC 계단식 피라미드 -- SANDSTONE(전체, 7A: 꼭대기도 사암 통일) */
 function createPyramidVoxels(): VoxelBox[] {
   const p: VoxelBox[] = [];
   const layers = 5;
   for (let i = 0; i < layers; i++) {
     const w = (2.0 - i * 0.35) * S;
     const h = 0.4 * S;
-    const isTop = i === layers - 1;
-    p.push({ w, h, d: w, x: 0, y: i * h + h / 2, z: 0, block: isTop ? BlockType.GOLD : BlockType.SANDSTONE });
+    p.push({ w, h, d: w, x: 0, y: i * h + h / 2, z: 0, block: BlockType.SANDSTONE });
   }
   return p;
 }
 const PYRAMID_VOXELS = createPyramidVoxels();
 
-/** MOSQUE (기존 DOME): MC 돔 모스크 -- QUARTZ(본체) + SANDSTONE(기단) + GOLD(돔 꼭대기) + QUARTZ(미나렛) */
+/** MOSQUE (기존 DOME): MC 돔 모스크 -- QUARTZ(본체) + SANDSTONE(기단+팁, 7A) + QUARTZ(미나렛) */
 const MOSQUE_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
   // 메인 빌딩 -- 사암 기단
@@ -139,13 +170,13 @@ const MOSQUE_VOXELS: VoxelBox[] = (() => {
   p.push({ w: 1.0*S, h: 0.3*S, d: 1.0*S, x: 0, y: 0.85*S, z: 0, block: BlockType.QUARTZ });
   p.push({ w: 0.7*S, h: 0.3*S, d: 0.7*S, x: 0, y: 1.15*S, z: 0, block: BlockType.QUARTZ });
   p.push({ w: 0.4*S, h: 0.25*S, d: 0.4*S, x: 0, y: 1.4*S, z: 0, block: BlockType.QUARTZ });
-  // 돔 꼭대기 -- 골드
-  p.push({ w: 0.2*S, h: 0.2*S, d: 0.2*S, x: 0, y: 1.62*S, z: 0, block: BlockType.GOLD });
+  // 돔 꼭대기 -- 사암 (7A: 이슬람 건축 = 모래톤)
+  p.push({ w: 0.2*S, h: 0.2*S, d: 0.2*S, x: 0, y: 1.62*S, z: 0, block: BlockType.SANDSTONE });
   // 4 미나렛 -- 석영
   const mp: [number, number][] = [[-0.8, 0.4], [0.8, 0.4], [-0.8, -0.4], [0.8, -0.4]];
   for (const [px, pz] of mp) {
     p.push({ w: 0.15*S, h: 1.6*S, d: 0.15*S, x: px*S, y: 0.8*S, z: pz*S, block: BlockType.QUARTZ });
-    p.push({ w: 0.2*S, h: 0.15*S, d: 0.2*S, x: px*S, y: 1.65*S, z: pz*S, block: BlockType.GOLD });
+    p.push({ w: 0.2*S, h: 0.15*S, d: 0.2*S, x: px*S, y: 1.65*S, z: pz*S, block: BlockType.SANDSTONE });
   }
   return p;
 })();
@@ -257,7 +288,7 @@ const SHELLS_VOXELS: VoxelBox[] = (() => {
   return p;
 })();
 
-/** ONION_DOME: MC 성바실리 -- BRICK(본체) + GOLD(양파돔) + EMERALD(기둥) */
+/** ONION_DOME: MC 성바실리 -- BRICK(본체) + COPPER(양파돔, 7A) + EMERALD(기둥) */
 const ONION_DOME_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
   p.push({ w: 1.6*S, h: 0.8*S, d: 1.2*S, x: 0, y: 0.4*S, z: 0, block: BlockType.BRICK });
@@ -265,11 +296,11 @@ const ONION_DOME_VOXELS: VoxelBox[] = (() => {
   for (const [dx, dz, maxH] of dp) {
     p.push({ w: 0.15*S, h: (maxH-0.5)*S, d: 0.15*S, x: dx*S, y: (maxH-0.5)*S/2 + 0.4*S, z: dz*S, block: BlockType.EMERALD });
     const bulbY = (maxH - 0.3) * S;
-    p.push({ w: 0.2*S, h: 0.15*S, d: 0.2*S, x: dx*S, y: bulbY, z: dz*S, block: BlockType.GOLD });
-    p.push({ w: 0.28*S, h: 0.12*S, d: 0.28*S, x: dx*S, y: bulbY + 0.12*S, z: dz*S, block: BlockType.GOLD });
-    p.push({ w: 0.22*S, h: 0.12*S, d: 0.22*S, x: dx*S, y: bulbY + 0.24*S, z: dz*S, block: BlockType.GOLD });
-    p.push({ w: 0.12*S, h: 0.1*S, d: 0.12*S, x: dx*S, y: bulbY + 0.34*S, z: dz*S, block: BlockType.GOLD });
-    p.push({ w: 0.06*S, h: 0.12*S, d: 0.06*S, x: dx*S, y: bulbY + 0.45*S, z: dz*S, block: BlockType.GOLD });
+    p.push({ w: 0.2*S, h: 0.15*S, d: 0.2*S, x: dx*S, y: bulbY, z: dz*S, block: BlockType.COPPER });
+    p.push({ w: 0.28*S, h: 0.12*S, d: 0.28*S, x: dx*S, y: bulbY + 0.12*S, z: dz*S, block: BlockType.COPPER });
+    p.push({ w: 0.22*S, h: 0.12*S, d: 0.22*S, x: dx*S, y: bulbY + 0.24*S, z: dz*S, block: BlockType.COPPER });
+    p.push({ w: 0.12*S, h: 0.1*S, d: 0.12*S, x: dx*S, y: bulbY + 0.34*S, z: dz*S, block: BlockType.COPPER });
+    p.push({ w: 0.06*S, h: 0.12*S, d: 0.06*S, x: dx*S, y: bulbY + 0.45*S, z: dz*S, block: BlockType.COPPER });
   }
   return p;
 })();
@@ -310,14 +341,14 @@ const BRIDGE_TOP_VOXELS: VoxelBox[] = (() => {
   return p;
 })();
 
-/** SPIRE_CLUSTER: MC 다중 첨탑 -- SANDSTONE(기단) + STONE(첨탑) + GOLD(꼭대기) */
+/** SPIRE_CLUSTER: MC 다중 첨탑 -- SANDSTONE(기단) + STONE(첨탑) + QUARTZ(꼭대기, 7A: 백색 돌) */
 const SPIRE_CLUSTER_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
   p.push({ w: 1.4*S, h: 0.4*S, d: 1.0*S, x: 0, y: 0.2*S, z: 0, block: BlockType.SANDSTONE });
   const sd: [number, number, number][] = [[0, 2.8, 0.18], [-0.4, 2.0, 0.14], [0.4, 2.0, 0.14], [-0.2, 1.6, 0.12], [0.2, 1.6, 0.12]];
   for (const [dx, h, w] of sd) {
     p.push({ w: w*S, h: h*S, d: w*S, x: dx*S, y: h*S/2 + 0.4*S, z: 0, block: BlockType.STONE });
-    p.push({ w: w*0.5*S, h: 0.2*S, d: w*0.5*S, x: dx*S, y: h*S + 0.5*S, z: 0, block: BlockType.GOLD });
+    p.push({ w: w*0.5*S, h: 0.2*S, d: w*0.5*S, x: dx*S, y: h*S + 0.5*S, z: 0, block: BlockType.QUARTZ });
   }
   return p;
 })();
@@ -330,17 +361,17 @@ const SKYSCRAPER_VOXELS: VoxelBox[] = [
   { w: 0.1*S, h: 0.6*S, d: 0.1*S, x: 0, y: 3.5*S, z: 0, block: BlockType.DIAMOND },
 ];
 
-/** CLOCK_TOWER: MC 빅벤 -- SANDSTONE(타워) + GOLD(시계) + COPPER(지붕) + IRON(첨탑) */
+/** CLOCK_TOWER: MC 빅벤 -- SANDSTONE(타워) + COPPER(시계+지붕, 7A) + IRON(첨탑) */
 const CLOCK_TOWER_VOXELS: VoxelBox[] = [
   { w: 0.6*S, h: 2.8*S, d: 0.6*S, x: 0, y: 1.4*S, z: 0, block: BlockType.SANDSTONE },
-  { w: 0.75*S, h: 0.4*S, d: 0.75*S, x: 0, y: 2.5*S, z: 0, block: BlockType.GOLD },
+  { w: 0.75*S, h: 0.4*S, d: 0.75*S, x: 0, y: 2.5*S, z: 0, block: BlockType.COPPER },
   { w: 0.5*S, h: 0.3*S, d: 0.5*S, x: 0, y: 2.95*S, z: 0, block: BlockType.COPPER },
   { w: 0.35*S, h: 0.25*S, d: 0.35*S, x: 0, y: 3.2*S, z: 0, block: BlockType.COPPER },
   { w: 0.2*S, h: 0.2*S, d: 0.2*S, x: 0, y: 3.42*S, z: 0, block: BlockType.COPPER },
   { w: 0.1*S, h: 0.15*S, d: 0.1*S, x: 0, y: 3.6*S, z: 0, block: BlockType.IRON },
 ];
 
-/** TEMPLE: MC 파르테논 -- QUARTZ(기단+기둥+지붕) + STONE(뒤벽) */
+/** TEMPLE: MC 파르테논 -- QUARTZ(기단+기둥) + STONE(뒤벽) + EMERALD(지붕 상부, 7A) */
 const TEMPLE_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
   p.push({ w: 2.0*S, h: 0.1*S, d: 1.2*S, x: 0, y: 0.05*S, z: 0, block: BlockType.QUARTZ });
@@ -350,8 +381,8 @@ const TEMPLE_VOXELS: VoxelBox[] = (() => {
   }
   p.push({ w: 1.6*S, h: 1.0*S, d: 0.1*S, x: 0, y: 0.7*S, z: -0.35*S, block: BlockType.STONE });
   p.push({ w: 1.8*S, h: 0.15*S, d: 0.9*S, x: 0, y: 1.47*S, z: 0, block: BlockType.QUARTZ });
-  p.push({ w: 1.3*S, h: 0.15*S, d: 0.6*S, x: 0, y: 1.62*S, z: 0, block: BlockType.QUARTZ });
-  p.push({ w: 0.7*S, h: 0.12*S, d: 0.4*S, x: 0, y: 1.74*S, z: 0, block: BlockType.QUARTZ });
+  p.push({ w: 1.3*S, h: 0.15*S, d: 0.6*S, x: 0, y: 1.62*S, z: 0, block: BlockType.EMERALD });
+  p.push({ w: 0.7*S, h: 0.12*S, d: 0.4*S, x: 0, y: 1.74*S, z: 0, block: BlockType.EMERALD });
   return p;
 })();
 
@@ -361,8 +392,8 @@ const GATE_VOXELS: VoxelBox[] = [
   { w: 0.4*S, h: 1.8*S, d: 0.4*S, x: 0.5*S, y: 0.9*S, z: 0, block: BlockType.SANDSTONE },
   { w: 1.6*S, h: 0.3*S, d: 0.5*S, x: 0, y: 2.0*S, z: 0, block: BlockType.STONE },
   { w: 0.6*S, h: 0.25*S, d: 0.35*S, x: 0, y: 1.55*S, z: 0, block: BlockType.STONE },
-  { w: 0.5*S, h: 0.25*S, d: 0.3*S, x: 0, y: 2.3*S, z: 0, block: BlockType.GOLD },
-  { w: 0.15*S, h: 0.2*S, d: 0.15*S, x: 0, y: 2.55*S, z: 0, block: BlockType.GOLD },
+  { w: 0.5*S, h: 0.25*S, d: 0.3*S, x: 0, y: 2.3*S, z: 0, block: BlockType.STONE },
+  { w: 0.15*S, h: 0.2*S, d: 0.15*S, x: 0, y: 2.55*S, z: 0, block: BlockType.STONE },
 ];
 
 /** WINDMILL: MC 풍차 -- STONE(하부) + BRICK(중부) + OAK_PLANKS(상부) + DARK_OAK(날개) */
@@ -410,13 +441,13 @@ const STONE_RING_VOXELS: VoxelBox[] = (() => {
   return p;
 })();
 
-/** OBELISK: MC 오벨리스크 -- SANDSTONE(기단) + QUARTZ(몸통) + GOLD(피라미디온) */
+/** OBELISK: MC 오벨리스크 -- SANDSTONE(기단) + QUARTZ(몸통) + STONE(피라미디온, 7A) */
 const OBELISK_VOXELS: VoxelBox[] = [
   { w: 0.5*S, h: 0.3*S, d: 0.5*S, x: 0, y: 0.15*S, z: 0, block: BlockType.SANDSTONE },
   { w: 0.35*S, h: 3.0*S, d: 0.35*S, x: 0, y: 1.8*S, z: 0, block: BlockType.QUARTZ },
-  { w: 0.3*S, h: 0.15*S, d: 0.3*S, x: 0, y: 3.37*S, z: 0, block: BlockType.GOLD },
-  { w: 0.2*S, h: 0.12*S, d: 0.2*S, x: 0, y: 3.5*S, z: 0, block: BlockType.GOLD },
-  { w: 0.1*S, h: 0.1*S, d: 0.1*S, x: 0, y: 3.61*S, z: 0, block: BlockType.GOLD },
+  { w: 0.3*S, h: 0.15*S, d: 0.3*S, x: 0, y: 3.37*S, z: 0, block: BlockType.STONE },
+  { w: 0.2*S, h: 0.12*S, d: 0.2*S, x: 0, y: 3.5*S, z: 0, block: BlockType.STONE },
+  { w: 0.1*S, h: 0.1*S, d: 0.1*S, x: 0, y: 3.61*S, z: 0, block: BlockType.STONE },
 ];
 
 /** TERRACED_FIELD (기존 TERRACE): MC 계단식 논/유적 -- GRASS_TOP(상면, topBlock) + STONE(계단) + OAK_PLANKS(건물) */
@@ -509,8 +540,8 @@ const MINARET_VOXELS: VoxelBox[] = (() => {
   p.push({ w: 0.55*S, h: 0.12*S, d: 0.55*S, x: 0, y: 2.85*S, z: 0, block: BlockType.SANDSTONE });
   // 상부 좁은 탑 -- 사암
   p.push({ w: 0.25*S, h: 0.5*S, d: 0.25*S, x: 0, y: 3.16*S, z: 0, block: BlockType.SANDSTONE });
-  // 첨탑 -- 골드
-  p.push({ w: 0.12*S, h: 0.3*S, d: 0.12*S, x: 0, y: 3.56*S, z: 0, block: BlockType.GOLD });
+  // 첨탑 -- 사암 (7A: 이슬람 건축 = 모래톤)
+  p.push({ w: 0.12*S, h: 0.3*S, d: 0.12*S, x: 0, y: 3.56*S, z: 0, block: BlockType.SANDSTONE });
   return p;
 })();
 
@@ -534,18 +565,18 @@ const BAOBAB_VOXELS: VoxelBox[] = (() => {
 
 // ─── 아시아 5종 ───
 
-/** STUPA: 불교 스투파 -- GOLD(돔) + QUARTZ(기단) + DIAMOND(첨탑) */
+/** STUPA: 불교 스투파 -- QUARTZ(돔+기단, 7A: 백색 돌) + DIAMOND(첨탑) */
 const STUPA_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
   // 기단 (3단) -- 석영
   p.push({ w: 1.4*S, h: 0.2*S, d: 1.4*S, x: 0, y: 0.1*S, z: 0, block: BlockType.QUARTZ });
   p.push({ w: 1.2*S, h: 0.2*S, d: 1.2*S, x: 0, y: 0.3*S, z: 0, block: BlockType.QUARTZ });
   p.push({ w: 1.0*S, h: 0.2*S, d: 1.0*S, x: 0, y: 0.5*S, z: 0, block: BlockType.QUARTZ });
-  // 반구 돔 (계단 근사) -- 골드
-  p.push({ w: 0.9*S, h: 0.3*S, d: 0.9*S, x: 0, y: 0.75*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.7*S, h: 0.3*S, d: 0.7*S, x: 0, y: 1.05*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.5*S, h: 0.25*S, d: 0.5*S, x: 0, y: 1.3*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.3*S, h: 0.2*S, d: 0.3*S, x: 0, y: 1.5*S, z: 0, block: BlockType.GOLD });
+  // 반구 돔 (계단 근사) -- 석영 (7A: 백색 돌 스투파)
+  p.push({ w: 0.9*S, h: 0.3*S, d: 0.9*S, x: 0, y: 0.75*S, z: 0, block: BlockType.QUARTZ });
+  p.push({ w: 0.7*S, h: 0.3*S, d: 0.7*S, x: 0, y: 1.05*S, z: 0, block: BlockType.QUARTZ });
+  p.push({ w: 0.5*S, h: 0.25*S, d: 0.5*S, x: 0, y: 1.3*S, z: 0, block: BlockType.QUARTZ });
+  p.push({ w: 0.3*S, h: 0.2*S, d: 0.3*S, x: 0, y: 1.5*S, z: 0, block: BlockType.QUARTZ });
   // 하르미카 (상부 사각 박스) -- 석영
   p.push({ w: 0.25*S, h: 0.2*S, d: 0.25*S, x: 0, y: 1.7*S, z: 0, block: BlockType.QUARTZ });
   // 첨탑 -- 다이아몬드
@@ -609,9 +640,9 @@ const GOPURAM_VOXELS: VoxelBox[] = (() => {
       p.push({ w: 0.1*S, h: h * 0.8, d: 0.1*S, x: (w/2 + 0.08*S), y: 0.3*S + i * h + h/2, z: 0, block: BlockType.TERRACOTTA });
     }
   }
-  // 꼭대기 -- 골드
-  p.push({ w: 0.3*S, h: 0.2*S, d: 0.25*S, x: 0, y: 0.3*S + layers * 0.35*S + 0.1*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.12*S, h: 0.15*S, d: 0.12*S, x: 0, y: 0.3*S + layers * 0.35*S + 0.28*S, z: 0, block: BlockType.GOLD });
+  // 꼭대기 -- 테라코타 (7A: 인도 사원 = 테라코타 색)
+  p.push({ w: 0.3*S, h: 0.2*S, d: 0.25*S, x: 0, y: 0.3*S + layers * 0.35*S + 0.1*S, z: 0, block: BlockType.TERRACOTTA });
+  p.push({ w: 0.12*S, h: 0.15*S, d: 0.12*S, x: 0, y: 0.3*S + layers * 0.35*S + 0.28*S, z: 0, block: BlockType.TERRACOTTA });
   return p;
 })();
 
@@ -642,11 +673,11 @@ const CATHEDRAL_VOXELS: VoxelBox[] = (() => {
   // 쌍탑 전면 -- 돌
   p.push({ w: 0.3*S, h: 2.2*S, d: 0.3*S, x: -0.45*S, y: 1.1*S, z: 0.8*S, block: BlockType.STONE });
   p.push({ w: 0.3*S, h: 2.2*S, d: 0.3*S, x: 0.45*S, y: 1.1*S, z: 0.8*S, block: BlockType.STONE });
-  // 첨탑 -- 골드
-  p.push({ w: 0.15*S, h: 0.6*S, d: 0.15*S, x: -0.45*S, y: 2.5*S, z: 0.8*S, block: BlockType.GOLD });
-  p.push({ w: 0.15*S, h: 0.6*S, d: 0.15*S, x: 0.45*S, y: 2.5*S, z: 0.8*S, block: BlockType.GOLD });
-  // 중앙 첨탑 -- 골드
-  p.push({ w: 0.1*S, h: 0.5*S, d: 0.1*S, x: 0, y: 2.15*S, z: 0, block: BlockType.GOLD });
+  // 첨탑 -- 구리 (7A: 유럽 성당 = 구리 지붕 녹청)
+  p.push({ w: 0.15*S, h: 0.6*S, d: 0.15*S, x: -0.45*S, y: 2.5*S, z: 0.8*S, block: BlockType.COPPER });
+  p.push({ w: 0.15*S, h: 0.6*S, d: 0.15*S, x: 0.45*S, y: 2.5*S, z: 0.8*S, block: BlockType.COPPER });
+  // 중앙 첨탑 -- 구리 (7A)
+  p.push({ w: 0.1*S, h: 0.5*S, d: 0.1*S, x: 0, y: 2.15*S, z: 0, block: BlockType.COPPER });
   // 장미창 (전면) -- 유리
   p.push({ w: 0.4*S, h: 0.4*S, d: 0.06*S, x: 0, y: 1.0*S, z: 0.93*S, block: BlockType.GLASS });
   // 측면 창 -- 유리
@@ -658,11 +689,13 @@ const CATHEDRAL_VOXELS: VoxelBox[] = (() => {
   return p;
 })();
 
-/** FORTRESS: 동남유럽 요새 -- STONE(벽) + NETHER_BRICK(타워) + MOSSY_STONE(기단) */
+/** FORTRESS: 동남유럽 요새 -- STONE(벽) + NETHER_BRICK(타워) + OBSIDIAN+MOSSY_STONE(기단, 7A) */
 const FORTRESS_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
+  // 최하 기단 -- 흑요석 (7A: 미사용 블록 활성화)
+  p.push({ w: 1.9*S, h: 0.15*S, d: 1.5*S, x: 0, y: 0.075*S, z: 0, block: BlockType.OBSIDIAN });
   // 이끼 기단 -- 이끼 낀 돌
-  p.push({ w: 1.8*S, h: 0.3*S, d: 1.4*S, x: 0, y: 0.15*S, z: 0, block: BlockType.MOSSY_STONE });
+  p.push({ w: 1.8*S, h: 0.3*S, d: 1.4*S, x: 0, y: 0.3*S, z: 0, block: BlockType.MOSSY_STONE });
   // 육중한 성벽 (4면) -- 돌
   const ww = 1.6, dd = 1.2, hh = 1.0, th = 0.25;
   p.push({ w: ww*S, h: hh*S, d: th*S, x: 0, y: 0.8*S, z: dd/2*S, block: BlockType.STONE });
@@ -702,7 +735,7 @@ const VIKING_SHIP_VOXELS: VoxelBox[] = (() => {
   return p;
 })();
 
-/** ORTHODOX_CROSS: 정교회 교회 -- QUARTZ(벽) + GOLD(돔+십자가) + STONE(기단) */
+/** ORTHODOX_CROSS: 정교회 교회 -- QUARTZ(벽) + COPPER(돔+십자가, 7A) + STONE(기단) */
 const ORTHODOX_CROSS_VOXELS: VoxelBox[] = (() => {
   const p: VoxelBox[] = [];
   // 기단 -- 돌
@@ -711,15 +744,15 @@ const ORTHODOX_CROSS_VOXELS: VoxelBox[] = (() => {
   p.push({ w: 0.8*S, h: 0.9*S, d: 0.7*S, x: 0, y: 0.65*S, z: 0, block: BlockType.QUARTZ });
   // 드럼 (8각 돔 기반) -- 석영
   p.push({ w: 0.5*S, h: 0.3*S, d: 0.5*S, x: 0, y: 1.25*S, z: 0, block: BlockType.QUARTZ });
-  // 양파 돔 -- 골드
-  p.push({ w: 0.35*S, h: 0.2*S, d: 0.35*S, x: 0, y: 1.5*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.4*S, h: 0.15*S, d: 0.4*S, x: 0, y: 1.68*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.3*S, h: 0.12*S, d: 0.3*S, x: 0, y: 1.8*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.15*S, h: 0.1*S, d: 0.15*S, x: 0, y: 1.92*S, z: 0, block: BlockType.GOLD });
-  // 정교회 십자가 (3-bar cross) -- 골드
-  p.push({ w: 0.06*S, h: 0.5*S, d: 0.06*S, x: 0, y: 2.22*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.3*S, h: 0.06*S, d: 0.06*S, x: 0, y: 2.3*S, z: 0, block: BlockType.GOLD });
-  p.push({ w: 0.2*S, h: 0.04*S, d: 0.06*S, x: 0, y: 2.1*S, z: 0, block: BlockType.GOLD });
+  // 양파 돔 -- 구리 (7A: 정교회 = 구리 지붕)
+  p.push({ w: 0.35*S, h: 0.2*S, d: 0.35*S, x: 0, y: 1.5*S, z: 0, block: BlockType.COPPER });
+  p.push({ w: 0.4*S, h: 0.15*S, d: 0.4*S, x: 0, y: 1.68*S, z: 0, block: BlockType.COPPER });
+  p.push({ w: 0.3*S, h: 0.12*S, d: 0.3*S, x: 0, y: 1.8*S, z: 0, block: BlockType.COPPER });
+  p.push({ w: 0.15*S, h: 0.1*S, d: 0.15*S, x: 0, y: 1.92*S, z: 0, block: BlockType.COPPER });
+  // 정교회 십자가 (3-bar cross) -- 구리 (7A)
+  p.push({ w: 0.06*S, h: 0.5*S, d: 0.06*S, x: 0, y: 2.22*S, z: 0, block: BlockType.COPPER });
+  p.push({ w: 0.3*S, h: 0.06*S, d: 0.06*S, x: 0, y: 2.3*S, z: 0, block: BlockType.COPPER });
+  p.push({ w: 0.2*S, h: 0.04*S, d: 0.06*S, x: 0, y: 2.1*S, z: 0, block: BlockType.COPPER });
   return p;
 })();
 
@@ -743,9 +776,9 @@ const COLONIAL_CHURCH_VOXELS: VoxelBox[] = (() => {
   p.push({ w: 0.2*S, h: 0.15*S, d: 0.2*S, x: -0.45*S, y: 1.88*S, z: 0.5*S, block: BlockType.TERRACOTTA });
   p.push({ w: 0.3*S, h: 0.2*S, d: 0.3*S, x: 0.45*S, y: 1.7*S, z: 0.5*S, block: BlockType.TERRACOTTA });
   p.push({ w: 0.2*S, h: 0.15*S, d: 0.2*S, x: 0.45*S, y: 1.88*S, z: 0.5*S, block: BlockType.TERRACOTTA });
-  // 십자가 -- 골드
-  p.push({ w: 0.06*S, h: 0.3*S, d: 0.06*S, x: -0.45*S, y: 2.18*S, z: 0.5*S, block: BlockType.GOLD });
-  p.push({ w: 0.06*S, h: 0.3*S, d: 0.06*S, x: 0.45*S, y: 2.18*S, z: 0.5*S, block: BlockType.GOLD });
+  // 십자가 -- 테라코타 (7A: 식민지 교회 = 테라코타)
+  p.push({ w: 0.06*S, h: 0.3*S, d: 0.06*S, x: -0.45*S, y: 2.18*S, z: 0.5*S, block: BlockType.TERRACOTTA });
+  p.push({ w: 0.06*S, h: 0.3*S, d: 0.06*S, x: 0.45*S, y: 2.18*S, z: 0.5*S, block: BlockType.TERRACOTTA });
   return p;
 })();
 
@@ -881,14 +914,16 @@ const ARCHETYPE_VOXELS: Record<string, VoxelBox[]> = {
 
 const geometryCache = new Map<string, THREE.BufferGeometry>();
 
-export function createArchetypeGeometry(archetype: LandmarkArchetype): THREE.BufferGeometry {
-  const cached = geometryCache.get(archetype);
+export function createArchetypeGeometry(archetype: LandmarkArchetype, biome?: BiomeType): THREE.BufferGeometry {
+  // v29 Phase 7G: 캐시 키에 바이옴 포함
+  const cacheKey = biome ? `${archetype}_${biome}` : archetype;
+  const cached = geometryCache.get(cacheKey);
   if (cached) return cached;
 
   const voxels = ARCHETYPE_VOXELS[archetype];
-  const geo = voxels ? buildVoxelGeometry(voxels) : buildVoxelGeometry(STONE_RING_VOXELS);
+  const geo = voxels ? buildVoxelGeometry(voxels, biome) : buildVoxelGeometry(STONE_RING_VOXELS, biome);
 
-  geometryCache.set(archetype, geo);
+  geometryCache.set(cacheKey, geo);
   return geo;
 }
 

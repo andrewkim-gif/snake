@@ -35,8 +35,10 @@
  *
  * v29 Phase 7 추가:
  *   - 7B: 셰이더 색온도 중립화 (스페큘러 near-white, 밤 emissive softer amber, sky indirect 2배)
+ *   - 7C: 재질 기반 라이팅 분화 (uMaterialProps[38] uniform, UV 블록 인덱스 역산, 패턴별 specular/weathering)
  *   - 7D: Face AO 범위 복원 (0.7→0.45 하한, 입체감 대폭 강화)
  *   - 7E: 바이옴 weathering 필드 실제 연결 (uBiomeWeathering[6] uniform, 고정 0.12 제거)
+ *   - 7G: 바이옴별 블록 치환 (archetype+biome 키 그룹핑, buildVoxelGeometry biome 파라미터)
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
@@ -49,6 +51,7 @@ import type { BiomeType } from '@/components/game/iso/types';
 import { createArchetypeGeometry, createArchetypeEdgeGeometry, disposeGeometryCache } from '@/lib/landmark-geometries';
 import { getBlockAtlasTexture } from '@/lib/mc-texture-atlas';
 import { BIOME_LANDMARK_TINTS, BIOME_INDEX } from '@/lib/biome-landmark-tints';
+import { MATERIAL_PROPS } from '@/lib/mc-blocks';
 
 // ─── Constants ───
 
@@ -109,6 +112,9 @@ const biomeDiffuseBoostArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].diff
 // v29 Phase 7E: 바이옴별 풍화 강도 배열
 const biomeWeatheringArray = BIOME_ORDER.map(b => BIOME_LANDMARK_TINTS[b].weathering);
 
+// v29 Phase 7C: 블록별 재질 속성 (vec2[38] → flat Float32Array for uniform)
+const materialPropsArray = MATERIAL_PROPS.map(([spec, weather]) => new THREE.Vector2(spec, weather));
+
 // ─── Types ───
 
 export interface LandmarkMeshesProps {
@@ -120,6 +126,8 @@ export interface LandmarkMeshesProps {
 
 interface ArchetypeGroup {
   archetype: LandmarkArchetype;
+  /** v29 Phase 7G: 그룹의 대표 바이옴 (geometry 치환용) */
+  groupBiome: BiomeType;
   landmarks: Landmark[];
   positions: THREE.Vector3[];
   normals: THREE.Vector3[];
@@ -165,6 +173,7 @@ const landmarkFragmentShader = /* glsl */ `
   uniform float uBiomeNightEmissive[6]; // v29 Phase 4: 바이옴별 밤 이미시브 강도
   uniform float uBiomeDiffuseBoost[6]; // v29 Phase 5: 바이옴별 디퓨즈 부스트
   uniform float uBiomeWeathering[6];  // v29 Phase 7E: 바이옴별 풍화 강도
+  uniform vec2 uMaterialProps[38];    // v29 Phase 7C: [specular, weatheringFactor] per block type
   uniform float uTime;           // v29 Phase 5: 시간 (초, 창문 깜빡임용)
   varying vec3 vWorldNormal;
   varying vec2 vUv;
@@ -193,6 +202,15 @@ const landmarkFragmentShader = /* glsl */ `
     vec4 texColor = texture2D(uMap, vUv);
     vec3 albedo = pow(texColor.rgb, vec3(2.2));
 
+    // v29 Phase 7C: UV에서 블록 인덱스 역산 (8x8 atlas, 64px cells)
+    int col = int(vUv.x * 8.0);
+    int row = int(vUv.y * 8.0);
+    int blockIdx = row * 8 + col;
+    blockIdx = clamp(blockIdx, 0, 37);
+    vec2 matProps = uMaterialProps[blockIdx];
+    float matSpecular = matProps.x;
+    float matWeatherFactor = matProps.y;
+
     // v29 Phase 5: 바이옴별 ambient/diffuse 조정
     // arctic: 높은 ambient (눈 반사), tropical: 낮은 ambient (부드러운 그림자), arid: 강한 대비
     float biomeDiffuse = uBiomeDiffuseBoost[biomeId];
@@ -209,20 +227,19 @@ const landmarkFragmentShader = /* glsl */ `
     float skyFactor = max(-NdotL, 0.0) * 0.15;
     color += albedo * vec3(0.5, 0.6, 0.9) * skyFactor;
 
-    // v29 Phase 5: 스페큘러 하이라이트 (금속/크리스탈 블록 — Blinn-Phong)
-    // 밝은 블록만 반짝임 (texColor.r 기반 shininess proxy)
+    // v29 Phase 7C: 재질 기반 스페큘러 하이라이트 (Blinn-Phong)
+    // 기존 texColor.r 추측적 shininess → 재질별 specularStrength
     vec3 viewDir = normalize(cameraPosition - vWorldPos);
     vec3 halfDir = normalize(uSunDir + viewDir);
     float spec = pow(max(dot(N, halfDir), 0.0), 32.0);
-    float shininess = smoothstep(0.6, 0.9, texColor.r) * 0.3;
-    color += vec3(1.0, 0.98, 0.95) * spec * shininess * max(NdotL, 0.0);
+    color += vec3(1.0, 0.98, 0.95) * spec * matSpecular * max(NdotL, 0.0);
 
     // v29 Phase 2: 바이옴 틴트 적용 (서틀하게 MC 미학 보존)
     vec3 biomeTint = uBiomeTints[biomeId];
     color = mix(color, color * biomeTint, 0.25);
 
-    // v29 Phase 2+7E: 풍화(Weathering) 노이즈 — 바이옴별 차등 강도
-    float weathering = hash21(vUv * 50.0 + vAgeSeed * 100.0) * uBiomeWeathering[biomeId];
+    // v29 Phase 7C+7E: 풍화(Weathering) 노이즈 — 바이옴 × 재질 계수
+    float weathering = hash21(vUv * 50.0 + vAgeSeed * 100.0) * uBiomeWeathering[biomeId] * matWeatherFactor;
     color *= (1.0 - weathering);
 
     // 야간 emissive: 밤면에서 창문 불빛 (따뜻한 글로우)
@@ -267,6 +284,8 @@ function getSharedMaterial(): THREE.ShaderMaterial {
       uBiomeDiffuseBoost: { value: biomeDiffuseBoostArray },
       // v29 Phase 7E: 바이옴별 풍화 강도
       uBiomeWeathering: { value: biomeWeatheringArray },
+      // v29 Phase 7C: 블록별 재질 속성 (specular, weatheringFactor)
+      uMaterialProps: { value: materialPropsArray },
       uTime: { value: 0 },
     },
     vertexShader: landmarkVertexShader,
@@ -322,8 +341,9 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
   }, [group.landmarks.length]);
 
   const geometry = useMemo(() => {
-    return createArchetypeGeometry(group.archetype);
-  }, [group.archetype]);
+    // v29 Phase 7G: 바이옴별 geometry 치환
+    return createArchetypeGeometry(group.archetype, group.groupBiome);
+  }, [group.archetype, group.groupBiome]);
 
   // v29 Phase 2+4: per-landmark 바이옴/풍화 + 스케일/회전 (결정론적, useMemo)
   const instanceData = useMemo(() => {
@@ -508,23 +528,27 @@ export function LandmarkMeshes({
 }: LandmarkMeshesProps) {
   const { camera } = useThree();
 
-  // Archetype별 그룹핑 + 3D 좌표 계산
+  // v29 Phase 7G: Archetype + Biome 별 그룹핑 + 3D 좌표 계산
+  // 같은 아키타입이라도 바이옴이 다르면 별도 InstancedMesh로 관리 (블록 치환 때문)
   const archetypeGroups = useMemo(() => {
-    const groupMap = new Map<LandmarkArchetype, ArchetypeGroup>();
+    const groupMap = new Map<string, ArchetypeGroup>();
     const r = globeRadius + SURFACE_ALT;
 
     for (const lm of landmarks) {
-      let group = groupMap.get(lm.archetype);
+      // v29 Phase 7G: archetype + biome으로 그룹화
+      const key = `${lm.archetype}_${lm.biome}`;
+      let group = groupMap.get(key);
       if (!group) {
         group = {
           archetype: lm.archetype,
+          groupBiome: lm.biome,
           landmarks: [],
           positions: [],
           normals: [],
           biomes: [],
           tiers: [],
         };
-        groupMap.set(lm.archetype, group);
+        groupMap.set(key, group);
       }
 
       const pos = latLngToVector3(lm.lat, lm.lng, r);
@@ -575,7 +599,7 @@ export function LandmarkMeshes({
     <group>
       {archetypeGroups.map(group => (
         <ArchetypeInstancedMesh
-          key={group.archetype}
+          key={`${group.archetype}_${group.groupBiome}`}
           group={group}
           globeRadius={globeRadius}
           camera={camera}
