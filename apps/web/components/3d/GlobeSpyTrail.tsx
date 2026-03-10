@@ -251,6 +251,11 @@ export function GlobeSpyTrail({
         d.dashMaterial.dispose();
       }
       sharedEyeMaterial.dispose();
+      // v33 Phase 6: 모듈 레벨 eye 텍스처 dispose + null 리셋 (재마운트 시 재생성)
+      if (_eyeTexture) {
+        _eyeTexture.dispose();
+        _eyeTexture = null;
+      }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

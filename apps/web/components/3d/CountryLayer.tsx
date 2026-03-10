@@ -31,7 +31,9 @@ function CountryBorders() {
   const [line, setLine] = useState<LineSegments2 | null>(null);
 
   useEffect(() => {
+    let mounted = true;
     loadGeoJSON().then((data) => {
+      if (!mounted) return;
       const positions = buildBorderPositions(data);
       const geo = new LineSegmentsGeometry();
       geo.setPositions(positions);
@@ -46,13 +48,20 @@ function CountryBorders() {
       setLine(new LineSegments2(geo, mat));
     }).catch(console.error);
     return () => {
+      mounted = false;
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // v33 Phase 6: line (LineSegments2) geometry + material dispose — stale closure 수정
+  useEffect(() => {
+    return () => {
       if (line) {
         line.geometry.dispose();
         (line.material as LineMaterial).dispose();
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [line]);
 
   useEffect(() => {
     if (line) (line.material as LineMaterial).resolution.set(size.width, size.height);
@@ -176,7 +185,10 @@ function HoverBorderGlow() {
     return () => {
       borderDataRef.current.forEach((d) => d.geometry.dispose());
       borderDataRef.current.clear();
+      // v33 Phase 6: shaderMat (useMemo ShaderMaterial) dispose
+      shaderMat.dispose();
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useFrame(({ clock }) => {

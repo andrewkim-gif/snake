@@ -479,6 +479,9 @@ function ArchetypeInstancedMesh({ group, globeRadius, onRuntimeReady, onRuntimeC
     });
     return () => {
       onRuntimeCleanup(groupKey);
+      // v33 Phase 6: useMemo로 생성한 edgeGeometry + edgeMaterial dispose
+      edgeGeometry.dispose();
+      edgeMaterial.dispose();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [groupKey, edgeGeometry, edgeAttrs, instanceData]);

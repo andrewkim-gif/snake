@@ -119,6 +119,13 @@ function EarthSphere({ sunDirRef }: SunDirProp) {
     earthMat.uniformsNeedUpdate = true;
   }, [texturesReady, earthMat]);
 
+  // v33 Phase 6: earthMat (useMemo ShaderMaterial) dispose — R3F 자동 dispose 대상 아님
+  useEffect(() => {
+    return () => {
+      earthMat.dispose();
+    };
+  }, [earthMat]);
+
   // v33 Phase 3: useFrame 제거 — sunDirRef.current를 직접 공유하므로 복사 불필요
   // (GlobeScene에서 computeSunDirection이 sunDirRef.current를 in-place 업데이트)
 
@@ -192,6 +199,13 @@ function EarthClouds({ sunDirRef, qualityRef }: EarthCloudsProps) {
     meshRef.current.visible = qualityRef.current.enableClouds;
   });
 
+  // v33 Phase 6: cloudsMat (useMemo ShaderMaterial) dispose
+  useEffect(() => {
+    return () => {
+      cloudsMat.dispose();
+    };
+  }, [cloudsMat]);
+
   return (
     <mesh ref={meshRef} material={cloudsMat} renderOrder={50}>
       <sphereGeometry args={[GLOBE_RADIUS * 1.005, 64, 64]} />
@@ -250,6 +264,13 @@ function SunLight({ sunDirRef }: SunDirProp) {
     ctx.fillRect(0, 0, 256, 256);
     return new THREE.CanvasTexture(canvas);
   }, []);
+
+  // v33 Phase 6: glowTexture (useMemo CanvasTexture) dispose
+  useEffect(() => {
+    return () => {
+      glowTexture.dispose();
+    };
+  }, [glowTexture]);
 
   // v33: Derive sun position from shared direction ref (distance=500)
   useFrame(() => {
