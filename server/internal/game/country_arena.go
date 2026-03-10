@@ -19,6 +19,9 @@ type CountryArenaManager struct {
 	// Player routing: clientID → countryCode
 	playerCountry map[string]string
 
+	// v33: Matrix player routing: clientID → countryCode (separate from legacy playerCountry)
+	matrixPlayerCountry map[string]string
+
 	// Queue per country: when arena is full (50 cap)
 	queues map[string][]QueueEntry
 
@@ -37,6 +40,9 @@ type CountryArenaManager struct {
 
 	// v15: Domination event callback (bridges domination events to ws layer)
 	OnDominationEvent func(event DominationEvent)
+
+	// v33: Matrix epoch event callback for broadcasting phase changes
+	OnMatrixEpochChange func(countryCode string, event MatrixEpochChangeEvent)
 }
 
 // QueueEntry represents a player waiting to join a full arena.
@@ -60,30 +66,24 @@ type CountryArenaWrapper struct {
 	CapturePoints  *CapturePointSystem
 	Domination     *DominationEngine
 	NationScore    *NationScoreTracker
+	MatrixEngine   *OnlineMatrixEngine // v33: Online Matrix engine (per-arena)
 	PlayerCount    int
 }
 
 // NewCountryArenaManager creates a manager for 195 country arenas.
 func NewCountryArenaManager(cfg RoomConfig) *CountryArenaManager {
 	return &CountryArenaManager{
-		arenas:             make(map[string]*CountryArenaWrapper),
-		playerCountry:      make(map[string]string),
-		queues:             make(map[string][]QueueEntry),
-		maxPlayersPerArena: 50,
-		defaultConfig:      cfg,
+		arenas:              make(map[string]*CountryArenaWrapper),
+		playerCountry:       make(map[string]string),
+		matrixPlayerCountry: make(map[string]string),
+		queues:              make(map[string][]QueueEntry),
+		maxPlayersPerArena:  50,
+		defaultConfig:       cfg,
 	}
 }
 
-// GetOrCreateArena lazily initializes a country arena on first access.
-func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string) *CountryArenaWrapper {
-	cam.mu.Lock()
-	defer cam.mu.Unlock()
-
-	if arena, ok := cam.arenas[countryCode]; ok {
-		return arena
-	}
-
-	// Create new arena with country-specific config
+// createArenaLocked creates a new arena and stores it. Caller must hold mu.
+func (cam *CountryArenaManager) createArenaLocked(countryCode, countryName string) *CountryArenaWrapper {
 	cfg := cam.defaultConfig
 	cfg.MaxPlayersPerRoom = cam.maxPlayersPerArena
 
@@ -98,6 +98,9 @@ func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string
 	domination := NewDominationEngine(countryCode)
 	nationScore := NewNationScoreTracker(countryCode)
 
+	// v33: Create OnlineMatrixEngine for this arena
+	matrixEngine := NewOnlineMatrixEngine(countryCode)
+
 	wrapper := &CountryArenaWrapper{
 		CountryCode:   countryCode,
 		CountryName:   countryName,
@@ -107,6 +110,7 @@ func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string
 		CapturePoints: capturePoints,
 		Domination:    domination,
 		NationScore:   nationScore,
+		MatrixEngine:  matrixEngine,
 	}
 
 	// Wire CapturePoints.OnEvent callback to forward capture events
@@ -115,17 +119,90 @@ func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string
 	// v15: Wire DominationEngine.OnEvent callback to forward domination events
 	domination.OnEvent = cam.forwardDominationEvent
 
+	// v33: Wire EpochManager phase changes → MatrixEngine
+	origOnEvents := epoch.OnEvents
+	epoch.OnEvents = func(events []EpochEvent) {
+		// Forward to original handler
+		if origOnEvents != nil {
+			origOnEvents(events)
+		}
+		// Forward epoch events to MatrixEngine
+		for _, evt := range events {
+			if matrixEngine.GetPlayerCount() == 0 {
+				continue
+			}
+			switch evt.Type {
+			case EpochEvtEpochStart:
+				if data, ok := evt.Data.(EpochStartData); ok {
+					matrixEngine.OnEpochPhaseChange(data.Phase, data.EpochNumber, EpochShrinkStartRadius)
+				}
+			case EpochEvtWarPhaseStart:
+				if data, ok := evt.Data.(WarPhaseData); ok {
+					matrixEngine.OnEpochPhaseChange(EpochPhaseWar, data.EpochNumber, epoch.GetCurrentRadius())
+				}
+			case EpochEvtWarPhaseEnd:
+				matrixEngine.OnEpochPhaseChange(EpochPhaseEnd, epoch.GetEpochNumber(), epoch.GetCurrentRadius())
+			case EpochEvtPhaseChange:
+				if data, ok := evt.Data.(map[string]interface{}); ok {
+					if phase, ok := data["phase"].(string); ok {
+						matrixEngine.OnEpochPhaseChange(EpochPhase(phase), epoch.GetEpochNumber(), epoch.GetCurrentRadius())
+					}
+				}
+			case EpochEvtWarCountdown:
+				matrixEngine.OnEpochPhaseChange(EpochPhaseWarCountdown, epoch.GetEpochNumber(), epoch.GetCurrentRadius())
+			case EpochEvtEpochEnd:
+				if data, ok := evt.Data.(EpochEndData); ok {
+					// Find dominant nation from matrix scores
+					dominant := ""
+					nationScores := matrixEngine.GetScoreAggregator().GetNationScores()
+					maxScore := 0
+					for nat, score := range nationScores {
+						if score > maxScore {
+							maxScore = score
+							dominant = nat
+						}
+					}
+					matrixEngine.OnEpochEnd(data.EpochNumber, dominant, false, false)
+				}
+			}
+		}
+	}
+
+	// v33: Wire MatrixEngine ban callback
+	matrixEngine.OnBan = func(clientID, reason string) {
+		slog.Warn("matrix player banned",
+			"clientId", clientID,
+			"country", countryCode,
+			"reason", reason,
+		)
+	}
+
 	// Start the epoch cycle so Tick() processes phase transitions
 	epoch.Start()
 
+	// Start the matrix engine
+	matrixEngine.Start()
+
 	cam.arenas[countryCode] = wrapper
 
-	slog.Info("country arena created (lazy)",
+	slog.Info("country arena created (lazy) with matrix engine",
 		"countryCode", countryCode,
 		"countryName", countryName,
 	)
 
 	return wrapper
+}
+
+// GetOrCreateArena lazily initializes a country arena on first access.
+func (cam *CountryArenaManager) GetOrCreateArena(countryCode, countryName string) *CountryArenaWrapper {
+	cam.mu.Lock()
+	defer cam.mu.Unlock()
+
+	if arena, ok := cam.arenas[countryCode]; ok {
+		return arena
+	}
+
+	return cam.createArenaLocked(countryCode, countryName)
 }
 
 // JoinCountryArena adds a player to a country arena, or queues them if full.
@@ -145,41 +222,7 @@ func (cam *CountryArenaManager) JoinCountryArena(clientID, countryCode, countryN
 	// Get or create arena
 	arena, ok := cam.arenas[countryCode]
 	if !ok {
-		// Create lazily
-		cfg := cam.defaultConfig
-		cfg.MaxPlayersPerRoom = cam.maxPlayersPerArena
-
-		room := NewRoom(countryCode, countryName, cfg)
-		room.OnEvents = cam.forwardEvents
-
-		epoch := NewEpochManager(countryCode)
-		epoch.OnEvents = cam.forwardEpochEvents
-		respawn := NewRespawnManager()
-		capturePoints := NewCapturePointSystem(countryCode, ArenaRadius)
-		domination := NewDominationEngine(countryCode)
-		nationScore := NewNationScoreTracker(countryCode)
-
-		arena = &CountryArenaWrapper{
-			CountryCode:   countryCode,
-			CountryName:   countryName,
-			Room:          room,
-			Epoch:         epoch,
-			Respawn:       respawn,
-			CapturePoints: capturePoints,
-			Domination:    domination,
-			NationScore:   nationScore,
-		}
-
-		// Wire CapturePoints.OnEvent callback to forward capture events
-		capturePoints.OnEvent = cam.forwardCaptureEvent
-
-		// v15: Wire DominationEngine.OnEvent callback to forward domination events
-		domination.OnEvent = cam.forwardDominationEvent
-
-		// Start the epoch cycle so Tick() processes phase transitions
-		epoch.Start()
-
-		cam.arenas[countryCode] = arena
+		arena = cam.createArenaLocked(countryCode, countryName)
 	}
 
 	// Check capacity
@@ -221,6 +264,13 @@ func (cam *CountryArenaManager) LeaveCountryArena(clientID string) {
 
 	countryCode, ok := cam.playerCountry[clientID]
 	if !ok {
+		// v33: Also check matrix players
+		if cc, mok := cam.matrixPlayerCountry[clientID]; mok {
+			if arena, exists := cam.arenas[cc]; exists && arena.MatrixEngine != nil {
+				arena.MatrixEngine.OnPlayerLeave(clientID)
+			}
+			delete(cam.matrixPlayerCountry, clientID)
+		}
 		return
 	}
 
@@ -429,7 +479,10 @@ func (cam *CountryArenaManager) TickActiveArenas(tick uint64) {
 	defer cam.mu.RUnlock()
 
 	for _, arena := range cam.arenas {
-		if arena.PlayerCount > 0 {
+		hasLegacyPlayers := arena.PlayerCount > 0
+		hasMatrixPlayers := arena.MatrixEngine != nil && arena.MatrixEngine.GetPlayerCount() > 0
+
+		if hasLegacyPlayers || hasMatrixPlayers {
 			arena.Epoch.Tick(tick)
 
 			// Tick capture points: build agent positions from arena agents
@@ -449,6 +502,11 @@ func (cam *CountryArenaManager) TickActiveArenas(tick uint64) {
 				}
 				nearbyAgents := arena.CapturePoints.GetAgentsNearPoints(agentPositions)
 				arena.CapturePoints.Tick(nearbyAgents)
+			}
+
+			// v33: Tick Matrix engine
+			if hasMatrixPlayers {
+				arena.MatrixEngine.Tick(tick)
 			}
 		}
 	}

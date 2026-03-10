@@ -97,6 +97,26 @@ const (
 	EventCityCommand   = "city_command"   // build/demolish/upgrade/toggle
 	EventCitySubscribe = "city_subscribe" // subscribe to a city's state updates
 	EventCityUnsubscribe = "city_unsubscribe" // unsubscribe from a city
+
+	// v33: Matrix online events (client → server)
+	EventMatrixJoin    = "matrix_join"     // join a country's Matrix arena
+	EventMatrixLeave   = "matrix_leave"    // leave Matrix arena
+	EventMatrixInput   = "matrix_input"    // player position+input (10Hz)
+	EventMatrixKill    = "matrix_kill"     // kill report (server validates)
+	EventMatrixDamage  = "matrix_damage"   // PvP damage report
+	EventMatrixCapture = "matrix_capture"  // capture point entry
+	EventMatrixLevelUp = "matrix_level_up" // level-up skill/weapon choice
+
+	// v33: Matrix online events (server → client)
+	EventMatrixState         = "matrix_state"          // 20Hz world state (delta/full)
+	EventMatrixEpoch         = "matrix_epoch"          // epoch phase transition
+	EventMatrixSpawnSeed     = "matrix_spawn_seed"     // deterministic monster spawn seed
+	EventMatrixKillConfirmed = "matrix_kill_confirmed"  // kill validated by server
+	EventMatrixKillRejected  = "matrix_kill_rejected"   // kill rejected (anti-cheat)
+	EventMatrixScore         = "matrix_score"           // real-time scoreboard
+	EventMatrixResult        = "matrix_result"          // epoch end result + rewards
+	EventMatrixLevelUpChoices = "matrix_level_up_choices" // server-generated level-up options
+	EventMatrixBuff          = "matrix_buff"            // active token buffs
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -310,6 +330,54 @@ type CitySubscribePayload struct {
 // CityUnsubscribePayload is sent by the client to unsubscribe from a city.
 type CityUnsubscribePayload struct {
 	ISO3 string `json:"iso3"`
+}
+
+// --- v33: Matrix online payload types (client → server) ---
+
+// MatrixJoinPayload is sent by the client to join a Matrix arena.
+type MatrixJoinPayload struct {
+	CountryCode string `json:"countryCode"`
+	Build       string `json:"build,omitempty"`
+	AgentID     string `json:"agentId,omitempty"`
+}
+
+// MatrixLeavePayload is sent by the client to leave a Matrix arena.
+type MatrixLeavePayload struct{}
+
+// MatrixInputPayload is sent at 10Hz with position+input data.
+type MatrixInputPayload struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Angle float64 `json:"angle"`
+	Boost bool    `json:"boost"`
+	Tick  uint64  `json:"tick"`
+}
+
+// MatrixKillPayload is the client's kill report for server validation.
+type MatrixKillPayload struct {
+	TargetID string  `json:"targetId"`
+	WeaponID string  `json:"weaponId"`
+	Damage   float64 `json:"damage"`
+	Distance float64 `json:"distance"`
+	Tick     uint64  `json:"tick"`
+}
+
+// MatrixDamagePayload is the client's PvP damage report.
+type MatrixDamagePayload struct {
+	TargetID string  `json:"targetId"`
+	WeaponID string  `json:"weaponId"`
+	Damage   float64 `json:"damage"`
+	Tick     uint64  `json:"tick"`
+}
+
+// MatrixCapturePayload is sent when a player enters a capture point.
+type MatrixCapturePayload struct {
+	PointID string `json:"pointId"`
+}
+
+// MatrixLevelUpPayload is sent when a player selects a level-up choice.
+type MatrixLevelUpPayload struct {
+	ChoiceID string `json:"choiceId"`
 }
 
 // --- v15: Globe effects message structs ---

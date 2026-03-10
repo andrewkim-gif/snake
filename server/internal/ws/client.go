@@ -40,9 +40,12 @@ func NewRateLimiter() *RateLimiter {
 	return &RateLimiter{
 		lastSent: make(map[string]time.Time),
 		limits: map[string]time.Duration{
-			"input":   33 * time.Millisecond,  // 30Hz max
-			"respawn": 2 * time.Second,        // 0.5Hz max
-			"ping":    200 * time.Millisecond,  // 5Hz max
+			"input":        33 * time.Millisecond,  // 30Hz max
+			"respawn":      2 * time.Second,        // 0.5Hz max
+			"ping":         200 * time.Millisecond, // 5Hz max
+			"matrix_input": 100 * time.Millisecond, // v33: 10Hz max
+			"matrix_kill":  200 * time.Millisecond, // v33: 5Hz max
+			"matrix_damage":100 * time.Millisecond, // v33: 10Hz max
 		},
 	}
 }

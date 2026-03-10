@@ -906,6 +906,13 @@ func main() {
 		}
 	})
 
+	// --- v33 Matrix Broadcaster (20Hz downlinks for online Matrix arenas) ---
+	g.Go(func() error {
+		slog.Info("v33 Matrix broadcaster starting (20Hz)")
+		startMatrixBroadcaster(hub, v14ArenaManager, gCtx.Done())
+		return nil
+	})
+
 	// --- v14 WarSystem ticker (every 5 seconds) ---
 	g.Go(func() error {
 		slog.Info("v14 WarSystem ticker starting")
@@ -1744,6 +1751,11 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 		})
 		client.Send(frame)
 	})
+
+	// ================================================================
+	// v33 Matrix Online Event Handlers
+	// ================================================================
+	registerMatrixEventHandlers(router, hub, v14)
 }
 
 // createWorldEventHandler bridges WorldManager events to the WebSocket Hub.

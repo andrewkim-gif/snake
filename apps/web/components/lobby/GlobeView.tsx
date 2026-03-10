@@ -8,7 +8,7 @@
  * Phase 0 modular refactor: reduced from ~1,988 lines to ~300.
  */
 
-import { useState, useEffect, useMemo, useRef, useCallback, Suspense } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, Suspense, createContext, useContext } from 'react';
 import { Canvas, useThree, useFrame } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
@@ -23,8 +23,8 @@ import {
   type CountryGeo,
 } from '@/lib/globe-geo';
 
-// Earth + sky
-import { EarthGroup, SunLight, Starfield } from '@/components/3d/EarthGroup';
+// Earth + sky (v33: + computeSunDirection for unified sun computation)
+import { EarthGroup, SunLight, Starfield, computeSunDirection } from '@/components/3d/EarthGroup';
 // Country polygons + borders
 import { CountryLayer } from '@/components/3d/CountryLayer';
 // Interaction + SizeGate
@@ -89,6 +89,42 @@ import type { SpyOpData } from '@/components/3d/GlobeSpyTrail';
 import { GlobeNukeEffect } from '@/components/3d/GlobeNukeEffect';
 import type { NukeData } from '@/components/3d/GlobeNukeEffect';
 
+// ─── v33 Phase 3: SharedTickRef — 매 프레임 공유 데이터 (useRef 기반, 리렌더 없음) ───
+
+export interface SharedTickData {
+  /** 카메라 원점 거리 */
+  cameraDist: number;
+  /** 카메라 방향 (정규화, 재사용 벡터) */
+  cameraDir: THREE.Vector3;
+  /** 프레임 델타 (초) */
+  delta: number;
+  /** 경과 시간 (초) */
+  elapsed: number;
+}
+
+/** 기본 SharedTickData — 초기값 (GC 방지용 모듈 레벨 객체) */
+function createSharedTickData(): SharedTickData {
+  return {
+    cameraDist: 300,
+    cameraDir: new THREE.Vector3(0, 0, 1),
+    delta: 0,
+    elapsed: 0,
+  };
+}
+
+/**
+ * SharedTickContext — useRef 기반 공유 tick 데이터.
+ * React Context지만 값은 MutableRefObject이므로 리렌더를 유발하지 않음.
+ */
+export const SharedTickContext = createContext<React.RefObject<SharedTickData>>(
+  { current: createSharedTickData() } as React.RefObject<SharedTickData>,
+);
+
+/** SharedTickRef 소비자 훅 */
+export function useSharedTick(): React.RefObject<SharedTickData> {
+  return useContext(SharedTickContext);
+}
+
 // ─── Module-scope fallback constants (GC prevention) ───
 
 const EMPTY_DOM_MAP = new Map<string, CountryDominationState>();
@@ -132,13 +168,14 @@ const DAMPING_FAR = 0.05;
 
 function AdaptiveOrbitControls() {
   const controlsRef = useRef<any>(null);
-  const { camera } = useThree();
+  const tickRef = useSharedTick();
 
+  // v33 Phase 3: cameraDist를 SharedTickRef에서 읽어 중복 계산 제거
   useFrame(() => {
     const controls = controlsRef.current;
     if (!controls) return;
 
-    const dist = camera.position.length();
+    const dist = tickRef.current.cameraDist;
     const t = THREE.MathUtils.clamp((dist - MIN_DIST) / (MAX_DIST - MIN_DIST), 0, 1);
     const ease = 1 - (1 - t) * (1 - t);
 
@@ -205,6 +242,25 @@ function GlobeScene({
   const cameraTargetRef = useRef<THREE.Vector3 | null>(null);
   const cameraPriorityRef = useRef<number>(1);
 
+  // v33 Phase 3: SharedTickRef — 매 프레임 공유 데이터 (한 번만 계산)
+  const sharedTickRef = useRef<SharedTickData>(createSharedTickData());
+
+  // v33 Task 1: Single sun direction ref, computed once per frame, shared to EarthGroup + SunLight
+  const sunDirRef = useRef(new THREE.Vector3(1, 0, 0));
+
+  const { camera } = useThree();
+  useFrame((_state, delta) => {
+    // 태양 방향 계산 (1회/프레임)
+    computeSunDirection(sunDirRef.current);
+
+    // v33 Phase 3: 공유 tick 데이터 갱신 (1회/프레임)
+    const tick = sharedTickRef.current;
+    tick.cameraDist = camera.position.length();
+    tick.cameraDir.copy(camera.position).normalize();
+    tick.delta = delta;
+    tick.elapsed = _state.clock.elapsedTime;
+  });
+
   const handleCameraTarget = useCallback((position: THREE.Vector3, priority?: number) => {
     cameraTargetRef.current = position.clone();
     cameraPriorityRef.current = priority ?? CAMERA_PRIORITY.war;
@@ -260,7 +316,7 @@ function GlobeScene({
   }, []);
 
   return (
-    <>
+    <SharedTickContext.Provider value={sharedTickRef}>
       {/* Intro camera */}
       {introActive && (
         <GlobeIntroCamera
@@ -273,15 +329,15 @@ function GlobeScene({
       {/* Space lighting */}
       <ambientLight intensity={0.12} color="#1a2a4a" />
       <hemisphereLight args={['#334466', '#0a0e18', 0.25]} />
-      <SunLight />
-      <Starfield />
+      <SunLight sunDirRef={sunDirRef} />
+      <Starfield sharedTickRef={sharedTickRef} />
 
       {/* Globe group */}
       <group ref={globeGroupRef}>
-        <EarthGroup />
+        <EarthGroup sunDirRef={sunDirRef} />
         <GlobeTitle />
         <CountryLayer countries={countries} />
-        <GlobeCountryNameLabels countries={countries} />
+        <GlobeCountryNameLabels countries={countries} sharedTickRef={sharedTickRef} />
         <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
       </group>
 
@@ -454,16 +510,17 @@ function GlobeScene({
       {/* Bloom post-processing */}
       {!isMobile && (
         <EffectComposer>
+          {/* v33 Task 3: Raised threshold + reduced intensity/radius for GPU savings */}
           <Bloom
-            luminanceThreshold={0.4}
+            luminanceThreshold={0.7}
             luminanceSmoothing={0.15}
-            intensity={1.2}
-            radius={0.75}
+            intensity={0.8}
+            radius={0.5}
             mipmapBlur
           />
         </EffectComposer>
       )}
-    </>
+    </SharedTickContext.Provider>
   );
 }
 

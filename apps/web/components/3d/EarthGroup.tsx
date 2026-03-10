@@ -3,6 +3,15 @@
 /**
  * EarthGroup — Earth sphere (PBR day/night), clouds, atmosphere glow, sun, starfield.
  * Extracted from GlobeView.tsx (Phase 0 modular refactor).
+ *
+ * v33 Phase 1 optimizations:
+ * - Task 1: Unified sun direction computation (single computeSunDirection per frame, shared via ref)
+ * - Task 4: Atmosphere segments 64→32
+ * - Task 5: AtmosphereGlow uniforms pre-created via useMemo
+ *
+ * v33 Phase 3 optimizations:
+ * - EarthSphere/EarthClouds/AtmosphereGlow: sunDirRef.current를 uniform에 직접 공유 → 3개 useFrame 제거
+ * - Starfield: SharedTickRef에서 cameraDist/cameraDir 읽기 → camera.position 중복 계산 제거
  */
 
 import { useState, useEffect, useMemo, useRef } from 'react';
@@ -16,14 +25,22 @@ import {
   cloudsVertexShader, cloudsFragmentShader,
   atmoVertexShader, atmoFragmentShader,
 } from '@/lib/globe-shaders';
+// v33 Phase 3: SharedTickData for Starfield
+import type { SharedTickData } from '@/components/lobby/GlobeView';
 
-// ─── Sun direction helper (UTC-based realtime position) ───
+// ─── Sun direction helper (UTC-based realtime position, GC-free) ───
 
+// Cache year start millis at module load (avoids per-frame Date allocation)
+const _yearStartMs = new Date(new Date().getFullYear(), 0, 0).getTime();
+
+/**
+ * Compute sun direction in-place using Date.now() (primitive, no GC).
+ * Uses cached _yearStartMs to avoid per-frame Date construction.
+ */
 function computeSunDirection(out: THREE.Vector3): void {
-  const now = new Date();
-  const start = new Date(now.getFullYear(), 0, 0);
-  const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
-  const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
+  const nowMs = Date.now();
+  const dayOfYear = Math.floor((nowMs - _yearStartMs) / 86400000);
+  const utcH = (nowMs % 86400000) / 3600000;
   const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
   const ha = ((utcH - 12) / 24) * 2 * Math.PI;
   const sx = Math.cos(decRad) * Math.cos(ha);
@@ -34,7 +51,11 @@ function computeSunDirection(out: THREE.Vector3): void {
 
 // ─── EarthSphere (PBR day/night + normal + specular) ───
 
-function EarthSphere() {
+interface SunDirProp {
+  sunDirRef: React.RefObject<THREE.Vector3>;
+}
+
+function EarthSphere({ sunDirRef }: SunDirProp) {
   const dayTexture = useLoader(THREE.TextureLoader, '/textures/earth-blue-marble.jpg');
   dayTexture.colorSpace = THREE.SRGBColorSpace;
 
@@ -71,6 +92,7 @@ function EarthSphere() {
     };
   }, []);
 
+  // v33 Phase 3: sunDirRef.current를 직접 uniform value로 공유 → useFrame 복사 제거
   const earthMat = useMemo(() => {
     return new THREE.ShaderMaterial({
       uniforms: {
@@ -78,7 +100,7 @@ function EarthSphere() {
         uNightMap: { value: createBlackTexture() },
         uNormalMap: { value: createFlatNormalTexture() },
         uSpecularMap: { value: createBlackSpecularTexture() },
-        uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+        uSunDir: { value: sunDirRef.current },
         uNormalScale: { value: 1.0 },
       },
       vertexShader: earthVertexShader,
@@ -95,9 +117,8 @@ function EarthSphere() {
     earthMat.uniformsNeedUpdate = true;
   }, [texturesReady, earthMat]);
 
-  useFrame(() => {
-    computeSunDirection(earthMat.uniforms.uSunDir.value);
-  });
+  // v33 Phase 3: useFrame 제거 — sunDirRef.current를 직접 공유하므로 복사 불필요
+  // (GlobeScene에서 computeSunDirection이 sunDirRef.current를 in-place 업데이트)
 
   return (
     <mesh material={earthMat}>
@@ -108,7 +129,7 @@ function EarthSphere() {
 
 // ─── EarthClouds ───
 
-function EarthClouds() {
+function EarthClouds({ sunDirRef }: SunDirProp) {
   const cloudsTextureRef = useRef<THREE.Texture | null>(null);
   const matRef = useRef<THREE.ShaderMaterial | null>(null);
   const [ready, setReady] = useState(false);
@@ -131,11 +152,12 @@ function EarthClouds() {
     };
   }, []);
 
+  // v33 Phase 3: sunDirRef.current를 직접 uniform value로 공유 → useFrame 복사 제거
   const cloudsMat = useMemo(() => {
     const mat = new THREE.ShaderMaterial({
       uniforms: {
         uCloudsMap: { value: createBlackTexture() },
-        uSunDir: { value: new THREE.Vector3(1, 0, 0) },
+        uSunDir: { value: sunDirRef.current },
       },
       vertexShader: cloudsVertexShader,
       fragmentShader: cloudsFragmentShader,
@@ -144,6 +166,7 @@ function EarthClouds() {
     });
     matRef.current = mat;
     return mat;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -153,10 +176,7 @@ function EarthClouds() {
     }
   }, [ready]);
 
-  useFrame(() => {
-    if (!matRef.current) return;
-    computeSunDirection(matRef.current.uniforms.uSunDir.value);
-  });
+  // v33 Phase 3: useFrame 제거 — sunDirRef.current를 직접 공유하므로 복사 불필요
 
   return (
     <mesh material={cloudsMat} renderOrder={50}>
@@ -166,23 +186,24 @@ function EarthClouds() {
 }
 
 // ─── AtmosphereGlow ───
+// v33 Task 4: Segments 64→32 (translucent glow, visual difference negligible)
+// v33 Task 5: Uniforms pre-created via useMemo (no per-render allocation)
 
-function AtmosphereGlow() {
-  const matRef = useRef<THREE.ShaderMaterial>(null);
-
-  useFrame(() => {
-    if (!matRef.current) return;
-    computeSunDirection(matRef.current.uniforms.uSunDir.value);
-  });
+function AtmosphereGlow({ sunDirRef }: SunDirProp) {
+  // v33 Phase 3: sunDirRef.current를 직접 uniform value로 공유 → useFrame 제거
+  const uniforms = useMemo(() => ({
+    uSunDir: { value: sunDirRef.current },
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }), []);
 
   return (
     <mesh renderOrder={48}>
-      <sphereGeometry args={[GLOBE_RADIUS * 1.02, 64, 64]} />
+      {/* v33 Task 4: 64,64 → 32,32 segments */}
+      <sphereGeometry args={[GLOBE_RADIUS * 1.02, 32, 32]} />
       <shaderMaterial
-        ref={matRef}
         vertexShader={atmoVertexShader}
         fragmentShader={atmoFragmentShader}
-        uniforms={{ uSunDir: { value: new THREE.Vector3(1, 0, 0) } }}
+        uniforms={uniforms}
         transparent
         side={THREE.BackSide}
         depthWrite={false}
@@ -193,8 +214,9 @@ function AtmosphereGlow() {
 }
 
 // ─── SunLight (UTC-based realtime position + corona glow) ───
+// v33 Task 1: Uses shared sunDirRef instead of duplicating computation
 
-function SunLight() {
+function SunLight({ sunDirRef }: SunDirProp) {
   const lightRef = useRef<THREE.DirectionalLight>(null);
   const sunRef = useRef<THREE.Group>(null);
 
@@ -215,17 +237,13 @@ function SunLight() {
     return new THREE.CanvasTexture(canvas);
   }, []);
 
+  // v33: Derive sun position from shared direction ref (distance=500)
   useFrame(() => {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), 0, 0);
-    const dayOfYear = Math.floor((now.getTime() - start.getTime()) / 86400000);
-    const utcH = now.getUTCHours() + now.getUTCMinutes() / 60 + now.getUTCSeconds() / 3600;
-    const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
-    const ha = ((utcH - 12) / 24) * 2 * Math.PI;
+    if (!sunDirRef.current) return;
     const d = 500;
-    const x = d * Math.cos(decRad) * Math.cos(ha);
-    const y = d * Math.sin(decRad);
-    const z = d * Math.cos(decRad) * Math.sin(ha);
+    const x = sunDirRef.current.x * d;
+    const y = sunDirRef.current.y * d;
+    const z = sunDirRef.current.z * d;
     lightRef.current?.position.set(x, y, z);
     sunRef.current?.position.set(x, y, z);
   });
@@ -265,10 +283,12 @@ function SunLight() {
 
 // ─── Starfield (equirectangular skybox + parallax) ───
 
-const _starCamDir = new THREE.Vector3();
+interface StarfieldProps {
+  sharedTickRef: React.RefObject<SharedTickData>;
+}
 
-function Starfield() {
-  const { scene, camera } = useThree();
+function Starfield({ sharedTickRef }: StarfieldProps) {
+  const { scene } = useThree();
   const milkyWayTexture = useLoader(THREE.TextureLoader, '/textures/stars-milky-way.jpg');
 
   useMemo(() => {
@@ -277,17 +297,17 @@ function Starfield() {
     scene.background = milkyWayTexture;
   }, [milkyWayTexture, scene]);
 
+  // v33 Phase 3: SharedTickRef에서 cameraDist/cameraDir 읽기 → 중복 계산 제거
   useFrame(() => {
-    const dist = camera.position.length();
-    const t = THREE.MathUtils.clamp((dist - 150) / (400 - 150), 0, 1);
+    const tick = sharedTickRef.current;
+    const t = THREE.MathUtils.clamp((tick.cameraDist - 150) / (400 - 150), 0, 1);
     const smooth = t * t * (3 - 2 * t);
 
     scene.backgroundIntensity = 0.3 + smooth * 0.3;
 
-    _starCamDir.copy(camera.position).normalize();
     scene.backgroundRotation.set(
-      _starCamDir.y * 0.08,
-      -_starCamDir.x * 0.08,
+      tick.cameraDir.y * 0.08,
+      -tick.cameraDir.x * 0.08,
       0,
     );
   });
@@ -304,15 +324,24 @@ function Starfield() {
 }
 
 // ─── Exported Composite ───
+// v33 Task 1: Single sunDirRef computed once per frame, shared to all sub-components
+// Accepts external sunDirRef from parent (GlobeScene) to share with SunLight
 
-export function EarthGroup() {
+interface EarthGroupProps {
+  sunDirRef: React.RefObject<THREE.Vector3>;
+}
+
+export function EarthGroup({ sunDirRef }: EarthGroupProps) {
   return (
     <>
-      <EarthSphere />
-      <EarthClouds />
-      <AtmosphereGlow />
+      <EarthSphere sunDirRef={sunDirRef} />
+      <EarthClouds sunDirRef={sunDirRef} />
+      <AtmosphereGlow sunDirRef={sunDirRef} />
     </>
   );
 }
 
-export { SunLight, Starfield };
+export { SunLight, Starfield, computeSunDirection };
+
+// v33: Export types for GlobeView to pass sunDirRef
+export type { SunDirProp };
