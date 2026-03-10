@@ -60,6 +60,7 @@ import { BIOME_LANDMARK_TINTS, BIOME_INDEX } from '@/lib/biome-landmark-tints';
 import { MATERIAL_PROPS } from '@/lib/mc-blocks';
 import { useGlobeLODDistance } from '@/hooks/useGlobeLOD';
 import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
+import { useSharedTick } from '@/components/lobby/GlobeView';
 
 // ─── Constants ───
 
@@ -85,8 +86,6 @@ const _obj = new THREE.Object3D();
 const _camDir = new THREE.Vector3();
 const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
-// v29 Phase 6: 태양 계산용 연초 밀리초 캐시 (per-frame Date 할당 방지)
-const _yearStartMs = new Date(new Date().getFullYear(), 0, 0).getTime();
 // v33 Phase 2: 이전 카메라 위치 비교용 temp
 const _prevCamPos = new THREE.Vector3();
 
@@ -516,9 +515,11 @@ export function LandmarkMeshes({
   const { camera } = useThree();
 
   // v33 Phase 2: LOD 연동 — 카메라 거리 기반 업데이트 빈도 조절
-  const distanceLOD = useGlobeLODDistance();
+  const distanceLODRef = useGlobeLODDistance();
   // v33 Phase 5: AdaptiveQuality context
   const qualityRef = useAdaptiveQualityContext();
+  // v33 perf: SharedTickData에서 태양 방향 참조 (중복 계산 제거)
+  const sharedTickRef = useSharedTick();
 
   // v33 Phase 2: Archetype별 런타임 데이터 맵 (통합 useFrame에서 사용)
   const runtimeMapRef = useRef<Map<string, ArchetypeRuntimeData>>(new Map());
@@ -582,23 +583,15 @@ export function LandmarkMeshes({
 
   // v33 Phase 2: 통합 useFrame — 태양 uniform + 모든 archetype 인스턴스 업데이트
   useFrame((state) => {
-    // ── 1. 태양 방향 + uTime uniform 갱신 (항상 실행) ──
+    // ── 1. 태양 방향 + uTime uniform 갱신 (SharedTickData에서 가져옴, 중복계산 제거) ──
     if (sharedMaterial) {
-      const nowMs = Date.now();
-      const dayOfYear = Math.floor((nowMs - _yearStartMs) / 86400000);
-      const utcH = (nowMs % 86400000) / 3600000;
-      const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
-      const ha = ((utcH - 12) / 24) * 2 * Math.PI;
-      const sx = Math.cos(decRad) * Math.cos(ha);
-      const sy = Math.sin(decRad);
-      const sz = Math.cos(decRad) * Math.sin(ha);
-      sharedMaterial.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+      sharedMaterial.uniforms.uSunDir.value.copy(sharedTickRef.current.sunDir);
       sharedMaterial.uniforms.uTime.value = state.clock.elapsedTime;
     }
 
     // ── 2. LOD + AdaptiveQuality 기반 업데이트 빈도 제어 ──
     frameCountRef.current++;
-    const distSkip = distanceLOD.distanceTier === 'far' ? FAR_LOD_UPDATE_INTERVAL : 1;
+    const distSkip = distanceLODRef.current.distanceTier === 'far' ? FAR_LOD_UPDATE_INTERVAL : 1;
     const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
     if (skip > 1 && frameCountRef.current % skip !== 0) return;
 

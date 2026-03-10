@@ -34,8 +34,8 @@ export interface GlobeSpyTrailProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
-  /** v24 Phase 6: 카메라 거리 LOD 설정 */
-  distanceLOD?: DistanceLODConfig;
+  /** v24 Phase 6: 카메라 거리 LOD 설정 (v33: useRef 패턴) */
+  distanceLODRef?: React.RefObject<DistanceLODConfig>;
   /** v24 Phase 6: prefers-reduced-motion */
   reducedMotion?: boolean;
 }
@@ -110,7 +110,7 @@ export function GlobeSpyTrail({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
-  distanceLOD,
+  distanceLODRef,
   reducedMotion = false,
 }: GlobeSpyTrailProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -202,11 +202,12 @@ export function GlobeSpyTrail({
     if (dataRef.current.length === 0) return;
     // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const dl = distanceLODRef?.current;
+    const distSkip = dl?.distanceTier === 'far' ? 3 : 1;
     const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
     if (skip > 1 && frameCountRef.current % skip !== 0) return;
     const elapsed = clock.getElapsedTime();
-    const showIcons = distanceLOD?.showIcons ?? true;
+    const showIcons = dl?.showIcons ?? true;
 
     if (reducedMotion) {
       // 정적 표시

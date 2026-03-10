@@ -38,8 +38,8 @@ export interface GlobeSanctionBarrierProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
-  /** v24 Phase 6: 카메라 거리 LOD 설정 */
-  distanceLOD?: DistanceLODConfig;
+  /** v24 Phase 6: 카메라 거리 LOD 설정 (v33: useRef 패턴) */
+  distanceLODRef?: React.RefObject<DistanceLODConfig>;
   /** v24 Phase 6: prefers-reduced-motion */
   reducedMotion?: boolean;
 }
@@ -78,7 +78,7 @@ export function GlobeSanctionBarrier({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
-  distanceLOD,
+  distanceLODRef,
   reducedMotion = false,
 }: GlobeSanctionBarrierProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -246,12 +246,12 @@ export function GlobeSanctionBarrier({
     if (instanceCountRef.current === 0) return;
     // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const distSkip = distanceLODRef?.current?.distanceTier === 'far' ? 3 : 1;
     const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
     if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
     const elapsed = clock.getElapsedTime();
-    const showIcons = distanceLOD?.showIcons ?? true;
+    const showIcons = distanceLODRef?.current?.showIcons ?? true;
 
     // X 마크: 스케일 펄스 + opacity 진동
     if (reducedMotion) {

@@ -108,6 +108,8 @@ export interface SharedTickData {
   delta: number;
   /** 경과 시간 (초) */
   elapsed: number;
+  /** 태양 방향 벡터 (정규화, 1회/프레임 계산) */
+  sunDir: THREE.Vector3;
 }
 
 /** 기본 SharedTickData — 초기값 (GC 방지용 모듈 레벨 객체) */
@@ -117,6 +119,7 @@ function createSharedTickData(): SharedTickData {
     cameraDir: new THREE.Vector3(0, 0, 1),
     delta: 0,
     elapsed: 0,
+    sunDir: new THREE.Vector3(1, 0, 0),
   };
 }
 
@@ -138,6 +141,7 @@ export function useSharedTick(): React.RefObject<SharedTickData> {
 const EMPTY_DOM_MAP = new Map<string, CountryDominationState>();
 const EMPTY_STATE_MAP = new Map<string, CountryClientState>();
 const EMPTY_SET = new Set<string>();
+const EMPTY_ARRAY: never[] = [];
 
 const BG = '#030305';
 
@@ -210,31 +214,40 @@ function AdaptiveOrbitControls() {
 // ─── v33 Phase 5: AdaptiveBloom — 품질 ref 기반 Bloom 조건부 렌더링 ───
 
 function AdaptiveBloom({ qualityRef }: { qualityRef: React.RefObject<QualityPreset> }) {
-  // ref 기반이라 리렌더 없음 — useFrame에서 EffectComposer 활성/비활성 제어
-  // EffectComposer 자체의 마운트/언마운트가 비용이 크므로
-  // intensity를 0으로 내려 비활성화하는 방식 사용
+  // v33+: EffectComposer의 enabled를 ref로 제어하여 GPU pass 자체를 스킵
+  // intensity=0으로만 하면 KawaseBlur pass가 여전히 GPU에서 실행됨
   //
   // ⚠️ Bloom 객체를 직접 ref에 저장하면 KawaseBlurPass→Resolution→resizable 순환 참조로
-  // Next.js dev 모드에서 JSON.stringify 에러 발생. ref callback으로 intensity setter만 캐시한다.
-  const setIntensityRef = useRef<((v: number) => void) | null>(null);
+  // Next.js dev 모드에서 JSON.stringify 에러 발생. ref callback으로 setter만 캐시한다.
+  const composerSetEnabledRef = useRef<((v: boolean) => void) | null>(null);
+  const bloomSetIntensityRef = useRef<((v: number) => void) | null>(null);
+
+  const composerRefCallback = useCallback((composer: any) => {
+    if (composer) {
+      composerSetEnabledRef.current = (v: boolean) => { composer.enabled = v; };
+    } else {
+      composerSetEnabledRef.current = null;
+    }
+  }, []);
 
   const bloomRefCallback = useCallback((effect: any) => {
     if (effect) {
-      setIntensityRef.current = (v: number) => { effect.intensity = v; };
+      bloomSetIntensityRef.current = (v: number) => { effect.intensity = v; };
     } else {
-      setIntensityRef.current = null;
+      bloomSetIntensityRef.current = null;
     }
   }, []);
 
   useFrame(() => {
-    if (!setIntensityRef.current) return;
     const enable = qualityRef.current.enableBloom;
-    // intensity를 0으로 내리면 GPU 비용 최소화
-    setIntensityRef.current(enable ? 0.8 : 0);
+    // EffectComposer 전체를 비활성화하여 GPU render pass 스킵
+    composerSetEnabledRef.current?.(enable);
+    // intensity도 설정 (재활성화 시 올바른 값 보장)
+    bloomSetIntensityRef.current?.(enable ? 0.8 : 0);
   });
 
   return (
-    <EffectComposer>
+    <EffectComposer ref={composerRefCallback}>
       <Bloom
         ref={bloomRefCallback}
         luminanceThreshold={0.7}
@@ -307,6 +320,7 @@ function GlobeScene({
     tick.cameraDir.copy(camera.position).normalize();
     tick.delta = delta;
     tick.elapsed = _state.clock.elapsedTime;
+    tick.sunDir.copy(sunDirRef.current);
   });
 
   const handleCameraTarget = useCallback((position: THREE.Vector3, priority?: number) => {
@@ -315,7 +329,7 @@ function GlobeScene({
   }, []);
 
   const lodConfig = useGlobeLOD();
-  const distanceLOD = useGlobeLODDistance();
+  const distanceLODRef = useGlobeLODDistance();
   const reducedMotion = useReducedMotion();
 
   // v33 Phase 5: AdaptiveQuality — FPS 모니터링 + 자동 품질 조절
@@ -523,7 +537,7 @@ function GlobeScene({
           sanctions={sanctions}
           centroidsMap={centroidsMap}
           globeRadius={GLOBE_RADIUS}
-          distanceLOD={distanceLOD}
+          distanceLODRef={distanceLODRef}
           reducedMotion={reducedMotion}
         />
       )}
@@ -534,7 +548,7 @@ function GlobeScene({
           resources={resources}
           centroidsMap={centroidsMap}
           globeRadius={GLOBE_RADIUS}
-          distanceLOD={distanceLOD}
+          distanceLODRef={distanceLODRef}
           reducedMotion={reducedMotion}
         />
       )}
@@ -545,7 +559,7 @@ function GlobeScene({
           spyOps={spyOps}
           centroidsMap={centroidsMap}
           globeRadius={GLOBE_RADIUS}
-          distanceLOD={distanceLOD}
+          distanceLODRef={distanceLODRef}
           reducedMotion={reducedMotion}
         />
       )}
@@ -589,16 +603,16 @@ export function GlobeView({
   onReady,
 }: GlobeViewProps) {
   const domStates = dominationStates ?? EMPTY_DOM_MAP;
-  const warList = wars ?? [];
+  const warList = wars ?? EMPTY_ARRAY;
   const cStates = countryStates ?? EMPTY_STATE_MAP;
-  const tradeList = tradeRoutes ?? [];
-  const eventList = globalEvents ?? [];
+  const tradeList = tradeRoutes ?? EMPTY_ARRAY;
+  const eventList = globalEvents ?? EMPTY_ARRAY;
   const conflictSet = activeConflictCountries ?? EMPTY_SET;
-  const allianceList = alliances ?? [];
-  const sanctionList = sanctions ?? [];
-  const resourceList = resources ?? [];
-  const spyOpList = spyOps ?? [];
-  const nukeList = nukes ?? [];
+  const allianceList = alliances ?? EMPTY_ARRAY;
+  const sanctionList = sanctions ?? EMPTY_ARRAY;
+  const resourceList = resources ?? EMPTY_ARRAY;
+  const spyOpList = spyOps ?? EMPTY_ARRAY;
+  const nukeList = nukes ?? EMPTY_ARRAY;
 
   const cameraStartPos: [number, number, number] = introActive
     ? [0, 120, 480]

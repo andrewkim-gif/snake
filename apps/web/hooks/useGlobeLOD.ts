@@ -209,11 +209,12 @@ export function useGlobeLOD(): GlobeLODConfig {
  *
  * ⚠️ 반드시 R3F Canvas 안에서 호출해야 함 (useFrame 사용).
  */
-export function useGlobeLODDistance(): DistanceLODConfig {
+export function useGlobeLODDistance(): React.RefObject<DistanceLODConfig> {
   const tierRef = useRef<DistanceLODTier>('close');
-  const [distanceTier, setDistanceTier] = useState<DistanceLODTier>('close');
+  const configRef = useRef<DistanceLODConfig>(DISTANCE_LOD_CLOSE);
 
   // 매 프레임 카메라 거리 체크 (히스테리시스 적용)
+  // v33 perf: useRef 기반 — LOD 경계를 넘어도 React 리렌더가 발생하지 않음
   useFrame(({ camera }) => {
     const dist = camera.position.length();
     const current = tierRef.current;
@@ -231,19 +232,15 @@ export function useGlobeLODDistance(): DistanceLODConfig {
 
     if (next !== current) {
       tierRef.current = next;
-      setDistanceTier(next);
+      switch (next) {
+        case 'close': configRef.current = DISTANCE_LOD_CLOSE; break;
+        case 'mid':   configRef.current = DISTANCE_LOD_MID;   break;
+        case 'far':   configRef.current = DISTANCE_LOD_FAR;   break;
+      }
     }
   });
 
-  const config = useMemo<DistanceLODConfig>(() => {
-    switch (distanceTier) {
-      case 'close': return DISTANCE_LOD_CLOSE;
-      case 'mid':   return DISTANCE_LOD_MID;
-      case 'far':   return DISTANCE_LOD_FAR;
-    }
-  }, [distanceTier]);
-
-  return config;
+  return configRef;
 }
 
 export default useGlobeLOD;

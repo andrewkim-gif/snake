@@ -91,7 +91,8 @@ export function GlobeInteraction({ onCountryClick, onHover }: GlobeInteractionPr
       onClick={handleClick}
       onPointerLeave={handlePointerLeave}
     >
-      <sphereGeometry args={[GLOBE_RADIUS + 3, 64, 64]} />
+      {/* v33 Task 2: 64,64 → 16,16 (invisible raycast-only sphere, low poly sufficient) */}
+      <sphereGeometry args={[GLOBE_RADIUS + 3, 16, 16]} />
       <meshBasicMaterial transparent opacity={0} depthWrite={false} depthTest={false} colorWrite={false} />
     </mesh>
   );

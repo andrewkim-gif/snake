@@ -18,6 +18,7 @@ import { latLngToVector3 } from '@/lib/globe-utils';
 import { createArcPoints } from '@/lib/effect-utils';
 import { ARC_HEIGHT, COLORS_BASE, RENDER_ORDER, CAMERA_PRIORITY } from '@/lib/effect-constants';
 import type { TradeRouteData } from '@/hooks/useSocket';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
@@ -32,6 +33,8 @@ export interface GlobeTradeRoutesProps {
   visible?: boolean;
   /** v24: 새 교역 루트 시 카메라 포커스 콜백 (priority=1, 최저 우선순위) */
   onCameraTarget?: (position: THREE.Vector3, priority?: number) => void;
+  /** v33 Phase 4: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
 }
 
 // ─── Constants ───
@@ -60,6 +63,10 @@ const _tempVec3A = new THREE.Vector3();
 const _tempVec3B = new THREE.Vector3();
 const _tempQuaternion = new THREE.Quaternion();
 const _upAxis = new THREE.Vector3(0, 1, 0);
+
+// v33 Task 8: Capture wall-clock base time at module load to derive absolute time
+// from R3F's clock.elapsedTime (avoids Date.now() call per frame)
+const _clockBaseMs = Date.now();
 
 // ─── Helpers ───
 
@@ -142,6 +149,7 @@ export function GlobeTradeRoutes({
   globeRadius = DEFAULT_GLOBE_RADIUS,
   visible = true,
   onCameraTarget,
+  distanceLOD,
 }: GlobeTradeRoutesProps) {
   const groupRef = useRef<THREE.Group>(null);
   const linesRef = useRef<THREE.Line[]>([]);
@@ -311,11 +319,18 @@ export function GlobeTradeRoutes({
   }, [tradeRoutes, countryCentroids, globeRadius, createLineMaterial]);
 
   // 매 프레임: opacity 업데이트 + 화물 이동 + 접선 정렬
+  // v33 Task 8: Use R3F clock.elapsedTime instead of Date.now() per frame
   useFrame(({ clock }) => {
     if (!visible) return;
+    // v33 Phase 4: 무역 루트가 없으면 스킵
+    if (routeDataRef.current.length === 0) return;
 
-    const now = Date.now();
     const elapsed = clock.getElapsedTime();
+    // Derive absolute wall-clock time from module-level base + R3F elapsed (avoids Date.now() per frame)
+    const now = _clockBaseMs + elapsed * 1000;
+
+    // v33 Phase 4: far LOD에서 화물 메쉬 숨김
+    const showCargo = distanceLOD?.showCargo ?? true;
 
     for (let i = 0; i < routeDataRef.current.length; i++) {
       const routeData = routeDataRef.current[i];
@@ -328,6 +343,13 @@ export function GlobeTradeRoutes({
       const mat = line.material as THREE.ShaderMaterial;
       mat.uniforms.uOpacity.value = opacity;
       mat.uniforms.uTime.value = elapsed;
+
+      // v33 Phase 4: far LOD에서 화물 계산 스킵
+      if (!showCargo) {
+        cargo.visible = false;
+        continue;
+      }
+      cargo.visible = true;
 
       // 화물 위치: 루트를 따라 이동하는 t (0->1 반복)
       const ageSec = (now - routeData.timestamp) / 1000;
@@ -361,6 +383,8 @@ export function GlobeTradeRoutes({
   // cleanup on unmount
   useEffect(() => {
     return () => {
+      // v33 Phase 4: 라인 geometry도 dispose 추가
+      for (const line of linesRef.current) line.geometry.dispose();
       for (const mat of materialsRef.current) mat.dispose();
       // v23: dispose cached cargo geometries & materials
       for (const geo of cargoGeosRef.current.values()) geo.dispose();

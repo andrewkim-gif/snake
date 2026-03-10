@@ -35,8 +35,8 @@ export interface GlobeResourceGlowProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
-  /** v24 Phase 6: 카메라 거리 LOD 설정 */
-  distanceLOD?: DistanceLODConfig;
+  /** v24 Phase 6: 카메라 거리 LOD 설정 (v33: useRef 패턴) */
+  distanceLODRef?: React.RefObject<DistanceLODConfig>;
   /** v24 Phase 6: prefers-reduced-motion */
   reducedMotion?: boolean;
 }
@@ -109,7 +109,7 @@ export function GlobeResourceGlow({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
-  distanceLOD,
+  distanceLODRef,
   reducedMotion = false,
 }: GlobeResourceGlowProps) {
   const groupRef = useRef<THREE.Group>(null);
@@ -217,14 +217,15 @@ export function GlobeResourceGlow({
     if (dataRef.current.length === 0) return;
     // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const dl = distanceLODRef?.current;
+    const distSkip = dl?.distanceTier === 'far' ? 3 : 1;
     const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
     if (skip > 1 && frameCountRef.current % skip !== 0) return;
     const elapsed = clock.getElapsedTime();
 
     // LOD 기반 파티클 표시/숨김 + 배율
-    const showParticles = distanceLOD?.showParticles ?? true;
-    const lodParticleMultiplier = distanceLOD?.particleMultiplier ?? 1.0;
+    const showParticles = dl?.showParticles ?? true;
+    const lodParticleMultiplier = dl?.particleMultiplier ?? 1.0;
     const effectiveParticleCount = showParticles
       ? Math.max(1, Math.floor(PARTICLE_COUNT * lodParticleMultiplier))
       : 0;
