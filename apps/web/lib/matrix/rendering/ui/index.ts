@@ -129,3 +129,20 @@ export function drawFormationWarning(
 
 // ===== 콤보 카운터 렌더링 =====
 export { drawComboAboveCharacter, drawComboTimer } from './comboCanvas';
+
+// ===== v37 Phase 6: Gold 플로팅 텍스트 =====
+export {
+  addGoldFloatingText,
+  drawGoldFloatingTexts,
+  clearGoldFloatingTexts,
+  getActiveGoldTextCount,
+} from './goldTextCanvas';
+
+// ===== v37 Phase 6: 킬→Gold 코인 파티클 =====
+export {
+  spawnCoinParticles,
+  updateAndDrawCoinParticles,
+  clearCoinParticles,
+  getActiveCoinParticleCount,
+} from './coinParticleCanvas';
+export type { KillType } from './coinParticleCanvas';
