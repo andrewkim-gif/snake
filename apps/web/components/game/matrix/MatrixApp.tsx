@@ -88,6 +88,14 @@ import type { EpochUIState } from '@/lib/matrix/systems/epoch-ui-bridge';
 // ─── v33 Phase 4: Multiplayer Rendering Integration ───
 import { MultiplayerRenderer } from '@/lib/matrix/rendering/multiplayer';
 
+// ─── v33 Phase 5: Epoch HUD + Scoreboard + Result Screen ───
+import EpochHUD from './EpochHUD';
+import NationScoreboard from './NationScoreboard';
+import CapturePointUI from './CapturePointUI';
+import EpochResultScreen from './EpochResultScreen';
+import TokenBuffDisplay from './TokenBuffDisplay';
+import type { MatrixResultPayload, MatrixBuffPayload, MatrixScorePayload } from '@/hooks/useMatrixSocket';
+
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
   () => import('./MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
@@ -178,6 +186,18 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     nextLevel: number; priorityScore: number;
   }> | null>(null);
 
+  // ─────────────────────────────────────────
+  // v33 Phase 5: Epoch HUD + Scoreboard State
+  // ─────────────────────────────────────────
+  const [epochResultData, setEpochResultData] = useState<MatrixResultPayload | null>(null);
+  const [showEpochResult, setShowEpochResult] = useState(false);
+  const [matrixBuffData, setMatrixBuffData] = useState<MatrixBuffPayload | null>(null);
+  const [onlineNationScores, setOnlineNationScores] = useState<Record<string, number>>({});
+  const [onlinePersonalScore, setOnlinePersonalScore] = useState(0);
+  const [onlinePersonalRank, setOnlinePersonalRank] = useState(0);
+  const [onlineCaptures, setOnlineCaptures] = useState<Array<{ id: string; owner: string | null; progress: number }>>([]);
+  const [matrixPlayerId, setMatrixPlayerId] = useState<string | null>(null);
+
   // 온라인 시스템 다운링크 리스너 설정
   const matrixListeners = useMemo<MatrixSocketListeners>(() => {
     if (!isOnline) return {};
@@ -185,10 +205,22 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       onState: (data) => {
         onlineSyncRef.current?.applyState(data);
         epochBridgeRef.current?.updateTimer(data.timer);
+        // Phase 5: 타이머 업데이트 → epochUI 스프레드 재생성으로 리렌더 트리거
+        const bridge = epochBridgeRef.current;
+        if (bridge) {
+          setEpochUI({ ...bridge.state });
+        }
+        // Phase 5: 실시간 스코어 + 캡처 포인트 UI 업데이트
+        setOnlineNationScores(data.nationScores ?? {});
+        setOnlineCaptures(data.captures ?? []);
       },
       onEpoch: (data) => {
         epochBridgeRef.current?.onEpochEvent(data);
-        setEpochUI(epochBridgeRef.current?.state ?? null);
+        // 스프레드로 새 객체 생성 → React 리렌더 보장
+        const bridge = epochBridgeRef.current;
+        if (bridge) {
+          setEpochUI({ ...bridge.state });
+        }
       },
       onSpawnSeed: (data) => {
         seededSpawning.onSeed(data);
@@ -199,11 +231,22 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       onKillRejected: (data) => {
         killReporterRef.current?.onRejected(data);
       },
-      onScore: (_data) => {
-        // 스코어는 online-sync가 matrix_state에서 이미 처리
+      onScore: (data: MatrixScorePayload) => {
+        // Phase 5: 개인 스코어/순위 업데이트
+        setOnlineNationScores(data.nationScores);
+        setOnlinePersonalScore(data.personalScore);
+        setOnlinePersonalRank(data.rank);
       },
-      onResult: (_data) => {
-        // 에폭 결과 — Phase 5에서 결과 화면 UI 연동
+      onResult: (data: MatrixResultPayload) => {
+        // Phase 5: 에폭 결과 화면 표시
+        setEpochResultData(data);
+        setShowEpochResult(true);
+        // 5초 후 자동 닫기 (transition 페이즈 동안)
+        setTimeout(() => setShowEpochResult(false), 5000);
+      },
+      onBuff: (data: MatrixBuffPayload) => {
+        // Phase 5: 토큰 버프 업데이트
+        setMatrixBuffData(data);
       },
       onLevelUpChoices: (data) => {
         setOnlineLevelUpChoices(data.choices);
@@ -257,13 +300,13 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     // 에폭 UI 콜백 설정
     epoch.setCallbacks({
       onPhaseChange: (_phase, _config) => {
-        setEpochUI(epoch.state);
+        setEpochUI({ ...epoch.state });
       },
       onWarSiren: () => {
         soundManager.playSFX('alert');
       },
       onEpochEnd: () => {
-        setEpochUI(epoch.state);
+        setEpochUI({ ...epoch.state });
         mpRenderer.reset(); // 에폭 종료 시 이펙트 클리어
       },
     });
@@ -295,7 +338,13 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     if (!isOnline || matrixSocket.connectionState !== 'connected' || !countryIso3) return;
     matrixSocket.joinArena(countryIso3);
     seededSpawning.enterOnlineMode();
-  }, [isOnline, matrixSocket.connectionState, countryIso3, matrixSocket]);
+    // Phase 5: 클라이언트 플레이어 ID 생성 (서버가 할당하면 matrix_joined 이벤트로 교체 예정)
+    if (!matrixPlayerId) {
+      const id = `p_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+      setMatrixPlayerId(id);
+      onlineSyncRef.current?.setLocalPlayerId(id);
+    }
+  }, [isOnline, matrixSocket.connectionState, countryIso3, matrixSocket, matrixPlayerId]);
 
   // 온라인 모드: 보간 틱 (requestAnimationFrame으로 매 프레임 호출)
   useEffect(() => {
@@ -785,6 +834,31 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   }, []);
 
   // ─────────────────────────────────────────
+  // v33 Phase 5: 온라인 모드 epochUI 폴백
+  // 서버 연결 전이거나 epochUI가 아직 null이면 기본 peace 상태 표시
+  // ─────────────────────────────────────────
+  const defaultEpochUI = useMemo<EpochUIState>(() => ({
+    phase: 'peace' as const,
+    config: {
+      displayName: countryName ?? 'CONNECTING',
+      color: '#4ADE80',
+      pvpEnabled: false,
+      orbMultiplier: 2.0,
+      shrinkTarget: null,
+      zoneDpsPercent: 0,
+    },
+    countdown: 0,
+    timerDisplay: '--:--',
+    warSiren: false,
+    warCountdownNumber: null,
+    showResult: false,
+    isTransitioning: false,
+  }), [countryName]);
+
+  /** 온라인 모드 활성 에폭 UI (서버 상태 또는 폴백) */
+  const activeEpochUI = epochUI ?? defaultEpochUI;
+
+  // ─────────────────────────────────────────
   // 렌더링
   // ─────────────────────────────────────────
 
@@ -898,8 +972,8 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         />
       )}
 
-      {/* ─── ArenaHUD: 배틀로얄 정보 ─── */}
-      {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+      {/* ─── ArenaHUD: 배틀로얄 정보 (오프라인 모드에서만 표시 — 온라인은 EpochHUD가 대체) ─── */}
+      {!isOnline && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
         <ArenaHUD
           timeRemaining={Math.max(0, arena.config.gameDuration - arena.gameTime)}
           aliveCount={arena.agents.filter((a: { isAlive: boolean }) => a.isAlive).length}
@@ -912,93 +986,49 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         />
       )}
 
-      {/* ─── v33 Phase 3: Online Epoch Phase HUD ─── */}
-      {isOnline && epochUI && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
-        <div style={{
-          position: 'absolute',
-          top: 12,
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 50,
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 4,
-          pointerEvents: 'none',
-        }}>
-          {/* 페이즈 이름 + 타이머 */}
-          <div style={{
-            background: 'rgba(0,0,0,0.7)',
-            border: `1px solid ${epochUI.config.color}`,
-            borderRadius: 8,
-            padding: '4px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}>
-            <span style={{
-              color: epochUI.config.color,
-              fontFamily: '"Black Ops One", monospace',
-              fontSize: 14,
-              fontWeight: 700,
-              letterSpacing: 2,
-            }}>
-              {epochUI.config.displayName}
-            </span>
-            <span style={{
-              color: '#E8E0D4',
-              fontFamily: '"Rajdhani", monospace',
-              fontSize: 18,
-              fontWeight: 600,
-            }}>
-              {epochUI.timerDisplay}
-            </span>
-          </div>
+      {/* ─── v33 Phase 5: Online Epoch HUD (서버 에폭 상태 또는 연결 대기 폴백) ─── */}
+      {isOnline && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <EpochHUD
+          epochUI={activeEpochUI}
+          connectionState={matrixSocket.connectionState}
+          latency={matrixSocket.latency}
+          playerNation={countryIso3}
+        />
+      )}
 
-          {/* 전쟁 카운트다운 숫자 (war_countdown 페이즈) */}
-          {epochUI.warCountdownNumber !== null && (
-            <div style={{
-              color: epochUI.warSiren ? '#EF4444' : '#FBBF24',
-              fontFamily: '"Black Ops One", monospace',
-              fontSize: epochUI.warSiren ? 48 : 36,
-              fontWeight: 900,
-              textShadow: epochUI.warSiren
-                ? '0 0 20px rgba(239,68,68,0.8), 0 0 40px rgba(239,68,68,0.4)'
-                : '0 0 10px rgba(251,191,36,0.5)',
-              animation: epochUI.warSiren ? 'pulse 0.5s infinite' : undefined,
-            }}>
-              {epochUI.warCountdownNumber}
-            </div>
-          )}
+      {/* ─── v33 Phase 5: Nation Scoreboard ─── */}
+      {isOnline && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <NationScoreboard
+          nationScores={onlineNationScores}
+          playerNation={countryIso3}
+          personalScore={onlinePersonalScore}
+          personalRank={onlinePersonalRank}
+          maxDisplay={5}
+          compact
+        />
+      )}
 
-          {/* PvP 상태 인디케이터 */}
-          {epochUI.config.pvpEnabled && (
-            <div style={{
-              background: 'rgba(239,68,68,0.2)',
-              border: '1px solid rgba(239,68,68,0.6)',
-              borderRadius: 4,
-              padding: '2px 8px',
-              color: '#EF4444',
-              fontSize: 11,
-              fontFamily: '"Rajdhani", monospace',
-              fontWeight: 600,
-              letterSpacing: 1,
-            }}>
-              PVP ACTIVE
-            </div>
-          )}
+      {/* ─── v33 Phase 5: Capture Point UI ─── */}
+      {isOnline && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <CapturePointUI
+          captures={onlineCaptures}
+          playerNation={countryIso3}
+        />
+      )}
 
-          {/* 연결 상태 */}
-          <div style={{
-            fontSize: 10,
-            color: matrixSocket.connectionState === 'connected' ? '#4ADE80' : '#EF4444',
-            fontFamily: 'monospace',
-          }}>
-            {matrixSocket.connectionState === 'connected'
-              ? `ONLINE · ${matrixSocket.latency}ms`
-              : matrixSocket.connectionState.toUpperCase()}
-          </div>
-        </div>
+      {/* ─── v33 Phase 5: Token Buff Display ─── */}
+      {isOnline && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <TokenBuffDisplay buffData={matrixBuffData} />
+      )}
+
+      {/* ─── v33 Phase 5: Epoch Result Screen ─── */}
+      {isOnline && (
+        <EpochResultScreen
+          result={epochResultData}
+          playerId={matrixPlayerId ?? undefined}
+          playerNation={countryIso3}
+          visible={showEpochResult}
+        />
       )}
 
       {/* ─── v3 시스템 시각 UI (v32 Phase 1) ─── */}
