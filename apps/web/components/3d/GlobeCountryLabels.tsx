@@ -204,6 +204,11 @@ export function GlobeCountryLabels({
   // 이전 라벨 키 캐시 (변경 감지)
   const prevKeysRef = useRef<string[]>(new Array(MAX_COUNTRIES).fill(''));
 
+  // v33 stall fix: LOD 전환 시 캔버스 리드로를 여러 프레임에 걸쳐 분산
+  const pendingRedrawsRef = useRef<{ idx: number; entry: LabelEntry; agents: number; maxAgents: number; domIso2: string | null; domName: string | null; lod: number }[]>([]);
+  /** 프레임당 최대 캔버스 리드로 수 (195개 한꺼번에 → 30개씩 분산) */
+  const MAX_REDRAWS_PER_FRAME = 30;
+
   // Geometry + Material
   const geometry = useMemo(() => {
     return new THREE.PlaneGeometry(LABEL_WORLD_W, LABEL_WORLD_H);
@@ -426,11 +431,26 @@ export function GlobeCountryLabels({
     let needsTextureUpdate = false;
     let visibleIdx = 0;
 
+    // v33 stall fix: 이전 프레임에서 대기 중인 리드로 처리 (프레임당 MAX_REDRAWS_PER_FRAME)
+    const pending = pendingRedrawsRef.current;
+    if (pending.length > 0) {
+      const batch = Math.min(pending.length, MAX_REDRAWS_PER_FRAME);
+      for (let b = 0; b < batch; b++) {
+        const p = pending[b];
+        drawLabelRow(p.idx, p.entry, p.agents, p.maxAgents, p.domIso2, p.domName, p.lod);
+      }
+      pending.splice(0, batch);
+      needsTextureUpdate = true;
+    }
+
     // 원거리: activeAgents 기준 상위 N개만 (정렬은 비용이 커서 단순 필터)
     const isFarLOD = lodLevel === 2;
 
     // v15 Phase 6: LOD 제한 — maxLabels와 MAX_COUNTRIES 중 작은 값 사용
     const labelLimit = Math.min(maxLabels, MAX_COUNTRIES);
+
+    // v33 stall fix: 이 프레임에서 남은 리드로 예산
+    let redrawBudget = MAX_REDRAWS_PER_FRAME - (pending.length > 0 ? 0 : 0); // pending은 이미 위에서 처리됨
 
     for (let i = 0; i < entries.length; i++) {
       if (visibleIdx >= labelLimit) break;
@@ -462,7 +482,14 @@ export function GlobeCountryLabels({
       // 캐시 키: stable entry index i 사용 → 카메라 이동 시 국기 플리커 방지
       const key = `${lodLevel}|${activeAgents}/${maxAgents}|${dominantIso2 ?? ''}|${dominantName ?? ''}`;
       if (prevKeys[i] !== key) {
-        drawLabelRow(i, entry, activeAgents, maxAgents, dominantIso2, dominantName, lodLevel);
+        if (redrawBudget > 0) {
+          // 예산 내: 즉시 리드로
+          drawLabelRow(i, entry, activeAgents, maxAgents, dominantIso2, dominantName, lodLevel);
+          redrawBudget--;
+        } else {
+          // 예산 초과: 대기열에 추가 (다음 프레임에 처리)
+          pending.push({ idx: i, entry, agents: activeAgents, maxAgents, domIso2: dominantIso2, domName: dominantName, lod: lodLevel });
+        }
         prevKeys[i] = key;
         needsTextureUpdate = true;
       }
@@ -503,14 +530,19 @@ export function GlobeCountryLabels({
 
     // stable index 사용: prevKeys는 entry index 기반이므로 별도 초기화 불필요
 
+    // v33 stall fix: count 또는 위치가 변경된 경우에만 GPU 버퍼 업데이트
+    const countChanged = mesh.count !== visibleIdx;
     mesh.count = visibleIdx;
-    mesh.instanceMatrix.needsUpdate = true;
 
-    // 어트리뷰트 업데이트
-    const rowAttr = mesh.geometry.getAttribute('rowIndex') as THREE.InstancedBufferAttribute;
-    const alphaAttr = mesh.geometry.getAttribute('alphaVal') as THREE.InstancedBufferAttribute;
-    if (rowAttr) rowAttr.needsUpdate = true;
-    if (alphaAttr) alphaAttr.needsUpdate = true;
+    // instanceMatrix + 어트리뷰트는 매 프레임 위치가 바뀔 수 있으므로 (billboard + 거리 스케일)
+    // 하지만 visible 개수가 0이면 업데이트 불필요
+    if (visibleIdx > 0) {
+      mesh.instanceMatrix.needsUpdate = true;
+      const rowAttr = mesh.geometry.getAttribute('rowIndex') as THREE.InstancedBufferAttribute;
+      const alphaAttr = mesh.geometry.getAttribute('alphaVal') as THREE.InstancedBufferAttribute;
+      if (rowAttr) rowAttr.needsUpdate = true;
+      if (alphaAttr) alphaAttr.needsUpdate = true;
+    }
 
     if (needsTextureUpdate) {
       labelTexture.needsUpdate = true;

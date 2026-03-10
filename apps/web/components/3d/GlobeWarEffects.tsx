@@ -62,6 +62,9 @@ export interface GlobeWarEffectsProps {
 
 const DEFAULT_GLOBE_RADIUS = 100;
 
+/** v33 stall fix: 동시 렌더링 최대 전쟁 수 (5개 이상 = 25+ useFrame → 프레임 드롭) */
+const MAX_VISIBLE_WARS = 3;
+
 // Arc line — v24: 통일 색상 + 높이 체계
 const ARC_COLOR_WAR = COLORS_BASE.war.clone();
 const ARC_COLOR_PREP = new THREE.Color(0xff6633);
@@ -1305,8 +1308,15 @@ export function GlobeWarEffects({
   }, [wars, autoRotateCamera, onCameraTarget, getBorderCenter]);
 
   // Build effect data for rendering
+  // v33 stall fix: 동시 렌더링 전쟁 수 제한 (active 우선, ended 후순위)
   const warEffects = useMemo(() => {
-    return wars.map((war) => {
+    // active 전쟁을 우선 정렬 (ended 전쟁은 후순위)
+    const sorted = [...wars].sort((a, b) => {
+      if (a.state === 'ended' && b.state !== 'ended') return 1;
+      if (a.state !== 'ended' && b.state === 'ended') return -1;
+      return 0;
+    });
+    return sorted.slice(0, MAX_VISIBLE_WARS).map((war) => {
       const attackerPos = getCountryPosition(war.attacker);
       const defenderPos = getCountryPosition(war.defender);
       const borderCenter = getBorderCenter(war.attacker, war.defender);

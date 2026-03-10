@@ -141,17 +141,39 @@ export function GlobeResourceGlow({
     [],
   );
 
+  // v33 stall fix: 공유 ring ShaderMaterial (per-resource 생성 → 단일 인스턴스)
+  // uTime은 모든 인스턴스에 동일한 elapsed를 넣으므로 공유 가능
+  const sharedRingMaterial = useMemo(
+    () => new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: RESOURCE_COLOR_HDR.clone() },
+        uTime: { value: 0 },
+        uOpacity: { value: 0.7 },
+        uReducedMotion: { value: reducedMotion ? 1.0 : 0.0 },
+      },
+      vertexShader: ringVertexShader,
+      fragmentShader: ringFragmentShader,
+      transparent: true,
+      depthWrite: false,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      toneMapped: false,
+    }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // resources 변경 시 재구축
   useEffect(() => {
     const group = groupRef.current;
     if (!group) return;
 
-    // 기존 정리
+    // 기존 정리 (v33 stall fix: 공유 material은 dispose하지 않음)
     for (const d of dataRef.current) {
       group.remove(d.ring);
       group.remove(d.particles);
-      d.ringMaterial.dispose();
       d.particles.dispose();
+      // ringMaterial은 공유이므로 dispose X
     }
     dataRef.current = [];
 
@@ -162,24 +184,8 @@ export function GlobeResourceGlow({
       const pos = latLngToVector3(centroid[0], centroid[1], globeRadius + SURFACE_ALT.GROUND);
       const normal = pos.clone().normalize();
 
-      // 글로우 링 (per-event ShaderMaterial — uTime phase offset 필요)
-      const ringMaterial = new THREE.ShaderMaterial({
-        uniforms: {
-          uColor: { value: RESOURCE_COLOR_HDR.clone() },
-          uTime: { value: 0 },
-          uOpacity: { value: 0.7 },
-          uReducedMotion: { value: reducedMotion ? 1.0 : 0.0 },
-        },
-        vertexShader: ringVertexShader,
-        fragmentShader: ringFragmentShader,
-        transparent: true,
-        depthWrite: false,
-        blending: THREE.AdditiveBlending,
-        side: THREE.DoubleSide,
-        toneMapped: false,
-      });
-
-      const ring = new THREE.Mesh(ringGeo, ringMaterial);
+      // v33 stall fix: 공유 ring ShaderMaterial 사용 (per-resource 생성 제거)
+      const ring = new THREE.Mesh(ringGeo, sharedRingMaterial);
       ring.position.copy(pos);
       _quat.setFromUnitVectors(_up, normal);
       ring.quaternion.copy(_quat);
@@ -200,7 +206,7 @@ export function GlobeResourceGlow({
 
       dataRef.current.push({
         ring,
-        ringMaterial,
+        ringMaterial: sharedRingMaterial,
         particles,
         normal,
         position: pos.clone(),
@@ -223,6 +229,10 @@ export function GlobeResourceGlow({
     if (skip > 1 && frameCountRef.current % skip !== 0) return;
     const elapsed = clock.getElapsedTime();
 
+    // v33 stall fix: 공유 material uniform을 1회만 업데이트 (per-resource 루프 밖)
+    sharedRingMaterial.uniforms.uTime.value = elapsed;
+    sharedRingMaterial.uniforms.uReducedMotion.value = reducedMotion ? 1.0 : 0.0;
+
     // LOD 기반 파티클 표시/숨김 + 배율
     const showParticles = dl?.showParticles ?? true;
     const lodParticleMultiplier = dl?.particleMultiplier ?? 1.0;
@@ -231,9 +241,6 @@ export function GlobeResourceGlow({
       : 0;
 
     for (const d of dataRef.current) {
-      // 링 셰이더 time + reduced motion uniform 업데이트
-      d.ringMaterial.uniforms.uTime.value = elapsed;
-      d.ringMaterial.uniforms.uReducedMotion.value = reducedMotion ? 1.0 : 0.0;
 
       // 링 느린 회전 (reduced motion이면 비활성화)
       if (!reducedMotion) {
@@ -285,12 +292,12 @@ export function GlobeResourceGlow({
   useEffect(() => {
     return () => {
       for (const d of dataRef.current) {
-        d.ringMaterial.dispose();
         d.particles.dispose();
       }
       ringGeo.dispose();
       particleGeo.dispose();
       sharedParticleMaterial.dispose();
+      sharedRingMaterial.dispose();
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

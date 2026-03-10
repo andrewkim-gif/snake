@@ -11,7 +11,7 @@
  * - Opacity = trade frequency (0.3~1.0)
  */
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
@@ -160,6 +160,9 @@ export function GlobeTradeRoutes({
   // v23: 자원별 cargo geometry + material 캐시 (생성된 것 추적하여 cleanup)
   const cargoGeosRef = useRef<Map<ResourceType, THREE.BufferGeometry>>(new Map());
   const cargoMatsRef = useRef<Map<ResourceType, THREE.MeshBasicMaterial>>(new Map());
+  // v33 stall fix: ShaderMaterial 풀 (dispose/recreate 대신 재사용)
+  const seaMatPoolRef = useRef<THREE.ShaderMaterial[]>([]);
+  const landMatPoolRef = useRef<THREE.ShaderMaterial[]>([]);
 
   /** 자원 타입별 geometry 획득 (캐시 사용) */
   const getCargoGeo = (type: ResourceType): THREE.BufferGeometry => {
@@ -243,20 +246,39 @@ export function GlobeTradeRoutes({
     });
   }, []);
 
+  // v33 stall fix: ShaderMaterial 풀에서 재사용 (dispose/recreate 방지 → 셰이더 재컴파일 제거)
+  const getPooledMaterial = useCallback((isSea: boolean): THREE.ShaderMaterial => {
+    const pool = isSea ? seaMatPoolRef.current : landMatPoolRef.current;
+    if (pool.length > 0) {
+      return pool.pop()!;
+    }
+    // 풀이 비어있으면 새로 생성 (최초 1회만 셰이더 컴파일)
+    return createLineMaterial(isSea);
+  }, [createLineMaterial]);
+
+  const returnToPool = useCallback((mat: THREE.ShaderMaterial, isSea: boolean) => {
+    const pool = isSea ? seaMatPoolRef.current : landMatPoolRef.current;
+    pool.push(mat);
+  }, []);
+
   // tradeRoutes -> 렌더 데이터 변환
   useEffect(() => {
     if (!groupRef.current) return;
 
-    // 기존 라인/화물 정리
-    for (const line of linesRef.current) {
+    // v33 stall fix: 기존 라인/화물을 씬에서 제거하되, material은 풀로 반환 (dispose X)
+    for (let i = 0; i < linesRef.current.length; i++) {
+      const line = linesRef.current[i];
       groupRef.current.remove(line);
       line.geometry.dispose();
     }
     for (const cargo of cargosRef.current) {
       groupRef.current.remove(cargo);
     }
-    for (const mat of materialsRef.current) {
-      mat.dispose();
+    // material → 풀로 반환 (dispose 대신)
+    for (let i = 0; i < materialsRef.current.length; i++) {
+      const mat = materialsRef.current[i];
+      const isSea = mat.uniforms.uDashed.value > 0.5;
+      returnToPool(mat, isSea);
     }
     linesRef.current = [];
     cargosRef.current = [];
@@ -288,8 +310,12 @@ export function GlobeTradeRoutes({
       }
       lineGeo.setAttribute('aLineDistance', new THREE.BufferAttribute(distances, 1));
 
-      const mat = createLineMaterial(isSea);
+      // v33 stall fix: 풀에서 material 재사용 (셰이더 재컴파일 방지)
+      const mat = getPooledMaterial(isSea);
+      mat.uniforms.uColor.value = isSea ? SEA_COLOR.clone() : LAND_COLOR.clone();
       mat.uniforms.uTotalLength.value = cumDist;
+      mat.uniforms.uOpacity.value = 1.0;
+      mat.uniforms.uTime.value = 0;
       materialsRef.current.push(mat);
 
       const line = new THREE.Line(lineGeo, mat);
@@ -316,7 +342,7 @@ export function GlobeTradeRoutes({
       });
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tradeRoutes, countryCentroids, globeRadius, createLineMaterial]);
+  }, [tradeRoutes, countryCentroids, globeRadius, getPooledMaterial, returnToPool]);
 
   // 매 프레임: opacity 업데이트 + 화물 이동 + 접선 정렬
   // v33 Task 8: Use R3F clock.elapsedTime instead of Date.now() per frame
@@ -386,6 +412,11 @@ export function GlobeTradeRoutes({
       // v33 Phase 4: 라인 geometry도 dispose 추가
       for (const line of linesRef.current) line.geometry.dispose();
       for (const mat of materialsRef.current) mat.dispose();
+      // v33 stall fix: 풀에 남아있는 material도 dispose
+      for (const mat of seaMatPoolRef.current) mat.dispose();
+      for (const mat of landMatPoolRef.current) mat.dispose();
+      seaMatPoolRef.current = [];
+      landMatPoolRef.current = [];
       // v23: dispose cached cargo geometries & materials
       for (const geo of cargoGeosRef.current.values()) geo.dispose();
       for (const mat of cargoMatsRef.current.values()) mat.dispose();
