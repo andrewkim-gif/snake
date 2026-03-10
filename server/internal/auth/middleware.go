@@ -25,6 +25,7 @@ type AuthType string
 const (
 	AuthTypeJWT    AuthType = "jwt"
 	AuthTypeAPIKey AuthType = "api_key"
+	AuthTypeWallet AuthType = "wallet"
 )
 
 // --- JWT Authentication Middleware ---
@@ -122,8 +123,37 @@ func RequireAuth(next http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 			return
 		}
-		// Fallback: try JWT
-		JWTAuth(next).ServeHTTP(w, r)
+
+		// Try JWT first
+		authHeader := r.Header.Get("Authorization")
+		if authHeader != "" {
+			parts := strings.SplitN(authHeader, " ", 2)
+			if len(parts) == 2 && strings.ToLower(parts[0]) == "bearer" {
+				token := parts[1]
+
+				// Wallet address auth: 0x-prefixed hex string (40 hex chars)
+				if len(token) == 42 && strings.HasPrefix(token, "0x") {
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, ContextKeyUserID, strings.ToLower(token))
+					ctx = context.WithValue(ctx, ContextKeyAuthType, AuthTypeWallet)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+
+				// JWT token validation
+				claims, err := ValidateToken(token)
+				if err == nil {
+					ctx := r.Context()
+					ctx = context.WithValue(ctx, ContextKeyUserID, claims.UserID)
+					ctx = context.WithValue(ctx, ContextKeyUsername, claims.Username)
+					ctx = context.WithValue(ctx, ContextKeyAuthType, AuthTypeJWT)
+					next.ServeHTTP(w, r.WithContext(ctx))
+					return
+				}
+			}
+		}
+
+		http.Error(w, `{"error":"authentication required"}`, http.StatusUnauthorized)
 	})
 }
 

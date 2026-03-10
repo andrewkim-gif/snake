@@ -457,31 +457,36 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       }));
   }, [gameState.weapons, gameState.weaponCooldowns]);
 
-  // LevelUp 선택지 생성
-  const levelUpOptions: LevelUpOption[] = useMemo(() => {
-    if (!gameState.gameState.isLevelUp) return [];
+  // LevelUp 선택지 생성 — useState로 한 번만 생성 (원본 LevelUpModal 패턴)
+  // useMemo + weapons 의존성은 무기 변경 시마다 Math.random() 재실행 → 선택지 셔플 버그
+  const [levelUpOptions, setLevelUpOptions] = useState<LevelUpOption[]>([]);
 
-    const choices = skillBuild.generateLevelUpChoices(gameState.weapons, 4);
-    return choices.map((choice: LevelUpChoice) => {
-      const weaponData = WEAPON_DATA[choice.skill as keyof typeof WEAPON_DATA];
-      // LevelUpChoice에 rarity가 없으므로 소스 기반으로 유추
-      const rarity: LevelUpOption['rarity'] =
-        choice.source === 'priority' ? 'rare'
-        : choice.willActivateSynergy ? 'epic'
-        : choice.isNew ? 'uncommon'
-        : 'common';
-      return {
-        id: choice.skill,
-        name: weaponData?.name || choice.skill,
-        description: weaponData?.desc || '',
-        currentLevel: choice.currentLevel,
-        maxLevel: weaponData?.stats?.length || 8,
-        rarity,
-        icon: '',
-        type: 'weapon' as const,
-      };
-    });
-  }, [gameState.gameState.isLevelUp, gameState.weapons, skillBuild]);
+  useEffect(() => {
+    if (gameState.gameState.isLevelUp) {
+      const choices = skillBuild.generateLevelUpChoices(gameState.weapons, 4);
+      setLevelUpOptions(choices.map((choice: LevelUpChoice) => {
+        const weaponData = WEAPON_DATA[choice.skill as keyof typeof WEAPON_DATA];
+        const rarity: LevelUpOption['rarity'] =
+          choice.source === 'priority' ? 'rare'
+          : choice.willActivateSynergy ? 'epic'
+          : choice.isNew ? 'uncommon'
+          : 'common';
+        return {
+          id: choice.skill,
+          name: weaponData?.name || choice.skill,
+          description: weaponData?.desc || '',
+          currentLevel: choice.currentLevel,
+          maxLevel: weaponData?.stats?.length || 8,
+          rarity,
+          icon: '',
+          type: 'weapon' as const,
+        };
+      }));
+    } else {
+      setLevelUpOptions([]);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [gameState.gameState.isLevelUp]); // Only trigger on isLevelUp change, NOT weapons
 
   // Result 화면 데이터
   const resultWeapons = useMemo(() => {

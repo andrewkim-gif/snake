@@ -15,26 +15,55 @@ export function isServerAvailable(): boolean {
 
 interface FetchOptions extends RequestInit {
   token?: string;
+  /** true이면 localStorage에서 wallet address를 자동으로 인증 헤더에 추가 */
+  authenticated?: boolean;
 }
 
 /**
  * Fetch wrapper that prepends SERVER_URL and handles JSON.
  * Returns null on network/server errors (graceful degradation).
+ *
+ * @param opts.token — Bearer 토큰 (JWT 또는 wallet address)
+ * @param opts.authenticated — true이면 localStorage에서 wallet address를 자동으로 가져와 인증 헤더에 추가
  */
 export async function apiFetch<T>(path: string, opts: FetchOptions = {}): Promise<T | null> {
-  const { token, ...fetchOpts } = opts;
+  const { token, authenticated, ...fetchOpts } = opts;
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...(opts.headers as Record<string, string> || {}),
   };
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`;
+
+  // 인증 헤더: 명시적 token > authenticated 플래그 > 없음
+  const authToken = token || (authenticated ? getWalletAddress() : null);
+  if (authToken) {
+    headers['Authorization'] = `Bearer ${authToken}`;
   }
 
   try {
     const res = await fetch(`${SERVER_URL}${path}`, { ...fetchOpts, headers });
     if (!res.ok) return null;
     return await res.json() as T;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * localStorage에서 wallet address를 가져옵니다.
+ * Zustand persist 미들웨어가 저장한 'aww-wallet' 키에서 읽습니다.
+ * 서버 사이드에서는 null을 반환합니다.
+ */
+function getWalletAddress(): string | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = localStorage.getItem('aww-wallet');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    const state = data?.state;
+    if (state?.isConnected && state?.address) {
+      return state.address;
+    }
+    return null;
   } catch {
     return null;
   }
