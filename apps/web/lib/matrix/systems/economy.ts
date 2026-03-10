@@ -320,19 +320,19 @@ export class EconomyManager {
     }
   }
 
-  /**
-   * 상점 아이템 배율 보너스 추가
-   */
+  /** 상점 Gold 배율 보너스 추가 (percent: 25 → 0.25 변환) */
   addShopGoldBonus(percent: number): void {
-    this._modifiers.shopGoldBonus += percent;
+    this._modifiers.shopGoldBonus += percent / 100;
   }
 
+  /** 상점 킬 보상 배율 보너스 추가 (percent: 50 → 0.50 변환) */
   addShopKillBonus(percent: number): void {
-    this._modifiers.shopKillBonus += percent;
+    this._modifiers.shopKillBonus += percent / 100;
   }
 
+  /** 상점 Score 배율 보너스 추가 (percent: 30 → 0.30 변환) */
   addShopScoreBonus(percent: number): void {
-    this._modifiers.shopScoreBonus += percent;
+    this._modifiers.shopScoreBonus += percent / 100;
   }
 
   // ============================================

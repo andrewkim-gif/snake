@@ -727,7 +727,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   // Spectate targets: alive agents
   const spectateTargets: SpectateTarget[] = useMemo(() => {
     return arena.agents
-      .filter((a: { isAlive: boolean }) => a.isAlive && !a.isLocalPlayer)
+      .filter((a: { isAlive: boolean; isLocalPlayer?: boolean }) => a.isAlive && !a.isLocalPlayer)
       .map((a: { id: string; displayName?: string; playerClass: PlayerClass; kills: number; isAlive: boolean; health?: number; maxHealth?: number; level?: number }) => {
         const identity = ARENA_AGENT_IDENTITIES[a.playerClass];
         const hp = a.health ?? 100;
