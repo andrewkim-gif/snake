@@ -116,6 +116,9 @@ import type { SkillCategory } from '@/lib/matrix/types';
 // ─── 디버그 패널 ───
 import DebugSkillPanel from './DebugSkillPanel';
 
+// Agent 컬러 팔레트 (module scope — 렌더 때마다 재생성 방지)
+const AGENT_COLORS = ['#10B981', '#FF4444', '#44AAFF', '#FFAA00', '#AA44FF', '#FF44AA', '#44FFAA', '#FFFF44', '#FF8844', '#8844FF'] as const;
+
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
   () => import('./MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
@@ -199,6 +202,8 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const killReporterRef = useRef<KillReporter | null>(null);
   const epochBridgeRef = useRef<EpochUIBridge | null>(null);
   const multiplayerRendererRef = useRef<MultiplayerRenderer | null>(null);
+  const remotePlayersRef = useRef<InterpolatedPlayer[]>([]);
+  const epochResultTimerRef = useRef<number | null>(null);
   const [remotePlayers, setRemotePlayers] = useState<InterpolatedPlayer[]>([]);
   const [epochUI, setEpochUI] = useState<EpochUIState | null>(null);
   const [onlineLevelUpChoices, setOnlineLevelUpChoices] = useState<Array<{
@@ -262,7 +267,8 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         setEpochResultData(data);
         setShowEpochResult(true);
         // 5초 후 자동 닫기 (transition 페이즈 동안)
-        setTimeout(() => setShowEpochResult(false), 5000);
+        if (epochResultTimerRef.current) clearTimeout(epochResultTimerRef.current);
+        epochResultTimerRef.current = window.setTimeout(() => setShowEpochResult(false), 5000);
       },
       onBuff: (data: MatrixBuffPayload) => {
         // Phase 5: 토큰 버프 업데이트
@@ -371,10 +377,20 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     if (!isOnline) return;
     let rafId: number;
 
+    let lastUIUpdate = 0;
+    const UI_UPDATE_INTERVAL = 100; // 10Hz로 React 상태 업데이트 (60fps → 10fps UI)
+
     const tick = () => {
-      // 원격 플레이어 보간
+      // 원격 플레이어 보간 (매 프레임, ref에 저장)
       const interpolated = onlineSyncRef.current?.interpolatePlayers() ?? [];
-      setRemotePlayers(interpolated);
+      remotePlayersRef.current = interpolated;
+
+      // React 상태는 10Hz로만 업데이트 (re-render 최소화)
+      const now = performance.now();
+      if (now - lastUIUpdate > UI_UPDATE_INTERVAL) {
+        setRemotePlayers(interpolated);
+        lastUIUpdate = now;
+      }
 
       // 클라이언트 예측 보정 tick
       clientPredictionRef.current?.tick();
@@ -461,13 +477,13 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     // 효과 적용
     switch (item.effectType) {
       case 'gold_multiplier':
-        eco.addShopGoldBonus(item.effectValue / 100);
+        eco.addShopGoldBonus(item.effectValue);
         break;
       case 'kill_reward':
-        eco.addShopKillBonus(item.effectValue / 100);
+        eco.addShopKillBonus(item.effectValue);
         break;
       case 'score_multiplier':
-        eco.addShopScoreBonus(item.effectValue / 100);
+        eco.addShopScoreBonus(item.effectValue);
         break;
       // 소모품/스텟업 효과는 게임 시스템에서 별도 처리 (TODO: wire to game systems)
       default:
@@ -810,7 +826,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     setKillFeedEntries([]);
     setShowDeathRecap(false);
     setIsSpectating(false);
-    setEconomySnapshot(economyRef.current?.getSnapshot() ?? economySnapshot);
+    setEconomySnapshot(economyRef.current!.getSnapshot());
     setIsShopOpen(false);
 
     // 무기 초기화
@@ -1034,8 +1050,6 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   }, [gameState.weapons]);
 
   // Arena 리더보드 (ArenaHUD용)
-  // Agent 컬러 팔레트 (10명분)
-  const AGENT_COLORS = ['#10B981', '#FF4444', '#44AAFF', '#FFAA00', '#AA44FF', '#FF44AA', '#44FFAA', '#FFFF44', '#FF8844', '#8844FF'];
   const arenaLeaderboard: LeaderboardEntry[] = useMemo(() => {
     return arena.agents
       .filter((a: { isAlive: boolean }) => a.isAlive)

@@ -36,6 +36,8 @@ interface EvolutionCutsceneState {
   duration: number;
   /** 파티클 배열 */
   particles: EvolutionParticle[];
+  /** 마지막 업데이트 시각 (실제 dt 계산용) */
+  lastUpdateTime: number;
 }
 
 /** 진화 파티클 */
@@ -92,6 +94,7 @@ let cutsceneState: EvolutionCutsceneState = {
   startTime: 0,
   duration: CUTSCENE_DURATION,
   particles: [],
+  lastUpdateTime: 0,
 };
 
 // ============================================
@@ -143,14 +146,16 @@ export function triggerEvolutionCutscene(
   oldName: string,
   newName: string,
 ): void {
+  const now = performance.now();
   cutsceneState = {
     active: true,
     category,
     oldName,
     newName,
-    startTime: performance.now(),
+    startTime: now,
     duration: CUTSCENE_DURATION,
     particles: createEvolutionParticles(category),
+    lastUpdateTime: now,
   };
 }
 
@@ -247,7 +252,9 @@ export function updateAndDrawEvolutionCutscene(
   // ─── Phase 2: 파티클 폭발 (40% ~ 70%) ───
   if (progress >= 0.3 && progress < 0.8) {
     const burstPhase = Math.min(1, (progress - 0.3) / 0.5);
-    const dt = 16 / 1000; // 대략 60fps 기준
+    const dtMs = Math.min(t - cutsceneState.lastUpdateTime, 50); // 최대 50ms 클램프
+    cutsceneState.lastUpdateTime = t;
+    const dt = dtMs / 1000;
 
     for (const p of particles) {
       // 물리 업데이트

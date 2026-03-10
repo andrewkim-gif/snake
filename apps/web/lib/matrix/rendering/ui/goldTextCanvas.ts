@@ -80,12 +80,10 @@ export function addGoldFloatingText(
  * 만료된 텍스트 제거
  */
 function pruneExpired(now: number): void {
-  let i = 0;
-  while (i < textPool.length) {
+  // 역순 순회로 splice O(n²) 방지
+  for (let i = textPool.length - 1; i >= 0; i--) {
     if (now - textPool[i].createdAt > textPool[i].duration) {
       textPool.splice(i, 1);
-    } else {
-      i++;
     }
   }
 }

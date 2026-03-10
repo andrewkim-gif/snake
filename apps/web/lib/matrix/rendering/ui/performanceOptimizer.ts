@@ -328,7 +328,10 @@ export class AdaptiveQuality {
 
   private _level: QualityLevel = 'high';
   private _manualOverride: QualityLevel | null = null;
-  private _frameTimeHistory: number[] = [];
+  // Ring buffer로 shift() O(n) 제거
+  private _frameTimeRing: number[] = new Array(90).fill(0);
+  private _ringIndex: number = 0;
+  private _ringCount: number = 0;
   private _lastAdjustTime: number = 0;
 
   /** 자동 조절 간격 (ms) */
@@ -354,10 +357,9 @@ export class AdaptiveQuality {
    * @param deltaMs 이번 프레임 소요 시간 (ms)
    */
   reportFrameTime(deltaMs: number): void {
-    this._frameTimeHistory.push(deltaMs);
-    if (this._frameTimeHistory.length > AdaptiveQuality.HISTORY_SIZE) {
-      this._frameTimeHistory.shift();
-    }
+    this._frameTimeRing[this._ringIndex] = deltaMs;
+    this._ringIndex = (this._ringIndex + 1) % AdaptiveQuality.HISTORY_SIZE;
+    if (this._ringCount < AdaptiveQuality.HISTORY_SIZE) this._ringCount++;
 
     // 수동 오버라이드 시 자동 조절 안 함
     if (this._manualOverride !== null) return;
@@ -373,9 +375,11 @@ export class AdaptiveQuality {
    * 자동 품질 조절
    */
   private _autoAdjust(): void {
-    if (this._frameTimeHistory.length < 30) return; // 충분한 데이터 없음
+    if (this._ringCount < 30) return; // 충분한 데이터 없음
 
-    const avg = this._frameTimeHistory.reduce((a, b) => a + b, 0) / this._frameTimeHistory.length;
+    let sum = 0;
+    for (let i = 0; i < this._ringCount; i++) sum += this._frameTimeRing[i];
+    const avg = sum / this._ringCount;
     const levels: QualityLevel[] = ['ultra', 'high', 'medium', 'low'];
     const currentIdx = levels.indexOf(this._level);
 
@@ -418,8 +422,10 @@ export class AdaptiveQuality {
    * 현재 평균 프레임 타임 (ms)
    */
   get averageFrameTime(): number {
-    if (this._frameTimeHistory.length === 0) return 16.67;
-    return this._frameTimeHistory.reduce((a, b) => a + b, 0) / this._frameTimeHistory.length;
+    if (this._ringCount === 0) return 16.67;
+    let sum = 0;
+    for (let i = 0; i < this._ringCount; i++) sum += this._frameTimeRing[i];
+    return sum / this._ringCount;
   }
 
   /**
@@ -443,7 +449,9 @@ export class AdaptiveQuality {
    * 리셋 (매치 시작 시)
    */
   reset(): void {
-    this._frameTimeHistory = [];
+    this._frameTimeRing.fill(0);
+    this._ringIndex = 0;
+    this._ringCount = 0;
     this._lastAdjustTime = 0;
     if (this._manualOverride === null) {
       this._level = 'high';

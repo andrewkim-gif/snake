@@ -27,6 +27,7 @@ interface UltimateCutsceneState {
   startTime: number;
   duration: number;
   particles: UltimateParticle[];
+  lastUpdateTime: number;
 }
 
 /** 궁극 파티클 */
@@ -77,6 +78,7 @@ let cutsceneState: UltimateCutsceneState = {
   startTime: 0,
   duration: CUTSCENE_DURATION,
   particles: [],
+  lastUpdateTime: 0,
 };
 
 // ============================================
@@ -147,13 +149,15 @@ export function triggerUltimateCutscene(
   category: CategoryKey,
   weaponName: string,
 ): void {
+  const now = performance.now();
   cutsceneState = {
     active: true,
     category,
     weaponName,
-    startTime: performance.now(),
+    startTime: now,
     duration: CUTSCENE_DURATION,
     particles: createUltimateParticles(category),
+    lastUpdateTime: now,
   };
 }
 
@@ -258,7 +262,9 @@ export function updateAndDrawUltimateCutscene(
   // ─── Phase 3: 파티클 폭발 (25% ~ 85%) ───
   if (progress >= 0.25 && progress < 0.85) {
     const burstPhase = (progress - 0.25) / 0.6;
-    const dt = 16 / 1000;
+    const dtMs = Math.min(t - cutsceneState.lastUpdateTime, 50);
+    cutsceneState.lastUpdateTime = t;
+    const dt = dtMs / 1000;
 
     for (const p of particles) {
       // 물리 업데이트
@@ -350,7 +356,8 @@ export function updateAndDrawUltimateCutscene(
     ctx.font = `bold 16px "Chakra Petch", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
-    ctx.letterSpacing = '0.5em';
+    // letterSpacing: Canvas 2D spec (Chrome 99+, Safari 미지원 시 무시됨)
+    try { (ctx as any).letterSpacing = '0.5em'; } catch { /* noop */ }
 
     // 아웃라인
     ctx.strokeStyle = '#000000';
@@ -367,7 +374,7 @@ export function updateAndDrawUltimateCutscene(
     // 무기 이름 (크게)
     ctx.shadowBlur = 0;
     ctx.font = `bold 36px "Chakra Petch", sans-serif`;
-    ctx.letterSpacing = '0.1em';
+    try { (ctx as any).letterSpacing = '0.1em'; } catch { /* noop */ }
 
     // 아웃라인
     ctx.strokeStyle = '#000000';

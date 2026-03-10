@@ -280,7 +280,7 @@ function KillFeedInner({
       // Cleanup is handled on unmount
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entries.length, maxDisplay, fadeOutMs]);
+  }, [entries, maxDisplay, fadeOutMs]);
 
   // Cleanup all timers on unmount
   useEffect(() => {

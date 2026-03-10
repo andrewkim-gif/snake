@@ -194,8 +194,8 @@ function getStatChangesStr(type: WeaponType, currentLevel: number, nextLevel: nu
   const prev = data.stats[currentLevel - 1];
   const next = data.stats[nextLevel - 1];
   if (!prev) return 'System initialized';
-  if ((next as any).isEvolved && !(prev as any).isEvolved) return 'EVOLUTION';
-  if ((next as any).isUltimate && !(prev as any).isUltimate) return 'ULTIMATE AWAKENING';
+  if (next.isEvolved && !prev.isEvolved) return 'EVOLUTION';
+  if (next.isUltimate && !prev.isUltimate) return 'ULTIMATE AWAKENING';
 
   const changes: string[] = [];
   if (next.damage > prev.damage) changes.push(`DMG +${Math.round(next.damage - prev.damage)}`);
@@ -279,8 +279,8 @@ function getCardType(opt: { isUltimate: boolean; isGoldReward?: boolean; statCha
 function autoSelectBestWithEconomy(
   options: UpgradeOption[],
   currentGold: number,
-): UpgradeOption {
-  if (options.length === 0) return options[0];
+): UpgradeOption | undefined {
+  if (options.length === 0) return undefined;
 
   // 1. Ultimate
   const ultimate = options.find(o => o.isUltimate);
@@ -393,20 +393,20 @@ function MatrixLevelUpInner({
       let statChanges = '';
       let description = data.desc;
       const nextStats = data.stats[nextLevel - 1];
-      const isEvolved = (nextStats as any).isEvolved || false;
-      const isUltimateFlag = (nextStats as any).isUltimate || false;
+      const isEvolved = nextStats.isEvolved || false;
+      const isUltimateFlag = nextStats.isUltimate || false;
       let isEvolutionThreshold = false;
 
       if (currentLevel === 0) {
         statChanges = 'NEW EQUIPMENT';
         description = data.desc;
-      } else if (isEvolved && (!currentWeapons[type] || !(WEAPON_DATA[type as keyof typeof WEAPON_DATA] as any).stats[currentLevel - 1].isEvolved)) {
+      } else if (isEvolved && (!currentWeapons[type] || !WEAPON_DATA[type as keyof typeof WEAPON_DATA]?.stats[currentLevel - 1]?.isEvolved)) {
         statChanges = 'EVOLUTION';
-        description = `Evolved: ${(nextStats as any).evolvedName}`;
+        description = `Evolved: ${nextStats.evolvedName}`;
         isEvolutionThreshold = true;
-      } else if (isUltimateFlag && (!currentWeapons[type] || !(WEAPON_DATA[type as keyof typeof WEAPON_DATA] as any).stats[currentLevel - 1].isUltimate)) {
+      } else if (isUltimateFlag && (!currentWeapons[type] || !WEAPON_DATA[type as keyof typeof WEAPON_DATA]?.stats[currentLevel - 1]?.isUltimate)) {
         statChanges = 'ULTIMATE AWAKENING';
-        description = `Ultimate: ${(nextStats as any).evolvedName}`;
+        description = `Ultimate: ${nextStats.evolvedName}`;
       } else {
         statChanges = getStatChangesStr(type, currentLevel, nextLevel);
       }
@@ -420,7 +420,7 @@ function MatrixLevelUpInner({
         isNew: currentLevel === 0,
         currentLevel,
         nextLevel,
-        name: (nextStats as any).evolvedName || data.name,
+        name: nextStats.evolvedName || data.name,
         description,
         statChanges,
         color: isUltimateFlag ? SK.gold : (isEvolved ? '#38bdf8' : data.color),
@@ -457,8 +457,13 @@ function MatrixLevelUpInner({
           return a.name.localeCompare(b.name);
         });
       } else {
-        const shuffled = possibleUpgrades.sort(() => 0.5 - Math.random());
-        selected = shuffled.slice(0, 4);
+        // Fisher-Yates shuffle (균등 분포)
+        const arr = [...possibleUpgrades];
+        for (let i = arr.length - 1; i > 0; i--) {
+          const j = Math.floor(Math.random() * (i + 1));
+          [arr[i], arr[j]] = [arr[j], arr[i]];
+        }
+        selected = arr.slice(0, 4);
       }
       // Mark best option
       const best = autoSelectBestWithEconomy(selected, currentGold);
@@ -497,7 +502,7 @@ function MatrixLevelUpInner({
   useEffect(() => {
     if (isDevMode || !isAutoHunt || autoSelectTimer !== 0 || options.length === 0) return;
     const bestOption = autoSelectBestWithEconomy(options, currentGold);
-    onSelect(bestOption.type);
+    if (bestOption) onSelect(bestOption.type);
   }, [autoSelectTimer, isAutoHunt, isDevMode, options, onSelect, currentGold]);
 
   // ─── Keyboard shortcuts (1-4) ───

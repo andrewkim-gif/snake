@@ -79,6 +79,8 @@ const KILL_VELOCITY: Record<KillType, number> = {
 // ============================================
 
 const particlePool: CoinParticle[] = [];
+// Free index stack — O(1) 비활성 파티클 탐색
+const freeIndices: number[] = [];
 
 // 풀 초기화
 function initPool(): void {
@@ -89,17 +91,17 @@ function initPool(): void {
       size: 4, createdAt: 0, lifetime: COIN_LIFETIME,
       rotation: 0, rotSpeed: 0, active: false,
     });
+    freeIndices.push(i);
   }
 }
 
 /**
- * 비활성 파티클을 풀에서 가져오기
+ * 비활성 파티클을 풀에서 가져오기 (O(1))
  */
 function getInactiveParticle(): CoinParticle | null {
-  for (const p of particlePool) {
-    if (!p.active) return p;
-  }
-  return null;
+  if (freeIndices.length === 0) return null;
+  const idx = freeIndices.pop()!;
+  return particlePool[idx];
 }
 
 // ============================================
@@ -166,12 +168,18 @@ export function updateAndDrawCoinParticles(
 
   let activeCount = 0;
 
-  for (const p of particlePool) {
+  // Viewport 캐시 (루프 밖)
+  const vpW = typeof window !== 'undefined' ? window.innerWidth : 1920;
+  const vpH = typeof window !== 'undefined' ? window.innerHeight : 1080;
+
+  for (let pi = 0; pi < particlePool.length; pi++) {
+    const p = particlePool[pi];
     if (!p.active) continue;
 
     const elapsed = t - p.createdAt;
     if (elapsed > p.lifetime) {
       p.active = false;
+      freeIndices.push(pi); // free index 반환
       continue;
     }
 
@@ -189,10 +197,6 @@ export function updateAndDrawCoinParticles(
     // 화면 좌표
     const screenX = p.worldX - camera.x;
     const screenY = p.worldY - camera.y;
-
-    // 화면 밖 스킵
-    const vpW = typeof window !== 'undefined' ? window.innerWidth : 1920;
-    const vpH = typeof window !== 'undefined' ? window.innerHeight : 1080;
     if (screenX < -20 || screenX > vpW + 20 || screenY < -20 || screenY > vpH + 20) {
       continue;
     }

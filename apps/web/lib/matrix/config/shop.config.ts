@@ -117,7 +117,7 @@ export const SHOP_ITEMS: ShopItemConfig[] = [
     color: '#3B82F6',
   },
   {
-    id: 'speed_boost',
+    id: 'xp_boost',
     name: 'XP Boost',
     nameKo: 'XP 부스트',
     description: '30s XP ×2',

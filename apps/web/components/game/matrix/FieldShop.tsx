@@ -100,6 +100,10 @@ if (typeof window !== 'undefined' && !document.getElementById(KEYFRAMES_ID)) {
       50% { box-shadow: inset 0 0 30px 5px rgba(245, 158, 11, 0.3); }
       100% { box-shadow: inset 0 0 0 0 rgba(245, 158, 11, 0); }
     }
+    @keyframes milestonePulse {
+      0%, 100% { opacity: 0.7; }
+      50% { opacity: 1; }
+    }
   `;
   document.head.appendChild(style);
 }

@@ -50,16 +50,6 @@ export interface SoundAsset {
   playbackRateRange: [number, number];
 }
 
-/** 사운드 풀 엔트리 */
-interface PoolEntry {
-  /** Web Audio 소스 노드 (재사용 불가 — 매번 생성) */
-  gainNode: GainNode;
-  /** 사용 중 여부 */
-  busy: boolean;
-  /** 마지막 재생 시각 */
-  lastPlayTime: number;
-}
-
 /** 사운드 매니저 설정 */
 export interface SoundManagerConfig {
   /** 마스터 볼륨 (0~1) */
@@ -189,7 +179,7 @@ export class SoundManager {
   // ─── 에셋 ───
   private _assets: Map<string, SoundAsset> = new Map();
   private _buffers: Map<string, AudioBuffer> = new Map();
-  private _pools: Map<string, PoolEntry[]> = new Map();
+  // _pools 삭제됨 (사용되지 않던 dead code)
 
   // ─── 설정 ───
   private _config: SoundManagerConfig = {
@@ -540,7 +530,7 @@ export class SoundManager {
     this._masterGain = null;
     this._categoryGains.clear();
     this._buffers.clear();
-    this._pools.clear();
+    // _pools 삭제됨
     this._lastPlayTimes.clear();
   }
 

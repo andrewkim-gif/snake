@@ -51,6 +51,11 @@ export function resetTouchCache(): void {
   _isTouchCached = null;
 }
 
+// 윈도우 리사이즈 시 터치 캐시 자동 무효화
+if (typeof window !== 'undefined') {
+  window.addEventListener('resize', resetTouchCache, { passive: true });
+}
+
 // ============================================
 // 터치 타겟 상수 (WCAG 2.1 AA 준수)
 // ============================================
