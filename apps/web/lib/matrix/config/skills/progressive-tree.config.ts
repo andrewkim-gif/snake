@@ -59,9 +59,9 @@ export interface SkillLocation {
 export const PROGRESSIVE_TREE: Record<ProgressiveCategory, CategoryDefinition> = {
   CODE: {
     id: 'CODE',
-    name: '코드',
-    nameEn: 'Code',
-    color: '#ef4444',
+    name: '강철',
+    nameEn: 'Steel',
+    color: '#EF4444',
     description: '근접 전투와 직접 공격에 특화',
     startSkills: ['whip', 'punch', 'knife'],
     tiers: {
@@ -72,9 +72,9 @@ export const PROGRESSIVE_TREE: Record<ProgressiveCategory, CategoryDefinition> =
   },
   DATA: {
     id: 'DATA',
-    name: '데이터',
-    nameEn: 'Data',
-    color: '#3b82f6',
+    name: '영토',
+    nameEn: 'Territory',
+    color: '#3B82F6',
     description: '원거리 투사체와 다중 타격에 특화',
     startSkills: ['wand'],
     tiers: {
@@ -85,9 +85,9 @@ export const PROGRESSIVE_TREE: Record<ProgressiveCategory, CategoryDefinition> =
   },
   NETWORK: {
     id: 'NETWORK',
-    name: '네트워크',
-    nameEn: 'Network',
-    color: '#06b6d4',
+    name: '동맹',
+    nameEn: 'Alliance',
+    color: '#8B5CF6',
     description: '체인 공격과 광역 효과에 특화',
     startSkills: ['lightning'],
     tiers: {
@@ -98,9 +98,9 @@ export const PROGRESSIVE_TREE: Record<ProgressiveCategory, CategoryDefinition> =
   },
   SECURITY: {
     id: 'SECURITY',
-    name: '보안',
-    nameEn: 'Security',
-    color: '#22c55e',
+    name: '주권',
+    nameEn: 'Sovereignty',
+    color: '#22C55E',
     description: '방어와 생존, 지속 피해에 특화',
     startSkills: ['garlic', 'bible'],
     tiers: {
@@ -111,9 +111,9 @@ export const PROGRESSIVE_TREE: Record<ProgressiveCategory, CategoryDefinition> =
   },
   SYSTEM: {
     id: 'SYSTEM',
-    name: '시스템',
-    nameEn: 'System',
-    color: '#a855f7',
+    name: '사기',
+    nameEn: 'Morale',
+    color: '#06B6D4',
     description: '관통, 특수 효과, 범용 스킬에 특화',
     startSkills: ['beam'],
     tiers: {
@@ -143,7 +143,7 @@ export const CHARACTER_START_WEAPON: Record<PlayerClass, WeaponType> = {
 export const PASSIVE_SKILLS: PassiveSkillDef[] = [
   {
     id: 'focus',
-    name: '딥워크',
+    name: '결사 항전',
     description: '크리티컬 확률 증가',
     maxLevel: 10,
     effectPerLevel: 5,
@@ -151,7 +151,7 @@ export const PASSIVE_SKILLS: PassiveSkillDef[] = [
   },
   {
     id: 'overclock',
-    name: '오버클럭',
+    name: '진군 나팔',
     description: '이동속도 증가',
     maxLevel: 10,
     effectPerLevel: 10,
@@ -159,7 +159,7 @@ export const PASSIVE_SKILLS: PassiveSkillDef[] = [
   },
   {
     id: 'gold_reward',
-    name: '골드 리워드',
+    name: '전리품',
     description: '획득 골드 증가',
     maxLevel: 10,
     effectPerLevel: 20,
@@ -172,8 +172,8 @@ export const PASSIVE_SKILLS: PassiveSkillDef[] = [
 export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   {
     skill: 'neural_net',
-    name: '뉴럴넷',
-    description: 'AI 신경망 공격',
+    name: '첩보망',
+    description: '정보 네트워크 공격',
     requirements: [
       { category: 'DATA', minTier: 3 },
       { category: 'SYSTEM', minTier: 2 },
@@ -181,8 +181,8 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   },
   {
     skill: 'chatgpt',
-    name: 'ChatGPT',
-    description: 'AI 대화 공격',
+    name: '프로파간다',
+    description: '선전 방송 공격',
     requirements: [
       { category: 'NETWORK', minTier: 3 },
       { category: 'DATA', minTier: 2 },
@@ -190,7 +190,7 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   },
   {
     skill: 'deepfake',
-    name: '딥페이크',
+    name: '도플갱어 작전',
     description: '분신 생성',
     requirements: [
       { category: 'CODE', minTier: 3 },
@@ -199,8 +199,8 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   },
   {
     skill: 'singularity_core',
-    name: '특이점 코어',
-    description: '궁극의 AI 스킬',
+    name: '블랙사이트',
+    description: '궁극의 정보 병기',
     requirements: [
       { category: 'CODE', minTier: 4 },
       { category: 'DATA', minTier: 4 },

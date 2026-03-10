@@ -43,15 +43,15 @@ export interface SkillBranch {
  */
 export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> = {
   // ============================================
-  // CODE CATEGORY
+  // STEEL CATEGORY
   // ============================================
 
   knife: {
     A: {
       id: 'A',
-      name: '포크 러시',
-      nameEn: 'Fork Rush',
-      description: '투사체가 3갈래로 분열! 화면을 커밋으로 가득 채워라',
+      name: '탄막 확산',
+      nameEn: 'Bullet Spread',
+      description: '투사체가 3갈래로 분열! 화면을 총알로 가득 채워라',
       icon: 'GitFork',
       focus: 'multi',
       bonuses: {
@@ -59,23 +59,23 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
         area: 0.8,
         cooldown: 0.85,
       },
-      ultimateName: '브랜치 스톰',
-      ultimateNameEn: 'Branch Storm',
-      ultimateEffect: '8방향 투사체 폭풍! 화면 전체가 커밋으로 뒤덮인다',
+      ultimateName: '화력 폭풍',
+      ultimateNameEn: 'Firestorm',
+      ultimateEffect: '8방향 탄막 폭풍! 화면 전체가 총알로 뒤덮인다',
       ultimateBonuses: {
         amount: 5,
         cooldown: 0.6,
         special: {
           type: 'chain',
           value: 2,
-          description: '적 관통 시 2마리에게 추가 히트',
+          description: '관통 시 2명에게 추가 타격',
         },
       },
     },
     B: {
       id: 'B',
-      name: '포스 푸시',
-      nameEn: 'Force Push',
+      name: '충격 사격',
+      nameEn: 'Impact Shot',
       description: '강력한 단일 충격파! 적을 날려버리는 임팩트',
       icon: 'Zap',
       focus: 'power',
@@ -84,9 +84,9 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
         pierce: 3,
         knockback: 1.5,
       },
-      ultimateName: '머지 콘플릭트',
-      ultimateNameEn: 'Merge Conflict',
-      ultimateEffect: '거대 폭발! 충돌 지점에서 대폭발 발생',
+      ultimateName: '핵탄두',
+      ultimateNameEn: 'Nuclear Warhead',
+      ultimateEffect: '거대 폭발! 충돌 지점에서 핵폭발 발생',
       ultimateBonuses: {
         damage: 3.5,
         area: 2.0,
@@ -94,7 +94,7 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
           type: 'aoe',
           value: 150,
           duration: 0.5,
-          description: '충돌 시 150px 범위 대폭발',
+          description: '충돌 시 150px 범위 핵폭발',
         },
       },
     },
@@ -103,17 +103,17 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   whip: {
     A: {
       id: 'A',
-      name: '멀티라인 코드',
-      nameEn: 'Multiline Code',
-      description: '여러 줄의 코드가 동시에 휘몰아친다!',
+      name: '연속 참격',
+      nameEn: 'Chain Slash',
+      description: '여러 번의 참격이 동시에 휘몰아친다!',
       icon: 'Layers',
       focus: 'multi',
       bonuses: {
         amount: 1,
         area: 1.2,
       },
-      ultimateName: '스파게티 코드',
-      ultimateNameEn: 'Spaghetti Code',
+      ultimateName: '강철 회오리',
+      ultimateNameEn: 'Steel Tornado',
       ultimateEffect: '4방향 채찍이 화면을 뒤덮는다!',
       ultimateBonuses: {
         amount: 3,
@@ -122,31 +122,31 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
           type: 'stun',
           value: 0.3,
           duration: 0.5,
-          description: '30% 확률로 0.5초 스턴',
+          description: '30% 확률로 0.5초 기절',
         },
       },
     },
     B: {
       id: 'B',
-      name: '원라이너',
-      nameEn: 'One-Liner',
-      description: '한 줄에 모든 것을! 극한의 집중 데미지',
+      name: '일섬',
+      nameEn: 'One Strike',
+      description: '한 번에 모든 것을! 극한의 집중 데미지',
       icon: 'Minus',
       focus: 'power',
       bonuses: {
         damage: 1.8,
         area: 1.4,
       },
-      ultimateName: '레거시 코드',
-      ultimateNameEn: 'Legacy Code',
-      ultimateEffect: '아무도 건드릴 수 없는 전설의 한 줄!',
+      ultimateName: '참수형',
+      ultimateNameEn: 'Decapitation',
+      ultimateEffect: '아무도 막을 수 없는 전설의 일격!',
       ultimateBonuses: {
         damage: 3.0,
         area: 2.0,
         special: {
           type: 'execute',
           value: 15,
-          description: '체력 30% 이하 적 15% 즉사',
+          description: '체력 30% 이하 적 15% 처형',
         },
       },
     },
@@ -155,18 +155,18 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   wand: {
     A: {
       id: 'A',
-      name: 'REST 스프레이',
-      nameEn: 'REST Spray',
-      description: '여러 API 엔드포인트 동시 호출!',
+      name: '다탄두 유도탄',
+      nameEn: 'MIRV Missile',
+      description: '여러 탄두가 동시에 목표를 추적!',
       icon: 'Sparkles',
       focus: 'multi',
       bonuses: {
         amount: 2,
         cooldown: 0.8,
       },
-      ultimateName: '마이크로서비스',
-      ultimateNameEn: 'Microservices',
-      ultimateEffect: '수많은 서비스가 동시에 응답한다!',
+      ultimateName: '포화 사격',
+      ultimateNameEn: 'Salvo Fire',
+      ultimateEffect: '수많은 미사일이 동시에 발사된다!',
       ultimateBonuses: {
         amount: 5,
         special: {
@@ -178,48 +178,48 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
     },
     B: {
       id: 'B',
-      name: 'GraphQL 뮤테이션',
-      nameEn: 'GraphQL Mutation',
-      description: '단일 요청으로 모든 데이터를 변경!',
+      name: '벙커버스터',
+      nameEn: 'Bunker Buster',
+      description: '단일 고관통 미사일! 모든 것을 관통!',
       icon: 'Target',
       focus: 'power',
       bonuses: {
         damage: 2.2,
         pierce: 2,
       },
-      ultimateName: '서버리스',
-      ultimateNameEn: 'Serverless',
-      ultimateEffect: '무한 스케일! 제한 없는 파괴력',
+      ultimateName: '극초음속 미사일',
+      ultimateNameEn: 'Hypersonic Missile',
+      ultimateEffect: '무한 속도! 제한 없는 파괴력',
       ultimateBonuses: {
         damage: 4.0,
         special: {
           type: 'chain',
           value: 5,
-          description: '5마리에게 연쇄 피해',
+          description: '5명에게 연쇄 피해',
         },
       },
     },
   },
 
   // ============================================
-  // DATA CATEGORY
+  // TERRITORY CATEGORY
   // ============================================
 
   bible: {
     A: {
       id: 'A',
-      name: 'API 문서',
-      nameEn: 'API Docs',
-      description: '문서가 더 많이, 더 넓게 회전!',
+      name: '순찰 증원',
+      nameEn: 'Patrol Reinforcement',
+      description: '순찰대가 더 많이, 더 넓게 순회!',
       icon: 'BookOpen',
       focus: 'multi',
       bonuses: {
         amount: 2,
         area: 1.3,
       },
-      ultimateName: '컨플루언스',
-      ultimateNameEn: 'Confluence',
-      ultimateEffect: '모든 문서가 하나로! 거대한 보호막 형성',
+      ultimateName: '요새 순찰',
+      ultimateNameEn: 'Fortress Patrol',
+      ultimateEffect: '모든 순찰대가 하나로! 거대한 보호막 형성',
       ultimateBonuses: {
         amount: 4,
         area: 1.8,
@@ -233,24 +233,24 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
     },
     B: {
       id: 'B',
-      name: '마크다운',
-      nameEn: 'Markdown',
-      description: '간결하지만 치명적인 문서!',
+      name: '저격 순찰',
+      nameEn: 'Sniper Patrol',
+      description: '간결하지만 치명적인 순찰!',
       icon: 'FileText',
       focus: 'power',
       bonuses: {
         damage: 1.8,
         speed: 1.5,
       },
-      ultimateName: 'README',
-      ultimateNameEn: 'README',
-      ultimateEffect: '필독! 적이 읽으면 즉사',
+      ultimateName: '처형 선고',
+      ultimateNameEn: 'Death Sentence',
+      ultimateEffect: '필중! 적이 걸리면 즉사',
       ultimateBonuses: {
         damage: 3.5,
         special: {
           type: 'execute',
           value: 20,
-          description: '체력 25% 이하 적 20% 즉사',
+          description: '체력 25% 이하 적 20% 처형',
         },
       },
     },
@@ -259,31 +259,31 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   pool: {
     A: {
       id: 'A',
-      name: '글로벌 방화벽',
-      nameEn: 'Global Firewall',
-      description: '방화벽 영역 대폭 확대! 넓은 보호막',
+      name: '확장 지뢰원',
+      nameEn: 'Extended Minefield',
+      description: '지뢰 지역 대폭 확대! 넓은 보호막',
       icon: 'Shield',
       focus: 'area',
       bonuses: {
         area: 2.0,
         duration: 1.3,
       },
-      ultimateName: '클라우드 방화벽',
-      ultimateNameEn: 'Cloud Firewall',
-      ultimateEffect: '화면 절반을 덮는 거대 보호 영역!',
+      ultimateName: '전술 핵지뢰',
+      ultimateNameEn: 'Tactical Nuclear Mine',
+      ultimateEffect: '화면 절반을 덮는 거대 지뢰 영역!',
       ultimateBonuses: {
         area: 3.0,
         special: {
           type: 'slow',
           value: 50,
-          description: '영역 내 적 50% 슬로우',
+          description: '영역 내 적 이동속도 50% 감소',
         },
       },
     },
     B: {
       id: 'B',
-      name: '인페르노',
-      nameEn: 'Inferno',
+      name: '네이팜 지옥',
+      nameEn: 'Napalm Inferno',
       description: '작지만 맹렬! 영역 내 불지옥',
       icon: 'Flame',
       focus: 'damage',
@@ -293,19 +293,19 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
           type: 'dot',
           value: 15,
           duration: 3,
-          description: '3초간 틱당 15 추가 피해',
+          description: '5초간 불길 데미지 15',
         },
       },
-      ultimateName: '용암 코어',
-      ultimateNameEn: 'Lava Core',
-      ultimateEffect: '중심에 용암 분출! 들어오는 적 즉시 소각',
+      ultimateName: '지열 폭발',
+      ultimateNameEn: 'Geothermal Eruption',
+      ultimateEffect: '중심에서 용암 분출! 들어오는 적 즉시 소각',
       ultimateBonuses: {
         damage: 5.0,
         special: {
           type: 'dot',
           value: 50,
           duration: 5,
-          description: '5초간 틱당 50 피해 + 입장 시 버스트',
+          description: '5초간 틱당 50 피해 + 진입 시 폭발',
         },
       },
     },
@@ -314,41 +314,41 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   shard: {
     A: {
       id: 'A',
-      name: '데이터 클러스터',
-      nameEn: 'Data Cluster',
-      description: '샤드가 군집을 이뤄 퍼져나간다!',
+      name: '산탄 클러스터',
+      nameEn: 'Shotgun Cluster',
+      description: '파편이 군집을 이뤄 퍼져나간다!',
       icon: 'Hexagon',
       focus: 'multi',
       bonuses: {
         amount: 4,
         area: 0.9,
       },
-      ultimateName: '빅뱅 데이터',
-      ultimateNameEn: 'Big Bang Data',
-      ultimateEffect: '데이터 폭발! 전방위로 샤드 방출',
+      ultimateName: '파편 폭풍',
+      ultimateNameEn: 'Shrapnel Typhoon',
+      ultimateEffect: '파편 폭발! 전방위로 파편 방출',
       ultimateBonuses: {
         amount: 8,
         special: {
           type: 'split',
           value: 2,
-          description: '각 샤드가 2개로 분열',
+          description: '각 파편이 2개로 분열',
         },
       },
     },
     B: {
       id: 'B',
-      name: '코어 샤드',
-      nameEn: 'Core Shard',
-      description: '핵심 데이터 조각! 치명적인 관통',
+      name: '관통 작렬탄',
+      nameEn: 'AP Explosive',
+      description: '핵심 파편! 치명적인 관통',
       icon: 'Diamond',
       focus: 'power',
       bonuses: {
         damage: 2.0,
         pierce: 5,
       },
-      ultimateName: '싱귤러리티 샤드',
-      ultimateNameEn: 'Singularity Shard',
-      ultimateEffect: '블랙홀급 관통력! 모든 것을 뚫는다',
+      ultimateName: '신의 창',
+      ultimateNameEn: "God's Spear",
+      ultimateEffect: '모든 것을 관통하는 궁극의 파편!',
       ultimateBonuses: {
         damage: 4.0,
         pierce: 999,
@@ -362,14 +362,14 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   },
 
   // ============================================
-  // NETWORK CATEGORY
+  // ALLIANCE CATEGORY
   // ============================================
 
   bridge: {
     A: {
       id: 'A',
-      name: '메시 네트워크',
-      nameEn: 'Mesh Network',
+      name: '동맹 확장',
+      nameEn: 'Alliance Expansion',
       description: '더 많은 적을 연결! 연쇄 데미지 극대화',
       icon: 'Network',
       focus: 'chain',
@@ -377,8 +377,8 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
         amount: 3,
         area: 1.2,
       },
-      ultimateName: '글로벌 메시',
-      ultimateNameEn: 'Global Mesh',
+      ultimateName: '세계 연합',
+      ultimateNameEn: 'World Coalition',
       ultimateEffect: '화면 모든 적을 하나로 연결!',
       ultimateBonuses: {
         amount: 10,
@@ -391,8 +391,8 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
     },
     B: {
       id: 'B',
-      name: '다이렉트 커넥션',
-      nameEn: 'Direct Connection',
+      name: '양자 통신',
+      nameEn: 'Direct Line',
       description: '1:1 초고속 연결! 강력한 집중 피해',
       icon: 'Link',
       focus: 'power',
@@ -402,12 +402,12 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
           type: 'stun',
           value: 50,
           duration: 1,
-          description: '연결 시 50% 확률로 1초 스턴',
+          description: '연결 시 50% 확률로 1초 기절',
         },
       },
-      ultimateName: '신경 링크',
-      ultimateNameEn: 'Neural Link',
-      ultimateEffect: '뇌에 직접 연결! 정신 지배',
+      ultimateName: '항복 강요',
+      ultimateNameEn: 'Forced Surrender',
+      ultimateEffect: '저항 불가! 완전한 제압',
       ultimateBonuses: {
         damage: 4.0,
         special: {
@@ -423,18 +423,18 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   ping: {
     A: {
       id: 'A',
-      name: '멀티 핑',
-      nameEn: 'Multi Ping',
-      description: '동시에 여러 타겟 핑!',
+      name: '다중 정찰',
+      nameEn: 'Multi Recon',
+      description: '동시에 여러 타겟 정찰!',
       icon: 'Radio',
       focus: 'multi',
       bonuses: {
         amount: 3,
         cooldown: 0.7,
       },
-      ultimateName: '브로드캐스트',
-      ultimateNameEn: 'Broadcast',
-      ultimateEffect: '전체 브로드캐스트! 모든 적에게 핑',
+      ultimateName: '전면 경보',
+      ultimateNameEn: 'Total Alert',
+      ultimateEffect: '전체 경보 발령! 모든 적에게 정찰 타격',
       ultimateBonuses: {
         amount: 8,
         special: {
@@ -447,18 +447,18 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
     },
     B: {
       id: 'B',
-      name: '레이저 핑',
-      nameEn: 'Laser Ping',
-      description: '초고속 집중 핑! 순간 폭딜',
+      name: '정밀 타격',
+      nameEn: 'Precision Strike',
+      description: '초고속 집중 타격! 순간 폭딜',
       icon: 'Zap',
       focus: 'power',
       bonuses: {
         damage: 2.2,
         speed: 2.0,
       },
-      ultimateName: '레일건 핑',
-      ultimateNameEn: 'Railgun Ping',
-      ultimateEffect: '전자기 가속! 화면 관통',
+      ultimateName: '궤도 저격',
+      ultimateNameEn: 'Orbital Snipe',
+      ultimateEffect: '궤도에서 저격! 화면 관통',
       ultimateBonuses: {
         damage: 5.0,
         pierce: 999,
@@ -472,38 +472,38 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   },
 
   // ============================================
-  // SECURITY CATEGORY
+  // SOVEREIGNTY CATEGORY
   // ============================================
 
   garlic: {
     A: {
       id: 'A',
-      name: '확장 디버거',
-      nameEn: 'Extended Debugger',
-      description: '오라 범위 대폭 확대!',
+      name: '확장 방어선',
+      nameEn: 'Extended Perimeter',
+      description: '방어선 범위 대폭 확대!',
       icon: 'Circle',
       focus: 'area',
       bonuses: {
         area: 1.8,
         duration: 1.2,
       },
-      ultimateName: '글로벌 디버거',
-      ultimateNameEn: 'Global Debugger',
-      ultimateEffect: '화면 전체 오라!',
+      ultimateName: '철옹성',
+      ultimateNameEn: 'Iron Fortress',
+      ultimateEffect: '화면 전체 방어선!',
       ultimateBonuses: {
         area: 3.0,
         special: {
           type: 'slow',
           value: 40,
-          description: '오라 내 적 40% 슬로우',
+          description: '방어선 내 적 이동속도 40% 감소',
         },
       },
     },
     B: {
       id: 'B',
-      name: '공격 디버거',
-      nameEn: 'Offensive Debugger',
-      description: '오라 데미지 강화 + 처치 폭발!',
+      name: '공세 방어',
+      nameEn: 'Aggressive Defense',
+      description: '방어선 데미지 강화 + 처치 폭발!',
       icon: 'Bomb',
       focus: 'damage',
       bonuses: {
@@ -511,72 +511,72 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
         special: {
           type: 'aoe',
           value: 50,
-          description: '오라 내 처치 시 50px 폭발',
+          description: '방어선 내 처치 시 50px 폭발',
         },
       },
-      ultimateName: '버그 헌터',
-      ultimateNameEn: 'Bug Hunter',
-      ultimateEffect: '버그 발견 즉시 폭파!',
+      ultimateName: '보복 타격',
+      ultimateNameEn: 'Retaliatory Strike',
+      ultimateEffect: '침입자 발견 즉시 폭파!',
       ultimateBonuses: {
         damage: 3.5,
         special: {
           type: 'aoe',
           value: 120,
-          description: '처치 시 120px 핵폭발',
+          description: '처치 시 120px 폭발',
         },
       },
     },
   },
 
   // ============================================
-  // AI CATEGORY
+  // INTELLIGENCE CATEGORY
   // ============================================
 
   lightning: {
     A: {
       id: 'A',
-      name: '체인 라이트닝',
-      nameEn: 'Chain Lightning',
-      description: '번개가 적에서 적으로 연쇄!',
+      name: '연쇄 천벌',
+      nameEn: 'Chain Judgment',
+      description: '천벌이 적에서 적으로 연쇄!',
       icon: 'Zap',
       focus: 'chain',
       bonuses: {
         amount: 3,
         damage: 0.9,
       },
-      ultimateName: '천둥 폭풍',
-      ultimateNameEn: 'Thunder Storm',
-      ultimateEffect: '하늘에서 무수한 번개가 내리친다!',
+      ultimateName: '신의 분노',
+      ultimateNameEn: 'Wrath of God',
+      ultimateEffect: '하늘에서 무수한 천벌이 내리친다!',
       ultimateBonuses: {
         amount: 8,
         special: {
           type: 'stun',
           value: 30,
           duration: 0.5,
-          description: '30% 확률로 0.5초 스턴',
+          description: '30% 확률로 0.5초 기절',
         },
       },
     },
     B: {
       id: 'B',
-      name: '플라즈마 볼트',
-      nameEn: 'Plasma Bolt',
-      description: '집중된 플라즈마! 단일 대상 초고데미지',
+      name: '집중 천벌',
+      nameEn: 'Focused Judgment',
+      description: '집중된 천벌! 단일 대상 초고데미지',
       icon: 'Circle',
       focus: 'power',
       bonuses: {
         damage: 2.5,
         cooldown: 0.7,
       },
-      ultimateName: '토르의 망치',
-      ultimateNameEn: "Thor's Hammer",
+      ultimateName: '심판의 벼락',
+      ultimateNameEn: 'Final Thunder',
       ultimateEffect: '신의 일격! 하나를 완전히 소멸',
       ultimateBonuses: {
         damage: 6.0,
         special: {
           type: 'execute',
           value: 25,
-          description: '체력 40% 이하 적 25% 즉사',
+          description: '체력 40% 이하 적 25% 처형',
         },
       },
     },
@@ -585,18 +585,18 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   beam: {
     A: {
       id: 'A',
-      name: '멀티 트레이스',
-      nameEn: 'Multi Trace',
-      description: '여러 스택을 동시에 추적!',
+      name: '다중 위성',
+      nameEn: 'Multi Satellite',
+      description: '여러 위성에서 동시에 레이저!',
       icon: 'Layers',
       focus: 'multi',
       bonuses: {
         amount: 2,
         area: 0.8,
       },
-      ultimateName: '풀 스택 트레이스',
-      ultimateNameEn: 'Full Stack Trace',
-      ultimateEffect: '모든 스택 동시 추적! 360도 빔',
+      ultimateName: '위성 그물',
+      ultimateNameEn: 'Satellite Net',
+      ultimateEffect: '모든 위성 동시 발사! 360도 빔',
       ultimateBonuses: {
         amount: 4,
         special: {
@@ -608,18 +608,18 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
     },
     B: {
       id: 'B',
-      name: '딥 트레이스',
-      nameEn: 'Deep Trace',
-      description: '깊은 추적! 강력한 단일 빔',
+      name: '관통 레이저',
+      nameEn: 'Penetrating Laser',
+      description: '깊은 관통! 강력한 단일 빔',
       icon: 'ArrowDown',
       focus: 'power',
       bonuses: {
         damage: 2.2,
         duration: 1.5,
       },
-      ultimateName: '커널 트레이스',
-      ultimateNameEn: 'Kernel Trace',
-      ultimateEffect: '커널 레벨 추적! 모든 것을 관통',
+      ultimateName: '신의 눈',
+      ultimateNameEn: 'Eye of God',
+      ultimateEffect: '궤도에서 모든 것을 관통하는 레이저',
       ultimateBonuses: {
         damage: 4.5,
         pierce: 999,
@@ -636,40 +636,40 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   laser: {
     A: {
       id: 'A',
-      name: '다중 루프',
-      nameEn: 'Multi Loop',
-      description: '여러 레이저가 동시에 회전!',
+      name: '다중 레이더',
+      nameEn: 'Multi Radar',
+      description: '여러 레이더가 동시에 회전!',
       icon: 'RotateCw',
       focus: 'multi',
       bonuses: {
         amount: 2,
         speed: 1.3,
       },
-      ultimateName: '무한 루프',
-      ultimateNameEn: 'Infinite Loop',
-      ultimateEffect: '멈추지 않는 회전! 영구 레이저',
+      ultimateName: '전방위 감시',
+      ultimateNameEn: 'Total Surveillance',
+      ultimateEffect: '멈추지 않는 회전! 영구 감시',
       ultimateBonuses: {
         amount: 4,
         special: {
           type: 'buff',
           value: 100,
-          description: '레이저 지속시간 무한',
+          description: '레이더 지속시간 무한',
         },
       },
     },
     B: {
       id: 'B',
-      name: '데스 레이',
-      nameEn: 'Death Ray',
-      description: '강력한 단일 레이저!',
+      name: '궤도 사격',
+      nameEn: 'Orbital Fire',
+      description: '강력한 단일 궤도 사격!',
       icon: 'Crosshair',
       focus: 'power',
       bonuses: {
         damage: 2.5,
         area: 1.5,
       },
-      ultimateName: '오비탈 스트라이크',
-      ultimateNameEn: 'Orbital Strike',
+      ultimateName: '아르마겟돈',
+      ultimateNameEn: 'Armageddon',
       ultimateEffect: '궤도에서 발사! 화면 관통 레이저',
       ultimateBonuses: {
         damage: 5.0,
@@ -677,21 +677,21 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
         special: {
           type: 'aoe',
           value: 200,
-          description: '레이저 경로 200px 범위 데미지',
+          description: '궤도 사격 경로 200px 범위 데미지',
         },
       },
     },
   },
 
   // ============================================
-  // SYSTEM CATEGORY (Passive buffs)
+  // MORALE CATEGORY (Passive buffs)
   // ============================================
 
   focus: {
     A: {
       id: 'A',
-      name: '존 포커스',
-      nameEn: 'Zone Focus',
+      name: '사무라이 정신',
+      nameEn: 'Bushido Spirit',
       description: '집중 시간이 길어질수록 강해짐',
       icon: 'Clock',
       focus: 'scaling',
@@ -703,8 +703,8 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
           description: '집중 5초당 크리티컬 +5%',
         },
       },
-      ultimateName: '플로우 스테이트',
-      ultimateNameEn: 'Flow State',
+      ultimateName: '무아지경',
+      ultimateNameEn: 'Transcendence',
       ultimateEffect: '완벽한 집중! 크리티컬 100%',
       ultimateBonuses: {
         special: {
@@ -716,9 +716,9 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
     },
     B: {
       id: 'B',
-      name: '버스트 포커스',
-      nameEn: 'Burst Focus',
-      description: '짧지만 강력한 집중!',
+      name: '광기의 순간',
+      nameEn: 'Moment of Madness',
+      description: '짧지만 강력한 광기!',
       icon: 'Zap',
       focus: 'burst',
       bonuses: {
@@ -730,15 +730,15 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
           description: '발동 시 3초간 크리티컬 +50%',
         },
       },
-      ultimateName: '퓨리',
-      ultimateNameEn: 'Fury',
+      ultimateName: '전쟁의 화신',
+      ultimateNameEn: 'Avatar of War',
       ultimateEffect: '분노 폭발! 5초간 무적 + 3배 데미지',
       ultimateBonuses: {
         special: {
           type: 'buff',
           value: 300,
           duration: 5,
-          description: '5초간 무적 + 데미지 300%',
+          description: '5초간 무적 + 화력 300%',
         },
       },
     },
@@ -747,32 +747,32 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
   overclock: {
     A: {
       id: 'A',
-      name: '터보 모드',
-      nameEn: 'Turbo Mode',
-      description: '지속적인 고속 모드!',
+      name: '전격전',
+      nameEn: 'Blitzkrieg',
+      description: '지속적인 전격 기동!',
       icon: 'FastForward',
       focus: 'sustained',
       bonuses: {
         speed: 1.5,
         duration: 999,
       },
-      ultimateName: '워프 드라이브',
-      ultimateNameEn: 'Warp Drive',
+      ultimateName: '시공 초월',
+      ultimateNameEn: 'Warp Speed',
       ultimateEffect: '초광속! 이동속도 3배',
       ultimateBonuses: {
         speed: 3.0,
         special: {
           type: 'buff',
           value: 50,
-          description: '이동 시 50% 회피율',
+          description: '기동 시 50% 회피율',
         },
       },
     },
     B: {
       id: 'B',
-      name: '나이트로',
-      nameEn: 'Nitro',
-      description: '짧지만 폭발적인 가속!',
+      name: '돌격 명령',
+      nameEn: 'Charge Order',
+      description: '짧지만 폭발적인 돌격!',
       icon: 'Flame',
       focus: 'burst',
       bonuses: {
@@ -781,18 +781,18 @@ export const SKILL_BRANCHES: Record<string, { A: SkillBranch; B: SkillBranch }> 
         special: {
           type: 'aoe',
           value: 30,
-          description: '대시 경로에 30 데미지',
+          description: '돌격 경로에 30 데미지',
         },
       },
-      ultimateName: '소닉 붐',
-      ultimateNameEn: 'Sonic Boom',
+      ultimateName: '충격과 공포',
+      ultimateNameEn: 'Shock & Awe',
       ultimateEffect: '음속 돌파! 충격파 발생',
       ultimateBonuses: {
         speed: 5.0,
         special: {
           type: 'aoe',
           value: 100,
-          description: '대시 종료 시 200px 충격파 100 데미지',
+          description: '돌격 종료 시 200px 충격파 100 데미지',
         },
       },
     },

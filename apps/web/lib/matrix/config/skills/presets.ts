@@ -40,11 +40,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'balanced_starter',
-    name: '밸런스 스타터',
-    nameEn: 'Balanced Starter',
+    name: '신병 훈련소',
+    nameEn: 'Boot Camp',
     icon: 'Scale',
-    description: '초보자 추천! 균형잡힌 공격과 방어',
-    descriptionEn: 'Recommended for beginners! Balanced offense and defense',
+    description: '처음이라도 걱정 마! 균형잡힌 공격과 방어',
+    descriptionEn: "Don't worry, recruit! Balanced offense and defense",
     startingSkills: ['knife' as WeaponType, 'garlic' as WeaponType],
     priorityPath: [
       'knife', 'garlic', 'wand', 'bible', 'lightning', 'focus',
@@ -61,11 +61,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'survival_focus',
-    name: '생존형 빌드',
-    nameEn: 'Survival Build',
+    name: '벙커 전술',
+    nameEn: 'Bunker Doctrine',
     icon: 'Heart',
-    description: '죽지 않는 것이 목표! 최대 생존력',
-    descriptionEn: 'Stay alive! Maximum survivability',
+    description: '죽지 않는 것이 승리! 최대 생존력',
+    descriptionEn: 'Survival IS victory! Maximum survivability',
     startingSkills: ['garlic' as WeaponType, 'antivirus' as WeaponType],
     priorityPath: [
       'garlic', 'antivirus', 'hotfix', 'firewall_surge', 'encryption',
@@ -86,11 +86,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'projectile_storm',
-    name: '투사체 폭풍',
-    nameEn: 'Projectile Storm',
+    name: '탄막의 신',
+    nameEn: 'God of Bullets',
     icon: 'Sparkles',
-    description: '화면을 투사체로 뒤덮어라! 다중 발사 특화',
-    descriptionEn: 'Fill the screen with projectiles! Multi-shot specialist',
+    description: '화면을 총알로 도배! 다중 발사 특화',
+    descriptionEn: 'Fill the screen with bullets! Multi-shot specialist',
     startingSkills: ['knife' as WeaponType, 'shard' as WeaponType],
     priorityPath: [
       'knife', 'shard', 'fork', 'bow', 'ping', 'wand',
@@ -108,10 +108,10 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'oneshot_sniper',
-    name: '원샷 스나이퍼',
-    nameEn: 'Oneshot Sniper',
+    name: '원샷 원킬',
+    nameEn: 'One Shot One Kill',
     icon: 'Target',
-    description: '한 방에 끝낸다! 단일 대상 최대 데미지',
+    description: '한 발에 끝낸다! 단일 대상 최대 데미지',
     descriptionEn: 'One shot, one kill! Maximum single target damage',
     startingSkills: ['bow' as WeaponType, 'wand' as WeaponType],
     priorityPath: [
@@ -131,11 +131,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'aoe_devastation',
-    name: '광역 파괴자',
-    nameEn: 'AoE Devastator',
+    name: '대지의 심판',
+    nameEn: 'Scorched Earth',
     icon: 'Bomb',
-    description: '넓은 범위를 초토화! 광역 데미지 특화',
-    descriptionEn: 'Devastate wide areas! AoE damage specialist',
+    description: '모든 것을 태워라! 광역 데미지 특화',
+    descriptionEn: 'Burn everything! AoE damage specialist',
     startingSkills: ['pool' as WeaponType, 'bible' as WeaponType],
     priorityPath: [
       'pool', 'bible', 'garlic', 'airdrop', 'json_bomb', 'tcp_flood',
@@ -156,11 +156,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'ai_autopilot',
-    name: 'AI 오토파일럿',
-    nameEn: 'AI Autopilot',
+    name: '무인 전쟁',
+    nameEn: 'Unmanned Warfare',
     icon: 'Brain',
-    description: 'AI가 알아서 싸운다! 자동 공격 특화',
-    descriptionEn: 'Let AI do the fighting! Auto-attack specialist',
+    description: '드론이 알아서 한다! 자동 공격 특화',
+    descriptionEn: 'Let the drones handle it! Auto-attack specialist',
     startingSkills: ['lightning' as WeaponType, 'wand' as WeaponType],
     priorityPath: [
       'lightning', 'wand', 'neural_net', 'autopilot', 'beam', 'laser',
@@ -178,11 +178,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'neural_dominance',
-    name: '뉴럴 도미넌스',
-    nameEn: 'Neural Dominance',
+    name: '감시 국가',
+    nameEn: 'Surveillance State',
     icon: 'Network',
-    description: 'AI의 힘으로 지배! 딥러닝 특화',
-    descriptionEn: 'Dominate with AI! Deep learning specialist',
+    description: '모든 것을 본다! 정보전 특화',
+    descriptionEn: 'We see everything! Intelligence warfare specialist',
     startingSkills: ['lightning' as WeaponType, 'neural_net' as WeaponType],
     priorityPath: [
       'lightning', 'neural_net', 'beam', 'laser', 'autopilot',
@@ -203,11 +203,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'chain_reaction',
-    name: '체인 리액션',
-    nameEn: 'Chain Reaction',
+    name: '동맹 연쇄',
+    nameEn: 'Chain of Alliance',
     icon: 'Link',
-    description: '연쇄 반응! 적을 연결하여 동시 처치',
-    descriptionEn: 'Chain reaction! Connect enemies for simultaneous kills',
+    description: '동맹의 연쇄 공격! 체인 데미지 특화',
+    descriptionEn: 'Alliance chain attack! Chain damage specialist',
     startingSkills: ['bridge' as WeaponType, 'lightning' as WeaponType],
     priorityPath: [
       'bridge', 'lightning', 'ping', 'fork', 'websocket',
@@ -227,8 +227,8 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'melee_berserker',
-    name: '근접 버서커',
-    nameEn: 'Melee Berserker',
+    name: '광전사',
+    nameEn: 'Berserker',
     icon: 'Sword',
     description: '정면 돌파! 근접 전투 특화',
     descriptionEn: 'Charge forward! Close combat specialist',
@@ -254,11 +254,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'system_optimizer',
-    name: '시스템 옵티마이저',
-    nameEn: 'System Optimizer',
+    name: '전시 총동원',
+    nameEn: 'Total War Footing',
     icon: 'Cpu',
-    description: '완벽한 최적화! 모든 스탯 극대화',
-    descriptionEn: 'Perfect optimization! Maximize all stats',
+    description: '국력의 극대화! 모든 스탯 극대화',
+    descriptionEn: 'Maximize national power! Maximize all stats',
     startingSkills: ['focus' as WeaponType, 'overclock' as WeaponType],
     priorityPath: [
       'focus', 'overclock', 'ram_upgrade', 'cpu_boost', 'cache',
@@ -277,11 +277,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'devops_hybrid',
-    name: 'DevOps 하이브리드',
-    nameEn: 'DevOps Hybrid',
+    name: '합동 작전',
+    nameEn: 'Joint Operations',
     icon: 'GitBranch',
-    description: '개발과 운영의 조화! 밸런스형 하이브리드',
-    descriptionEn: 'Dev meets Ops! Balanced hybrid',
+    description: '균형잡힌 합동 전투! 밸런스형 하이브리드',
+    descriptionEn: 'Balanced joint combat! Hybrid warfare',
     startingSkills: ['knife' as WeaponType, 'bridge' as WeaponType],
     priorityPath: [
       'knife', 'bridge', 'wand', 'ping', 'fork', 'shard',
@@ -297,11 +297,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'security_hacker',
-    name: '화이트 해커',
-    nameEn: 'White Hacker',
+    name: '요새 공방전',
+    nameEn: 'Siege Warfare',
     icon: 'ShieldCheck',
-    description: '공격적인 방어! 보안 + 공격 하이브리드',
-    descriptionEn: 'Offensive defense! Security + Attack hybrid',
+    description: '공격적인 방어! 주권+공격 하이브리드',
+    descriptionEn: 'Offensive defense! Sovereignty + Attack hybrid',
     startingSkills: ['garlic' as WeaponType, 'knife' as WeaponType],
     priorityPath: [
       'garlic', 'knife', 'firewall_surge', 'encryption', 'sql_injection',
@@ -321,11 +321,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'singularity_seeker',
-    name: '싱귤래리티 시커',
-    nameEn: 'Singularity Seeker',
+    name: '세계 정복',
+    nameEn: 'World Domination',
     icon: 'Circle',
-    description: '한계 돌파! 최강 시너지 조합',
-    descriptionEn: 'Break the limit! Ultimate synergy combination',
+    description: '모든 것을 지배하라! 최강 시너지 조합',
+    descriptionEn: 'Dominate everything! Ultimate synergy combination',
     startingSkills: ['lightning' as WeaponType, 'beam' as WeaponType],
     priorityPath: [
       'lightning', 'beam', 'laser', 'neural_net', 'singularity_core',
@@ -343,11 +343,11 @@ export const SKILL_BUILD_PRESETS: SkillBuild[] = [
 
   {
     id: 'full_stack_master',
-    name: '풀스택 마스터',
-    nameEn: 'Full Stack Master',
+    name: '초강대국',
+    nameEn: 'Superpower',
     icon: 'Layers',
-    description: 'CODE + DATA 완벽 조합!',
-    descriptionEn: 'Perfect CODE + DATA combination!',
+    description: 'STEEL + TERRITORY 완벽 조합!',
+    descriptionEn: 'Perfect STEEL + TERRITORY combination!',
     startingSkills: ['knife' as WeaponType, 'bible' as WeaponType],
     priorityPath: [
       'knife', 'bible', 'wand', 'pool', 'bow', 'shard',
