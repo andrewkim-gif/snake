@@ -233,6 +233,9 @@ func startMatrixBroadcaster(hub *ws.Hub, arenaManager *game.CountryArenaManager,
 
 	sendScores := false
 
+	// v33 Phase 8: Delta compressor for matrix_state bandwidth optimization
+	deltaCompressor := game.NewDeltaCompressor()
+
 	for {
 		select {
 		case <-done:
@@ -245,9 +248,11 @@ func startMatrixBroadcaster(hub *ws.Hub, arenaManager *game.CountryArenaManager,
 			for _, batch := range batches {
 				roomID := batch.CountryCode
 
-				// --- matrix_state (20Hz) ---
+				// --- matrix_state (20Hz, delta compressed) ---
 				if batch.WorldState != nil && len(batch.WorldState.Players) > 0 {
-					frame, err := ws.EncodeFrame(ws.EventMatrixState, batch.WorldState)
+					// v33 Phase 8: Apply delta compression
+					deltaState := deltaCompressor.CompressDelta(roomID, batch.WorldState)
+					frame, err := ws.EncodeFrame(ws.EventMatrixState, deltaState)
 					if err == nil {
 						hub.BroadcastToRoom(roomID, frame)
 					}

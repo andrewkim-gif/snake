@@ -40,6 +40,13 @@ import {
   getNationColor,
 } from './constants';
 
+// ─── v33 Phase 8: 파티클 하드 캡 (GC 압력 방지) ───
+
+/** 히트 이펙트 최대 동시 활성 수 */
+const MAX_HIT_EFFECTS = 30;
+/** 데미지 숫자 최대 동시 활성 수 */
+const MAX_DAMAGE_NUMBERS = 40;
+
 // ─── PvP 이펙트 매니저 ───
 
 /* PLACEHOLDER:PvpEffectsManager */
@@ -55,6 +62,11 @@ export class PvpEffectsManager {
 
   /** 히트 이펙트 추가 (PvP 피격 시) */
   addHitEffect(x: number, y: number, damage: number, isCritical: boolean = false): void {
+    // v33 Phase 8: 하드 캡 — 가장 오래된 이펙트 제거
+    if (this.hitEffects.length >= MAX_HIT_EFFECTS) {
+      this.hitEffects.shift();
+    }
+
     this.hitEffects.push({
       x,
       y,
@@ -64,6 +76,11 @@ export class PvpEffectsManager {
       color: isCritical ? MILITARY_GOLD : ENEMY_RED,
       type: isCritical ? 'critical' : 'hit',
     });
+
+    // v33 Phase 8: 데미지 숫자 하드 캡
+    if (this.damageNumbers.length >= MAX_DAMAGE_NUMBERS) {
+      this.damageNumbers.shift();
+    }
 
     // 데미지 숫자도 함께 추가
     this.damageNumbers.push({
@@ -79,6 +96,11 @@ export class PvpEffectsManager {
 
   /** 킬 이펙트 추가 */
   addKillEffect(x: number, y: number, score: number): void {
+    // v33 Phase 8: 하드 캡 — 가장 오래된 이펙트 제거
+    if (this.hitEffects.length >= MAX_HIT_EFFECTS) {
+      this.hitEffects.shift();
+    }
+
     this.hitEffects.push({
       x,
       y,

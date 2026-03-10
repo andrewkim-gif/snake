@@ -88,7 +88,14 @@ export function renderRemotePlayer(params: RemotePlayerRenderParams): void {
 /**
  * 모든 원격 플레이어를 렌더링한다.
  * 뷰포트 컬링 + LOD 자동 적용.
+ *
+ * v33 Phase 8: 성능 최적화 적용
+ * - 플레이어 수 기반 적응형 LOD 임계값
+ * - 렌더 캡: 동시에 최대 MAX_RENDERED_PLAYERS만 렌더링
+ * - 정렬 최소화: 가까운 플레이어 우선 (카메라 근접 순)
  */
+const MAX_RENDERED_PLAYERS = 35;
+
 export function renderRemotePlayers(
   ctx: CanvasRenderingContext2D,
   players: InterpolatedPlayer[],
@@ -101,6 +108,9 @@ export function renderRemotePlayers(
   culler: ViewportCuller,
   time: number = Date.now()
 ): { rendered: number; culled: number } {
+  // v33 Phase 8: 적응형 LOD 임계값 조절
+  culler.adaptThresholdsForPlayerCount(players.length);
+
   // 뷰포트 바운드 계산
   const bounds = culler.calculateBounds(cameraX, cameraY, canvasWidth, canvasHeight, zoom);
 
@@ -114,7 +124,13 @@ export function renderRemotePlayers(
     return distB - distA; // 먼 것부터 그리기 (painter's algorithm)
   });
 
-  for (const player of sorted) {
+  // v33 Phase 8: 렌더 캡 — 가장 먼 플레이어부터 skip
+  const toRender = sorted.length > MAX_RENDERED_PLAYERS
+    ? sorted.slice(sorted.length - MAX_RENDERED_PLAYERS)
+    : sorted;
+  const cappedCulled = result.culledCount + (sorted.length - toRender.length);
+
+  for (const player of toRender) {
     const lod = culler.getPlayerLOD(player.x, player.y, cameraX, cameraY);
 
     renderRemotePlayer({
@@ -129,7 +145,7 @@ export function renderRemotePlayers(
     });
   }
 
-  return { rendered: result.visible.length, culled: result.culledCount };
+  return { rendered: toRender.length, culled: cappedCulled };
 }
 
 // ─── Layer 1: 그림자 ───

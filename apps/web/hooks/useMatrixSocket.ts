@@ -39,6 +39,10 @@ export interface RemotePlayer {
   status: string[];
   angle?: number;
   name?: string;
+  /** v33 Phase 8: 킬 수 (delta compression 지원) */
+  kills?: number;
+  /** v33 Phase 8: 생존 여부 (delta compression 지원) */
+  alive?: boolean;
 }
 
 /** 캡처 포인트 상태 */
@@ -57,6 +61,48 @@ export interface MatrixStatePayload {
   captures: CapturePointState[];
   nationScores: Record<string, number>;
   safeZoneRadius: number;
+}
+
+/**
+ * v33 Phase 8: Delta-compressed matrix_state 패킷
+ * 서버에서 변경된 필드만 전송. 클라이언트에서 이전 상태와 머지.
+ */
+export interface DeltaPlayerState {
+  /** 플레이어 ID */
+  id: string;
+  /** 위치 (변경 시에만 포함) */
+  x?: number;
+  y?: number;
+  /** 각도 (변경 시에만 포함) */
+  a?: number;
+  /** HP (변경 시에만 포함) */
+  hp?: number;
+  /** Max HP (변경 시에만 포함) */
+  mhp?: number;
+  /** 레벨 (변경 시에만 포함) */
+  lv?: number;
+  /** 킬 수 (변경 시에만 포함) */
+  k?: number;
+  /** 생존 여부 (변경 시에만 포함) */
+  al?: boolean;
+  /** 신규 플레이어 플래그 */
+  new?: boolean;
+  /** 퇴장 플레이어 플래그 */
+  rm?: boolean;
+}
+
+/** Delta-compressed world state */
+export interface DeltaStatePayload {
+  tick: number;
+  phase: MatrixEpochPhase;
+  timer: number;
+  players?: DeltaPlayerState[];
+  /** 국가 스코어 (변경 시에만 포함) */
+  ns?: Record<string, number>;
+  /** 안전 구역 반경 (변경 시에만 포함) */
+  szr?: number;
+  /** 풀 스냅샷 플래그 */
+  full?: boolean;
 }
 
 /** matrix_epoch 패킷 */
@@ -184,6 +230,8 @@ export interface MatrixDamagePayload {
 
 export interface MatrixSocketListeners {
   onState?: (data: MatrixStatePayload) => void;
+  /** v33 Phase 8: Delta-compressed state handler */
+  onDeltaState?: (data: DeltaStatePayload) => void;
   onEpoch?: (data: MatrixEpochPayload) => void;
   onSpawnSeed?: (data: MatrixSpawnSeedPayload) => void;
   onKillConfirmed?: (data: MatrixKillConfirmedPayload) => void;
@@ -260,10 +308,22 @@ export function useMatrixSocket(listeners: MatrixSocketListeners = {}): UseMatri
 
     // ─── 다운링크 이벤트 등록 ───
 
-    socket.on('matrix_state', (data: MatrixStatePayload) => {
+    // v33 Phase 8: matrix_state now supports delta compression
+    // Delta packets have short field names (ns, szr, etc.) and optional full flag.
+    // Full state packets have players[] with full RemotePlayer objects.
+    socket.on('matrix_state', (data: DeltaStatePayload | MatrixStatePayload) => {
       serverTickRef.current = data.tick;
       setServerTick(data.tick);
-      listenersRef.current.onState?.(data);
+
+      // Detect delta format: delta packets use 'ns' key for nation scores,
+      // full legacy packets use 'nationScores' key
+      if ('ns' in data || 'szr' in data || (data as DeltaStatePayload).full !== undefined) {
+        // Delta-compressed packet
+        listenersRef.current.onDeltaState?.(data as DeltaStatePayload);
+      } else {
+        // Legacy full state packet (backward compatible)
+        listenersRef.current.onState?.(data as MatrixStatePayload);
+      }
     });
 
     socket.on('matrix_epoch', (data: MatrixEpochPayload) => {

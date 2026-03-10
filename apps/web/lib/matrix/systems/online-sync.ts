@@ -2,11 +2,14 @@
  * online-sync.ts — 서버 상태 동기화 시스템
  *
  * v33 Phase 3: matrix_state (20Hz) 수신 → 로컬 상태에 반영
+ * v33 Phase 8: Delta compression 지원 (변경 필드만 수신, 로컬 머지)
+ *
  * - 다른 플레이어 위치 보간 (100ms 버퍼, lerp)
  * - 에폭 페이즈/타이머 반영
  * - 국가 스코어 업데이트
  * - 캡처 포인트 상태 업데이트
  * - 안전 구역 반경 업데이트
+ * - Delta merge: 서버에서 변경된 필드만 수신하여 기존 상태에 합침
  */
 
 import type {
@@ -14,6 +17,8 @@ import type {
   RemotePlayer,
   CapturePointState,
   MatrixEpochPhase,
+  DeltaStatePayload,
+  DeltaPlayerState,
 } from '@/hooks/useMatrixSocket';
 import type { Vector2 } from '../types';
 
@@ -75,6 +80,12 @@ const PVP_PHASES: Set<MatrixEpochPhase> = new Set(['war', 'shrink']);
 export class OnlineSyncSystem {
   /** 플레이어별 보간 버퍼 */
   private buffers = new Map<string, InterpolationEntry[]>();
+
+  /**
+   * v33 Phase 8: Delta merge 캐시 — 이전 풀 플레이어 상태 저장
+   * delta 패킷 수신 시 여기에 합쳐서 보간 버퍼에 추가
+   */
+  private cachedPlayers = new Map<string, RemotePlayer>();
 
   /** 최신 동기화 상태 */
   private _state: OnlineSyncState = {
@@ -143,6 +154,112 @@ export class OnlineSyncSystem {
     // 퇴장한 플레이어 정리
     for (const [id] of this.buffers) {
       if (!activePlayers.has(id)) {
+        this.buffers.delete(id);
+      }
+    }
+
+    // v33 Phase 8: 풀 스냅샷이므로 캐시 동기화
+    this.cachedPlayers.clear();
+    for (const player of payload.players) {
+      this.cachedPlayers.set(player.id, { ...player });
+    }
+  }
+
+  /**
+   * v33 Phase 8: Delta-compressed matrix_state 수신 시 호출
+   *
+   * Delta merge 로직:
+   *   - full=true → 풀 스냅샷, applyState()와 동일하게 처리
+   *   - players[].new=true → 새 플레이어 추가 (전체 필드 포함)
+   *   - players[].rm=true → 플레이어 제거
+   *   - 그 외 → 변경된 필드만 기존 cachedPlayers에 머지
+   *   - ns (nationScores), szr (safeZoneRadius) → 존재하면 덮어쓰기
+   */
+  applyDeltaState(delta: DeltaStatePayload): void {
+    const now = Date.now();
+
+    // 에폭/타이머 항상 반영
+    this._state.epochPhase = delta.phase;
+    this._state.epochTimer = delta.timer;
+    this._state.serverTick = delta.tick;
+    this._state.pvpEnabled = PVP_PHASES.has(delta.phase);
+
+    // 국가 스코어: delta에 포함된 경우에만 업데이트
+    if (delta.ns) {
+      this._state.nationScores = delta.ns;
+    }
+
+    // 안전 구역: delta에 포함된 경우에만 업데이트
+    if (delta.szr !== undefined && delta.szr !== 0) {
+      this._state.safeZoneRadius = delta.szr;
+    }
+
+    // 풀 스냅샷이면 기존 applyState 로직과 동일하게 처리
+    if (delta.full && delta.players) {
+      const fullPlayers: RemotePlayer[] = delta.players.map(dp => deltaToRemotePlayer(dp));
+      this.applyState({
+        tick: delta.tick,
+        phase: delta.phase,
+        timer: delta.timer,
+        players: fullPlayers,
+        captures: this._state.capturePoints, // 캡처 포인트는 유지
+        nationScores: delta.ns ?? this._state.nationScores,
+        safeZoneRadius: delta.szr ?? this._state.safeZoneRadius,
+      });
+      return;
+    }
+
+    // Delta merge
+    if (delta.players) {
+      for (const dp of delta.players) {
+        // 제거된 플레이어
+        if (dp.rm) {
+          this.cachedPlayers.delete(dp.id);
+          this.buffers.delete(dp.id);
+          continue;
+        }
+
+        // 신규 또는 기존 플레이어 머지
+        let cached = this.cachedPlayers.get(dp.id);
+
+        if (dp.new || !cached) {
+          // 새 플레이어: 전체 필드로 초기화
+          cached = deltaToRemotePlayer(dp);
+          this.cachedPlayers.set(dp.id, cached);
+        } else {
+          // 기존 플레이어: 변경된 필드만 업데이트
+          if (dp.x !== undefined && dp.x !== 0) cached.x = dp.x;
+          if (dp.y !== undefined && dp.y !== 0) cached.y = dp.y;
+          if (dp.a !== undefined && dp.a !== 0) cached.angle = dp.a;
+          if (dp.hp !== undefined && dp.hp !== 0) cached.hp = dp.hp;
+          if (dp.mhp !== undefined && dp.mhp !== 0) cached.maxHp = dp.mhp;
+          if (dp.lv !== undefined && dp.lv !== 0) cached.level = dp.lv;
+          if (dp.k !== undefined) cached.kills = dp.k;
+          if (dp.al !== undefined) cached.alive = dp.al;
+          this.cachedPlayers.set(dp.id, cached);
+        }
+
+        // 보간 버퍼에 추가 (자기 자신 필터링)
+        if (cached.id === this.localPlayerId) continue;
+
+        // RemotePlayer로 변환하여 버퍼에 추가
+        let buffer = this.buffers.get(cached.id);
+        if (!buffer) {
+          buffer = [];
+          this.buffers.set(cached.id, buffer);
+        }
+
+        buffer.push({ timestamp: now, player: { ...cached } });
+
+        if (buffer.length > MAX_BUFFER_SIZE) {
+          buffer.splice(0, buffer.length - MAX_BUFFER_SIZE);
+        }
+      }
+    }
+
+    // 퇴장한 플레이어 정리: cachedPlayers에 없는 버퍼 제거
+    for (const [id] of this.buffers) {
+      if (!this.cachedPlayers.has(id)) {
         this.buffers.delete(id);
       }
     }
@@ -233,6 +350,7 @@ export class OnlineSyncSystem {
   /** 전체 리셋 (에폭 전환/아레나 퇴장 시) */
   reset(): void {
     this.buffers.clear();
+    this.cachedPlayers.clear();
     this._state = {
       remotePlayers: [],
       epochPhase: 'peace',
@@ -260,4 +378,28 @@ function lerpAngle(a: number, b: number, t: number): number {
   while (diff > Math.PI) diff -= Math.PI * 2;
   while (diff < -Math.PI) diff += Math.PI * 2;
   return a + diff * t;
+}
+
+/**
+ * v33 Phase 8: DeltaPlayerState → RemotePlayer 변환
+ * 풀 스냅샷 또는 신규 플레이어에서 사용
+ */
+function deltaToRemotePlayer(dp: DeltaPlayerState): RemotePlayer {
+  return {
+    id: dp.id,
+    x: dp.x ?? 0,
+    y: dp.y ?? 0,
+    hp: dp.hp ?? 100,
+    maxHp: dp.mhp ?? 100,
+    level: dp.lv ?? 1,
+    nation: '',       // delta에 nation 없음 — 캐시에서 보충
+    isAlly: false,    // delta에 없음 — 캐시에서 보충
+    weapons: [],      // delta에 없음 — 캐시에서 보충
+    status: [],       // delta에 없음 — 캐시에서 보충
+    angle: dp.a ?? 0,
+    name: dp.id,      // delta에 없음 — 캐시에서 보충
+    // 확장 필드 (delta 전용)
+    kills: dp.k ?? 0,
+    alive: dp.al ?? true,
+  };
 }

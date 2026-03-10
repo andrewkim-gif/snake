@@ -140,6 +140,36 @@ export class ViewportCuller {
     this.thresholds = { ...this.thresholds, ...thresholds };
   }
 
+  /**
+   * v33 Phase 8: 플레이어 수에 따라 LOD 임계값을 자동 조절
+   * 50+ 플레이어일 때 더 공격적으로 LOD를 낮춰 60fps 유지
+   *
+   * playerCount:
+   *   0-15: 기본 임계값 (여유)
+   *   16-30: mid/low 살짝 줄여 MID LOD 비중 증가
+   *   31-50: 공격적 축소, 멀리 있는 플레이어 빨리 컬링
+   */
+  adaptThresholdsForPlayerCount(playerCount: number): void {
+    if (playerCount <= 15) {
+      // 기본: 넉넉한 뷰포트
+      this.thresholds = { ...DEFAULT_LOD_THRESHOLDS };
+    } else if (playerCount <= 30) {
+      // 중간: mid/low 거리 10% 축소
+      this.thresholds = {
+        midDistance: DEFAULT_LOD_THRESHOLDS.midDistance * 0.9,
+        lowDistance: DEFAULT_LOD_THRESHOLDS.lowDistance * 0.85,
+        cullDistance: DEFAULT_LOD_THRESHOLDS.cullDistance * 0.85,
+      };
+    } else {
+      // 고부하: mid/low 거리 20-30% 축소, 멀리 있는 플레이어 빨리 컬링
+      this.thresholds = {
+        midDistance: DEFAULT_LOD_THRESHOLDS.midDistance * 0.75,
+        lowDistance: DEFAULT_LOD_THRESHOLDS.lowDistance * 0.7,
+        cullDistance: DEFAULT_LOD_THRESHOLDS.cullDistance * 0.65,
+      };
+    }
+  }
+
   /** 마지막 계산된 뷰포트 바운드 */
   get lastBounds(): ViewportBounds {
     return this._lastBounds;
@@ -148,5 +178,10 @@ export class ViewportCuller {
   /** 마지막 카메라 중심 */
   get lastCameraCenter(): { x: number; y: number } {
     return this._lastCameraCenter;
+  }
+
+  /** 현재 LOD 임계값 (디버그/모니터링용) */
+  get currentThresholds(): LODThresholds {
+    return { ...this.thresholds };
   }
 }
