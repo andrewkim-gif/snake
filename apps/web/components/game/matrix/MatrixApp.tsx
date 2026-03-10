@@ -1067,6 +1067,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         <BranchSelectModal
           skillName={branchPending.skillName}
           skillColor={branchPending.skillColor}
+          skillType={branchPending.skill}
           branchA={branchPending.branchA}
           branchB={branchPending.branchB}
           onSelect={handleBranchSelect}

@@ -30,6 +30,7 @@ import { soundManager } from '@/lib/matrix/utils/audio';
 import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 import { OVERLAY } from '@/lib/overlay-tokens';
 import { getWeaponCategory } from '@/lib/matrix/config/skills/progressive-tree.config';
+import { SkillIcon } from './SkillIcon';
 
 // ============================================
 // Category color mapping for left stripe
@@ -103,9 +104,11 @@ interface UpgradeOption {
 }
 
 // ============================================
-// Weapon Icons mapping
+// Weapon Icons mapping (Legacy - use SkillIcon instead)
+// Kept for backward compatibility with external imports
 // ============================================
 
+/** @deprecated Use `<SkillIcon type={...} />` component instead */
 export const WEAPON_ICONS: Record<string, React.ComponentType<{ size?: number; className?: string; style?: React.CSSProperties }>> = {
   // Melee/Aura
   whip: Code2,
@@ -590,7 +593,6 @@ function MatrixLevelUpInner({
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, maxWidth: 480, marginLeft: 'auto', marginRight: 'auto' }}>
             {options.map((opt, idx) => {
-              const Icon = WEAPON_ICONS[opt.type] || Zap;
               const isUltimateUpgrade = opt.isUltimate;
               const categoryColor = getCategoryColor(opt.type);
 
@@ -651,7 +653,7 @@ function MatrixLevelUpInner({
                         background: isUltimateUpgrade ? `${SK.gold}20` : SK.bg,
                         clipPath: apexClip.sm,
                       }}>
-                        <Icon size={24} style={{ color: opt.color }} />
+                        <SkillIcon type={opt.type} size={24} style={{ color: opt.color }} />
                       </div>
                       {isUltimateUpgrade && (
                         <Crown style={{

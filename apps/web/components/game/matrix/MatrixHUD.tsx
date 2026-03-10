@@ -23,7 +23,7 @@ import {
 } from 'lucide-react';
 import { WEAPON_DATA } from '@/lib/matrix/constants';
 import type { WeaponType } from '@/lib/matrix/types';
-import { WEAPON_ICONS } from './MatrixLevelUp';
+import { SkillIcon } from './SkillIcon';
 import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 
 // ============================================
@@ -397,7 +397,6 @@ function MatrixHUDInner({
               {weaponSlots.map((slot) => {
                 const type = slot.type as WeaponType;
                 const data = WEAPON_DATA[type as keyof typeof WEAPON_DATA];
-                const Icon = WEAPON_ICONS[type];
                 if (!data || slot.level === 0) return null;
 
                 const cdPercent = Math.min(100, slot.cooldownPercent * 100);
@@ -416,7 +415,7 @@ function MatrixHUDInner({
                       overflow: 'hidden',
                       clipPath: apexClip.sm,
                     }}>
-                      {Icon && <Icon size={16} style={{ color: data.color }} />}
+                      <SkillIcon type={type} size={16} style={{ color: data.color }} />
                       {/* Cooldown overlay — SK.accent 반투명 */}
                       <div
                         style={{

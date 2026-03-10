@@ -13,6 +13,8 @@ import React, { memo, useCallback, useEffect } from 'react';
 import { GitFork, Zap, Shield, Target, Sparkles } from 'lucide-react';
 import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 import { OVERLAY } from '@/lib/overlay-tokens';
+import type { WeaponType } from '@/lib/matrix/types';
+import { SkillIcon } from './SkillIcon';
 
 export interface BranchOption {
   id: 'A' | 'B';
@@ -28,12 +30,13 @@ export interface BranchOption {
 export interface BranchSelectModalProps {
   skillName: string;
   skillColor: string;
+  skillType?: WeaponType;
   branchA: BranchOption;
   branchB: BranchOption;
   onSelect: (branch: 'A' | 'B') => void;
 }
 
-/** Map icon string to lucide component */
+/** @deprecated Legacy - use SkillIcon instead */
 function getBranchIcon(iconName: string) {
   switch (iconName) {
     case 'GitFork': return GitFork;
@@ -47,6 +50,7 @@ function getBranchIcon(iconName: string) {
 function BranchSelectModalInner({
   skillName,
   skillColor,
+  skillType,
   branchA,
   branchB,
   onSelect,
@@ -63,7 +67,7 @@ function BranchSelectModalInner({
   }, [onSelect]);
 
   const renderBranch = useCallback((branch: BranchOption, index: number) => {
-    const IconComp = getBranchIcon(branch.icon);
+    const IconComp = getBranchIcon(branch.icon); // Legacy fallback
     const isA = branch.id === 'A';
     const branchColor = isA ? SK.green : SK.blue;
 
@@ -122,7 +126,11 @@ function BranchSelectModalInner({
           border: `1px solid ${branchColor}40`,
           clipPath: apexClip.sm,
         }}>
-          <IconComp size={24} style={{ color: branchColor }} />
+          {skillType ? (
+            <SkillIcon type={skillType} size={24} style={{ color: branchColor }} />
+          ) : (
+            <IconComp size={24} style={{ color: branchColor }} />
+          )}
         </div>
 
         {/* Name */}
@@ -205,7 +213,7 @@ function BranchSelectModalInner({
         </div>
       </button>
     );
-  }, [onSelect]);
+  }, [onSelect, skillType]);
 
   return (
     <div style={{
