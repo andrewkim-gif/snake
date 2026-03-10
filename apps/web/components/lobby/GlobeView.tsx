@@ -213,19 +213,30 @@ function AdaptiveBloom({ qualityRef }: { qualityRef: React.RefObject<QualityPres
   // ref 기반이라 리렌더 없음 — useFrame에서 EffectComposer 활성/비활성 제어
   // EffectComposer 자체의 마운트/언마운트가 비용이 크므로
   // intensity를 0으로 내려 비활성화하는 방식 사용
-  const bloomRef = useRef<any>(null);
+  //
+  // ⚠️ Bloom 객체를 직접 ref에 저장하면 KawaseBlurPass→Resolution→resizable 순환 참조로
+  // Next.js dev 모드에서 JSON.stringify 에러 발생. ref callback으로 intensity setter만 캐시한다.
+  const setIntensityRef = useRef<((v: number) => void) | null>(null);
+
+  const bloomRefCallback = useCallback((effect: any) => {
+    if (effect) {
+      setIntensityRef.current = (v: number) => { effect.intensity = v; };
+    } else {
+      setIntensityRef.current = null;
+    }
+  }, []);
 
   useFrame(() => {
-    if (!bloomRef.current) return;
+    if (!setIntensityRef.current) return;
     const enable = qualityRef.current.enableBloom;
     // intensity를 0으로 내리면 GPU 비용 최소화
-    bloomRef.current.intensity = enable ? 0.8 : 0;
+    setIntensityRef.current(enable ? 0.8 : 0);
   });
 
   return (
     <EffectComposer>
       <Bloom
-        ref={bloomRef}
+        ref={bloomRefCallback}
         luminanceThreshold={0.7}
         luminanceSmoothing={0.15}
         intensity={0.8}
