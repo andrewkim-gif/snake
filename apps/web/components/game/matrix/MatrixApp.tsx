@@ -55,7 +55,7 @@ import type { LeaderboardEntry } from './ArenaHUD';
 
 // ─── UI 오버레이 (같은 matrix 폴더) ───
 import MatrixHUD from './MatrixHUD';
-import type { WeaponSlot } from './MatrixHUD';
+import type { WeaponSlot, MatchPhase } from './MatrixHUD';
 import MatrixLevelUp from './MatrixLevelUp';
 import type { LevelUpOption } from './MatrixLevelUp';
 import MatrixPause from './MatrixPause';
@@ -715,6 +715,15 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       }));
   }, [gameState.weapons, gameState.weaponCooldowns]);
 
+  // v37 Phase 5: 매치 페이즈 계산 (gameTime 기반)
+  // 전초전: 0:00~1:30 (0~90초), 교전기: 1:30~3:30 (90~210초), 결전: 3:30~5:00 (210~300초)
+  const matchPhase: MatchPhase | undefined = useMemo(() => {
+    const t = gameState.gameTime;
+    if (t < 90) return 'skirmish';
+    if (t < 210) return 'engagement';
+    return 'showdown';
+  }, [gameState.gameTime]);
+
   // v33 Phase 3: 온라인 레벨업 선택 전송
   const handleOnlineLevelUpSelect = useCallback((type: string) => {
     if (isOnline) {
@@ -966,7 +975,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         onMultiplayerRender={isOnline ? handleMultiplayerRender : undefined}
       />
 
-      {/* ─── MatrixHUD: 상단 HP/XP/레벨 + 무기 슬롯 ─── */}
+      {/* ─── MatrixHUD: v37 Tactical War Room Layout ─── */}
       {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
         <MatrixHUD
           health={gameState.health}
@@ -981,6 +990,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
           enemyCount={entityCounts.enemies}
           autoHuntEnabled={isAutoHunt}
           isPaused={isPaused}
+          matchPhase={matchPhase}
         />
       )}
 
