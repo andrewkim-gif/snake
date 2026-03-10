@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * GlobeDominationLayer — v14 Phase 5 S26 + v15 Phase 3 셰이더 강화
+ * GlobeDominationLayer — v14 Phase 5 S26 + v15 Phase 3 셰이더 강화 + v33 Phase 7 Merged Geometry
  * Renders domination state on the globe:
  * - Dominated countries: colored with dominant nation's representative color
  * - Sovereignty: soft pulse glow (shader uniform oscillation)
@@ -13,9 +13,14 @@
  * - 골드 전환 웨이브: sovereignty→hegemony 전환 시 골드 펄스 확산 (3초)
  * - 분쟁 영토 해칭: 2개국 이상 경합 국가에 대각선 스트라이프 패턴
  * - 점령 완료 플래시: hegemony 달성 시 밝은 백색 플래시 감쇠 (3초)
+ *
+ * v33 Phase 7: Merged Geometry 최적화
+ * - 195개 개별 Mesh → 1개 Merged BufferGeometry + 1 ShaderMaterial
+ * - per-vertex attributes로 국가별 색상/이펙트 데이터 전달
+ * - 195 draw calls → 1 draw call
  */
 
-import { useRef, useMemo, useEffect } from 'react';
+import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RENDER_ORDER } from '@/lib/effect-constants';
@@ -75,14 +80,34 @@ const TRANSITION_DURATION = 2.0;            // 2 seconds fade
 const TRANSITION_WAVE_DURATION = 3.0;       // 골드 웨이브 3초 확산
 const FLASH_DURATION = 3.0;                 // 점령 완료 플래시 3초 감쇠
 
-// ─── Domination shader material ───
+// v33 Phase 7: per-vertex attribute 인덱스 (stride 8 floats per attribute set)
+// aColor(3) + aPreviousColor(3) + aParams(4: transition, glowIntensity, pulseAmplitude, disputeIntensity) + aEffects(2: transitionWave, flashIntensity)
 
-const dominationVertexShader = /* glsl */ `
+// ─── Merged Geometry Vertex Shader ───
+
+const mergedVertexShader = /* glsl */ `
+  // per-vertex 국가별 색상/이펙트 데이터 (attribute)
+  attribute vec3 aColor;
+  attribute vec3 aPreviousColor;
+  attribute vec4 aParams;   // x=transition, y=glowIntensity, z=pulseAmplitude, w=disputeIntensity
+  attribute vec2 aEffects;  // x=transitionWave, y=flashIntensity
+
+  // varying → fragment로 전달
+  varying vec3 vColor;
+  varying vec3 vPreviousColor;
+  varying vec4 vParams;
+  varying vec2 vEffects;
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying vec2 vScreenUV;
 
   void main() {
+    // per-vertex 데이터를 varying으로 전달
+    vColor = aColor;
+    vPreviousColor = aPreviousColor;
+    vParams = aParams;
+    vEffects = aEffects;
+
     vNormal = normalize(normalMatrix * normal);
     vPosition = (modelMatrix * vec4(position, 1.0)).xyz;
     vec4 clipPos = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
@@ -92,27 +117,33 @@ const dominationVertexShader = /* glsl */ `
   }
 `;
 
-const dominationFragmentShader = /* glsl */ `
-  uniform vec3 uColor;
-  uniform vec3 uPreviousColor;
-  uniform float uTransition;        // 0 → 1 (color fade progress)
-  uniform float uGlowIntensity;     // 0 for none, >0 for sovereignty/hegemony
+// ─── Merged Geometry Fragment Shader ───
+
+const mergedFragmentShader = /* glsl */ `
+  // 글로벌 uniforms (모든 국가 공통)
   uniform float uPulsePhase;        // animated time for pulse effect
-  uniform float uPulseAmplitude;    // 0 for no pulse, 0.2 for sovereignty
   uniform float uOpacity;
 
-  // v15 Phase 3: 신규 uniforms
-  uniform float uTransitionWave;    // 0→1: 골드 펄스 웨이브 (sovereignty→hegemony 전환)
-  uniform float uDisputeIntensity;  // 0=평화, 1=분쟁 (2개국 이상 경합)
-  uniform float uFlashIntensity;    // 1→0: 점령 완료 플래시 (3초 감쇠)
+  // per-vertex에서 전달받은 varying
+  varying vec3 vColor;
+  varying vec3 vPreviousColor;
+  varying vec4 vParams;   // x=transition, y=glowIntensity, z=pulseAmplitude, w=disputeIntensity
+  varying vec2 vEffects;  // x=transitionWave, y=flashIntensity
 
   varying vec3 vNormal;
   varying vec3 vPosition;
   varying vec2 vScreenUV;
 
   void main() {
+    float uTransition = vParams.x;
+    float uGlowIntensity = vParams.y;
+    float uPulseAmplitude = vParams.z;
+    float uDisputeIntensity = vParams.w;
+    float uTransitionWave = vEffects.x;
+    float uFlashIntensity = vEffects.y;
+
     // Interpolate between previous and current color during transition
-    vec3 baseColor = mix(uPreviousColor, uColor, uTransition);
+    vec3 baseColor = mix(vPreviousColor, vColor, uTransition);
 
     // Apply pulse glow for sovereignty
     float pulse = 1.0 + uPulseAmplitude * sin(uPulsePhase * 6.28318);
@@ -232,20 +263,208 @@ function hexToThreeColor(hex: string): THREE.Color {
   return new THREE.Color(hex);
 }
 
-// ─── Country domination mesh ───
+// ─── v33 Phase 7: per-country 애니메이션 상태 (CPU 측) ───
 
-interface DominationMeshData {
+interface CountryAnimState {
+  // 현재 셰이더 파라미터 (per-vertex attribute에 반영)
+  colorR: number; colorG: number; colorB: number;
+  prevColorR: number; prevColorG: number; prevColorB: number;
+  transition: number;
+  glowIntensity: number;
+  pulseAmplitude: number;
+  disputeIntensity: number;
+  transitionWave: number;
+  flashIntensity: number;
+  // 애니메이션 타이머
+  transitionTimer: number;       // 색상 전환 타이머 (0→TRANSITION_DURATION)
+  transitionWaveTimer: number;   // 골드 웨이브 타이머 (-1=비활성, 0→TRANSITION_WAVE_DURATION)
+  flashTimer: number;            // 플래시 타이머 (-1=비활성, FLASH_DURATION→0)
+  // 현재 domination state 스냅샷
+  level: DominationLevel;
+  dominantNation: string;
+  stateColor: string;
+  contested: boolean;
+}
+
+// ─── v33 Phase 7: Merged geometry 빌드 정보 ───
+
+interface MergedGeometryInfo {
   geometry: THREE.BufferGeometry;
   material: THREE.ShaderMaterial;
-  mesh: THREE.Mesh;
-  state: CountryDominationState;
-  // v15 Phase 3: 전환 웨이브 + 플래시 타이머
-  transitionWaveTimer: number;   // 0→TRANSITION_WAVE_DURATION → stops
-  flashTimer: number;            // FLASH_DURATION→0 → stops
+  // iso3 → 해당 국가의 vertex 범위 [startIndex, count]
+  countryVertexRanges: Map<string, [number, number]>;
+  totalVertices: number;
+  // per-vertex attribute 배열 참조 (직접 업데이트용)
+  colorArray: Float32Array;
+  prevColorArray: Float32Array;
+  paramsArray: Float32Array;   // stride 4: transition, glow, pulse, dispute
+  effectsArray: Float32Array;  // stride 2: transitionWave, flashIntensity
+}
+
+/**
+ * v33 Phase 7: 모든 국가 geometry를 하나의 BufferGeometry로 병합.
+ * 각 국가의 vertex 범위를 기록하여 per-vertex attribute 업데이트에 사용.
+ */
+function buildMergedGeometry(
+  countryGeometries: Map<string, THREE.BufferGeometry>,
+  dominationIsos: Set<string>,
+): MergedGeometryInfo {
+  // 1단계: 총 vertex 수 계산 + 국가별 범위 기록
+  const countryVertexRanges = new Map<string, [number, number]>();
+  let totalVertices = 0;
+
+  // domination 상태가 있는 국가만 포함
+  const orderedIsos: string[] = [];
+  dominationIsos.forEach((iso3) => {
+    const geo = countryGeometries.get(iso3);
+    if (!geo) return;
+    const posAttr = geo.getAttribute('position');
+    if (!posAttr) return;
+    orderedIsos.push(iso3);
+    countryVertexRanges.set(iso3, [totalVertices, posAttr.count]);
+    totalVertices += posAttr.count;
+  });
+
+  // 2단계: 병합된 position/normal 배열 생성
+  const positions = new Float32Array(totalVertices * 3);
+  const normals = new Float32Array(totalVertices * 3);
+
+  // per-vertex 커스텀 attributes
+  const colorArray = new Float32Array(totalVertices * 3);
+  const prevColorArray = new Float32Array(totalVertices * 3);
+  const paramsArray = new Float32Array(totalVertices * 4);
+  const effectsArray = new Float32Array(totalVertices * 2);
+
+  let offset = 0;
+  for (const iso3 of orderedIsos) {
+    const geo = countryGeometries.get(iso3)!;
+    const posAttr = geo.getAttribute('position');
+    const normAttr = geo.getAttribute('normal');
+    const count = posAttr.count;
+
+    // position 복사
+    for (let i = 0; i < count; i++) {
+      positions[(offset + i) * 3] = posAttr.getX(i);
+      positions[(offset + i) * 3 + 1] = posAttr.getY(i);
+      positions[(offset + i) * 3 + 2] = posAttr.getZ(i);
+    }
+
+    // normal 복사 (없으면 position 방향을 normal로 사용 — 구 표면)
+    for (let i = 0; i < count; i++) {
+      if (normAttr) {
+        normals[(offset + i) * 3] = normAttr.getX(i);
+        normals[(offset + i) * 3 + 1] = normAttr.getY(i);
+        normals[(offset + i) * 3 + 2] = normAttr.getZ(i);
+      } else {
+        // 구 표면: position 방향 = normal 방향
+        const x = posAttr.getX(i);
+        const y = posAttr.getY(i);
+        const z = posAttr.getZ(i);
+        const len = Math.sqrt(x * x + y * y + z * z) || 1;
+        normals[(offset + i) * 3] = x / len;
+        normals[(offset + i) * 3 + 1] = y / len;
+        normals[(offset + i) * 3 + 2] = z / len;
+      }
+    }
+
+    // per-vertex attribute 초기값: 기본 회색 (나중에 상태 업데이트에서 덮어씀)
+    const defaultColor = hexToThreeColor(UNDOMINATED_COLOR);
+    for (let i = 0; i < count; i++) {
+      const vi = offset + i;
+      colorArray[vi * 3] = defaultColor.r;
+      colorArray[vi * 3 + 1] = defaultColor.g;
+      colorArray[vi * 3 + 2] = defaultColor.b;
+      prevColorArray[vi * 3] = defaultColor.r;
+      prevColorArray[vi * 3 + 1] = defaultColor.g;
+      prevColorArray[vi * 3 + 2] = defaultColor.b;
+      paramsArray[vi * 4] = 1.0;     // transition (완료 상태)
+      paramsArray[vi * 4 + 1] = 0.0; // glowIntensity
+      paramsArray[vi * 4 + 2] = 0.0; // pulseAmplitude
+      paramsArray[vi * 4 + 3] = 0.0; // disputeIntensity
+      effectsArray[vi * 2] = 0.0;     // transitionWave
+      effectsArray[vi * 2 + 1] = 0.0; // flashIntensity
+    }
+
+    offset += count;
+  }
+
+  // 3단계: BufferGeometry 생성
+  const geometry = new THREE.BufferGeometry();
+  geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3));
+  geometry.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  geometry.setAttribute('aColor', new THREE.BufferAttribute(colorArray, 3));
+  geometry.setAttribute('aPreviousColor', new THREE.BufferAttribute(prevColorArray, 3));
+  geometry.setAttribute('aParams', new THREE.BufferAttribute(paramsArray, 4));
+  geometry.setAttribute('aEffects', new THREE.BufferAttribute(effectsArray, 2));
+
+  // index 복사 (indexed geometry 지원)
+  let totalIndices = 0;
+  let hasIndex = false;
+  for (const iso3 of orderedIsos) {
+    const geo = countryGeometries.get(iso3)!;
+    if (geo.index) {
+      hasIndex = true;
+      totalIndices += geo.index.count;
+    } else {
+      // non-indexed: 3 indices per vertex (triangle list)
+      totalIndices += geo.getAttribute('position').count;
+    }
+  }
+
+  if (hasIndex) {
+    const indices = new Uint32Array(totalIndices);
+    let idxOffset = 0;
+    let vertexOffset = 0;
+    for (const iso3 of orderedIsos) {
+      const geo = countryGeometries.get(iso3)!;
+      const posCount = geo.getAttribute('position').count;
+      if (geo.index) {
+        const srcIdx = geo.index;
+        for (let i = 0; i < srcIdx.count; i++) {
+          indices[idxOffset + i] = srcIdx.getX(i) + vertexOffset;
+        }
+        idxOffset += srcIdx.count;
+      } else {
+        // non-indexed → identity index
+        for (let i = 0; i < posCount; i++) {
+          indices[idxOffset + i] = vertexOffset + i;
+        }
+        idxOffset += posCount;
+      }
+      vertexOffset += posCount;
+    }
+    geometry.setIndex(new THREE.BufferAttribute(indices, 1));
+  }
+
+  // 4단계: ShaderMaterial 생성 (글로벌 uniforms만)
+  const material = new THREE.ShaderMaterial({
+    vertexShader: mergedVertexShader,
+    fragmentShader: mergedFragmentShader,
+    uniforms: {
+      uPulsePhase: { value: 0.0 },
+      uOpacity: { value: 0.7 },
+    },
+    transparent: true,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+  });
+
+  return {
+    geometry,
+    material,
+    countryVertexRanges,
+    totalVertices,
+    colorArray,
+    prevColorArray,
+    paramsArray,
+    effectsArray,
+  };
 }
 
 /**
  * GlobeDominationLayer renders domination overlays on the globe.
+ *
+ * v33 Phase 7: 195개 개별 Mesh → 1개 Merged BufferGeometry (1 draw call)
  *
  * Usage:
  * ```tsx
@@ -263,246 +482,390 @@ export function GlobeDominationLayer({
   visible = true,
   distanceLOD,
 }: GlobeDominationLayerProps) {
-  const groupRef = useRef<THREE.Group>(null);
-  const meshDataRef = useRef<Map<string, DominationMeshData>>(new Map());
-  const transitionTimers = useRef<Map<string, number>>(new Map());
+  const meshRef = useRef<THREE.Mesh>(null);
+  // v33 Phase 7: merged geometry 정보
+  const mergedRef = useRef<MergedGeometryInfo | null>(null);
+  // per-country 애니메이션 상태 (CPU 측)
+  const animStatesRef = useRef<Map<string, CountryAnimState>>(new Map());
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
   // v33 Phase 5: AdaptiveQuality context
   const qualityRef = useAdaptiveQualityContext();
+  // attribute 업데이트 필요 여부 플래그
+  const needsAttributeUpdate = useRef(false);
 
-  // Create or update meshes when geometries or states change
+  // v33 Phase 7: 국가별 per-vertex attribute 업데이트 헬퍼
+  const updateCountryAttributes = useCallback((
+    merged: MergedGeometryInfo,
+    iso3: string,
+    anim: CountryAnimState,
+  ) => {
+    const range = merged.countryVertexRanges.get(iso3);
+    if (!range) return;
+    const [start, count] = range;
+
+    for (let i = 0; i < count; i++) {
+      const vi = start + i;
+      // aColor (vec3)
+      merged.colorArray[vi * 3] = anim.colorR;
+      merged.colorArray[vi * 3 + 1] = anim.colorG;
+      merged.colorArray[vi * 3 + 2] = anim.colorB;
+      // aPreviousColor (vec3)
+      merged.prevColorArray[vi * 3] = anim.prevColorR;
+      merged.prevColorArray[vi * 3 + 1] = anim.prevColorG;
+      merged.prevColorArray[vi * 3 + 2] = anim.prevColorB;
+      // aParams (vec4)
+      merged.paramsArray[vi * 4] = anim.transition;
+      merged.paramsArray[vi * 4 + 1] = anim.glowIntensity;
+      merged.paramsArray[vi * 4 + 2] = anim.pulseAmplitude;
+      merged.paramsArray[vi * 4 + 3] = anim.disputeIntensity;
+      // aEffects (vec2)
+      merged.effectsArray[vi * 2] = anim.transitionWave;
+      merged.effectsArray[vi * 2 + 1] = anim.flashIntensity;
+    }
+  }, []);
+
+  // v33 Phase 7: merged geometry 빌드 + 국가 상태 초기화
   useEffect(() => {
-    if (!countryGeometries || !groupRef.current) return;
+    if (!countryGeometries || countryGeometries.size === 0) return;
 
-    const group = groupRef.current;
-    const meshMap = meshDataRef.current;
-    const existingIsos = new Set(meshMap.keys());
+    const dominationIsos = new Set(dominationStates.keys());
 
-    // Update or create meshes for each country with domination state
-    dominationStates.forEach((state, iso3) => {
-      const geometry = countryGeometries.get(iso3);
-      if (!geometry) return;
+    // 기존 merged geometry가 없거나 국가 구성이 바뀌면 재빌드
+    const prevMerged = mergedRef.current;
+    const needsRebuild = !prevMerged ||
+      !sameKeySet(prevMerged.countryVertexRanges, dominationIsos, countryGeometries);
 
-      existingIsos.delete(iso3);
-
-      if (meshMap.has(iso3)) {
-        // Update existing mesh uniforms
-        const data = meshMap.get(iso3)!;
-        updateMeshUniforms(data, state);
-        data.state = state;
-        return;
+    if (needsRebuild) {
+      // 이전 geometry/material 정리
+      if (prevMerged) {
+        prevMerged.geometry.dispose();
+        prevMerged.material.dispose();
       }
 
-      // Create new mesh
-      const color = state.dominantNation
-        ? hexToThreeColor(state.color || getNationColor(state.dominantNation))
-        : hexToThreeColor(UNDOMINATED_COLOR);
-      const prevColor = state.previousColor
-        ? hexToThreeColor(state.previousColor)
-        : color.clone();
+      const merged = buildMergedGeometry(countryGeometries, dominationIsos);
+      mergedRef.current = merged;
 
-      const glowIntensity = state.level === 'hegemony'
-        ? HEGEMONY_GLOW_INTENSITY
-        : 0;
-      const pulseAmplitude = state.level === 'sovereignty'
-        ? SOVEREIGNTY_PULSE_AMPLITUDE
-        : state.level === 'hegemony'
-          ? SOVEREIGNTY_PULSE_AMPLITUDE * 0.5 // hegemony has subtler pulse
-          : 0;
+      // mesh에 새 geometry/material 적용
+      if (meshRef.current) {
+        meshRef.current.geometry = merged.geometry;
+        meshRef.current.material = merged.material;
+      }
 
-      const material = new THREE.ShaderMaterial({
-        vertexShader: dominationVertexShader,
-        fragmentShader: dominationFragmentShader,
-        uniforms: {
-          uColor: { value: color },
-          uPreviousColor: { value: prevColor },
-          uTransition: { value: state.transitionProgress },
-          uGlowIntensity: { value: glowIntensity },
-          uPulsePhase: { value: 0.0 },
-          uPulseAmplitude: { value: pulseAmplitude },
-          uOpacity: { value: 0.7 },
-          // v15 Phase 3: 신규 uniforms
-          uTransitionWave: { value: 0.0 },
-          uDisputeIntensity: { value: state.contested ? 1.0 : 0.0 },
-          uFlashIntensity: { value: 0.0 },
-        },
-        transparent: true,
-        side: THREE.DoubleSide,
-        depthWrite: false,
+      // 애니메이션 상태 초기화
+      const animStates = animStatesRef.current;
+      const prevAnimStates = new Map(animStates);
+      animStates.clear();
+
+      dominationStates.forEach((state, iso3) => {
+        if (!merged.countryVertexRanges.has(iso3)) return;
+
+        const prevAnim = prevAnimStates.get(iso3);
+        const color = state.dominantNation
+          ? hexToThreeColor(state.color || getNationColor(state.dominantNation))
+          : hexToThreeColor(UNDOMINATED_COLOR);
+        const prevColor = state.previousColor
+          ? hexToThreeColor(state.previousColor)
+          : color.clone();
+
+        const isNewHegemony = state.level === 'hegemony' &&
+          state.previousLevel !== 'hegemony';
+
+        const anim: CountryAnimState = {
+          colorR: color.r, colorG: color.g, colorB: color.b,
+          prevColorR: prevColor.r, prevColorG: prevColor.g, prevColorB: prevColor.b,
+          transition: state.transitionProgress,
+          glowIntensity: state.level === 'hegemony' ? HEGEMONY_GLOW_INTENSITY : 0,
+          pulseAmplitude: state.level === 'sovereignty'
+            ? SOVEREIGNTY_PULSE_AMPLITUDE
+            : state.level === 'hegemony'
+              ? SOVEREIGNTY_PULSE_AMPLITUDE * 0.5
+              : 0,
+          disputeIntensity: state.contested ? 1.0 : 0.0,
+          transitionWave: 0,
+          flashIntensity: isNewHegemony ? 1.0 : 0,
+          transitionTimer: state.transitionProgress < 1.0 ? 0 : TRANSITION_DURATION,
+          transitionWaveTimer: isNewHegemony ? 0 : -1,
+          flashTimer: isNewHegemony ? FLASH_DURATION : -1,
+          level: state.level,
+          dominantNation: state.dominantNation,
+          stateColor: state.color,
+          contested: state.contested ?? false,
+        };
+
+        // 이전 애니메이션 상태에서 진행 중인 타이머 복원
+        if (prevAnim) {
+          anim.transitionWaveTimer = prevAnim.transitionWaveTimer;
+          anim.flashTimer = prevAnim.flashTimer;
+          anim.transitionWave = prevAnim.transitionWave;
+          anim.flashIntensity = prevAnim.flashIntensity;
+        }
+
+        animStates.set(iso3, anim);
+        updateCountryAttributes(merged, iso3, anim);
       });
 
-      const mesh = new THREE.Mesh(geometry, material);
-      mesh.renderOrder = RENDER_ORDER.DOMINATION; // v24: 통일 renderOrder
+      // 모든 attribute 업데이트 플래그
+      markAllAttributesDirty(merged.geometry);
+    } else {
+      // geometry 재빌드 불필요 — 상태만 업데이트
+      const merged = mergedRef.current!;
+      const animStates = animStatesRef.current;
 
-      // v15: 전환 웨이브 + 플래시 초기화
-      const isNewHegemony = state.level === 'hegemony' &&
-        state.previousLevel !== 'hegemony';
+      dominationStates.forEach((state, iso3) => {
+        if (!merged.countryVertexRanges.has(iso3)) return;
 
-      const data: DominationMeshData = {
-        geometry,
-        material,
-        mesh,
-        state,
-        transitionWaveTimer: isNewHegemony ? 0 : -1,
-        flashTimer: isNewHegemony ? FLASH_DURATION : -1,
-      };
+        const existingAnim = animStates.get(iso3);
+        if (existingAnim) {
+          // 기존 국가: 상태 변경 감지 → 업데이트
+          updateAnimFromState(existingAnim, state);
+        } else {
+          // 새 국가 (이론적으로 여기에 오면 rebuild 필요하나 안전 처리)
+          const color = state.dominantNation
+            ? hexToThreeColor(state.color || getNationColor(state.dominantNation))
+            : hexToThreeColor(UNDOMINATED_COLOR);
+          const prevColor = state.previousColor
+            ? hexToThreeColor(state.previousColor)
+            : color.clone();
+          const isNewHegemony = state.level === 'hegemony' &&
+            state.previousLevel !== 'hegemony';
 
-      meshMap.set(iso3, data);
-      group.add(mesh);
+          const anim: CountryAnimState = {
+            colorR: color.r, colorG: color.g, colorB: color.b,
+            prevColorR: prevColor.r, prevColorG: prevColor.g, prevColorB: prevColor.b,
+            transition: state.transitionProgress,
+            glowIntensity: state.level === 'hegemony' ? HEGEMONY_GLOW_INTENSITY : 0,
+            pulseAmplitude: state.level === 'sovereignty'
+              ? SOVEREIGNTY_PULSE_AMPLITUDE
+              : state.level === 'hegemony'
+                ? SOVEREIGNTY_PULSE_AMPLITUDE * 0.5
+                : 0,
+            disputeIntensity: state.contested ? 1.0 : 0.0,
+            transitionWave: 0,
+            flashIntensity: isNewHegemony ? 1.0 : 0,
+            transitionTimer: state.transitionProgress < 1.0 ? 0 : TRANSITION_DURATION,
+            transitionWaveTimer: isNewHegemony ? 0 : -1,
+            flashTimer: isNewHegemony ? FLASH_DURATION : -1,
+            level: state.level,
+            dominantNation: state.dominantNation,
+            stateColor: state.color,
+            contested: state.contested ?? false,
+          };
+          animStates.set(iso3, anim);
+        }
 
-      // Start transition timer if not complete
-      if (state.transitionProgress < 1.0) {
-        transitionTimers.current.set(iso3, 0);
-      }
-    });
+        const anim = animStates.get(iso3)!;
+        updateCountryAttributes(merged, iso3, anim);
+      });
 
-    // Remove meshes for countries no longer in domination states
-    existingIsos.forEach((iso3) => {
-      const data = meshMap.get(iso3);
-      if (data) {
-        group.remove(data.mesh);
-        data.material.dispose();
-        meshMap.delete(iso3);
-        transitionTimers.current.delete(iso3);
-      }
-    });
-  }, [dominationStates, countryGeometries, globeRadius]);
+      markAllAttributesDirty(merged.geometry);
+    }
+
+    needsAttributeUpdate.current = true;
+  }, [dominationStates, countryGeometries, globeRadius, updateCountryAttributes]);
 
   // Animate: pulse glow, transition fades, v15 effects
   useFrame((_, delta) => {
     if (!visible) return;
-    // v33 Phase 4: 지배 상태 데이터가 없으면 스킵
-    if (meshDataRef.current.size === 0) return;
+    const merged = mergedRef.current;
+    if (!merged) return;
+    const animStates = animStatesRef.current;
+    if (animStates.size === 0) return;
+
     // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
     const distSkip = distanceLOD?.distanceTier === 'far' ? 4 : 1;
     const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
     if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
-    const meshMap = meshDataRef.current;
+    // 글로벌 pulse phase 업데이트
+    const mat = merged.material;
+    const currentPhase = (mat.uniforms.uPulsePhase.value as number) +
+      delta * SOVEREIGNTY_PULSE_SPEED;
+    mat.uniforms.uPulsePhase.value = currentPhase % 1000;
 
-    meshMap.forEach((data, iso3) => {
-      const mat = data.material;
+    let anyChanged = false;
 
-      // Animate pulse for sovereignty/hegemony
-      if (data.state.level === 'sovereignty' || data.state.level === 'hegemony') {
-        const currentPhase = (mat.uniforms.uPulsePhase.value as number) +
-          delta * SOVEREIGNTY_PULSE_SPEED;
-        mat.uniforms.uPulsePhase.value = currentPhase % 1000; // prevent overflow
-      }
+    animStates.forEach((anim, iso3) => {
+      let changed = false;
 
       // Animate transition fade (2 seconds)
-      const timer = transitionTimers.current.get(iso3);
-      if (timer !== undefined && timer < TRANSITION_DURATION) {
-        const newTimer = timer + delta;
-        const progress = Math.min(newTimer / TRANSITION_DURATION, 1.0);
-        mat.uniforms.uTransition.value = progress;
-        transitionTimers.current.set(iso3, newTimer);
-
-        if (progress >= 1.0) {
-          transitionTimers.current.delete(iso3);
-        }
+      if (anim.transitionTimer < TRANSITION_DURATION) {
+        anim.transitionTimer += delta;
+        anim.transition = Math.min(anim.transitionTimer / TRANSITION_DURATION, 1.0);
+        changed = true;
       }
 
       // v15 Phase 3: 골드 전환 웨이브 애니메이션 (sovereignty→hegemony)
-      if (data.transitionWaveTimer >= 0 && data.transitionWaveTimer < TRANSITION_WAVE_DURATION) {
-        data.transitionWaveTimer += delta;
-        const waveProgress = Math.min(data.transitionWaveTimer / TRANSITION_WAVE_DURATION, 1.0);
-        mat.uniforms.uTransitionWave.value = waveProgress;
-        if (waveProgress >= 1.0) {
-          // 웨이브 완료 후 서서히 사라짐
-          data.transitionWaveTimer = TRANSITION_WAVE_DURATION;
+      if (anim.transitionWaveTimer >= 0 && anim.transitionWaveTimer < TRANSITION_WAVE_DURATION) {
+        anim.transitionWaveTimer += delta;
+        anim.transitionWave = Math.min(anim.transitionWaveTimer / TRANSITION_WAVE_DURATION, 1.0);
+        if (anim.transitionWave >= 1.0) {
+          anim.transitionWaveTimer = TRANSITION_WAVE_DURATION;
         }
-      } else if (data.transitionWaveTimer >= TRANSITION_WAVE_DURATION) {
+        changed = true;
+      } else if (anim.transitionWaveTimer >= TRANSITION_WAVE_DURATION) {
         // 웨이브 완료 후 0으로 감쇠
-        const current = mat.uniforms.uTransitionWave.value as number;
-        if (current > 0.01) {
-          mat.uniforms.uTransitionWave.value = current - delta * 0.5;
+        if (anim.transitionWave > 0.01) {
+          anim.transitionWave -= delta * 0.5;
+          if (anim.transitionWave <= 0.01) {
+            anim.transitionWave = 0;
+            anim.transitionWaveTimer = -1;
+          }
+          changed = true;
         } else {
-          mat.uniforms.uTransitionWave.value = 0;
-          data.transitionWaveTimer = -1; // 완전 종료
+          anim.transitionWave = 0;
+          anim.transitionWaveTimer = -1;
         }
       }
 
       // v15 Phase 3: 점령 완료 플래시 감쇠 (3초)
-      if (data.flashTimer > 0) {
-        data.flashTimer -= delta;
-        const flashProgress = Math.max(data.flashTimer / FLASH_DURATION, 0);
+      if (anim.flashTimer > 0) {
+        anim.flashTimer -= delta;
+        const flashProgress = Math.max(anim.flashTimer / FLASH_DURATION, 0);
         // easeOutCubic 감쇠 커브
-        mat.uniforms.uFlashIntensity.value = flashProgress * flashProgress;
-        if (data.flashTimer <= 0) {
-          data.flashTimer = -1;
-          mat.uniforms.uFlashIntensity.value = 0;
+        anim.flashIntensity = flashProgress * flashProgress;
+        if (anim.flashTimer <= 0) {
+          anim.flashTimer = -1;
+          anim.flashIntensity = 0;
         }
+        changed = true;
+      }
+
+      // 변경된 국가만 per-vertex attribute 업데이트
+      if (changed) {
+        updateCountryAttributes(merged, iso3, anim);
+        anyChanged = true;
       }
     });
+
+    // GPU에 변경 사항 전송 (attribute 더티 플래그)
+    if (anyChanged) {
+      markDirtyAttributes(merged.geometry);
+    }
   });
 
   // Cleanup on unmount
   useEffect(() => {
     return () => {
-      const meshMap = meshDataRef.current;
-      meshMap.forEach((data) => {
-        data.material.dispose();
-      });
-      meshMap.clear();
-      transitionTimers.current.clear();
+      const merged = mergedRef.current;
+      if (merged) {
+        merged.geometry.dispose();
+        merged.material.dispose();
+      }
+      mergedRef.current = null;
+      animStatesRef.current.clear();
     };
   }, []);
 
-  return <group ref={groupRef} visible={visible} />;
+  return (
+    <mesh
+      ref={meshRef}
+      visible={visible}
+      renderOrder={RENDER_ORDER.DOMINATION}
+      frustumCulled={false}
+    />
+  );
 }
 
-// ─── Helper: update mesh uniforms from state ───
+// ─── v33 Phase 7: 헬퍼 함수들 ───
 
-function updateMeshUniforms(data: DominationMeshData, newState: CountryDominationState) {
-  const mat = data.material;
-  const oldState = data.state;
+/**
+ * 기존 애니메이션 상태를 새 domination state로 업데이트.
+ * 색상 변경 시 transition 애니메이션 트리거.
+ */
+function updateAnimFromState(anim: CountryAnimState, newState: CountryDominationState) {
+  // 색상 변경 감지 → transition 애니메이션 시작
+  if (newState.color !== anim.stateColor || newState.dominantNation !== anim.dominantNation) {
+    // previous color ← current color
+    anim.prevColorR = anim.colorR;
+    anim.prevColorG = anim.colorG;
+    anim.prevColorB = anim.colorB;
 
-  // Color change → trigger transition animation
-  if (newState.color !== oldState.color || newState.dominantNation !== oldState.dominantNation) {
-    // Set previous color to current
-    const currentColor = mat.uniforms.uColor.value as THREE.Color;
-    (mat.uniforms.uPreviousColor.value as THREE.Color).copy(currentColor);
-
-    // Set new target color
+    // new target color
     const targetColor = newState.dominantNation
       ? hexToThreeColor(newState.color || getNationColor(newState.dominantNation))
       : hexToThreeColor(UNDOMINATED_COLOR);
-    (mat.uniforms.uColor.value as THREE.Color).copy(targetColor);
+    anim.colorR = targetColor.r;
+    anim.colorG = targetColor.g;
+    anim.colorB = targetColor.b;
 
-    // Reset transition
-    mat.uniforms.uTransition.value = 0;
+    // transition 리셋
+    anim.transition = 0;
+    anim.transitionTimer = 0;
+    anim.stateColor = newState.color;
+    anim.dominantNation = newState.dominantNation;
   }
 
-  // Update glow/pulse based on domination level
-  const glowIntensity = newState.level === 'hegemony'
-    ? HEGEMONY_GLOW_INTENSITY
-    : 0;
-  const pulseAmplitude = newState.level === 'sovereignty'
+  // glow/pulse 레벨 업데이트
+  anim.glowIntensity = newState.level === 'hegemony' ? HEGEMONY_GLOW_INTENSITY : 0;
+  anim.pulseAmplitude = newState.level === 'sovereignty'
     ? SOVEREIGNTY_PULSE_AMPLITUDE
     : newState.level === 'hegemony'
       ? SOVEREIGNTY_PULSE_AMPLITUDE * 0.5
       : 0;
 
-  mat.uniforms.uGlowIntensity.value = glowIntensity;
-  mat.uniforms.uPulseAmplitude.value = pulseAmplitude;
+  // 분쟁 해칭
+  anim.disputeIntensity = newState.contested ? 1.0 : 0.0;
+  anim.contested = newState.contested ?? false;
 
-  // v15 Phase 3: 분쟁 해칭 업데이트
-  mat.uniforms.uDisputeIntensity.value = newState.contested ? 1.0 : 0.0;
-
-  // v15 Phase 3: sovereignty→hegemony 전환 감지 → 골드 웨이브 + 플래시 트리거
-  const wasNotHegemony = oldState.level !== 'hegemony';
+  // sovereignty→hegemony 전환 감지
+  const wasNotHegemony = anim.level !== 'hegemony';
   const isNowHegemony = newState.level === 'hegemony';
   if (wasNotHegemony && isNowHegemony) {
-    // 골드 전환 웨이브 시작
-    data.transitionWaveTimer = 0;
-    mat.uniforms.uTransitionWave.value = 0;
-    // 점령 완료 플래시 시작
-    data.flashTimer = FLASH_DURATION;
-    mat.uniforms.uFlashIntensity.value = 1.0;
+    anim.transitionWaveTimer = 0;
+    anim.transitionWave = 0;
+    anim.flashTimer = FLASH_DURATION;
+    anim.flashIntensity = 1.0;
   }
+
+  anim.level = newState.level;
+}
+
+/**
+ * 두 키 세트가 동일한지 비교 (rebuild 판단용).
+ * countryGeometries에 실제로 존재하는 iso3만 고려.
+ */
+function sameKeySet(
+  existingRanges: Map<string, [number, number]>,
+  newIsos: Set<string>,
+  countryGeometries: Map<string, THREE.BufferGeometry>,
+): boolean {
+  // 새 iso3 중 geometry가 있는 것만 필터
+  const validNewIsos = new Set<string>();
+  newIsos.forEach((iso3) => {
+    if (countryGeometries.has(iso3)) validNewIsos.add(iso3);
+  });
+
+  if (existingRanges.size !== validNewIsos.size) return false;
+  for (const iso3 of validNewIsos) {
+    if (!existingRanges.has(iso3)) return false;
+  }
+  return true;
+}
+
+/**
+ * params/effects attribute만 더티 마킹 (애니메이션 루프에서 사용).
+ */
+function markDirtyAttributes(geometry: THREE.BufferGeometry) {
+  const paramsAttr = geometry.getAttribute('aParams') as THREE.BufferAttribute;
+  const effectsAttr = geometry.getAttribute('aEffects') as THREE.BufferAttribute;
+  if (paramsAttr) paramsAttr.needsUpdate = true;
+  if (effectsAttr) effectsAttr.needsUpdate = true;
+}
+
+/**
+ * 모든 per-vertex attribute를 더티 마킹 (초기화/상태 변경 시 사용).
+ */
+function markAllAttributesDirty(geometry: THREE.BufferGeometry) {
+  const colorAttr = geometry.getAttribute('aColor') as THREE.BufferAttribute;
+  const prevColorAttr = geometry.getAttribute('aPreviousColor') as THREE.BufferAttribute;
+  const paramsAttr = geometry.getAttribute('aParams') as THREE.BufferAttribute;
+  const effectsAttr = geometry.getAttribute('aEffects') as THREE.BufferAttribute;
+  if (colorAttr) colorAttr.needsUpdate = true;
+  if (prevColorAttr) prevColorAttr.needsUpdate = true;
+  if (paramsAttr) paramsAttr.needsUpdate = true;
+  if (effectsAttr) effectsAttr.needsUpdate = true;
 }
 
 // ─── Utility: Create domination state from server data ───
