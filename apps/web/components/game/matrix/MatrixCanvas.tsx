@@ -219,6 +219,8 @@ interface MatrixCanvasProps {
     onArenaAgentKill?: (agentId: string, killerId?: string) => void;
     // v8.1: 에이전트 XP 부여 (젬 수집 시)
     addAgentXp?: (agentId: string, xp: number) => void;
+    // v33 Phase 4: 멀티플레이어 렌더링 콜백 (온라인 모드)
+    onMultiplayerRender?: (ctx: CanvasRenderingContext2D, cameraX: number, cameraY: number, canvasWidth: number, canvasHeight: number, zoom: number, time: number) => void;
 }
 
 const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
@@ -275,6 +277,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
     onArenaAgentDamage,
     onArenaAgentKill,
     addAgentXp,
+    onMultiplayerRender,
 }) => {
     // 다국어 시스템
     const { language, t } = useLanguage();
@@ -5124,6 +5127,15 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
         }
 
         ctx.resetTransform();
+
+        // v33 Phase 4: 멀티플레이어 렌더링 (원격 플레이어 + PvP 이펙트 + 전쟁 테두리 + 킬피드)
+        // ctx를 화면 중앙 기준으로 세팅하여 remote-player의 (player.x - cameraX) * zoom 좌표계와 매치
+        if (onMultiplayerRender) {
+            ctx.save();
+            ctx.translate(width / 2, height / 2);
+            onMultiplayerRender(ctx, p.position.x, p.position.y, width, height, zoom, Date.now());
+            ctx.restore();
+        }
 
         if (!isAutoHunt) {
             drawJoystick(ctx, joystickRef.current);

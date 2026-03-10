@@ -85,6 +85,9 @@ import type { MatrixEpochPhase } from '@/hooks/useMatrixSocket';
 import type { InterpolatedPlayer } from '@/lib/matrix/systems/online-sync';
 import type { EpochUIState } from '@/lib/matrix/systems/epoch-ui-bridge';
 
+// ─── v33 Phase 4: Multiplayer Rendering Integration ───
+import { MultiplayerRenderer } from '@/lib/matrix/rendering/multiplayer';
+
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
   () => import('./MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
@@ -167,6 +170,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const clientPredictionRef = useRef<ClientPrediction | null>(null);
   const killReporterRef = useRef<KillReporter | null>(null);
   const epochBridgeRef = useRef<EpochUIBridge | null>(null);
+  const multiplayerRendererRef = useRef<MultiplayerRenderer | null>(null);
   const [remotePlayers, setRemotePlayers] = useState<InterpolatedPlayer[]>([]);
   const [epochUI, setEpochUI] = useState<EpochUIState | null>(null);
   const [onlineLevelUpChoices, setOnlineLevelUpChoices] = useState<Array<{
@@ -217,16 +221,32 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     const prediction = new ClientPrediction();
     const killRep = new KillReporter();
     const epoch = new EpochUIBridge();
+    const mpRenderer = new MultiplayerRenderer();
 
     onlineSyncRef.current = sync;
     clientPredictionRef.current = prediction;
     killReporterRef.current = killRep;
     epochBridgeRef.current = epoch;
+    multiplayerRendererRef.current = mpRenderer;
 
-    // 킬 리포터 콜백 설정
+    // 킬 리포터 콜백 설정 — PvP 이펙트 연동
     killRep.setCallbacks({
       onConfirmed: (kill) => {
         setSessionKills(prev => prev + 1);
+        // v33 Phase 4: 킬 이펙트 + 킬피드 (원격 플레이어 위치로 이펙트)
+        const targetPos = sync.getPlayerPosition(kill.targetId);
+        if (targetPos) {
+          mpRenderer.onKillConfirmed(
+            kill,
+            'YOU',
+            countryIso3 ?? 'UNK',
+            kill.targetId,
+            '',
+            targetPos.x,
+            targetPos.y,
+            '',
+          );
+        }
       },
       onRejected: (_targetId, _reason) => {
         // 킬 롤백 — 세션 킬 카운트 감소
@@ -244,6 +264,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       },
       onEpochEnd: () => {
         setEpochUI(epoch.state);
+        mpRenderer.reset(); // 에폭 종료 시 이펙트 클리어
       },
     });
 
@@ -257,12 +278,14 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       prediction.reset();
       killRep.reset();
       epoch.reset();
+      mpRenderer.reset();
       seededSpawning.enterOfflineMode();
       matrixSocket.disconnect();
       onlineSyncRef.current = null;
       clientPredictionRef.current = null;
       killReporterRef.current = null;
       epochBridgeRef.current = null;
+      multiplayerRendererRef.current = null;
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOnline, serverUrl]);
@@ -549,13 +572,14 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       isGameOver: false,
     }));
 
-    // v33 Phase 3: 온라인 모드 퇴장 시 클린업
+    // v33 Phase 3+4: 온라인 모드 퇴장 시 클린업
     if (isOnline) {
       matrixSocket.leaveArena();
       onlineSyncRef.current?.reset();
       clientPredictionRef.current?.reset();
       killReporterRef.current?.reset();
       epochBridgeRef.current?.reset();
+      multiplayerRendererRef.current?.reset();
       seededSpawning.enterOfflineMode();
     }
 
@@ -721,6 +745,46 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   }, [arena.agents]);
 
   // ─────────────────────────────────────────
+  // v33 Phase 4: 멀티플레이어 렌더링 콜백
+  // ─────────────────────────────────────────
+  const handleMultiplayerRender = useCallback((
+    ctx: CanvasRenderingContext2D,
+    cameraX: number,
+    cameraY: number,
+    canvasWidth: number,
+    canvasHeight: number,
+    zoom: number,
+    time: number,
+  ) => {
+    const renderer = multiplayerRendererRef.current;
+    if (!renderer) return;
+
+    const sync = onlineSyncRef.current;
+    const epochBridge = epochBridgeRef.current;
+    if (!sync) return;
+
+    // 보간된 원격 플레이어 가져오기 (이미 RAF tick에서 호출되지만 draw 타이밍에 최신 보간 적용)
+    const interpolated = sync.state.remotePlayers;
+
+    // 에폭 상태에서 PvP + war 카운트다운 추출
+    const pvpEnabled = sync.state.pvpEnabled;
+    const warCountdown = epochBridge?.state.warCountdownNumber ?? null;
+
+    renderer.renderMultiplayerLayer({
+      ctx,
+      cameraX,
+      cameraY,
+      canvasWidth,
+      canvasHeight,
+      zoom,
+      remotePlayers: interpolated,
+      pvpEnabled,
+      warCountdown,
+      time,
+    });
+  }, []);
+
+  // ─────────────────────────────────────────
   // 렌더링
   // ─────────────────────────────────────────
 
@@ -811,6 +875,9 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         onArenaAgentDamage={arena.damageAgent}
         onArenaAgentKill={arena.killAgent}
         addAgentXp={arena.addAgentXp}
+
+        // === v33 Phase 4: Multiplayer Rendering ===
+        onMultiplayerRender={isOnline ? handleMultiplayerRender : undefined}
       />
 
       {/* ─── MatrixHUD: 상단 HP/XP/레벨 + 무기 슬롯 ─── */}
