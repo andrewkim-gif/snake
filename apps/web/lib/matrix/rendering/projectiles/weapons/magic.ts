@@ -1,10 +1,10 @@
 /**
  * game/rendering/projectiles/weapons/magic.ts - 마법/영역 무기 렌더링
- * v4.9: 스타일리시 이펙트 시스템 - 이징, 글로우, 펄스, 파티클
- * v4.9.1: LOD-aware shadowBlur 최적화
- * v7.20: 성능 최적화 - easing 통합 모듈 사용, gradient→solid 변환, time 파라미터화
- *
- * API Call (wand), Documentation (bible), Debug Aura (garlic), Firewall Zone (pool)
+ * v37: 카테고리 테마 리디자인
+ *   - wand (에너지 볼트 / Plasma Bolt): TERRITORY 블루 — 영역 확장 펄스
+ *   - bible (가디언 위성): SOVEREIGNTY 그린 — 궤도 도는 구체 (기존 유지)
+ *   - garlic (방어 필드): SOVEREIGNTY 그린 — 오로라 에너지 영역 (기존 유지)
+ *   - pool (지뢰밭 / Minefield): TERRITORY 블루 → 영역 설치물 (맥동하는 위험 구역)
  */
 
 import { shouldUseGlow } from '../../enemies/renderContext';
@@ -21,72 +21,61 @@ export interface MagicWeaponParams {
 // v7.20: 공통 easing 모듈 사용 (중복 제거)
 
 /**
- * API Call - JSON/REST 리퀘스트 발사체
- * v4.9: 이징 바운스 + 데이터 스트림 트레일 + JSON 파티클
- * v7.15: 성능 최적화 - LOD 기반 이펙트 감소, shadowBlur 최소화
+ * 에너지 볼트 / Plasma Bolt — TERRITORY (DATA) 카테고리
+ * v37: 영역 확장 펄스 + 플라즈마 에너지 (블루 에너지 테마)
  */
 export function drawWand(params: MagicWeaponParams): void {
   const { ctx, p, time: frameTime } = params;
-  const time = frameTime ?? Date.now(); // v7.20: 외부에서 전달받거나 폴백
+  const time = frameTime ?? Date.now();
   const bounceBonus = 1 + (p.bounceCount || 0) * 0.5;
-
-  // v7.15: LOD 체크 (한 번만)
   const useGlow = shouldUseGlow();
 
   ctx.save();
-  applyIsoProjectileTransform(ctx, p.angle); // v7.20: 아이소메트릭 3D 원근감
+  applyIsoProjectileTransform(ctx, p.angle);
 
   const isEvolved = p.isEvolved;
   const isUltimate = p.isUltimate;
 
-  // REST API 팔레트 (블루 테마)
-  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#22d3ee' : '#3b82f6');
-  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '34, 211, 238' : '59, 130, 246');
-  const methodColors = {
-    GET: '#22c55e',
-    POST: '#3b82f6',
-    PUT: '#f59e0b',
-    DELETE: '#ef4444',
-    PATCH: '#a855f7'
-  };
+  // TERRITORY 컬러 팔레트 (블루 계열)
+  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#93C5FD' : '#3B82F6');
+  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '147, 197, 253' : '59, 130, 246');
+  const coreColor = isUltimate ? '#FEF3C7' : '#DBEAFE';
 
   // 크기 with 탄성 등장
   const lifeRatio = Math.max(0, Math.min(1, p.life / (p.startLife || 1)));
   const appearProgress = Math.max(0, Math.min(1, (1 - lifeRatio) * 4));
-  const bounceScale = Math.max(0.1, EASING.easeOutBack(appearProgress)); // v7.20: 공통 모듈
-  const packetSize = Math.max(8, Math.max(14, (p.radius || 6) * 3) * bounceBonus * bounceScale);
+  const bounceScale = Math.max(0.1, EASING.easeOutBack(appearProgress));
+  const boltSize = Math.max(8, Math.max(12, (p.radius || 6) * 2.5) * bounceBonus * bounceScale);
 
-  // ===== JSON 데이터 스트림 트레일 (최적화: 개수 감소, shadowBlur 조건부) =====
-  const jsonChars = ['{', '"data":', '[', '}', '"status":'];
-  const trailCount = isUltimate ? 5 : (isEvolved ? 4 : 3); // 10/8/6 → 5/4/3
-
+  // ===== 1. 에너지 트레일 (플라즈마 잔상) =====
+  const trailCount = isUltimate ? 5 : (isEvolved ? 4 : 3);
   for (let i = trailCount; i >= 1; i--) {
-    const trailEase = EASING.easeOutExpo(1 - i / trailCount); // v7.20: 공통 모듈
-    const offsetX = -i * 12 * trailEase;
-    const waveY = Math.sin(time / 60 + i * 0.8) * 4;
-    // v7.34: 알파값 증가 (0.6 → 0.85) - 더 선명한 트레일
-    const alpha = 0.85 * (1 - i / trailCount);
-    const fontSize = Math.max(6, 9 - i * 0.6);
+    const trailEase = EASING.easeOutExpo(1 - i / trailCount);
+    const offsetX = -i * 10 * trailEase;
+    const waveY = Math.sin(time / 80 + i * 1.2) * 3;
+    const alpha = 0.7 * (1 - i / trailCount);
 
-    ctx.font = `bold ${fontSize}px monospace`;
     ctx.fillStyle = `rgba(${glowColorRgba}, ${alpha})`;
-    ctx.fillText(jsonChars[i % jsonChars.length], offsetX, waveY);
+    ctx.beginPath();
+    ctx.arc(offsetX, waveY, boltSize * 0.35 - i * 0.8, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  // ===== 펄스 링 (1개로 축소) =====
-  // v7.34: 알파값 증가 (0.3 → 0.5) - 더 선명한 펄스
-  const pulsePhase = (time / 160) % 1;
-  const ringRadius = packetSize * 0.8 + pulsePhase * 12;
-  const ringAlpha = (1 - pulsePhase) * 0.5;
+  // ===== 2. 영역 확장 펄스 링 =====
+  const pulseCount = isUltimate ? 2 : 1;
+  for (let pr = 0; pr < pulseCount; pr++) {
+    const pulsePhase = ((time / 200 + pr * 0.5) % 1);
+    const ringRadius = boltSize * 0.7 + pulsePhase * 15;
+    const ringAlpha = (1 - pulsePhase) * 0.5;
 
-  ctx.strokeStyle = `rgba(${glowColorRgba}, ${ringAlpha})`;
-  ctx.lineWidth = 2.5 * (1 - pulsePhase);
-  ctx.beginPath();
-  ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
-  ctx.stroke();
+    ctx.strokeStyle = `rgba(${glowColorRgba}, ${ringAlpha})`;
+    ctx.lineWidth = 2.5 * (1 - pulsePhase);
+    ctx.beginPath();
+    ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
-  // ===== 메인 API 패킷 (글로우 레이어 조건부) =====
-  // v7.34: 글로우 알파 증가 (0.3 → 0.5), shadowBlur 증가 (12 → 16)
+  // ===== 3. 메인 플라즈마 볼트 (빛나는 에너지 구체) =====
   if (useGlow) {
     ctx.save();
     ctx.globalAlpha = 0.5 * bounceScale;
@@ -94,109 +83,96 @@ export function drawWand(params: MagicWeaponParams): void {
     ctx.shadowBlur = 16;
     ctx.fillStyle = mainColor;
     ctx.beginPath();
-    ctx.roundRect(-packetSize / 2 * 1.2, -packetSize / 2 * 1.2,
-                  packetSize * 1.2, packetSize * 1.2, 6);
+    ctx.arc(0, 0, boltSize * 0.65, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // 패킷 배경 (단색으로 단순화)
-  ctx.fillStyle = '#1e293b';
+  // 플라즈마 구체 본체
+  ctx.fillStyle = mainColor;
   ctx.beginPath();
-  ctx.roundRect(-packetSize / 2, -packetSize / 2, packetSize, packetSize, 5);
+  ctx.arc(0, 0, boltSize * 0.5, 0, Math.PI * 2);
   ctx.fill();
 
-  // 테두리 (글로우 조건부)
-  // v7.34: shadowBlur 증가 (8 → 12), lineWidth 증가 (2.5 → 3)
+  // 테두리 글로우
   if (useGlow) {
     ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 10;
   }
-  ctx.strokeStyle = mainColor;
-  ctx.lineWidth = 3;
+  ctx.strokeStyle = coreColor;
+  ctx.lineWidth = 2;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // ===== HTTP 메서드 뱃지 =====
-  const methods = isUltimate ? ['DELETE', 'PUT'] : (isEvolved ? ['POST', 'GET'] : ['GET']);
-  const currentMethod = methods[Math.floor(time / 400) % methods.length];
-  const methodColor = methodColors[currentMethod as keyof typeof methodColors] || '#3b82f6';
-
-  ctx.fillStyle = methodColor;
+  // 내부 에너지 패턴 (파동 라인)
+  const waveOffset = time / 50;
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.5)`;
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(-packetSize / 2 + 2, -packetSize / 2 + 2, packetSize - 4, 10, 3);
+  for (let w = 0; w < 8; w++) {
+    const wAngle = (w / 8) * Math.PI * 2 + waveOffset;
+    const wr = boltSize * 0.35;
+    const wx = Math.cos(wAngle) * wr;
+    const wy = Math.sin(wAngle) * wr;
+    if (w === 0) ctx.moveTo(wx, wy);
+    else ctx.lineTo(wx, wy);
+  }
+  ctx.closePath();
+  ctx.stroke();
+
+  // 코어 (밝은 중심점)
+  const corePulse = 0.8 + Math.sin(time / 35) * 0.2;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(0, 0, boltSize * 0.15 * corePulse, 0, Math.PI * 2);
   ctx.fill();
 
-  ctx.font = 'bold 6px monospace';
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.fillText(currentMethod, 0, -packetSize / 2 + 9);
-
-  // ===== JSON 데이터 표시 (간소화) =====
-  const jsonLines = isUltimate ? ['"status": 200', '"ok": true'] : ['"data": {...}'];
-
-  ctx.font = '4px monospace';
-  ctx.textAlign = 'left';
-  ctx.fillStyle = '#94a3b8';
-
-  jsonLines.forEach((line, idx) => {
-    ctx.fillText(line.substring(0, 12), -packetSize / 2 + 4, -packetSize / 2 + 18 + idx * 6);
-  });
-
-  // ===== 전송 인디케이터 (간소화) =====
-  // v7.34: 알파값 범위 증가 (0.6-1.0 → 0.7-1.0), 크기 증가 (3 → 4)
-  const pulse = Math.sin(time / 100) * 0.3 + 0.7;
+  // ===== 4. 에너지 전달 인디케이터 =====
+  const pulse = Math.sin(time / 80) * 0.3 + 0.7;
   ctx.fillStyle = `rgba(${glowColorRgba}, ${pulse})`;
   ctx.beginPath();
-  ctx.arc(packetSize / 2 - 4, 0, 4, 0, Math.PI * 2);
+  ctx.arc(boltSize * 0.55, 0, 3, 0, Math.PI * 2);
   ctx.fill();
 
-  // ===== 속도선 (2개로 축소) =====
-  // v7.34: 알파값 증가 (0.5 → 0.7), lineWidth 증가 (2 → 2.5)
+  // 속도선 (에너지 궤적)
   for (let s = 0; s < 2; s++) {
     const flowProgress = ((time / 100) + s * 0.5) % 1;
-    const sY = (s - 0.5) * 8;
-    const sAlpha = Math.sin(flowProgress * Math.PI) * 0.7;
+    const sY = (s - 0.5) * 6;
+    const sAlpha = Math.sin(flowProgress * Math.PI) * 0.6;
 
     ctx.strokeStyle = `rgba(${glowColorRgba}, ${sAlpha})`;
-    ctx.lineWidth = 2.5;
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(-packetSize - 5 - flowProgress * 15, sY);
-    ctx.lineTo(-packetSize - 5 - flowProgress * 15 - 8, sY);
+    ctx.moveTo(-boltSize * 0.6 - flowProgress * 12, sY);
+    ctx.lineTo(-boltSize * 0.6 - flowProgress * 12 - 8, sY);
     ctx.stroke();
   }
 
-  // ===== 진화/궁극 추가 이펙트 (최적화) =====
-  // v7.34: 파티클 알파 증가, 크기 증가
+  // ===== 5. 진화/궁극 이펙트 =====
   if (isEvolved || isUltimate) {
-    // 데이터 오비탈 파티클 (개수 감소, shadowBlur 제거)
-    const orbitalCount = isUltimate ? 5 : 4; // v7.34: 개수 복원 (4/3 → 5/4)
+    // 오비탈 에너지 입자 (유도 궤적 암시)
+    const orbitalCount = isUltimate ? 5 : 3;
     for (let d = 0; d < orbitalCount; d++) {
       const dAngle = (time / 250 + d * Math.PI * 2 / orbitalCount) % (Math.PI * 2);
-      const dDist = packetSize * 0.8 + 8; // v7.34: 거리 증가 (6 → 8)
-      const dPulse = Math.sin(time / 120 + d) * 0.15 + 0.9; // v7.34: 알파 증가 (0.8 → 0.9)
+      const dDist = boltSize * 0.7 + 6;
 
-      ctx.font = 'bold 8px monospace'; // v7.34: bold 추가, 크기 증가 (7 → 8)
-      ctx.fillStyle = `rgba(${glowColorRgba}, ${dPulse})`;
-      ctx.textAlign = 'center';
-      const dataChars = ['0', '1', '{', '}'];
-      ctx.fillText(dataChars[d % dataChars.length],
-                   Math.cos(dAngle) * dDist,
-                   Math.sin(dAngle) * dDist);
+      ctx.fillStyle = `rgba(${glowColorRgba}, 0.8)`;
+      ctx.beginPath();
+      ctx.arc(
+        Math.cos(dAngle) * dDist,
+        Math.sin(dAngle) * dDist,
+        2.5, 0, Math.PI * 2
+      );
+      ctx.fill();
     }
 
     if (isUltimate) {
       ctx.save();
       ctx.rotate(-p.angle);
-      ctx.font = 'bold 9px monospace';
+      ctx.font = 'bold 7px monospace';
       ctx.textAlign = 'center';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.fillStyle = '#22c55e';
-
-      const statusY = -packetSize - 6;
-      ctx.strokeText('200 OK', 0, statusY);
-      ctx.fillText('200 OK', 0, statusY);
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillText('PLASMA', 0, -boltSize * 0.7 - 8);
       ctx.restore();
     }
   }
@@ -581,13 +557,13 @@ export function drawGarlic(params: MagicWeaponParams): void {
 }
 
 /**
- * Firewall Zone - 네트워크 보안 영역
- * v7.30: 궤도 도는 보안 노드 + 스캔 라인 + 이중 회전 링
- * v7.36: 그림자 추가 - 공중에 떠있는 듯한 연출
- * v7.39: 아이소메트릭 Y축 압축 제거 - 인게임은 toIsoScreen에서 이미 변환됨
- * - 기본 상태에서도 역동적인 궤도 요소
- * - 보안 스캐너 스캔 라인 효과
- * - 반대 방향 회전 대시 링 2개
+ * Minefield — TERRITORY (DATA) 카테고리
+ * v37: 지뢰밭 → 영역 설치물 (맥동하는 위험 구역)
+ * - 위험 구역 표시 (레드-블루 맥동 그라데이션)
+ * - 매설 지뢰 노드 (삼각형 경고 표시 + 맥동 글로우)
+ * - 위험 감지 동심원 (레이더 스캔 패턴)
+ * - 지표면 균열 텍스처 (매설 표시)
+ * - 진화: 전기 방전 아크 + 추가 지뢰 노드
  */
 export function drawPool(params: MagicWeaponParams): void {
   const { ctx, p, time: frameTime } = params;
@@ -597,228 +573,261 @@ export function drawPool(params: MagicWeaponParams): void {
   const isEvolved = p.isEvolved;
   const isUltimate = p.isUltimate;
 
-  // 사이버 보안 테마 컬러
-  const mainColor = isUltimate ? '#ef4444' : (isEvolved ? '#f97316' : '#06b6d4');
-  const glowColorRgba = isUltimate ? '239, 68, 68' : (isEvolved ? '249, 115, 22' : '6, 182, 212');
+  // TERRITORY 컬러 팔레트 (블루 계열 — 위험 구역)
+  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#93C5FD' : '#3B82F6');
+  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '147, 197, 253' : '59, 130, 246');
+  const dangerRgba = isUltimate ? '239, 68, 68' : '30, 58, 138'; // 위험 강조 보조색
 
   // LOD 체크 (한 번만)
   const useGlow = shouldUseGlow();
 
   ctx.save();
 
-  // Note: 인게임에서는 toIsoScreen()이 이미 아이소메트릭 변환을 적용함
-  // Collection 미리보기에서만 별도로 scale 적용 필요
+  // 맥동 펄스 (위험 구역 호흡 효과)
+  const dangerPulse = 1 + Math.sin(time / 350) * 0.08;
+  const alertPulse = Math.sin(time / 200) * 0.5 + 0.5; // 0~1 경고 깜빡임
 
-  // 간단한 펄스 (sin 기반)
-  const pulse = 1 + Math.sin(time / 500) * 0.05;
-
-  // ===== 1. 영역 배경 =====
-  // v7.34: 배경 알파 증가 - 더 선명한 영역 표시
+  // ===== 1. 위험 구역 배경 (맥동 그라데이션) =====
   if (useGlow) {
-    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, poolRadius * pulse);
-    gradient.addColorStop(0, `rgba(${glowColorRgba}, 0.4)`);
-    gradient.addColorStop(0.6, `rgba(${glowColorRgba}, 0.2)`);
+    const gradient = ctx.createRadialGradient(0, 0, 0, 0, 0, poolRadius * dangerPulse);
+    gradient.addColorStop(0, `rgba(${glowColorRgba}, ${0.35 + alertPulse * 0.1})`);
+    gradient.addColorStop(0.4, `rgba(${glowColorRgba}, 0.2)`);
+    gradient.addColorStop(0.7, `rgba(${dangerRgba}, 0.12)`);
     gradient.addColorStop(1, 'transparent');
     ctx.fillStyle = gradient;
   } else {
-    ctx.fillStyle = `rgba(${glowColorRgba}, 0.25)`;
+    ctx.fillStyle = `rgba(${glowColorRgba}, 0.22)`;
   }
   ctx.beginPath();
-  ctx.arc(0, 0, poolRadius * pulse, 0, Math.PI * 2);
+  ctx.arc(0, 0, poolRadius * dangerPulse, 0, Math.PI * 2);
   ctx.fill();
 
-  // ===== 2. 외곽 테두리 링 =====
-  // v7.34: 알파 증가 (0.6 → 0.8), lineWidth 증가
-  ctx.strokeStyle = `rgba(${glowColorRgba}, 0.8)`;
+  // ===== 2. 위험 구역 경계선 (이중 링 + 경고 대시) =====
+  // 외곽 실선 (굵은 경계)
+  ctx.strokeStyle = `rgba(${glowColorRgba}, ${0.6 + alertPulse * 0.25})`;
   ctx.lineWidth = isUltimate ? 4 : 3;
   ctx.beginPath();
-  ctx.arc(0, 0, poolRadius * pulse * 0.95, 0, Math.PI * 2);
+  ctx.arc(0, 0, poolRadius * dangerPulse * 0.95, 0, Math.PI * 2);
   ctx.stroke();
 
-  // ===== 3. 스캔 라인 효과 (보안 스캐너) =====
-  // v7.34: 스캔 알파 증가 (0.4 → 0.6)
-  const scanY = Math.sin(time / 400) * poolRadius * 0.7;
-  const scanAlpha = 0.6 + Math.sin(time / 200) * 0.15;
-
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(0, 0, poolRadius * pulse * 0.9, 0, Math.PI * 2);
-  ctx.clip();
-
-  // 스캔 라인
-  ctx.strokeStyle = `rgba(${glowColorRgba}, ${scanAlpha})`;
+  // 내부 경고 대시 링 (회전)
+  ctx.strokeStyle = `rgba(${glowColorRgba}, 0.5)`;
   ctx.lineWidth = 2;
+  ctx.setLineDash([12, 8]);
+  ctx.lineDashOffset = time / 50;
   ctx.beginPath();
-  ctx.moveTo(-poolRadius, scanY);
-  ctx.lineTo(poolRadius, scanY);
-  ctx.stroke();
-
-  // 스캔 글로우 (작은 원) - v7.34: 알파 증가 (0.3 → 0.5), 크기 증가
-  if (useGlow) {
-    ctx.fillStyle = `rgba(${glowColorRgba}, 0.5)`;
-    ctx.beginPath();
-    ctx.arc(0, scanY, 8, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-
-  // ===== 4. 이중 회전 대시 링 (반대 방향) =====
-  // v7.34: 알파 증가 (0.35 → 0.55), lineWidth 증가
-  // 외부 링 (시계 방향)
-  ctx.strokeStyle = `rgba(${glowColorRgba}, 0.55)`;
-  ctx.lineWidth = 2;
-  ctx.setLineDash([10, 6]);
-  ctx.lineDashOffset = time / 60;
-  ctx.beginPath();
-  ctx.arc(0, 0, poolRadius * pulse * 0.8, 0, Math.PI * 2);
-  ctx.stroke();
-
-  // 내부 링 (반시계 방향)
-  ctx.lineDashOffset = -time / 80;
-  ctx.setLineDash([6, 10]);
-  ctx.beginPath();
-  ctx.arc(0, 0, poolRadius * pulse * 0.55, 0, Math.PI * 2);
+  ctx.arc(0, 0, poolRadius * dangerPulse * 0.82, 0, Math.PI * 2);
   ctx.stroke();
   ctx.setLineDash([]);
 
-  // ===== 5. 궤도 도는 보안 노드 (기본 상태에서도 3개) =====
-  // v7.34: 노드 크기 증가, shadowBlur 증가
-  const baseNodeCount = isUltimate ? 6 : (isEvolved ? 5 : 4);
-  const orbitRadius = poolRadius * pulse * 0.68;
+  // ===== 3. 레이더 스캔 동심원 (위험 감지 패턴) =====
+  const scanCount = isUltimate ? 4 : 3;
+  for (let r = 0; r < scanCount; r++) {
+    const scanPhase = ((time / 600 + r * 0.33) % 1);
+    const scanRadius = poolRadius * 0.2 + scanPhase * poolRadius * 0.7;
+    const scanAlpha = (1 - scanPhase) * 0.4;
 
-  for (let i = 0; i < baseNodeCount; i++) {
-    // 각 노드 다른 속도로 회전
-    const speedMod = 1 + (i * 0.15);
-    const nodeAngle = (time / (1200 / speedMod)) + (i * Math.PI * 2 / baseNodeCount);
-    const nx = Math.cos(nodeAngle) * orbitRadius;
-    const ny = Math.sin(nodeAngle) * orbitRadius;
-
-    // 노드 글로우 - v7.34: shadowBlur 증가 (6 → 10)
-    if (useGlow) {
-      ctx.shadowColor = mainColor;
-      ctx.shadowBlur = 10;
-    }
-
-    // 작은 방패/잠금 아이콘
-    ctx.save();
-    ctx.translate(nx, ny);
-
-    // 노드 배경 - v7.34: 크기 증가 (6/5 → 8/7)
-    ctx.fillStyle = mainColor;
+    ctx.strokeStyle = `rgba(${glowColorRgba}, ${scanAlpha})`;
+    ctx.lineWidth = 2 * (1 - scanPhase);
     ctx.beginPath();
-    ctx.arc(0, 0, isUltimate ? 8 : 7, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.arc(0, 0, scanRadius * dangerPulse, 0, Math.PI * 2);
+    ctx.stroke();
+  }
 
-    // 노드 내부 심볼 - v7.34: 크기 증가 (3.5/3 → 5/4)
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.arc(0, 0, isUltimate ? 5 : 4, 0, Math.PI * 2);
-    ctx.fill();
+  // ===== 4. 지표면 균열 라인 (매설 표시) =====
+  ctx.save();
+  ctx.beginPath();
+  ctx.arc(0, 0, poolRadius * dangerPulse * 0.9, 0, Math.PI * 2);
+  ctx.clip();
 
-    // 잠금 심볼 (작은 원) - v7.34: 크기 증가
-    ctx.strokeStyle = mainColor;
+  const crackCount = isUltimate ? 8 : (isEvolved ? 6 : 5);
+  for (let c = 0; c < crackCount; c++) {
+    const crackAngle = (c / crackCount) * Math.PI * 2 + 0.3;
+    const crackLen = poolRadius * (0.3 + Math.sin(time / 800 + c * 2) * 0.1);
+    const cx1 = Math.cos(crackAngle) * 12;
+    const cy1 = Math.sin(crackAngle) * 12;
+    const cx2 = Math.cos(crackAngle + 0.15) * crackLen;
+    const cy2 = Math.sin(crackAngle + 0.15) * crackLen;
+
+    ctx.strokeStyle = `rgba(${glowColorRgba}, 0.25)`;
     ctx.lineWidth = 1.5;
     ctx.beginPath();
-    ctx.arc(0, 0.5, 2, 0, Math.PI * 2);
+    ctx.moveTo(cx1, cy1);
+    // 지그재그 균열
+    const midX = (cx1 + cx2) / 2 + Math.sin(crackAngle * 3) * 8;
+    const midY = (cy1 + cy2) / 2 + Math.cos(crackAngle * 3) * 8;
+    ctx.lineTo(midX, midY);
+    ctx.lineTo(cx2, cy2);
     ctx.stroke();
+  }
+  ctx.restore();
+
+  // ===== 5. 매설 지뢰 노드 (삼각형 경고 + 맥동 글로우) =====
+  const mineCount = isUltimate ? 7 : (isEvolved ? 5 : 4);
+  const mineOrbitRadius = poolRadius * dangerPulse * 0.6;
+
+  for (let i = 0; i < mineCount; i++) {
+    const mineAngle = (i * Math.PI * 2 / mineCount) + Math.sin(time / 2000) * 0.1;
+    const mineRadialOffset = mineOrbitRadius * (0.5 + (i % 3) * 0.25);
+    const mx = Math.cos(mineAngle) * mineRadialOffset;
+    const my = Math.sin(mineAngle) * mineRadialOffset;
+
+    // 개별 지뢰 맥동 (시차 적용)
+    const minePulse = 0.8 + Math.sin(time / 250 + i * 1.7) * 0.2;
+    const mineSize = (isUltimate ? 9 : 7) * minePulse;
+
+    ctx.save();
+    ctx.translate(mx, my);
+
+    // 지뢰 맥동 글로우
+    if (useGlow) {
+      ctx.shadowColor = mainColor;
+      ctx.shadowBlur = 8 + alertPulse * 6;
+    }
+
+    // 지뢰 본체 (육각형 — 대인지뢰 형태)
+    ctx.fillStyle = `rgba(${glowColorRgba}, ${0.7 + alertPulse * 0.2})`;
+    ctx.beginPath();
+    for (let h = 0; h < 6; h++) {
+      const hAngle = (h / 6) * Math.PI * 2 - Math.PI / 6;
+      const hx = Math.cos(hAngle) * mineSize;
+      const hy = Math.sin(hAngle) * mineSize;
+      if (h === 0) ctx.moveTo(hx, hy);
+      else ctx.lineTo(hx, hy);
+    }
+    ctx.closePath();
+    ctx.fill();
+
+    // 지뢰 내부 코어 (어두운 중심)
+    ctx.fillStyle = '#0f172a';
+    ctx.beginPath();
+    ctx.arc(0, 0, mineSize * 0.5, 0, Math.PI * 2);
+    ctx.fill();
+
+    // 경고 표시 (맥동하는 점)
+    ctx.fillStyle = mainColor;
+    ctx.beginPath();
+    ctx.arc(0, 0, mineSize * 0.25 * minePulse, 0, Math.PI * 2);
+    ctx.fill();
 
     ctx.restore();
   }
   ctx.shadowBlur = 0;
 
-  // ===== 6. 중앙 아이콘 (방패 심볼) =====
-  // v7.34: shadowBlur 증가 (10 → 15)
+  // ===== 6. 중앙 위험 표시 (경고 삼각형) =====
   if (useGlow) {
     ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 15;
+    ctx.shadowBlur = 14;
   }
 
-  // 방패 외곽
+  // 경고 삼각형 외곽
+  const triSize = isUltimate ? 16 : 13;
   ctx.fillStyle = mainColor;
   ctx.beginPath();
-  ctx.moveTo(0, -12);
-  ctx.lineTo(10, -6);
-  ctx.lineTo(10, 4);
-  ctx.quadraticCurveTo(10, 12, 0, 16);
-  ctx.quadraticCurveTo(-10, 12, -10, 4);
-  ctx.lineTo(-10, -6);
+  ctx.moveTo(0, -triSize);
+  ctx.lineTo(triSize * 0.87, triSize * 0.5);
+  ctx.lineTo(-triSize * 0.87, triSize * 0.5);
   ctx.closePath();
   ctx.fill();
-
   ctx.shadowBlur = 0;
 
-  // 방패 내부 (어두운 색)
+  // 삼각형 내부 (어두운 색)
+  const innerTri = triSize * 0.65;
   ctx.fillStyle = '#0f172a';
   ctx.beginPath();
-  ctx.moveTo(0, -8);
-  ctx.lineTo(6, -4);
-  ctx.lineTo(6, 2);
-  ctx.quadraticCurveTo(6, 8, 0, 11);
-  ctx.quadraticCurveTo(-6, 8, -6, 2);
-  ctx.lineTo(-6, -4);
+  ctx.moveTo(0, -innerTri + 2);
+  ctx.lineTo(innerTri * 0.87, innerTri * 0.5 + 2);
+  ctx.lineTo(-innerTri * 0.87, innerTri * 0.5 + 2);
   ctx.closePath();
   ctx.fill();
 
-  // 체크마크 또는 잠금 심볼
-  ctx.strokeStyle = mainColor;
-  ctx.lineWidth = 2;
-  ctx.lineCap = 'round';
-  if (isUltimate) {
-    // 체크마크
+  // 느낌표 (!) 경고 심볼
+  ctx.fillStyle = mainColor;
+  ctx.beginPath();
+  ctx.roundRect(-1.5, -5, 3, 7, 1);
+  ctx.fill();
+  ctx.beginPath();
+  ctx.arc(0, 5, 1.8, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ===== 7. 위험 감지 펄스 웨이브 =====
+  const waveCount = isUltimate ? 2 : 1;
+  for (let w = 0; w < waveCount; w++) {
+    const waveProgress = ((time / 700 + w * 0.5) % 1);
+    const waveRadius = 15 + waveProgress * (poolRadius * 0.85 - 15);
+    const waveAlpha = (1 - waveProgress) * 0.5;
+
+    ctx.strokeStyle = `rgba(${glowColorRgba}, ${waveAlpha})`;
+    ctx.lineWidth = 2.5 * (1 - waveProgress);
     ctx.beginPath();
-    ctx.moveTo(-3, 2);
-    ctx.lineTo(-1, 5);
-    ctx.lineTo(4, -2);
-    ctx.stroke();
-  } else {
-    // 간단한 잠금
-    ctx.beginPath();
-    ctx.arc(0, 2, 3, 0, Math.PI * 2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(0, -1, 2, Math.PI, 0);
+    ctx.arc(0, 0, waveRadius, 0, Math.PI * 2);
     ctx.stroke();
   }
 
-  // ===== 7. 펄스 웨이브 =====
-  // v7.34: 펄스 웨이브 알파 증가 (0.35 → 0.55)
-  const waveProgress = (time / 800) % 1;
-  const waveRadius = 20 + waveProgress * (poolRadius * 0.9 - 20);
-  const waveAlpha = (1 - waveProgress) * 0.55;
-
-  ctx.strokeStyle = `rgba(${glowColorRgba}, ${waveAlpha})`;
-  ctx.lineWidth = 2.5 * (1 - waveProgress);
-  ctx.beginPath();
-  ctx.arc(0, 0, waveRadius, 0, Math.PI * 2);
-  ctx.stroke();
-
   // ===== 8. 진화/궁극 추가 효과 =====
-  // v7.34: 파티클 알파 증가 (0.5 → 0.7), 개수 증가
   if (isEvolved || isUltimate) {
-    // 외곽 데이터 패킷 (빠르게 공전)
-    const packetCount = isUltimate ? 10 : 7;
-    const packetRadius = poolRadius * 0.9 * pulse;
-    const packetChars = ['{', '}', '0', '1', '<', '>', '/', '*'];
+    // 전기 방전 아크 (지뢰 간 연결 — 위험 네트워크)
+    const arcCount = isUltimate ? 5 : 3;
+    for (let a = 0; a < arcCount; a++) {
+      const a1 = (a / mineCount) * Math.PI * 2 + Math.sin(time / 2000) * 0.1;
+      const a2 = ((a + 1) / mineCount) * Math.PI * 2 + Math.sin(time / 2000) * 0.1;
+      const r1 = mineOrbitRadius * (0.5 + (a % 3) * 0.25);
+      const r2 = mineOrbitRadius * (0.5 + ((a + 1) % 3) * 0.25);
 
-    for (let i = 0; i < packetCount; i++) {
-      const pAngle = (time / 300) + (i * Math.PI * 2 / packetCount);
-      const px = Math.cos(pAngle) * packetRadius;
-      const py = Math.sin(pAngle) * packetRadius;
-      const pAlpha = 0.7 + Math.sin(time / 150 + i) * 0.2;
+      const x1 = Math.cos(a1) * r1;
+      const y1 = Math.sin(a1) * r1;
+      const x2 = Math.cos(a2) * r2;
+      const y2 = Math.sin(a2) * r2;
 
-      ctx.font = 'bold 8px monospace';
-      ctx.fillStyle = `rgba(${glowColorRgba}, ${pAlpha})`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(packetChars[i % packetChars.length], px, py);
+      // 번개 형태 지그재그 라인
+      const arcAlpha = 0.3 + Math.sin(time / 80 + a * 2) * 0.3;
+      ctx.strokeStyle = `rgba(${glowColorRgba}, ${arcAlpha})`;
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+
+      const segments = 3;
+      for (let s = 1; s <= segments; s++) {
+        const t = s / (segments + 1);
+        const lx = x1 + (x2 - x1) * t + (Math.random() - 0.5) * 12;
+        const ly = y1 + (y2 - y1) * t + (Math.random() - 0.5) * 12;
+        ctx.lineTo(lx, ly);
+      }
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+    }
+
+    // 외곽 위험 마커 (삼각형 경고 심볼 회전)
+    const markerCount = isUltimate ? 6 : 4;
+    const markerRadius = poolRadius * 0.88 * dangerPulse;
+
+    for (let m = 0; m < markerCount; m++) {
+      const mAngle = (time / 1500 + m * Math.PI * 2 / markerCount) % (Math.PI * 2);
+      const markerX = Math.cos(mAngle) * markerRadius;
+      const markerY = Math.sin(mAngle) * markerRadius;
+      const mAlpha = 0.6 + Math.sin(time / 150 + m * 1.3) * 0.2;
+
+      ctx.save();
+      ctx.translate(markerX, markerY);
+
+      // 작은 삼각형 경고 마커
+      ctx.fillStyle = `rgba(${glowColorRgba}, ${mAlpha})`;
+      ctx.beginPath();
+      ctx.moveTo(0, -4);
+      ctx.lineTo(3.5, 2);
+      ctx.lineTo(-3.5, 2);
+      ctx.closePath();
+      ctx.fill();
+
+      ctx.restore();
     }
 
     if (isUltimate) {
-      // FIREWALL 라벨
+      // MINEFIELD 라벨
       ctx.font = 'bold 7px monospace';
       ctx.textAlign = 'center';
       ctx.fillStyle = mainColor;
-      ctx.fillText('FIREWALL', 0, poolRadius * 0.45);
+      ctx.fillText('MINEFIELD', 0, poolRadius * 0.45);
     }
   }
 

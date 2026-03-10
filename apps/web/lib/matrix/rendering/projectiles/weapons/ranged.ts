@@ -1,11 +1,12 @@
 /**
  * game/rendering/projectiles/weapons/ranged.ts - 원거리 무기 렌더링
- * v4.9: 스타일리시 이펙트 시스템 적용 - 이징, 글로우, 트레일, 펄스
- * v6.0: 아이소메트릭 Z축 물리 + 그림자 렌더링
- * v7.20: 성능 최적화 - easing 통합 모듈 사용, time 파라미터화
- *
- * Git Push (knife), GraphQL Query (bow), Ping 패킷 (ping), 유리파편 (shard),
- * NPM Install (airdrop), 삼지창 (fork)
+ * v37: 카테고리 테마 리디자인
+ *   - knife (전투 단검 / Railgun): STEEL 레드 — 관통 라인 + 전하 파티클 + 충격파
+ *   - bow (레일건 빔 / Data Wave): TERRITORY 블루 — 충격파 링 (확장하며 감쇠)
+ *   - ping: ALLIANCE 퍼플 — 체인 라이트닝 (기존 유지)
+ *   - shard (클러스터탄 / Siege Cannon): TERRITORY 블루 — 대형 포탄 궤적 + 착탄 폭발
+ *   - airdrop: MORALE 시안 — 공습 (기존 유지)
+ *   - fork: ALLIANCE 퍼플 — 분열탄 (기존 유지)
  */
 
 import { GLOW_PRESETS, EASING, applyEasing, lerp, lerpColor, setGlow, clearGlow } from '../../effects';
@@ -41,170 +42,160 @@ function applyGlow(
 }
 
 /**
- * Git Push - 커밋 해시 발사체
- * v4.9: easeOutBack 바운스 + matrix 글로우 프리셋 + 코드 파티클 트레일
- * v7.15: 성능 최적화 - 트레일/글로우 레이어/shadowBlur 대폭 감소
+ * 전투 단검 / Railgun — STEEL (CODE) 카테고리
+ * v37: 관통 라인 + 전하 파티클 + 충격파 (레드 군사 테마)
  */
 export function drawKnife(params: RangedWeaponParams): void {
   const { ctx, p, time: frameTime } = params;
-  const time = frameTime ?? Date.now(); // v7.20: 외부에서 전달받거나 폴백
+  const time = frameTime ?? Date.now();
   const knifeRot = p.currentRotation !== undefined ? p.currentRotation : p.angle;
   const useGlow = shouldUseGlow();
 
   const isEvolved = p.isEvolved;
   const isUltimate = p.isUltimate;
 
-  // v4 컬러 팔레트 (매트릭스 스타일)
-  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#a78bfa' : '#00FF41');
-  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '167, 139, 250' : '0, 255, 65');
+  // STEEL 컬러 팔레트 (레드 계열)
+  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#FCA5A5' : '#EF4444');
+  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '252, 165, 165' : '239, 68, 68');
+  const coreColor = isUltimate ? '#FEF3C7' : (isEvolved ? '#FEE2E2' : '#FCA5A5');
 
-  // 크기 계산 with easeOutBack
+  // 크기 계산
   const baseSize = Math.max(8, (p.radius || 5) * 2.5);
   const lifeRatio = Math.max(0, Math.min(1, p.life / (p.startLife || 1)));
   const appearProgress = Math.max(0, Math.min(1, (1 - lifeRatio) * 4));
   const bounceScale = Math.max(0.1, EASING.easeOutBack(appearProgress));
-  const commitSize = Math.max(4, baseSize * bounceScale);
+  const knifeSize = Math.max(4, baseSize * bounceScale);
 
   ctx.save();
-  applyIsoProjectileTransform(ctx, knifeRot); // v7.20: 아이소메트릭 3D 원근감
+  applyIsoProjectileTransform(ctx, knifeRot);
 
-  // ===== 트레일 시스템 (v7.34: 개수 증가 5/4/3, 알파값 0.85) =====
-  const trailChars = ['git', 'push', '-f'];
+  // ===== 1. 전하 파티클 트레일 (뒤쪽 잔상) =====
   const trailCount = isUltimate ? 5 : (isEvolved ? 4 : 3);
-
-  // v7.34: 트레일 개수 증가 (4/3/2 → 5/4/3), 알파값 증가 (0.6 → 0.85)
   for (let i = trailCount; i >= 1; i--) {
     const trailEase = EASING.easeOutExpo(1 - i / trailCount);
-    const offsetX = -i * 14 * trailEase;
-    const waveY = Math.sin(time / 100 + i) * 4;
-    const alpha = 0.85 * (1 - i / trailCount);
+    const offsetX = -i * 10 * trailEase;
+    const waveY = Math.sin(time / 80 + i * 1.5) * 3;
+    const alpha = 0.7 * (1 - i / trailCount);
 
-    ctx.font = `bold ${9 - i}px monospace`;
     ctx.fillStyle = `rgba(${glowColorRgba}, ${alpha})`;
-    ctx.fillText(trailChars[i % trailChars.length], offsetX, waveY);
+    ctx.beginPath();
+    ctx.arc(offsetX, waveY, 2.5 - i * 0.3, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  // ===== 펄스 링 (v7.34: 알파값 0.35 → 0.55, lineWidth 증가) =====
+  // ===== 2. 충격파 링 =====
   const pulsePhase = (time / 200) % 1;
-  const pulseRadius = commitSize * (1.2 + pulsePhase * 0.6);
-  const pulseAlpha = (1 - pulsePhase) * 0.55;
+  const pulseRadius = knifeSize * (1.1 + pulsePhase * 0.8);
+  const pulseAlpha = (1 - pulsePhase) * 0.5;
 
   ctx.strokeStyle = `rgba(${glowColorRgba}, ${pulseAlpha})`;
-  ctx.lineWidth = 2.5 * (1 - pulsePhase);
+  ctx.lineWidth = 2 * (1 - pulsePhase);
   ctx.beginPath();
   ctx.arc(0, 0, pulseRadius, 0, Math.PI * 2);
   ctx.stroke();
 
-  // ===== 메인 커밋 노드 (v7.34: 글로우 알파 0.3→0.5, shadowBlur 12→16) =====
+  // ===== 3. 메인 단검 본체 (날카로운 삼각형) =====
   if (useGlow) {
     ctx.save();
     ctx.globalAlpha = 0.5 * bounceScale;
     ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 16;
+    ctx.shadowBlur = 14;
     ctx.fillStyle = mainColor;
     ctx.beginPath();
-    ctx.arc(0, 0, commitSize * 1.2, 0, Math.PI * 2);
+    ctx.moveTo(knifeSize + 6, 0);
+    ctx.lineTo(-knifeSize * 0.5, -knifeSize * 0.6);
+    ctx.lineTo(-knifeSize * 0.5, knifeSize * 0.6);
+    ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
 
-  // 커밋 원 본체 (단색)
-  ctx.fillStyle = '#1e293b';
+  // 단검 칼날 (어두운 금속)
+  ctx.fillStyle = '#7F1D1D';
   ctx.beginPath();
-  ctx.arc(0, 0, commitSize, 0, Math.PI * 2);
-  ctx.fill();
-
-  // 테두리 (v7.34: shadowBlur 8→12, lineWidth 3→3.5)
-  if (useGlow) {
-    ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 12;
-  }
-  ctx.strokeStyle = mainColor;
-  ctx.lineWidth = 3.5;
-  ctx.stroke();
-  ctx.shadowBlur = 0;
-
-  // ===== Git 브랜치 라인 =====
-  ctx.strokeStyle = mainColor;
-  ctx.lineWidth = 2.5;
-  ctx.beginPath();
-  ctx.moveTo(commitSize, 0);
-  ctx.lineTo(commitSize + 12, 0);
-  ctx.stroke();
-
-  // 화살표 머리
-  ctx.fillStyle = mainColor;
-  ctx.beginPath();
-  ctx.moveTo(commitSize + 16, 0);
-  ctx.lineTo(commitSize + 10, -4);
-  ctx.lineTo(commitSize + 10, 4);
+  ctx.moveTo(knifeSize + 4, 0);
+  ctx.lineTo(-knifeSize * 0.3, -knifeSize * 0.45);
+  ctx.lineTo(-knifeSize * 0.3, knifeSize * 0.45);
   ctx.closePath();
   ctx.fill();
 
-  // 뒤쪽 브랜치 라인 (v7.34: 알파값 0.4 → 0.6)
-  ctx.strokeStyle = `rgba(${glowColorRgba}, 0.6)`;
-  ctx.lineWidth = 2.5;
-  ctx.setLineDash([4, 4]);
-  ctx.beginPath();
-  ctx.moveTo(-commitSize, 0);
-  ctx.lineTo(-commitSize - 15, 0);
+  // 칼날 테두리
+  if (useGlow) {
+    ctx.shadowColor = mainColor;
+    ctx.shadowBlur = 10;
+  }
+  ctx.strokeStyle = mainColor;
+  ctx.lineWidth = 2;
   ctx.stroke();
-  ctx.setLineDash([]);
+  ctx.shadowBlur = 0;
 
-  // ===== 커밋 해시 텍스트 =====
-  const hashes = isUltimate ? ['HEAD', 'main'] : (isEvolved ? ['merge', 'dev'] : ['push', 'git']);
-  const hashIndex = Math.floor(time / 500) % hashes.length;
+  // 칼날 중심 하이라이트
+  ctx.strokeStyle = coreColor;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(knifeSize * 0.8, 0);
+  ctx.lineTo(-knifeSize * 0.1, 0);
+  ctx.stroke();
 
-  ctx.font = 'bold 7px monospace';
-  ctx.fillStyle = '#fff';
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(hashes[hashIndex], 0, 1);
+  // 관통 방향 화살표 (앞쪽 돌출)
+  ctx.fillStyle = mainColor;
+  ctx.beginPath();
+  ctx.moveTo(knifeSize + 8, 0);
+  ctx.lineTo(knifeSize + 2, -3);
+  ctx.lineTo(knifeSize + 2, 3);
+  ctx.closePath();
+  ctx.fill();
 
-  // ===== Diff 표시 (v7.15: shadowBlur 제거) =====
-  ctx.font = 'bold 8px monospace';
-  ctx.fillStyle = '#22c55e';
-  ctx.fillText('+' + (isUltimate ? '99' : isEvolved ? '42' : '7'), -commitSize - 6, -8);
+  // ===== 4. 전하 스파크 (칼날 주변 전기) =====
+  const sparkCount = isUltimate ? 4 : (isEvolved ? 3 : 2);
+  for (let s = 0; s < sparkCount; s++) {
+    const sAngle = (time / 60 + s * Math.PI * 2 / sparkCount) % (Math.PI * 2);
+    const sDist = knifeSize * 0.8;
+    const sx = Math.cos(sAngle) * sDist;
+    const sy = Math.sin(sAngle) * sDist;
+    const sAlpha = 0.6 + Math.sin(time / 40 + s) * 0.3;
 
-  ctx.fillStyle = '#ef4444';
-  ctx.fillText('-' + (isUltimate ? '0' : isEvolved ? '3' : '2'), -commitSize - 6, 8);
+    ctx.fillStyle = `rgba(${glowColorRgba}, ${sAlpha})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
 
-  // ===== 진화/궁극 브랜치 이펙트 (v7.15: shadowBlur 제거) =====
+  // ===== 5. 진화/궁극 이펙트 =====
   if (isEvolved || isUltimate) {
-    ctx.strokeStyle = mainColor;
-    ctx.lineWidth = 1.5;
-
-    // 위쪽 브랜치
-    ctx.beginPath();
-    ctx.moveTo(-commitSize * 0.7, -commitSize * 0.7);
-    ctx.quadraticCurveTo(-commitSize - 4, -8, -commitSize - 10, -12);
-    ctx.stroke();
-
-    // 아래쪽 브랜치
-    ctx.beginPath();
-    ctx.moveTo(-commitSize * 0.7, commitSize * 0.7);
-    ctx.quadraticCurveTo(-commitSize - 4, 8, -commitSize - 10, 12);
-    ctx.stroke();
-
-    // 작은 커밋 노드들
+    // 진동 블러 (이중 잔상)
+    ctx.save();
+    ctx.globalAlpha = 0.25;
+    const blurOffset = Math.sin(time / 20) * 2;
+    ctx.translate(0, blurOffset);
     ctx.fillStyle = mainColor;
     ctx.beginPath();
-    ctx.arc(-commitSize - 10, -12, 4, 0, Math.PI * 2);
+    ctx.moveTo(knifeSize + 3, 0);
+    ctx.lineTo(-knifeSize * 0.2, -knifeSize * 0.35);
+    ctx.lineTo(-knifeSize * 0.2, knifeSize * 0.35);
+    ctx.closePath();
     ctx.fill();
+    ctx.restore();
+
+    ctx.save();
+    ctx.globalAlpha = 0.2;
+    ctx.translate(0, -blurOffset);
+    ctx.fillStyle = mainColor;
     ctx.beginPath();
-    ctx.arc(-commitSize - 10, 12, 4, 0, Math.PI * 2);
+    ctx.moveTo(knifeSize + 3, 0);
+    ctx.lineTo(-knifeSize * 0.2, -knifeSize * 0.35);
+    ctx.lineTo(-knifeSize * 0.2, knifeSize * 0.35);
+    ctx.closePath();
     ctx.fill();
+    ctx.restore();
 
     if (isUltimate) {
       ctx.save();
       ctx.rotate(-knifeRot);
-      ctx.font = 'bold 9px monospace';
+      ctx.font = 'bold 7px monospace';
       ctx.textAlign = 'center';
-      ctx.strokeStyle = '#000';
-      ctx.lineWidth = 2;
-      ctx.fillStyle = '#ef4444';
-      ctx.strokeText('--force', 0, -commitSize - 10);
-      ctx.fillText('--force', 0, -commitSize - 10);
+      ctx.fillStyle = '#fcd34d';
+      ctx.fillText('PLASMA', 0, -knifeSize - 8);
       ctx.restore();
     }
   }
@@ -213,134 +204,137 @@ export function drawKnife(params: RangedWeaponParams): void {
 }
 
 /**
- * GraphQL Query - 핑크 쿼리 발사체
- * v4.9: 이징 트레일 + electric 글로우 + 쿼리 텍스트 파티클
- * v7.15: 성능 최적화 - 트레일/글로우 레이어/shadowBlur 감소
+ * 레일건 / Data Wave — TERRITORY (DATA) 카테고리
+ * v37: 고속 관통 빔 + 충격파 링 (블루 에너지 테마)
  */
 export function drawBow(params: RangedWeaponParams): void {
   const { ctx, p, time: frameTime } = params;
-  const time = frameTime ?? Date.now(); // v7.20: 외부에서 전달받거나 폴백
+  const time = frameTime ?? Date.now();
   const useGlow = shouldUseGlow();
 
   ctx.save();
-  applyIsoProjectileTransform(ctx, p.angle); // v7.20: 아이소메트릭 3D 원근감
+  applyIsoProjectileTransform(ctx, p.angle);
 
   const isEvolved = p.isEvolved;
   const isUltimate = p.isUltimate;
 
-  // GraphQL 핑크 팔레트
-  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#f472b6' : '#e535ab');
-  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '244, 114, 182' : '229, 53, 171');
+  // TERRITORY 컬러 팔레트 (블루 계열)
+  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#93C5FD' : '#3B82F6');
+  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '147, 197, 253' : '59, 130, 246');
+  const coreColor = isUltimate ? '#FEF3C7' : '#DBEAFE';
 
   const bowSize = Math.max(6, (p.radius || 3) * 2);
   const lifeRatio = Math.max(0, Math.min(1, p.life / (p.startLife || 1)));
   const appearEase = Math.max(0.1, EASING.easeOutElastic(Math.max(0, Math.min(1, (1 - lifeRatio) * 3))));
   const scale = Math.max(4, bowSize * appearEase);
 
-  // ===== 쿼리 텍스트 트레일 (v7.34: 개수 증가, 알파값 0.5→0.75) =====
-  const queryParts = ['query', '{', 'user', '}'];
-  const trailCount = isUltimate ? 4 : (isEvolved ? 3 : 2);
-
+  // ===== 1. 에너지 트레일 (뒤쪽 잔상) =====
+  const trailCount = isUltimate ? 5 : (isEvolved ? 4 : 3);
   for (let i = trailCount; i >= 1; i--) {
     const trailEase = EASING.easeOutExpo(1 - i / trailCount);
-    const offsetX = -i * 12 * trailEase;
-    const alpha = 0.75 * (1 - i / trailCount);
+    const offsetX = -i * 10 * trailEase;
+    const alpha = 0.7 * (1 - i / trailCount);
 
-    ctx.font = `bold ${8 - i}px monospace`;
     ctx.fillStyle = `rgba(${glowColorRgba}, ${alpha})`;
-    ctx.fillText(queryParts[i % queryParts.length], offsetX, 0);
+    ctx.beginPath();
+    ctx.arc(offsetX, 0, scale * 0.4 - i * 0.5, 0, Math.PI * 2);
+    ctx.fill();
   }
 
-  // ===== 펄스 링 (v7.34: 알파값 0.4→0.6, lineWidth 증가) =====
-  const pulsePhase = (time / 180) % 1;
-  ctx.strokeStyle = `rgba(${glowColorRgba}, ${(1 - pulsePhase) * 0.6})`;
-  ctx.lineWidth = 2.5 * (1 - pulsePhase);
-  ctx.beginPath();
-  ctx.arc(0, 0, scale + pulsePhase * 12, 0, Math.PI * 2);
-  ctx.stroke();
+  // ===== 2. 충격파 링 (확장하며 감쇠) =====
+  const ringCount = isUltimate ? 2 : 1;
+  for (let r = 0; r < ringCount; r++) {
+    const ringPhase = ((time / 250 + r * 0.5) % 1);
+    const ringRadius = scale + ringPhase * 18;
+    const ringAlpha = (1 - ringPhase) * 0.55;
 
-  // ===== 메인 GraphQL 로고 (v7.34: 글로우 알파 0.3→0.5, shadowBlur 10→14) =====
+    ctx.strokeStyle = `rgba(${glowColorRgba}, ${ringAlpha})`;
+    ctx.lineWidth = 2.5 * (1 - ringPhase);
+    ctx.beginPath();
+    ctx.arc(0, 0, ringRadius, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+
+  // ===== 3. 메인 에너지 볼트 본체 (빛나는 구체) =====
   if (useGlow) {
     ctx.save();
     ctx.globalAlpha = 0.5;
     ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 14;
+    ctx.shadowBlur = 16;
     ctx.fillStyle = mainColor;
     ctx.beginPath();
-    for (let i = 0; i < 6; i++) {
-      const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
-      const x = Math.cos(angle) * scale * 1.15;
-      const y = Math.sin(angle) * scale * 1.15;
-      if (i === 0) ctx.moveTo(x, y);
-      else ctx.lineTo(x, y);
-    }
-    ctx.closePath();
+    ctx.arc(0, 0, scale * 1.2, 0, Math.PI * 2);
     ctx.fill();
     ctx.restore();
   }
 
-  // 메인 노드 (단색)
+  // 에너지 코어 (블루 구체)
   ctx.fillStyle = mainColor;
   ctx.beginPath();
-  for (let i = 0; i < 6; i++) {
-    const angle = (i / 6) * Math.PI * 2 - Math.PI / 2;
-    const x = Math.cos(angle) * scale;
-    const y = Math.sin(angle) * scale;
-    if (i === 0) ctx.moveTo(x, y);
-    else ctx.lineTo(x, y);
-  }
-  ctx.closePath();
+  ctx.arc(0, 0, scale, 0, Math.PI * 2);
   ctx.fill();
 
-  // 테두리 (v7.34: shadowBlur 8→12, lineWidth 2→2.5)
+  // 테두리
   if (useGlow) {
     ctx.shadowColor = mainColor;
-    ctx.shadowBlur = 12;
+    ctx.shadowBlur = 10;
   }
-  ctx.strokeStyle = '#fff';
-  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = coreColor;
+  ctx.lineWidth = 2;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // 내부 연결선 (v7.34: 알파값 0.5→0.7)
-  ctx.strokeStyle = `rgba(255, 255, 255, 0.7)`;
-  ctx.lineWidth = 1;
-  for (let i = 0; i < 3; i++) {
-    const angle1 = (i / 6) * Math.PI * 2 - Math.PI / 2;
-    const angle2 = ((i + 3) / 6) * Math.PI * 2 - Math.PI / 2;
-    ctx.beginPath();
-    ctx.moveTo(Math.cos(angle1) * scale * 0.5, Math.sin(angle1) * scale * 0.5);
-    ctx.lineTo(Math.cos(angle2) * scale * 0.5, Math.sin(angle2) * scale * 0.5);
-    ctx.stroke();
-  }
-
-  // 중앙 노드
-  ctx.fillStyle = '#fff';
+  // 내부 에너지 패턴 (십자형 빔)
+  ctx.strokeStyle = `rgba(255, 255, 255, 0.6)`;
+  ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.arc(0, 0, scale * 0.2, 0, Math.PI * 2);
+  ctx.moveTo(-scale * 0.6, 0);
+  ctx.lineTo(scale * 0.6, 0);
+  ctx.moveTo(0, -scale * 0.6);
+  ctx.lineTo(0, scale * 0.6);
+  ctx.stroke();
+
+  // 중앙 코어 (밝은 점)
+  const corePulse = 0.8 + Math.sin(time / 40) * 0.2;
+  ctx.fillStyle = '#ffffff';
+  ctx.beginPath();
+  ctx.arc(0, 0, scale * 0.25 * corePulse, 0, Math.PI * 2);
   ctx.fill();
 
-  // ===== 진화/궁극 (v7.15: shadowBlur 제거) =====
+  // ===== 4. 전자기 파동 (진화/궁극) =====
   if (isEvolved || isUltimate) {
-    const orbitalCount = isUltimate ? 3 : 2;
+    // 오비탈 에너지 입자
+    const orbitalCount = isUltimate ? 4 : 3;
     for (let o = 0; o < orbitalCount; o++) {
-      const oAngle = (time / 300 + o * Math.PI * 2 / orbitalCount) % (Math.PI * 2);
-      const ox = Math.cos(oAngle) * (scale + 8);
-      const oy = Math.sin(oAngle) * (scale + 8);
+      const oAngle = (time / 200 + o * Math.PI * 2 / orbitalCount) % (Math.PI * 2);
+      const oDist = scale + 8;
+      const ox = Math.cos(oAngle) * oDist;
+      const oy = Math.sin(oAngle) * oDist;
 
       ctx.fillStyle = mainColor;
       ctx.beginPath();
-      ctx.arc(ox, oy, 3, 0, Math.PI * 2);
+      ctx.arc(ox, oy, 2.5, 0, Math.PI * 2);
       ctx.fill();
+
+      // 연결선 (에너지 아크)
+      ctx.save();
+      ctx.globalAlpha = 0.4;
+      ctx.strokeStyle = mainColor;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, 0);
+      ctx.lineTo(ox, oy);
+      ctx.stroke();
+      ctx.restore();
     }
 
     if (isUltimate) {
       ctx.save();
       ctx.rotate(-p.angle);
       ctx.font = 'bold 7px monospace';
-      ctx.fillStyle = mainColor;
+      ctx.fillStyle = '#fcd34d';
       ctx.textAlign = 'center';
-      ctx.fillText('MUTATION', 0, -scale - 8);
+      ctx.fillText('RAIL', 0, -scale - 10);
       ctx.restore();
     }
   }
@@ -513,100 +507,148 @@ export function drawPing(params: RangedWeaponParams): void {
 }
 
 /**
- * 유리 파편 - 창문 유리
- * v4.9: 회전 이징 + 반사광 글로우 + 깨짐 이펙트
- * v7.15: 성능 최적화 - 트레일/shadowBlur/gradient 감소
+ * 클러스터탄 / Siege Cannon — TERRITORY (DATA) 카테고리
+ * v37: 대형 포탄 형태 + 착탄 폭발 + 분열 파편 (블루 에너지 테마)
  */
 export function drawShard(params: RangedWeaponParams): void {
   const { ctx, p, time: frameTime } = params;
-  const time = frameTime ?? Date.now(); // v7.20: 외부에서 전달받거나 폴백
+  const time = frameTime ?? Date.now();
   const useGlow = shouldUseGlow();
 
   ctx.save();
-  applyIsoProjectileTransform(ctx, p.angle); // v7.20: 아이소메트릭 3D 원근감
+  applyIsoProjectileTransform(ctx, p.angle);
 
-  const shardSize = Math.max(15, p.radius * 1.5);
+  const isEvolved = p.isEvolved;
+  const isUltimate = p.isUltimate;
+
+  // TERRITORY 컬러 팔레트 (블루 계열)
+  const mainColor = isUltimate ? '#fcd34d' : (isEvolved ? '#93C5FD' : '#3B82F6');
+  const glowColorRgba = isUltimate ? '252, 211, 77' : (isEvolved ? '147, 197, 253' : '59, 130, 246');
+  const coreColor = isUltimate ? '#FEF3C7' : '#1E3A8A';
+
+  const shardSize = Math.max(12, p.radius * 1.3);
   const lifeRatio = Math.max(0, Math.min(1, p.life / (p.startLife || 1)));
 
-  // 회전 with 이징 (점점 느려지는 회전)
+  // 회전 (포탄 스핀)
   const spinProgress = Math.max(0, Math.min(1, 1 - lifeRatio));
   const spinEase = EASING.easeOutExpo(spinProgress);
-  const spin = spinEase * Math.PI * 6;
+  const spin = spinEase * Math.PI * 4;
   ctx.rotate(spin);
 
-  // ===== 잔상 트레일 (v7.34: 개수 3, 알파값 증가) =====
-  for (let t = 3; t >= 1; t--) {
-    const trailAlpha = (1 - t / 4) * 0.5;
-    const trailSpin = spin - t * 0.3;
+  // ===== 1. 에너지 트레일 잔상 =====
+  const trailCount = isUltimate ? 4 : (isEvolved ? 3 : 2);
+  for (let t = trailCount; t >= 1; t--) {
+    const trailAlpha = (1 - t / (trailCount + 1)) * 0.5;
+    const trailSpin = spin - t * 0.35;
 
     ctx.save();
     ctx.rotate(-spin + trailSpin);
     ctx.globalAlpha = trailAlpha;
-    ctx.fillStyle = 'rgba(147, 197, 253, 0.7)';
+    ctx.fillStyle = `rgba(${glowColorRgba}, 0.6)`;
     ctx.beginPath();
-    ctx.moveTo(shardSize * 0.8, 0);
-    ctx.lineTo(shardSize * 0.2, -shardSize * 0.6);
-    ctx.lineTo(-shardSize * 0.3, -shardSize * 0.2);
-    ctx.lineTo(-shardSize * 0.2, shardSize * 0.3);
-    ctx.lineTo(shardSize * 0.15, shardSize * 0.5);
+    // 포탄 형태 잔상
+    ctx.moveTo(shardSize * 0.6, 0);
+    ctx.lineTo(shardSize * 0.15, -shardSize * 0.4);
+    ctx.lineTo(-shardSize * 0.5, -shardSize * 0.2);
+    ctx.lineTo(-shardSize * 0.5, shardSize * 0.2);
+    ctx.lineTo(shardSize * 0.15, shardSize * 0.4);
     ctx.closePath();
     ctx.fill();
     ctx.restore();
   }
   ctx.globalAlpha = 1;
 
-  // ===== 메인 유리 파편 (v7.34: shadowBlur 10→14, 알파값 증가) =====
+  // ===== 2. 포탄 본체 (다각형 클러스터) =====
   if (useGlow) {
-    ctx.shadowColor = '#93c5fd';
+    ctx.shadowColor = mainColor;
     ctx.shadowBlur = 14;
   }
 
-  // 유리 본체 (v7.34: 알파값 0.75→0.88)
-  ctx.fillStyle = 'rgba(147, 197, 253, 0.88)';
+  // 포탄 외형 (다면체)
+  ctx.fillStyle = coreColor;
   ctx.beginPath();
-  ctx.moveTo(shardSize, 0);
-  ctx.lineTo(shardSize * 0.3, -shardSize * 0.8);
-  ctx.lineTo(-shardSize * 0.5, -shardSize * 0.3);
-  ctx.lineTo(-shardSize * 0.4, shardSize * 0.4);
-  ctx.lineTo(shardSize * 0.2, shardSize * 0.6);
+  ctx.moveTo(shardSize * 0.7, 0);
+  ctx.lineTo(shardSize * 0.2, -shardSize * 0.55);
+  ctx.lineTo(-shardSize * 0.4, -shardSize * 0.3);
+  ctx.lineTo(-shardSize * 0.5, 0);
+  ctx.lineTo(-shardSize * 0.4, shardSize * 0.3);
+  ctx.lineTo(shardSize * 0.2, shardSize * 0.55);
   ctx.closePath();
   ctx.fill();
 
-  ctx.strokeStyle = '#93c5fd';
+  // 포탄 테두리 (에너지 라인)
+  ctx.strokeStyle = mainColor;
   ctx.lineWidth = 2;
   ctx.stroke();
   ctx.shadowBlur = 0;
 
-  // ===== 반사광 (애니메이션) (v7.34: 알파값 증가) =====
-  const reflectPhase = (time / 200) % 1;
-  const reflectX = -shardSize * 0.3 + reflectPhase * shardSize * 0.6;
-
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
-  ctx.beginPath();
-  ctx.moveTo(reflectX, -shardSize * 0.3);
-  ctx.lineTo(reflectX + shardSize * 0.2, -shardSize * 0.5);
-  ctx.lineTo(reflectX + shardSize * 0.1, -shardSize * 0.15);
-  ctx.closePath();
-  ctx.fill();
-
-  // 반짝임 포인트 (v7.34: 크기/알파 증가)
-  const sparkle = Math.sin(time / 80) * 0.5 + 0.5;
-  ctx.fillStyle = `rgba(255, 255, 255, ${0.5 + sparkle * 0.5})`;
-  ctx.beginPath();
-  ctx.arc(shardSize * 0.5, -shardSize * 0.2, 3 + sparkle * 2.5, 0, Math.PI * 2);
-  ctx.fill();
-
-  // ===== 균열 라인 (v7.34: 알파값 0.5→0.7) =====
-  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+  // ===== 3. 내부 분열선 (클러스터 세그먼트 표시) =====
+  ctx.strokeStyle = `rgba(${glowColorRgba}, 0.6)`;
   ctx.lineWidth = 1;
+  // 분열 라인 (3방향)
   ctx.beginPath();
   ctx.moveTo(0, 0);
-  ctx.lineTo(shardSize * 0.5, shardSize * 0.25);
+  ctx.lineTo(shardSize * 0.5, shardSize * 0.2);
   ctx.moveTo(0, 0);
-  ctx.lineTo(-shardSize * 0.25, -shardSize * 0.35);
+  ctx.lineTo(-shardSize * 0.3, -shardSize * 0.25);
   ctx.moveTo(0, 0);
-  ctx.lineTo(shardSize * 0.15, -shardSize * 0.4);
+  ctx.lineTo(-shardSize * 0.1, shardSize * 0.35);
   ctx.stroke();
+
+  // 에너지 코어
+  const corePulse = 0.7 + Math.sin(time / 50) * 0.3;
+  ctx.fillStyle = mainColor;
+  ctx.beginPath();
+  ctx.arc(0, 0, 3 * corePulse, 0, Math.PI * 2);
+  ctx.fill();
+
+  // ===== 4. 에너지 스파크 (표면 전기) =====
+  const sparkCount = isUltimate ? 4 : (isEvolved ? 3 : 2);
+  for (let s = 0; s < sparkCount; s++) {
+    const sPhase = ((time / 70 + s * 0.3) % 1);
+    const sAngle = s * Math.PI * 2 / sparkCount + time / 100;
+    const sDist = shardSize * 0.45;
+    const sx = Math.cos(sAngle) * sDist;
+    const sy = Math.sin(sAngle) * sDist;
+    const sAlpha = Math.sin(sPhase * Math.PI) * 0.8;
+
+    ctx.fillStyle = `rgba(${glowColorRgba}, ${sAlpha})`;
+    ctx.beginPath();
+    ctx.arc(sx, sy, 1.5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // ===== 5. 진화: 6방향 분열 암시 =====
+  if (isEvolved || isUltimate) {
+    const splitCount = isUltimate ? 6 : 4;
+    const splitAlpha = 0.4 + Math.sin(time / 200) * 0.2;
+
+    ctx.save();
+    ctx.globalAlpha = splitAlpha;
+    ctx.strokeStyle = mainColor;
+    ctx.lineWidth = 1;
+    ctx.setLineDash([3, 3]);
+
+    for (let sp = 0; sp < splitCount; sp++) {
+      const spAngle = (sp / splitCount) * Math.PI * 2;
+      ctx.beginPath();
+      ctx.moveTo(Math.cos(spAngle) * shardSize * 0.5, Math.sin(spAngle) * shardSize * 0.5);
+      ctx.lineTo(Math.cos(spAngle) * shardSize * 1.2, Math.sin(spAngle) * shardSize * 1.2);
+      ctx.stroke();
+
+      // 분열 방향 점
+      ctx.fillStyle = mainColor;
+      ctx.beginPath();
+      ctx.arc(
+        Math.cos(spAngle) * shardSize * 1.2,
+        Math.sin(spAngle) * shardSize * 1.2,
+        2, 0, Math.PI * 2
+      );
+      ctx.fill();
+    }
+    ctx.setLineDash([]);
+    ctx.restore();
+  }
 
   ctx.restore();
 }
