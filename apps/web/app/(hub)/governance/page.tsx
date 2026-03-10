@@ -95,8 +95,9 @@ function GovernancePageInner() {
     [refetch]
   );
 
-  const handleWithdraw = useCallback((proposalId: number) => {
-    console.log(`[Governance] Withdraw tokens from #${proposalId}`);
+  // v32 Phase 1 Task 6: 서버에 철회 API가 없으므로 no-op (UI에서 버튼 비활성화됨)
+  const handleWithdraw = useCallback((_proposalId: number) => {
+    // 서버에 withdraw API가 없음 — VoteInterface에서 버튼이 disabled + tooltip 표시
   }, []);
 
   const activeCount = proposals.filter(p => p.status === 'active').length;

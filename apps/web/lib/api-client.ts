@@ -3,6 +3,14 @@
  * Uses /api/ routes (v18 compatibility layer on the server).
  */
 
+import type {
+  ServerResolution,
+  ServerResolutionsResponse,
+  CouncilProposal,
+  VoteRecord,
+  ServerResolutionStatus,
+} from '@/types/council';
+
 const SERVER_URL = process.env.NEXT_PUBLIC_SERVER_URL || '';
 
 export function getServerUrl(): string {
@@ -158,63 +166,154 @@ export async function fetchCountries(): Promise<CountryEconomy[] | null> {
 }
 
 // ── Council / Governance ──
+// v32 Phase 1: 서버 Resolution 스키마에 맞춰 정상화
 
-export interface CouncilProposal {
-  id: string;
-  iso3: string;
-  proposer: string;
-  title: string;
-  description: string;
-  proposalType: string;
-  forVotes: number;
-  againstVotes: number;
-  startTime: string;
-  endTime: string;
-  status: string;
-  executed: boolean;
-  totalVoters: number;
+export type { CouncilProposal, VoteRecord } from '@/types/council';
+
+/**
+ * ServerResolutionStatus → 프론트엔드 ProposalStatus 매핑
+ * 서버: voting | passed | vetoed | rejected | expired
+ * 프론트엔드: active | passed | rejected | executed
+ */
+function mapResolutionStatus(status: ServerResolutionStatus): string {
+  switch (status) {
+    case 'voting': return 'active';
+    case 'passed': return 'passed';
+    case 'vetoed': return 'rejected';
+    case 'rejected': return 'rejected';
+    case 'expired': return 'executed'; // 효과가 만료 = 이미 실행된 것
+    default: return 'active';
+  }
 }
 
-export interface VoteRecord {
-  proposalId: string;
-  title: string;
-  iso3: string;
-  support: boolean;
-  quadraticWeight: number;
-  tokensUsed: number;
-  timestamp: string;
+/**
+ * Resolution → CouncilProposal 어댑터
+ * 서버 snake_case → 프론트엔드 camelCase 변환
+ */
+function mapResolutionToProposal(res: ServerResolution): CouncilProposal {
+  const votes = res.votes ?? {};
+  const forVotes = Object.values(votes).filter((v) => v === true).length;
+  const againstVotes = Object.values(votes).filter((v) => v === false).length;
+
+  return {
+    id: res.id,
+    iso3: res.target_faction ?? '', // Resolution은 국가 ISO가 없으므로 target_faction 활용
+    proposer: res.proposed_by,
+    title: res.name,
+    description: res.description,
+    proposalType: res.type, // 서버의 resolution type 그대로 (nuclear_ban 등)
+    forVotes,
+    againstVotes,
+    startTime: res.created_at,
+    endTime: res.voting_ends_at,
+    status: mapResolutionStatus(res.status),
+    executed: res.status === 'expired' || (res.status === 'passed' && !!res.effect_starts_at),
+    totalVoters: Object.keys(votes).length,
+  };
 }
 
-export async function fetchCouncilProposals(country?: string): Promise<CouncilProposal[]> {
-  const q = country ? `?country=${country}` : '';
-  const data = await apiFetch<{ proposals: CouncilProposal[] }>(`/api/council/proposals${q}`);
-  return data?.proposals ?? [];
+/**
+ * GET /api/council/resolutions → voting[] + history[] 합쳐서 proposals[] 반환
+ * 기존: GET /api/council/proposals (존재하지 않는 경로)
+ */
+export async function fetchCouncilProposals(_country?: string): Promise<CouncilProposal[]> {
+  const data = await apiFetch<ServerResolutionsResponse>('/api/council/resolutions');
+  if (!data) return [];
+
+  const voting = (data.voting ?? []).map(mapResolutionToProposal);
+  const history = (data.history ?? []).map(mapResolutionToProposal);
+
+  // history에는 voting 중인 것도 포함될 수 있으므로 중복 제거
+  const seen = new Set(voting.map((p) => p.id));
+  const uniqueHistory = history.filter((p) => !seen.has(p.id));
+
+  return [...voting, ...uniqueHistory];
 }
 
-export async function fetchCouncilVotes(country?: string): Promise<VoteRecord[]> {
-  const q = country ? `?country=${country}` : '';
-  const data = await apiFetch<{ votes: VoteRecord[] }>(`/api/council/votes${q}`);
-  return data?.votes ?? [];
+/**
+ * 투표 기록 추출: GET /api/council/resolutions에서 Resolution.Votes map을 펼쳐 VoteRecord[] 반환
+ * 서버에 별도 votes API가 없으므로 resolutions에서 추출
+ */
+export async function fetchCouncilVotes(_country?: string): Promise<VoteRecord[]> {
+  const data = await apiFetch<ServerResolutionsResponse>('/api/council/resolutions');
+  if (!data) return [];
+
+  const records: VoteRecord[] = [];
+  const allResolutions = [...(data.voting ?? []), ...(data.history ?? [])];
+
+  // 중복 제거
+  const seen = new Set<string>();
+  for (const res of allResolutions) {
+    if (seen.has(res.id)) continue;
+    seen.add(res.id);
+
+    const votes = res.votes ?? {};
+    for (const [voter, support] of Object.entries(votes)) {
+      records.push({
+        proposalId: res.id,
+        title: res.name,
+        iso3: res.target_faction ?? '',
+        voter,
+        support,
+        quadraticWeight: 1, // 서버 Council 시스템은 1표=1표 (quadratic 아님)
+        tokensUsed: 0, // Council vote는 토큰 소모 없음 (vote-with-burn은 별도)
+        timestamp: res.created_at,
+      });
+    }
+  }
+
+  return records;
 }
 
+/**
+ * POST /api/council/vote → body: {resolution_id, in_favor}
+ * 기존: POST /api/council/proposals/{id}/vote (존재하지 않는 경로)
+ */
 export async function postCouncilVote(
   proposalId: string,
   support: boolean,
-  tokens: number,
+  _tokens: number,
 ): Promise<{ success: boolean } | null> {
-  return apiFetch<{ success: boolean }>(`/api/council/proposals/${proposalId}/vote`, {
+  const result = await apiFetch<{ status: string }>('/api/council/vote', {
     method: 'POST',
-    body: JSON.stringify({ support, tokens }),
+    body: JSON.stringify({
+      resolution_id: proposalId,
+      in_favor: support,
+    }),
+    authenticated: true,
   });
+  if (!result) return null;
+  return { success: result.status === 'vote recorded' };
 }
 
+/**
+ * POST /api/council/propose → body: {type, target_faction}
+ * 기존: POST /api/council/proposals (존재하지 않는 경로 + 불일치 body)
+ *
+ * 서버는 ResolutionType(nuclear_ban 등)과 target_faction만 받음.
+ * proposalType을 서버 type으로 매핑.
+ */
 export async function postCouncilProposal(
-  data: Omit<CouncilProposal, 'id' | 'forVotes' | 'againstVotes' | 'status' | 'executed' | 'totalVoters'>,
+  data: {
+    iso3?: string;
+    proposer?: string;
+    title?: string;
+    description?: string;
+    proposalType: string;
+    startTime?: string;
+    endTime?: string;
+  },
 ): Promise<CouncilProposal | null> {
-  return apiFetch<CouncilProposal>('/api/council/proposals', {
+  const result = await apiFetch<{ resolution: ServerResolution }>('/api/council/propose', {
     method: 'POST',
-    body: JSON.stringify(data),
+    body: JSON.stringify({
+      type: data.proposalType,
+      target_faction: data.iso3 ?? '',
+    }),
+    authenticated: true,
   });
+  if (!result?.resolution) return null;
+  return mapResolutionToProposal(result.resolution);
 }
 
 // ── Player ──

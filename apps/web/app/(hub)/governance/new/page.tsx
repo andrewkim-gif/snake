@@ -10,10 +10,10 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
-import { fetchCountries, postCouncilProposal, CountryEconomy } from '@/lib/api-client';
+import { fetchCountries, postCouncilProposal, fetchPlayerTokenBalance, CountryEconomy } from '@/lib/api-client';
 import { useApiData } from '@/hooks/useApiData';
+import { useAuthenticatedApi } from '@/hooks/useAuthenticatedApi';
 import { ServerRequired } from '@/components/ui/ServerRequired';
-// Plus icon removed — 대시보드 스타일에서 PageHeader 제거로 불필요
 import type { ProposalType } from '@/components/governance/types';
 
 const ProposalForm = dynamic(
@@ -41,8 +41,16 @@ function NewProposalPageInner() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const countryParam = searchParams.get('country')?.toUpperCase() ?? '';
+  const { playerId, walletAddress } = useAuthenticatedApi();
 
   const { data: rawCountries, loading } = useApiData(() => fetchCountries());
+
+  // v32 Phase 1 Task 5: 실제 토큰 잔액 조회 (하드코딩 제거)
+  const { data: tokenBalanceData } = useApiData(
+    () => fetchPlayerTokenBalance(playerId),
+    { refreshInterval: 15000 },
+  );
+  const userBalance = tokenBalanceData?.balance ?? 0;
 
   const countries = useMemo(() => (rawCountries || []).map(toCountryItem), [rawCountries]);
 
@@ -66,7 +74,7 @@ function NewProposalPageInner() {
     }) => {
       await postCouncilProposal({
         iso3: data.iso3,
-        proposer: '', // 서버에서 세션 기반 할당
+        proposer: walletAddress || '', // v32: wallet address 전달 (서버에서 인증 헤더로 처리)
         title: data.title,
         description: data.description,
         proposalType: data.proposalType,
@@ -284,7 +292,7 @@ function NewProposalPageInner() {
             iso3={selectedCountry.iso3}
             tokenSymbol={selectedCountry.symbol.replace('$', '')}
             minTokens={100}
-            userBalance={10000}
+            userBalance={userBalance}
             onSubmit={handleSubmit}
             onCancel={handleCancel}
           />

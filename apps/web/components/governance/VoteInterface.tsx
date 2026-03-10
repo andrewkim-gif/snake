@@ -298,23 +298,27 @@ export default function VoteInterface({
         >
           You voted {proposal.userVoteSupport ? 'FOR' : 'AGAINST'} this proposal
           {canWithdraw && (
-            <button
-              onClick={() => onWithdraw?.(proposal.id)}
-              style={{
-                display: 'block',
-                margin: '8px auto 0',
-                padding: '4px 12px',
-                borderRadius: 0,
-                border: '1px solid rgba(232, 224, 212, 0.2)',
-                background: 'transparent',
-                color: '#E8E0D4',
-                fontSize: '12px',
-                cursor: 'pointer',
-                fontFamily: '"Rajdhani", sans-serif',
-              }}
-            >
-              Withdraw Locked Tokens
-            </button>
+            <div style={{ position: 'relative', display: 'inline-block', width: '100%', textAlign: 'center' }}>
+              <button
+                disabled
+                title="Withdraw is not available yet. The server does not support token withdrawal at this time."
+                style={{
+                  display: 'block',
+                  margin: '8px auto 0',
+                  padding: '4px 12px',
+                  borderRadius: 0,
+                  border: '1px solid rgba(232, 224, 212, 0.1)',
+                  background: 'transparent',
+                  color: '#8B8B8B',
+                  fontSize: '12px',
+                  cursor: 'not-allowed',
+                  opacity: 0.5,
+                  fontFamily: '"Rajdhani", sans-serif',
+                }}
+              >
+                Withdraw Locked Tokens (Coming Soon)
+              </button>
+            </div>
           )}
         </div>
       )}
