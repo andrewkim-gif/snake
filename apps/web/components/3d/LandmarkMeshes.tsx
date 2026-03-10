@@ -39,6 +39,12 @@
  *   - 7D: Face AO 범위 복원 (0.7→0.45 하한, 입체감 대폭 강화)
  *   - 7E: 바이옴 weathering 필드 실제 연결 (uBiomeWeathering[6] uniform, 고정 0.12 제거)
  *   - 7G: 바이옴별 블록 치환 (archetype+biome 키 그룹핑, buildVoxelGeometry biome 파라미터)
+ *
+ * v33 Phase 2 성능 최적화:
+ *   - static attribute (biomeAttr, ageAttr) needsUpdate 제거 — visibleCount 변경 시에만 업로드
+ *   - dirty flag 패턴 — 카메라 미이동 시 빌보드/스케일 계산 스킵
+ *   - 단일 useFrame 통합 — 부모에서 모든 archetype 일괄 업데이트 (useFrame 오버헤드 제거)
+ *   - LOD 연동 — useGlobeLODDistance 'far' 티어에서 매 4프레임마다만 업데이트
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
@@ -52,12 +58,18 @@ import { createArchetypeGeometry, createArchetypeEdgeGeometry, disposeGeometryCa
 import { getBlockAtlasTexture } from '@/lib/mc-texture-atlas';
 import { BIOME_LANDMARK_TINTS, BIOME_INDEX } from '@/lib/biome-landmark-tints';
 import { MATERIAL_PROPS } from '@/lib/mc-blocks';
+import { useGlobeLODDistance } from '@/hooks/useGlobeLOD';
 
 // ─── Constants ───
 
 const SURFACE_ALT = 0.5;
 const BACKFACE_THRESHOLD = 0.05;
 const BACKFACE_FADE_RANGE = 0.3;
+
+// v33 Phase 2: 카메라 이동 감지 임계값 (이 거리 미만 이동 시 업데이트 스킵)
+const CAMERA_DIRTY_THRESHOLD = 0.5;
+// v33 Phase 2: 'far' LOD에서 업데이트 빈도 (N프레임마다 1회)
+const FAR_LOD_UPDATE_INTERVAL = 4;
 
 // v29 Phase 4: Tier 기반 스케일 차등화 (기존 LANDMARK_SCALE=1.5 대체)
 const TIER_SCALE: Record<number, number> = {
@@ -74,6 +86,8 @@ const _up = new THREE.Vector3(0, 1, 0);
 const _quat = new THREE.Quaternion();
 // v29 Phase 6: 태양 계산용 연초 밀리초 캐시 (per-frame Date 할당 방지)
 const _yearStartMs = new Date(new Date().getFullYear(), 0, 0).getTime();
+// v33 Phase 2: 이전 카메라 위치 비교용 temp
+const _prevCamPos = new THREE.Vector3();
 
 // ─── v29 Phase 2: iso3 해시 기반 결정론적 랜덤 시드 ───
 
@@ -135,6 +149,29 @@ interface ArchetypeGroup {
   biomes: BiomeType[];
   /** v29 Phase 4: 각 랜드마크의 티어 (스케일 차등화용) */
   tiers: number[];
+}
+
+// ─── v33 Phase 2: Archetype별 런타임 데이터 (통합 useFrame용) ───
+
+interface ArchetypeRuntimeData {
+  meshRef: React.RefObject<THREE.InstancedMesh | null>;
+  biomeAttrRef: React.MutableRefObject<THREE.InstancedBufferAttribute | null>;
+  ageAttrRef: React.MutableRefObject<THREE.InstancedBufferAttribute | null>;
+  edgeGeometry: THREE.InstancedBufferGeometry;
+  edgeAttrs: {
+    m0: THREE.InstancedBufferAttribute;
+    m1: THREE.InstancedBufferAttribute;
+    m2: THREE.InstancedBufferAttribute;
+    m3: THREE.InstancedBufferAttribute;
+  };
+  instanceData: {
+    biomeIndices: Float32Array;
+    ageSeeds: Float32Array;
+    finalScales: Float32Array;
+    yRotations: THREE.Quaternion[];
+  };
+  /** v33 Phase 2: 이전 프레임의 visible count (변경 시에만 static attr 업로드) */
+  prevVisibleCount: number;
 }
 
 // ─── Landmark Sun Lighting Shaders (v22 Phase 1) ───
@@ -304,21 +341,24 @@ function getSharedMaterial(): THREE.ShaderMaterial {
 }
 
 
-// ─── ArchetypeInstancedMesh 서브 컴포넌트 ───
+// ─── ArchetypeInstancedMesh 서브 컴포넌트 (v33: useFrame 제거, JSX만 렌더링) ───
 
 interface ArchetypeInstancedMeshProps {
   group: ArchetypeGroup;
   globeRadius: number;
-  camera: THREE.Camera;
+  /** v33 Phase 2: 부모가 런타임 데이터에 접근하기 위한 콜백 */
+  onRuntimeReady: (key: string, data: ArchetypeRuntimeData) => void;
+  onRuntimeCleanup: (key: string) => void;
 }
 
-function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstancedMeshProps) {
+function ArchetypeInstancedMesh({ group, globeRadius, onRuntimeReady, onRuntimeCleanup }: ArchetypeInstancedMeshProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null!);
-  const edgeRef = useRef<THREE.LineSegments>(null!);
 
-  // v29 Phase 2: InstancedBufferAttribute 참조 (useFrame에서 업데이트)
+  // v29 Phase 2: InstancedBufferAttribute 참조
   const biomeAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
   const ageAttrRef = useRef<THREE.InstancedBufferAttribute | null>(null);
+
+  const groupKey = `${group.archetype}_${group.groupBiome}`;
 
   const meshRefCb = useCallback((mesh: THREE.InstancedMesh | null) => {
     if (mesh) {
@@ -425,78 +465,22 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
     m3: edgeGeometry.getAttribute('aInstanceMatrix3') as THREE.InstancedBufferAttribute,
   }), [edgeGeometry]);
 
-  useFrame(() => {
-    const mesh = meshRef.current;
-    if (!mesh) return;
-
-    _camDir.copy(camera.position).normalize();
-
-    let visibleCount = 0;
-
-    // v29 Phase 6: 캐시된 엣지 어트리뷰트 참조 사용
-    const { m0, m1, m2, m3 } = edgeAttrs;
-
-    // v29 Phase 2: 바이옴 attribute 참조
-    const biomeAttr = biomeAttrRef.current;
-    const ageAttr = ageAttrRef.current;
-
-    for (let i = 0; i < group.landmarks.length; i++) {
-      const pos = group.positions[i];
-      const normal = group.normals[i];
-
-      // Backface culling
-      const dot = normal.dot(_camDir);
-      if (dot < BACKFACE_THRESHOLD) continue;
-
-      // Alpha fade (backface 경계)
-      const fade = THREE.MathUtils.clamp(
-        (dot - BACKFACE_THRESHOLD) / BACKFACE_FADE_RANGE, 0, 1,
-      );
-      // ★ 너무 작은 스케일은 검은 점으로 보이므로 스킵
-      if (fade < 0.15) continue;
-
-      // v29 Phase 4: Y축 회전을 먼저 적용 → surface normal alignment를 곱함
-      // surface normal이 "위"이므로, local up축 기준 회전 후 표면 정렬
-      _quat.setFromUnitVectors(_up, normal);         // surface alignment
-      _quat.multiply(instanceData.yRotations[i]);    // local Y축 회전 추가
-
-      _obj.position.copy(pos);
-      _obj.quaternion.copy(_quat);
-      // v29 Phase 4: tier 스케일 × jitter × backface fade
-      const s = instanceData.finalScales[i] * fade;
-      _obj.scale.set(s, s, s);
-      _obj.updateMatrix();
-      mesh.setMatrixAt(visibleCount, _obj.matrix);
-
-      // v29 Phase 2+4: per-instance 바이옴 인덱스 + 풍화 시드 설정
-      if (biomeAttr) biomeAttr.setX(visibleCount, instanceData.biomeIndices[i]);
-      if (ageAttr) ageAttr.setX(visibleCount, instanceData.ageSeeds[i]);
-
-      // 엣지 인스턴스 행렬도 동기화
-      const e = _obj.matrix.elements;
-      const j = visibleCount;
-      m0.setXYZW(j, e[0], e[1], e[2], e[3]);
-      m1.setXYZW(j, e[4], e[5], e[6], e[7]);
-      m2.setXYZW(j, e[8], e[9], e[10], e[11]);
-      m3.setXYZW(j, e[12], e[13], e[14], e[15]);
-
-      visibleCount++;
-    }
-
-    mesh.count = visibleCount;
-    mesh.instanceMatrix.needsUpdate = true;
-
-    // v29 Phase 2: 바이옴 attribute needsUpdate
-    if (biomeAttr) biomeAttr.needsUpdate = true;
-    if (ageAttr) ageAttr.needsUpdate = true;
-
-    // 엣지 인스턴스 카운트 업데이트
-    edgeGeometry.instanceCount = visibleCount;
-    m0.needsUpdate = true;
-    m1.needsUpdate = true;
-    m2.needsUpdate = true;
-    m3.needsUpdate = true;
-  });
+  // v33 Phase 2: 마운트 시 런타임 데이터를 부모에 등록, 언마운트 시 해제
+  useEffect(() => {
+    onRuntimeReady(groupKey, {
+      meshRef,
+      biomeAttrRef,
+      ageAttrRef,
+      edgeGeometry,
+      edgeAttrs,
+      instanceData,
+      prevVisibleCount: -1, // 초기값: 무조건 첫 프레임에서 static attr 업로드 강제
+    });
+    return () => {
+      onRuntimeCleanup(groupKey);
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [groupKey, edgeGeometry, edgeAttrs, instanceData]);
 
   return (
     <>
@@ -510,7 +494,6 @@ function ArchetypeInstancedMesh({ group, globeRadius, camera }: ArchetypeInstanc
       />
       {/* MC 블록 외곽선 */}
       <lineSegments
-        ref={edgeRef}
         geometry={edgeGeometry}
         material={edgeMaterial}
         frustumCulled={false}
@@ -527,6 +510,25 @@ export function LandmarkMeshes({
   globeRadius = 100,
 }: LandmarkMeshesProps) {
   const { camera } = useThree();
+
+  // v33 Phase 2: LOD 연동 — 카메라 거리 기반 업데이트 빈도 조절
+  const distanceLOD = useGlobeLODDistance();
+
+  // v33 Phase 2: Archetype별 런타임 데이터 맵 (통합 useFrame에서 사용)
+  const runtimeMapRef = useRef<Map<string, ArchetypeRuntimeData>>(new Map());
+
+  // v33 Phase 2: 카메라 dirty flag — 이전 위치 저장
+  const prevCamPosRef = useRef(new THREE.Vector3(Infinity, Infinity, Infinity));
+  // v33 Phase 2: 'far' LOD 프레임 카운터
+  const frameCountRef = useRef(0);
+
+  // v33 Phase 2: 런타임 등록/해제 콜백 (안정 참조, 재렌더링 방지)
+  const handleRuntimeReady = useCallback((key: string, data: ArchetypeRuntimeData) => {
+    runtimeMapRef.current.set(key, data);
+  }, []);
+  const handleRuntimeCleanup = useCallback((key: string) => {
+    runtimeMapRef.current.delete(key);
+  }, []);
 
   // v29 Phase 7G: Archetype + Biome 별 그룹핑 + 3D 좌표 계산
   // 같은 아키타입이라도 바이옴이 다르면 별도 InstancedMesh로 관리 (블록 치환 때문)
@@ -563,25 +565,131 @@ export function LandmarkMeshes({
     return Array.from(groupMap.values());
   }, [landmarks, globeRadius]);
 
-  // v22: useFrame에서 태양 방향 갱신 (UTC 기반, EarthSphere와 동일 계산)
-  // sharedMaterial 하나를 모든 ArchetypeInstancedMesh가 공유 → uniform 한 번만 갱신
-  // v29 Phase 6: Date.now() + 캐시된 yearStartMs로 per-frame Date 할당 제거 (GC 방지)
+  // v33 Phase 2: 그룹 키 → 그룹 데이터 매핑 (useFrame에서 사용)
+  const groupByKey = useMemo(() => {
+    const map = new Map<string, ArchetypeGroup>();
+    for (const g of archetypeGroups) {
+      map.set(`${g.archetype}_${g.groupBiome}`, g);
+    }
+    return map;
+  }, [archetypeGroups]);
+
+  // v33 Phase 2: 통합 useFrame — 태양 uniform + 모든 archetype 인스턴스 업데이트
   useFrame((state) => {
-    if (!sharedMaterial) return;
-    const nowMs = Date.now();
-    // UTC 시각을 밀리초에서 직접 계산 (new Date() 객체 생성 없음)
-    const dayOfYear = Math.floor((nowMs - _yearStartMs) / 86400000);
-    const utcH = (nowMs % 86400000) / 3600000;
-    // 태양 적위 (지축 23.44도 기울기)
-    const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
-    // 시간각: UTC 12시 = 본초자오선 정오
-    const ha = ((utcH - 12) / 24) * 2 * Math.PI;
-    const sx = Math.cos(decRad) * Math.cos(ha);
-    const sy = Math.sin(decRad);
-    const sz = Math.cos(decRad) * Math.sin(ha);
-    sharedMaterial.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
-    // v29 Phase 5: 시간 uniform 갱신 (창문 깜빡임 애니메이션)
-    sharedMaterial.uniforms.uTime.value = state.clock.elapsedTime;
+    // ── 1. 태양 방향 + uTime uniform 갱신 (항상 실행) ──
+    if (sharedMaterial) {
+      const nowMs = Date.now();
+      const dayOfYear = Math.floor((nowMs - _yearStartMs) / 86400000);
+      const utcH = (nowMs % 86400000) / 3600000;
+      const decRad = (-23.44 * Math.cos(((dayOfYear + 10) / 365) * 2 * Math.PI)) * (Math.PI / 180);
+      const ha = ((utcH - 12) / 24) * 2 * Math.PI;
+      const sx = Math.cos(decRad) * Math.cos(ha);
+      const sy = Math.sin(decRad);
+      const sz = Math.cos(decRad) * Math.sin(ha);
+      sharedMaterial.uniforms.uSunDir.value.set(sx, sy, sz).normalize();
+      sharedMaterial.uniforms.uTime.value = state.clock.elapsedTime;
+    }
+
+    // ── 2. LOD 기반 업데이트 빈도 제어 ──
+    frameCountRef.current++;
+    if (distanceLOD.distanceTier === 'far') {
+      // 'far' 티어: 매 FAR_LOD_UPDATE_INTERVAL 프레임마다만 인스턴스 업데이트
+      if (frameCountRef.current % FAR_LOD_UPDATE_INTERVAL !== 0) return;
+    }
+
+    // ── 3. 카메라 dirty flag 체크 ──
+    const camPos = camera.position;
+    _prevCamPos.copy(prevCamPosRef.current);
+    const camDelta = _prevCamPos.distanceToSquared(camPos);
+    const cameraDirty = camDelta > CAMERA_DIRTY_THRESHOLD * CAMERA_DIRTY_THRESHOLD;
+
+    // 카메라 미이동 시 빌보드/스케일/backface 계산 스킵
+    if (!cameraDirty) return;
+
+    // 카메라 위치 저장
+    prevCamPosRef.current.copy(camPos);
+
+    // ── 4. 카메라 방향 한 번 계산 (모든 그룹 공유) ──
+    _camDir.copy(camPos).normalize();
+
+    // ── 5. 모든 archetype 그룹 일괄 업데이트 ──
+    const runtimeMap = runtimeMapRef.current;
+    for (const [key, runtime] of runtimeMap) {
+      const group = groupByKey.get(key);
+      if (!group) continue;
+
+      const mesh = runtime.meshRef.current;
+      if (!mesh) continue;
+
+      const { m0, m1, m2, m3 } = runtime.edgeAttrs;
+      const biomeAttr = runtime.biomeAttrRef.current;
+      const ageAttr = runtime.ageAttrRef.current;
+      const { biomeIndices, ageSeeds, finalScales, yRotations } = runtime.instanceData;
+
+      let visibleCount = 0;
+
+      for (let i = 0; i < group.landmarks.length; i++) {
+        const pos = group.positions[i];
+        const normal = group.normals[i];
+
+        // Backface culling
+        const dot = normal.dot(_camDir);
+        if (dot < BACKFACE_THRESHOLD) continue;
+
+        // Alpha fade (backface 경계)
+        const fade = THREE.MathUtils.clamp(
+          (dot - BACKFACE_THRESHOLD) / BACKFACE_FADE_RANGE, 0, 1,
+        );
+        // ★ 너무 작은 스케일은 검은 점으로 보이므로 스킵
+        if (fade < 0.15) continue;
+
+        // v29 Phase 4: Y축 회전을 먼저 적용 → surface normal alignment를 곱함
+        _quat.setFromUnitVectors(_up, normal);
+        _quat.multiply(yRotations[i]);
+
+        _obj.position.copy(pos);
+        _obj.quaternion.copy(_quat);
+        const s = finalScales[i] * fade;
+        _obj.scale.set(s, s, s);
+        _obj.updateMatrix();
+        mesh.setMatrixAt(visibleCount, _obj.matrix);
+
+        // v29 Phase 2+4: per-instance 바이옴 인덱스 + 풍화 시드 설정
+        if (biomeAttr) biomeAttr.setX(visibleCount, biomeIndices[i]);
+        if (ageAttr) ageAttr.setX(visibleCount, ageSeeds[i]);
+
+        // 엣지 인스턴스 행렬도 동기화
+        const e = _obj.matrix.elements;
+        m0.setXYZW(visibleCount, e[0], e[1], e[2], e[3]);
+        m1.setXYZW(visibleCount, e[4], e[5], e[6], e[7]);
+        m2.setXYZW(visibleCount, e[8], e[9], e[10], e[11]);
+        m3.setXYZW(visibleCount, e[12], e[13], e[14], e[15]);
+
+        visibleCount++;
+      }
+
+      mesh.count = visibleCount;
+      mesh.instanceMatrix.needsUpdate = true;
+
+      // v33 Phase 2: static attribute는 visibleCount 변경 시에만 needsUpdate
+      // 카메라가 움직이면 backface culling이 바뀌어 인스턴스 순서가 달라지므로
+      // visibleCount가 같아도 인덱스 매핑이 변할 수 있음 → cameraDirty일 때 업데이트
+      // 하지만 이미 cameraDirty 체크 위에서 통과했으므로, 여기서는 항상 업로드 필요
+      // 최적화: prevVisibleCount와 비교하여 동일하면 데이터 내용도 동일한지 확인 불가
+      // → 안전하게: cameraDirty 통과 시 항상 업로드 (카메라 미이동 시 이 코드 자체 미도달)
+      if (biomeAttr) biomeAttr.needsUpdate = true;
+      if (ageAttr) ageAttr.needsUpdate = true;
+
+      // 엣지 인스턴스 카운트 업데이트
+      runtime.edgeGeometry.instanceCount = visibleCount;
+      m0.needsUpdate = true;
+      m1.needsUpdate = true;
+      m2.needsUpdate = true;
+      m3.needsUpdate = true;
+
+      // v33 Phase 2: prevVisibleCount 갱신
+      runtime.prevVisibleCount = visibleCount;
+    }
   });
 
   // 언마운트 시 geometry cache + 공유 머티리얼 정리
@@ -602,7 +710,8 @@ export function LandmarkMeshes({
           key={`${group.archetype}_${group.groupBiome}`}
           group={group}
           globeRadius={globeRadius}
-          camera={camera}
+          onRuntimeReady={handleRuntimeReady}
+          onRuntimeCleanup={handleRuntimeCleanup}
         />
       ))}
     </group>
