@@ -97,20 +97,33 @@ export interface MatrixScorePayload {
   rank: number;
 }
 
-/** matrix_result 패킷 */
+/** matrix_result 패킷 (v33 Phase 6: 보상 상세 포함) */
 export interface MatrixResultPayload {
   rankings: Array<{
-    playerId: string;
-    name: string;
-    nation: string;
-    kills: number;
+    nationality: string;
     score: number;
+    rank: number;
   }>;
   rewards: Array<{
-    token: string;
-    amount: number;
+    playerId: string;
+    playerName: string;
+    nationality: string;
+    rawScore: number;
+    baseAmount: number;
+    multiplier: number;
+    popAdjust: number;
+    finalAmount: number;
+    tokenType: string;
+    isMvp: boolean;
+    isTopThree: boolean;
+    isDirectPlay: boolean;
+    reason: string;
   }>;
-  mvp: string;
+  mvp: {
+    playerId: string;
+    playerName: string;
+    finalAmount: number;
+  } | null;
 }
 
 /** matrix_buff 패킷 */

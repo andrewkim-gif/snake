@@ -753,6 +753,21 @@ func main() {
 	})
 
 	// ================================================================
+	// 9.5. v33 Phase 6: Matrix Token Economy Setup
+	// ================================================================
+	tokenBalanceCache := game.NewTokenBalanceCache(nil) // nil AWW balance — placeholder until full blockchain integration
+	tokenBalanceCache.StartPolling()
+
+	matrixBuffApplier := game.NewTokenBuffApplier()
+
+	matrixHandler := api.NewMatrixHandler(
+		v14TokenRewardMgr,
+		tokenBalanceCache,
+		matrixBuffApplier,
+		nil, // PlayerAWWBalance — placeholder
+	)
+
+	// ================================================================
 	// 10. HTTP Router (all routes)
 	// ================================================================
 	router := newRouter(cfg, hub, eventRouter, worldManager, &RouterDeps{
@@ -804,6 +819,9 @@ func main() {
 		// v30 Task 1-4: blockchain engines for HTTP endpoints
 		BuybackEngine: buybackEngine,
 		DefenseOracle: defenseOracle,
+		// v33 Phase 6: matrix token economy
+		MatrixHandler:     matrixHandler,
+		TokenBalanceCache: tokenBalanceCache,
 	})
 
 	// ================================================================
@@ -1018,6 +1036,8 @@ func main() {
 		v14WarSystem.Reset()
 		v14TokenRewardMgr.DistributePendingRewards() // flush pending rewards
 		bandwidthMonitor.Reset()
+		// v33 Phase 6: stop token balance cache polling
+		tokenBalanceCache.StopPolling()
 		// v30 Task 1-2: DefenseOracle graceful shutdown
 		if defenseOracle != nil {
 			defenseOracle.Stop()

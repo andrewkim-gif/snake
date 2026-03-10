@@ -62,33 +62,26 @@ function EpochResultScreenInner({
   playerNation,
   visible,
 }: EpochResultScreenProps) {
-  // 개인 성과 추출
-  const personalResult = useMemo(() => {
+  // 개인 보상 추출
+  const personalReward = useMemo(() => {
     if (!result || !playerId) return null;
-    const idx = result.rankings.findIndex((r) => r.playerId === playerId);
-    if (idx === -1) return null;
-    return { ...result.rankings[idx], rank: idx + 1 };
+    return result.rewards.find((r) => r.playerId === playerId) ?? null;
   }, [result, playerId]);
 
-  // 국가별 합산 점수 (순위용)
+  // 국가별 순위 (서버에서 이미 정렬됨)
   const nationRankings = useMemo(() => {
     if (!result) return [];
-    const nationMap = new Map<string, { score: number; kills: number; players: number }>();
-    for (const r of result.rankings) {
-      const existing = nationMap.get(r.nation) ?? { score: 0, kills: 0, players: 0 };
-      nationMap.set(r.nation, {
-        score: existing.score + r.score,
-        kills: existing.kills + r.kills,
-        players: existing.players + 1,
-      });
-    }
-    return [...nationMap.entries()]
-      .map(([nation, data]) => ({ nation, ...data }))
-      .sort((a, b) => b.score - a.score)
-      .slice(0, 5);
+    return [...result.rankings]
+      .sort((a, b) => a.rank - b.rank)
+      .slice(0, 5)
+      .map((r) => ({
+        nation: r.nationality,
+        score: r.score,
+        rank: r.rank,
+      }));
   }, [result]);
 
-  const isMVP = result?.mvp === playerId;
+  const isMVP = result?.mvp?.playerId === playerId;
   const dominantNation = nationRankings[0]?.nation;
 
   if (!visible || !result) return null;
@@ -216,7 +209,7 @@ function EpochResultScreenInner({
                 fontSize: 8,
               }}
             >
-              SCORE / KILLS / PLAYERS
+              SCORE
             </span>
           </div>
 
@@ -273,12 +266,6 @@ function EpochResultScreenInner({
                   <span style={{ color: '#ECECEF', fontFamily: BODY_FONT, fontSize: 12, fontWeight: 600, minWidth: 40, textAlign: 'right' }}>
                     {formatScore(entry.score)}
                   </span>
-                  <span style={{ color: '#EF4444', fontFamily: BODY_FONT, fontSize: 11, minWidth: 24, textAlign: 'right' }}>
-                    {entry.kills}
-                  </span>
-                  <span style={{ color: '#55565E', fontFamily: BODY_FONT, fontSize: 10, minWidth: 16, textAlign: 'right' }}>
-                    {entry.players}
-                  </span>
                 </div>
               </div>
             );
@@ -286,7 +273,7 @@ function EpochResultScreenInner({
         </div>
 
         {/* ═══ Personal Stats ═══ */}
-        {personalResult && (
+        {personalReward && (
           <div
             style={{
               width: '100%',
@@ -295,12 +282,12 @@ function EpochResultScreenInner({
               gap: 8,
             }}
           >
-            {/* Rank */}
-            <StatCard label="RANK" value={`#${personalResult.rank}`} color="#CC9933" />
-            {/* Kills */}
-            <StatCard label="KILLS" value={personalResult.kills.toString()} color="#EF4444" />
             {/* Score */}
-            <StatCard label="SCORE" value={formatScore(personalResult.score)} color="#FBBF24" />
+            <StatCard label="SCORE" value={formatScore(personalReward.rawScore)} color="#FBBF24" />
+            {/* Multiplier */}
+            <StatCard label="MULTI" value={`${personalReward.multiplier.toFixed(1)}x`} color="#CC9933" />
+            {/* Reward */}
+            <StatCard label="EARNED" value={formatTokenAmount(personalReward.finalAmount)} color="#4ADE80" />
           </div>
         )}
 
@@ -328,39 +315,41 @@ function EpochResultScreenInner({
               TOKEN REWARDS
             </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              {result.rewards.map((reward, idx) => (
-                <div
-                  key={idx}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'baseline',
-                    gap: 4,
-                  }}
-                >
-                  <span
+              {result.rewards
+                .filter((r) => r.playerId === playerId)
+                .map((reward, idx) => (
+                  <div
+                    key={idx}
                     style={{
-                      color: '#4ADE80',
-                      fontFamily: DISPLAY_FONT,
-                      fontSize: 16,
-                      fontWeight: 900,
-                      textShadow: '0 0 8px rgba(74,222,128,0.4)',
+                      display: 'flex',
+                      alignItems: 'baseline',
+                      gap: 4,
                     }}
                   >
-                    +{formatTokenAmount(reward.amount)}
-                  </span>
-                  <span
-                    style={{
-                      color: '#8B8D98',
-                      fontFamily: BODY_FONT,
-                      fontSize: 10,
-                      fontWeight: 600,
-                      letterSpacing: '0.05em',
-                    }}
-                  >
-                    ${reward.token}
-                  </span>
-                </div>
-              ))}
+                    <span
+                      style={{
+                        color: '#4ADE80',
+                        fontFamily: DISPLAY_FONT,
+                        fontSize: 16,
+                        fontWeight: 900,
+                        textShadow: '0 0 8px rgba(74,222,128,0.4)',
+                      }}
+                    >
+                      +{formatTokenAmount(reward.finalAmount)}
+                    </span>
+                    <span
+                      style={{
+                        color: '#8B8D98',
+                        fontFamily: BODY_FONT,
+                        fontSize: 10,
+                        fontWeight: 600,
+                        letterSpacing: '0.05em',
+                      }}
+                    >
+                      ${reward.tokenType}
+                    </span>
+                  </div>
+                ))}
             </div>
           </div>
         )}

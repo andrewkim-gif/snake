@@ -101,6 +101,10 @@ type OnlineMatrixEngine struct {
 	rewarder    *EpochRewardCalculator
 	buffApplier *TokenBuffApplier
 
+	// v33 Phase 6: Token economy integration
+	tokenRewardMgr *TokenRewardManager  // bridges epoch rewards → on-chain queue
+	balanceCache   *TokenBalanceCache    // 5-min cached token balances
+
 	// State
 	currentTick uint64
 	pvpEnabled  bool
@@ -406,7 +410,10 @@ func (e *OnlineMatrixEngine) OnEpochPhaseChange(phase EpochPhase, epochNumber in
 }
 
 // OnEpochEnd is called at the end of an epoch.
-// Takes score snapshot, calculates rewards, resets for next epoch.
+// Takes score snapshot, calculates rewards, queues for distribution, resets.
+//
+// v33 Phase 6: Now bridges to TokenRewardManager for on-chain queue.
+// Flow: snapshot → calculate → QueueMatrixEpochRewards → matrix_result
 func (e *OnlineMatrixEngine) OnEpochEnd(epochNumber int, dominantNation string, isSovereignty, isHegemony bool) *MatrixResultEvent {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -434,7 +441,18 @@ func (e *OnlineMatrixEngine) OnEpochEnd(epochNumber int, dominantNation string, 
 	}
 	rewardResult := e.rewarder.Calculate(rewardInput)
 
-	// 4. Build result event
+	// 4. v33 Phase 6: Queue rewards through TokenRewardManager
+	//    Applies DefenseOracle issuanceMod + daily cap + FIFO eviction
+	queued := 0
+	if e.tokenRewardMgr != nil && len(rewardResult.Rewards) > 0 {
+		queued = e.tokenRewardMgr.QueueMatrixEpochRewards(
+			rewardResult.Rewards,
+			e.countryCode,
+			epochNumber,
+		)
+	}
+
+	// 5. Build result event (includes reward amounts for client display)
 	resultEvent := &MatrixResultEvent{
 		Rankings: e.scorer.GetNationRankings(),
 		Rewards:  rewardResult.Rewards,
@@ -458,10 +476,10 @@ func (e *OnlineMatrixEngine) OnEpochEnd(epochNumber int, dominantNation string, 
 
 	e.pendingResults = append(e.pendingResults, *resultEvent)
 
-	// 5. Reset sessions for next epoch
+	// 6. Reset sessions for next epoch
 	e.sessions.ResetAll()
 
-	// 6. Callback
+	// 7. Callback
 	if e.OnResult != nil {
 		e.OnResult(resultEvent)
 	}
@@ -471,10 +489,33 @@ func (e *OnlineMatrixEngine) OnEpochEnd(epochNumber int, dominantNation string, 
 		"epoch", epochNumber,
 		"players", len(allSessions),
 		"rewards", len(rewardResult.Rewards),
+		"queued", queued,
 		"totalTokens", rewardResult.TotalPaid,
 	)
 
 	return resultEvent
+}
+
+// SetTokenRewardManager wires the TokenRewardManager for epoch reward queuing.
+// Called during CountryArenaWrapper initialization.
+func (e *OnlineMatrixEngine) SetTokenRewardManager(trm *TokenRewardManager) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.tokenRewardMgr = trm
+}
+
+// SetBalanceCache wires the TokenBalanceCache for balance lookups.
+func (e *OnlineMatrixEngine) SetBalanceCache(cache *TokenBalanceCache) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.balanceCache = cache
+}
+
+// GetBalanceCache returns the token balance cache.
+func (e *OnlineMatrixEngine) GetBalanceCache() *TokenBalanceCache {
+	e.mu.RLock()
+	defer e.mu.RUnlock()
+	return e.balanceCache
 }
 
 // --- Tick ---

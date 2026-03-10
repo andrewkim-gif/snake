@@ -121,6 +121,10 @@ type RouterDeps struct {
 	V14TickProfiler    *game.TickProfiler
 	V14BandwidthMon    *game.BandwidthMonitor
 	V14ArenaReaper     *game.InactiveArenaReaper
+
+	// v33 Phase 6: Matrix token economy
+	MatrixHandler     *api.MatrixHandler
+	TokenBalanceCache *game.TokenBalanceCache
 }
 
 func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *world.WorldManager, deps ...*RouterDeps) http.Handler {
@@ -983,6 +987,18 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 			"history": history,
 		})
 	})
+
+	// ==============================================================
+	// v33 Phase 6: Matrix Token Economy API Routes
+	// Public GET endpoints for token buffs, balances, reward history.
+	// ==============================================================
+	if d.MatrixHandler != nil {
+		r.Route("/api/matrix", func(r chi.Router) {
+			r.Get("/buffs", d.MatrixHandler.GetBuffs)
+			r.Get("/balance", d.MatrixHandler.GetBalance)
+			r.Get("/rewards/history", d.MatrixHandler.GetRewardHistory)
+		})
+	}
 
 	// ==============================================================
 	// v30 Phase 2: Token Economy APIs
