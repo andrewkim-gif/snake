@@ -74,6 +74,17 @@ import SynergyNotification from './SynergyNotification';
 import type { SynergyNotificationData } from './SynergyNotification';
 import { SKILL_BRANCHES } from '@/lib/matrix/config/skills/branches';
 
+// ─── v33 Phase 3: Online Mode Systems ───
+import { useMatrixSocket, type MatrixSocketListeners } from '@/hooks/useMatrixSocket';
+import { OnlineSyncSystem } from '@/lib/matrix/systems/online-sync';
+import { ClientPrediction } from '@/lib/matrix/systems/client-prediction';
+import { KillReporter } from '@/lib/matrix/systems/kill-reporter';
+import { seededSpawning } from '@/lib/matrix/systems/seeded-spawning';
+import { EpochUIBridge } from '@/lib/matrix/systems/epoch-ui-bridge';
+import type { MatrixEpochPhase } from '@/hooks/useMatrixSocket';
+import type { InterpolatedPlayer } from '@/lib/matrix/systems/online-sync';
+import type { EpochUIState } from '@/lib/matrix/systems/epoch-ui-bridge';
+
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
   () => import('./MatrixCanvas').then(m => ({ default: m.MatrixCanvas })),
@@ -93,6 +104,10 @@ export interface MatrixAppProps {
   countryIso3?: string;
   /** v29b Phase 2: 진입 국가 이름 (예: 'South Korea', 'United States') */
   countryName?: string;
+  /** v33 Phase 3: 온라인 모드 활성화 (true면 서버 연결) */
+  isOnline?: boolean;
+  /** v33 Phase 3: 게임 서버 URL (isOnline=true 시 필수) */
+  serverUrl?: string;
 }
 
 // ============================================
@@ -122,7 +137,7 @@ const DEFAULT_CHARACTER_BONUS = {
 // 컴포넌트
 // ============================================
 
-export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, countryName }: MatrixAppProps) {
+export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, countryName, isOnline = false, serverUrl }: MatrixAppProps) {
   // ─────────────────────────────────────────
   // 게임 훅 호출
   // ─────────────────────────────────────────
@@ -144,6 +159,143 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const [sessionKills, setSessionKills] = useState(0);
   const [playerPosition, setPlayerPosition] = useState({ x: 0, y: 0 });
   const playerPositionRef = useRef({ x: 0, y: 0 });
+
+  // ─────────────────────────────────────────
+  // v33 Phase 3: Online Mode Systems
+  // ─────────────────────────────────────────
+  const onlineSyncRef = useRef<OnlineSyncSystem | null>(null);
+  const clientPredictionRef = useRef<ClientPrediction | null>(null);
+  const killReporterRef = useRef<KillReporter | null>(null);
+  const epochBridgeRef = useRef<EpochUIBridge | null>(null);
+  const [remotePlayers, setRemotePlayers] = useState<InterpolatedPlayer[]>([]);
+  const [epochUI, setEpochUI] = useState<EpochUIState | null>(null);
+  const [onlineLevelUpChoices, setOnlineLevelUpChoices] = useState<Array<{
+    id: string; skill: string; isNew: boolean; currentLevel: number;
+    nextLevel: number; priorityScore: number;
+  }> | null>(null);
+
+  // 온라인 시스템 다운링크 리스너 설정
+  const matrixListeners = useMemo<MatrixSocketListeners>(() => {
+    if (!isOnline) return {};
+    return {
+      onState: (data) => {
+        onlineSyncRef.current?.applyState(data);
+        epochBridgeRef.current?.updateTimer(data.timer);
+      },
+      onEpoch: (data) => {
+        epochBridgeRef.current?.onEpochEvent(data);
+        setEpochUI(epochBridgeRef.current?.state ?? null);
+      },
+      onSpawnSeed: (data) => {
+        seededSpawning.onSeed(data);
+      },
+      onKillConfirmed: (data) => {
+        killReporterRef.current?.onConfirmed(data);
+      },
+      onKillRejected: (data) => {
+        killReporterRef.current?.onRejected(data);
+      },
+      onScore: (_data) => {
+        // 스코어는 online-sync가 matrix_state에서 이미 처리
+      },
+      onResult: (_data) => {
+        // 에폭 결과 — Phase 5에서 결과 화면 UI 연동
+      },
+      onLevelUpChoices: (data) => {
+        setOnlineLevelUpChoices(data.choices);
+      },
+    };
+  }, [isOnline]);
+
+  const matrixSocket = useMatrixSocket(matrixListeners);
+
+  // 온라인 시스템 인스턴스 초기화 (마운트 시 1회)
+  useEffect(() => {
+    if (!isOnline) return;
+
+    const sync = new OnlineSyncSystem();
+    const prediction = new ClientPrediction();
+    const killRep = new KillReporter();
+    const epoch = new EpochUIBridge();
+
+    onlineSyncRef.current = sync;
+    clientPredictionRef.current = prediction;
+    killReporterRef.current = killRep;
+    epochBridgeRef.current = epoch;
+
+    // 킬 리포터 콜백 설정
+    killRep.setCallbacks({
+      onConfirmed: (kill) => {
+        setSessionKills(prev => prev + 1);
+      },
+      onRejected: (_targetId, _reason) => {
+        // 킬 롤백 — 세션 킬 카운트 감소
+        setSessionKills(prev => Math.max(0, prev - 1));
+      },
+    });
+
+    // 에폭 UI 콜백 설정
+    epoch.setCallbacks({
+      onPhaseChange: (_phase, _config) => {
+        setEpochUI(epoch.state);
+      },
+      onWarSiren: () => {
+        soundManager.playSFX('alert');
+      },
+      onEpochEnd: () => {
+        setEpochUI(epoch.state);
+      },
+    });
+
+    // 서버 연결 시작
+    if (serverUrl) {
+      matrixSocket.connect(serverUrl);
+    }
+
+    return () => {
+      sync.reset();
+      prediction.reset();
+      killRep.reset();
+      epoch.reset();
+      seededSpawning.enterOfflineMode();
+      matrixSocket.disconnect();
+      onlineSyncRef.current = null;
+      clientPredictionRef.current = null;
+      killReporterRef.current = null;
+      epochBridgeRef.current = null;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOnline, serverUrl]);
+
+  // 온라인 모드: 아레나 입장 (연결 완료 후)
+  useEffect(() => {
+    if (!isOnline || matrixSocket.connectionState !== 'connected' || !countryIso3) return;
+    matrixSocket.joinArena(countryIso3);
+    seededSpawning.enterOnlineMode();
+  }, [isOnline, matrixSocket.connectionState, countryIso3, matrixSocket]);
+
+  // 온라인 모드: 보간 틱 (requestAnimationFrame으로 매 프레임 호출)
+  useEffect(() => {
+    if (!isOnline) return;
+    let rafId: number;
+
+    const tick = () => {
+      // 원격 플레이어 보간
+      const interpolated = onlineSyncRef.current?.interpolatePlayers() ?? [];
+      setRemotePlayers(interpolated);
+
+      // 클라이언트 예측 보정 tick
+      clientPredictionRef.current?.tick();
+
+      // 킬 리포터 타임아웃 체크 (매초 1회를 간략화하여 매 프레임)
+      killReporterRef.current?.tick();
+
+      rafId = requestAnimationFrame(tick);
+    };
+
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [isOnline]);
 
   // v32 Phase 3: Branch selection + Synergy notification
   const [branchPending, setBranchPending] = useState<{
@@ -396,9 +548,20 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       isPlaying: false,
       isGameOver: false,
     }));
+
+    // v33 Phase 3: 온라인 모드 퇴장 시 클린업
+    if (isOnline) {
+      matrixSocket.leaveArena();
+      onlineSyncRef.current?.reset();
+      clientPredictionRef.current?.reset();
+      killReporterRef.current?.reset();
+      epochBridgeRef.current?.reset();
+      seededSpawning.enterOfflineMode();
+    }
+
     soundManager.playMenuBGM();
     onExitToLobby();
-  }, [gameState, onExitToLobby]);
+  }, [gameState, onExitToLobby, isOnline, matrixSocket]);
 
   // V3 시스템 콜백
   const handleV3Update = useCallback((state: V3GameSystems, events: V3SystemEvents) => {
@@ -415,7 +578,17 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const handlePlayerPositionUpdate = useCallback((x: number, y: number) => {
     playerPositionRef.current = { x, y };
     setPlayerPosition({ x, y });
-  }, []);
+
+    // v33 Phase 3: 온라인 모드에서 입력 전송 (10Hz 스로틀은 useMatrixSocket 내부 처리)
+    if (isOnline) {
+      matrixSocket.sendInput(x, y, 0, false);
+      clientPredictionRef.current?.applyInput({
+        tick: matrixSocket.serverTick,
+        x, y, angle: 0, boost: false,
+        timestamp: Date.now(),
+      });
+    }
+  }, [isOnline, matrixSocket]);
 
   // 싱귤러리티 킬 카운트
   const handleSingularityKill = useCallback(() => {
@@ -457,12 +630,44 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       }));
   }, [gameState.weapons, gameState.weaponCooldowns]);
 
+  // v33 Phase 3: 온라인 레벨업 선택 전송
+  const handleOnlineLevelUpSelect = useCallback((type: string) => {
+    if (isOnline) {
+      matrixSocket.chooseLevelUp(type);
+    }
+    handleSelectUpgrade(type);
+  }, [isOnline, matrixSocket, handleSelectUpgrade]);
+
   // LevelUp 선택지 생성 — useState로 한 번만 생성 (원본 LevelUpModal 패턴)
   // useMemo + weapons 의존성은 무기 변경 시마다 Math.random() 재실행 → 선택지 셔플 버그
   const [levelUpOptions, setLevelUpOptions] = useState<LevelUpOption[]>([]);
 
   useEffect(() => {
     if (gameState.gameState.isLevelUp) {
+      // v33 Phase 3: 온라인 모드에서는 서버가 보낸 선택지 사용
+      if (isOnline && onlineLevelUpChoices) {
+        setLevelUpOptions(onlineLevelUpChoices.map((choice) => {
+          const weaponData = WEAPON_DATA[choice.skill as keyof typeof WEAPON_DATA];
+          const rarity: LevelUpOption['rarity'] =
+            choice.priorityScore > 80 ? 'rare'
+            : choice.isNew ? 'uncommon'
+            : 'common';
+          return {
+            id: choice.id,
+            name: weaponData?.name || choice.skill,
+            description: weaponData?.desc || '',
+            currentLevel: choice.currentLevel,
+            maxLevel: weaponData?.stats?.length || 8,
+            rarity,
+            icon: '',
+            type: 'weapon' as const,
+          };
+        }));
+        setOnlineLevelUpChoices(null); // 소비 완료
+        return;
+      }
+
+      // 오프라인 모드: 기존 로컬 생성
       const choices = skillBuild.generateLevelUpChoices(gameState.weapons, 4);
       setLevelUpOptions(choices.map((choice: LevelUpChoice) => {
         const weaponData = WEAPON_DATA[choice.skill as keyof typeof WEAPON_DATA];
@@ -486,7 +691,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       setLevelUpOptions([]);
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gameState.gameState.isLevelUp]); // Only trigger on isLevelUp change, NOT weapons
+  }, [gameState.gameState.isLevelUp, isOnline, onlineLevelUpChoices]); // Only trigger on isLevelUp change, NOT weapons
 
   // Result 화면 데이터
   const resultWeapons = useMemo(() => {
@@ -640,6 +845,95 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         />
       )}
 
+      {/* ─── v33 Phase 3: Online Epoch Phase HUD ─── */}
+      {isOnline && epochUI && gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <div style={{
+          position: 'absolute',
+          top: 12,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 50,
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 4,
+          pointerEvents: 'none',
+        }}>
+          {/* 페이즈 이름 + 타이머 */}
+          <div style={{
+            background: 'rgba(0,0,0,0.7)',
+            border: `1px solid ${epochUI.config.color}`,
+            borderRadius: 8,
+            padding: '4px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}>
+            <span style={{
+              color: epochUI.config.color,
+              fontFamily: '"Black Ops One", monospace',
+              fontSize: 14,
+              fontWeight: 700,
+              letterSpacing: 2,
+            }}>
+              {epochUI.config.displayName}
+            </span>
+            <span style={{
+              color: '#E8E0D4',
+              fontFamily: '"Rajdhani", monospace',
+              fontSize: 18,
+              fontWeight: 600,
+            }}>
+              {epochUI.timerDisplay}
+            </span>
+          </div>
+
+          {/* 전쟁 카운트다운 숫자 (war_countdown 페이즈) */}
+          {epochUI.warCountdownNumber !== null && (
+            <div style={{
+              color: epochUI.warSiren ? '#EF4444' : '#FBBF24',
+              fontFamily: '"Black Ops One", monospace',
+              fontSize: epochUI.warSiren ? 48 : 36,
+              fontWeight: 900,
+              textShadow: epochUI.warSiren
+                ? '0 0 20px rgba(239,68,68,0.8), 0 0 40px rgba(239,68,68,0.4)'
+                : '0 0 10px rgba(251,191,36,0.5)',
+              animation: epochUI.warSiren ? 'pulse 0.5s infinite' : undefined,
+            }}>
+              {epochUI.warCountdownNumber}
+            </div>
+          )}
+
+          {/* PvP 상태 인디케이터 */}
+          {epochUI.config.pvpEnabled && (
+            <div style={{
+              background: 'rgba(239,68,68,0.2)',
+              border: '1px solid rgba(239,68,68,0.6)',
+              borderRadius: 4,
+              padding: '2px 8px',
+              color: '#EF4444',
+              fontSize: 11,
+              fontFamily: '"Rajdhani", monospace',
+              fontWeight: 600,
+              letterSpacing: 1,
+            }}>
+              PVP ACTIVE
+            </div>
+          )}
+
+          {/* 연결 상태 */}
+          <div style={{
+            fontSize: 10,
+            color: matrixSocket.connectionState === 'connected' ? '#4ADE80' : '#EF4444',
+            fontFamily: 'monospace',
+          }}>
+            {matrixSocket.connectionState === 'connected'
+              ? `ONLINE · ${matrixSocket.latency}ms`
+              : matrixSocket.connectionState.toUpperCase()}
+          </div>
+        </div>
+      )}
+
       {/* ─── v3 시스템 시각 UI (v32 Phase 1) ─── */}
       {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && v3State && (
         <>
@@ -667,7 +961,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       {gameState.gameState.isLevelUp && levelUpOptions.length > 0 && !branchPending && (
         <MatrixLevelUp
           options={levelUpOptions}
-          onSelect={handleSelectUpgrade}
+          onSelect={isOnline ? handleOnlineLevelUpSelect : handleSelectUpgrade}
         />
       )}
 

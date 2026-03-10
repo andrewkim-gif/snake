@@ -14,7 +14,7 @@
  * v24: COLORS_3D 통일 색상, SURFACE_ALT.LOW 고도, RENDER_ORDER.EVENT_PULSE 체계 적용
  */
 
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef, useMemo, useCallback, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
@@ -55,6 +55,9 @@ const MAX_SIMULTANEOUS = 3;       // 동시 최대 3개 이펙트
 const PULSE_DURATION = 2.0;       // 2초 확산→소멸
 const PULSE_MAX_SCALE = 15;       // 링 최대 반경 (구면 위)
 const RING_INNER_RATIO = 0.85;    // 링 내경/외경 비율
+
+// v33 Task 7: Module-scope temp vector (GC prevention in useFrame loop)
+const _tempVec3 = new THREE.Vector3();
 
 // v24: 이벤트 타입별 색상을 effect-constants COLORS_3D에서 가져옴
 const EVENT_TYPE_COLORS: Record<string, THREE.Color> = {
@@ -192,6 +195,8 @@ export function GlobeEventPulse({
   // 매 프레임 업데이트
   useFrame(() => {
     if (!visible || !groupRef.current) return;
+    // v33 Phase 4: 이벤트 없고 활성 펄스 없고 대기열도 비어있으면 스킵
+    if (globalEvents.length === 0 && activePulsesRef.current.length === 0 && queueRef.current.length === 0) return;
 
     const now = performance.now() / 1000;
 
@@ -279,7 +284,8 @@ export function GlobeEventPulse({
         mesh.position.copy(pulse.position);
 
         // 방향: 구면 법선 방향으로 정렬 (billboard 대신 구면 접선면)
-        mesh.lookAt(pulse.position.clone().multiplyScalar(2));
+        // v33 Task 7: Reuse module-scope _tempVec3 instead of clone()
+        mesh.lookAt(_tempVec3.copy(pulse.position).multiplyScalar(2));
       } else {
         mesh.visible = false;
       }
@@ -291,6 +297,16 @@ export function GlobeEventPulse({
       processedRef.current = new Set(ids.slice(-100));
     }
   });
+
+  // v33 Phase 4: cleanup — geometry + material dispose
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    return () => {
+      ringGeo.dispose();
+      xGeo.dispose();
+      for (const mat of materials) mat.dispose();
+    };
+  }, []);
 
   // 메쉬 풀을 그룹에 마운트
   return (
