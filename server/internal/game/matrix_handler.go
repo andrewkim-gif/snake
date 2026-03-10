@@ -332,3 +332,307 @@ func (cam *CountryArenaManager) TickMatrixEngines(tick uint64) {
 		}
 	}
 }
+
+// ============================================================
+// v33 Phase 7 — Agent-Specific Matrix Handlers
+//
+// matrix_agent_input: Separate from matrix_input, routes agent
+//   positional input through the same OnPlayerInput + KillValidator.
+// matrix_agent_state: 10Hz agent-specific state event with
+//   HP, level, weapons, nearby enemies, coordinates.
+// Agent deployment: max 3 agents per owner, 50 Oil per agent.
+// ============================================================
+
+// MatrixAgentInputData holds agent-specific input data.
+// Identical to MatrixInputData but routed through the agent handler
+// for separate rate-limiting and logging.
+type MatrixAgentInputData struct {
+	X     float64 `json:"x"`
+	Y     float64 `json:"y"`
+	Angle float64 `json:"angle"`
+	Boost bool    `json:"boost"`
+	Tick  uint64  `json:"tick"`
+}
+
+// MatrixAgentStateEvent is the agent-specific state payload (10Hz).
+// Contains richer information than the regular matrix_state:
+// self HP/level/weapons, nearby enemies with HP, captures, scores.
+type MatrixAgentStateEvent struct {
+	Tick           uint64                   `json:"tick"`
+	Phase          EpochPhase               `json:"phase"`
+	Timer          int                      `json:"timer"`
+	Self           MatrixAgentSelfState     `json:"self"`
+	NearbyEnemies  []MatrixAgentNearbyPlayer `json:"nearby_enemies"`
+	NearbyAllies   []MatrixAgentNearbyPlayer `json:"nearby_allies"`
+	Captures       []MatrixAgentCapture     `json:"captures"`
+	NationScores   map[string]int           `json:"nation_scores"`
+	SafeZoneRadius float64                  `json:"safe_zone_radius"`
+	PersonalScore  int                      `json:"personal_score"`
+	Rank           int                      `json:"rank"`
+}
+
+// MatrixAgentSelfState is the agent's own state in matrix_agent_state.
+type MatrixAgentSelfState struct {
+	X             float64  `json:"x"`
+	Y             float64  `json:"y"`
+	Angle         float64  `json:"angle"`
+	HP            int      `json:"hp"`
+	MaxHP         int      `json:"max_hp"`
+	Level         int      `json:"level"`
+	Kills         int      `json:"kills"`
+	Deaths        int      `json:"deaths"`
+	TotalDamage   float64  `json:"total_damage"`
+	Weapons       []string `json:"weapons"`
+	StatusEffects []string `json:"status_effects"`
+	Alive         bool     `json:"alive"`
+	XPBoost       float64  `json:"xp_boost"`
+	StatBoost     float64  `json:"stat_boost"`
+}
+
+// MatrixAgentNearbyPlayer is a nearby player in matrix_agent_state.
+type MatrixAgentNearbyPlayer struct {
+	ID      string   `json:"id"`
+	Name    string   `json:"name"`
+	X       float64  `json:"x"`
+	Y       float64  `json:"y"`
+	HP      int      `json:"hp"`
+	MaxHP   int      `json:"max_hp"`
+	Level   int      `json:"level"`
+	Nation  string   `json:"nation"`
+	Weapons []string `json:"weapons"`
+	Alive   bool     `json:"alive"`
+}
+
+// MatrixAgentCapture is a capture point in matrix_agent_state.
+type MatrixAgentCapture struct {
+	ID       string  `json:"id"`
+	Owner    string  `json:"owner"`
+	Progress float64 `json:"progress"`
+	Type     string  `json:"type"` // "resource", "buff", "healing"
+}
+
+// Agent deployment constants
+const (
+	// MatrixAgentDeployCostOil is the Oil cost per agent deployment.
+	MatrixAgentDeployCostOil = 50
+
+	// MatrixMaxAgentsPerOwner is the maximum number of agents per owner.
+	MatrixMaxAgentsPerOwner = 3
+
+	// MatrixAgentStateHz is the agent state broadcast frequency.
+	// Every 2nd tick at 20Hz = 10Hz agent state updates.
+	MatrixAgentStateTick = 2
+
+	// MatrixAgentNearbyRadius is the detection radius for nearby players.
+	MatrixAgentNearbyRadius = 500.0
+)
+
+// MatrixAgentInput handles agent-specific input (10Hz position + angle + boost).
+// Uses the same validation pipeline as MatrixInput but tracks agent-specific metrics.
+func (cam *CountryArenaManager) MatrixAgentInput(clientID string, input MatrixAgentInputData) {
+	cam.mu.RLock()
+	countryCode, ok := cam.matrixPlayerCountry[clientID]
+	if !ok {
+		cam.mu.RUnlock()
+		return
+	}
+	arena, exists := cam.arenas[countryCode]
+	cam.mu.RUnlock()
+
+	if !exists || arena.MatrixEngine == nil {
+		return
+	}
+
+	// Convert to standard MatrixInputData and route through OnPlayerInput
+	// Same KillValidator speed checks apply to agents
+	stdInput := MatrixInputData{
+		X:     input.X,
+		Y:     input.Y,
+		Angle: input.Angle,
+		Boost: input.Boost,
+		Tick:  input.Tick,
+	}
+
+	arena.MatrixEngine.OnPlayerInput(clientID, stdInput)
+}
+
+// BuildMatrixAgentState constructs the agent-specific state event
+// for a given agent session. Called at 10Hz (every 2nd tick).
+func (cam *CountryArenaManager) BuildMatrixAgentState(clientID string) *MatrixAgentStateEvent {
+	cam.mu.RLock()
+	countryCode, ok := cam.matrixPlayerCountry[clientID]
+	if !ok {
+		cam.mu.RUnlock()
+		return nil
+	}
+	arena, exists := cam.arenas[countryCode]
+	cam.mu.RUnlock()
+
+	if !exists || arena.MatrixEngine == nil {
+		return nil
+	}
+
+	engine := arena.MatrixEngine
+	session := engine.GetSession(clientID)
+	if session == nil {
+		return nil
+	}
+
+	// Collect nearby players (within AgentNearbyRadius)
+	allSessions := engine.sessions.GetAll()
+	var nearbyEnemies []MatrixAgentNearbyPlayer
+	var nearbyAllies []MatrixAgentNearbyPlayer
+
+	for _, other := range allSessions {
+		if other.ClientID == clientID || !other.Alive {
+			continue
+		}
+		dx := other.X - session.X
+		dy := other.Y - session.Y
+		distSq := dx*dx + dy*dy
+		if distSq > MatrixAgentNearbyRadius*MatrixAgentNearbyRadius {
+			continue
+		}
+
+		weapons := make([]string, len(other.Weapons))
+		copy(weapons, other.Weapons)
+		nearby := MatrixAgentNearbyPlayer{
+			ID:      other.ClientID,
+			Name:    other.Name,
+			X:       other.X,
+			Y:       other.Y,
+			HP:      other.HP,
+			MaxHP:   other.MaxHP,
+			Level:   other.Level,
+			Nation:  other.Nationality,
+			Weapons: weapons,
+			Alive:   other.Alive,
+		}
+
+		if other.Nationality == session.Nationality {
+			nearbyAllies = append(nearbyAllies, nearby)
+		} else {
+			nearbyEnemies = append(nearbyEnemies, nearby)
+		}
+	}
+
+	// Build self state
+	selfWeapons := make([]string, len(session.Weapons))
+	copy(selfWeapons, session.Weapons)
+	selfStatus := make([]string, len(session.StatusEffects))
+	copy(selfStatus, session.StatusEffects)
+
+	selfState := MatrixAgentSelfState{
+		X:             session.X,
+		Y:             session.Y,
+		Angle:         session.Angle,
+		HP:            session.HP,
+		MaxHP:         session.MaxHP,
+		Level:         session.Level,
+		Kills:         session.Kills,
+		Deaths:        session.Deaths,
+		TotalDamage:   session.TotalDamage,
+		Weapons:       selfWeapons,
+		StatusEffects: selfStatus,
+		Alive:         session.Alive,
+		XPBoost:       session.Buffs.XPBoost,
+		StatBoost:     session.Buffs.StatBoost,
+	}
+
+	// Get score info
+	scorer := engine.GetScoreAggregator()
+	personalScore, _ := scorer.GetPlayerScore(clientID)
+	rank := scorer.GetPlayerRank(clientID)
+
+	return &MatrixAgentStateEvent{
+		Tick:           engine.GetCurrentTick(),
+		Phase:          engine.GetCurrentPhase(),
+		Timer:          engine.getPhaseTimerSeconds(),
+		Self:           selfState,
+		NearbyEnemies:  nearbyEnemies,
+		NearbyAllies:   nearbyAllies,
+		Captures:       []MatrixAgentCapture{}, // TODO: integrate CapturePointSystem
+		NationScores:   scorer.GetNationScores(),
+		SafeZoneRadius: engine.currentRadius,
+		PersonalScore:  personalScore,
+		Rank:           rank,
+	}
+}
+
+// CollectMatrixAgentStates gathers agent state events for all agent sessions.
+// Called at 10Hz (every 2nd tick of the 20Hz loop) by the broadcaster.
+// Returns a map of clientID → MatrixAgentStateEvent.
+func (cam *CountryArenaManager) CollectMatrixAgentStates(tick uint64) map[string]*MatrixAgentStateEvent {
+	// Only emit at 10Hz (every 2nd tick)
+	if tick%MatrixAgentStateTick != 0 {
+		return nil
+	}
+
+	cam.mu.RLock()
+	defer cam.mu.RUnlock()
+
+	states := make(map[string]*MatrixAgentStateEvent)
+
+	for clientID, countryCode := range cam.matrixPlayerCountry {
+		arena, exists := cam.arenas[countryCode]
+		if !exists || arena.MatrixEngine == nil {
+			continue
+		}
+
+		session := arena.MatrixEngine.GetSession(clientID)
+		if session == nil || !session.IsAgent {
+			continue // Only emit agent state for agent sessions
+		}
+
+		state := cam.BuildMatrixAgentState(clientID)
+		if state != nil {
+			states[clientID] = state
+		}
+	}
+
+	return states
+}
+
+// GetMatrixAgentSessions returns all agent sessions across all arenas.
+// Useful for monitoring and admin endpoints.
+func (cam *CountryArenaManager) GetMatrixAgentSessions() map[string]*PlayerSession {
+	cam.mu.RLock()
+	defer cam.mu.RUnlock()
+
+	agents := make(map[string]*PlayerSession)
+	for clientID, countryCode := range cam.matrixPlayerCountry {
+		arena, exists := cam.arenas[countryCode]
+		if !exists || arena.MatrixEngine == nil {
+			continue
+		}
+		session := arena.MatrixEngine.GetSession(clientID)
+		if session != nil && session.IsAgent {
+			agents[clientID] = session
+		}
+	}
+	return agents
+}
+
+// CountMatrixAgentsByOwner returns the number of deployed agents for a given owner.
+// Used for enforcing the max 3 agents per owner limit.
+// Since we don't track owner in sessions currently, this counts by API key prefix.
+func (cam *CountryArenaManager) CountMatrixAgentsByOwner(ownerPrefix string) int {
+	cam.mu.RLock()
+	defer cam.mu.RUnlock()
+
+	count := 0
+	for clientID, countryCode := range cam.matrixPlayerCountry {
+		arena, exists := cam.arenas[countryCode]
+		if !exists || arena.MatrixEngine == nil {
+			continue
+		}
+		session := arena.MatrixEngine.GetSession(clientID)
+		if session != nil && session.IsAgent {
+			// Match by client ID prefix (owner-derived)
+			if len(clientID) >= len(ownerPrefix) && clientID[:len(ownerPrefix)] == ownerPrefix {
+				count++
+			}
+		}
+	}
+	return count
+}
