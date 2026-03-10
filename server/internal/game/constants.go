@@ -86,10 +86,10 @@ const (
 	OrbCollectRadius = 50.0
 
 	// NaturalOrbMinValue is the minimum XP value of natural orbs.
-	NaturalOrbMinValue = 1.0
+	NaturalOrbMinValue = 3.0
 
 	// NaturalOrbMaxValue is the maximum XP value of natural orbs.
-	NaturalOrbMaxValue = 2.0
+	NaturalOrbMaxValue = 8.0
 
 	// DeathOrbMassRatio is the fraction of mass converted to orbs on death.
 	DeathOrbMassRatio = 0.80

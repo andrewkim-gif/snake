@@ -523,107 +523,25 @@ export default function Home() {
     return () => clearTimeout(timer);
   }, [epochSummary]);
 
-  // --- v26: 아이소메트릭 국가 관리 화면 ---
-  if (mode === 'iso' && isoCountry) {
-    return (
-      <div style={{
-        width: '100vw',
-        height: '100vh',
-        opacity: fadeOut ? 0 : 1,
-        transition: 'opacity 300ms ease',
-      }}>
-        <IsoCanvas
-          countryIso3={isoCountry.iso3}
-          countryName={isoCountry.name}
-          onBackToGlobe={handleBackToGlobe}
-          spectating={isoCountry.spectating}
-        />
-      </div>
-    );
-  }
+  // v37: Globe를 항상 마운트 유지 — 인게임 진입/복귀 시 WebGL 컨텍스트 재생성 방지
+  const isLobby = mode === 'lobby';
+  const isOverlayMode = mode === 'matrix' || mode === 'iso' || mode === 'playing' || mode === 'transitioning';
 
-  // --- v29: MatrixApp 오케스트레이터 (게임 훅 + 캔버스 + 오버레이 통합) ---
-  if (mode === 'matrix') {
-    return (
-      <div style={{
-        width: '100vw',
-        height: '100vh',
-        opacity: fadeOut ? 0 : 1,
-        transition: 'opacity 300ms ease',
-      }}>
-        <MatrixApp
-          countryIso3={matrixCountry?.iso3}
-          countryName={matrixCountry?.name}
-          onExitToLobby={() => {
-            setFadeOut(true);
-            setTimeout(() => {
-              setMode('lobby');
-              setMatrixCountry(null);
-              setMatrixLoading(false);
-              setFadeOut(false);
-            }, 300);
-          }}
-        />
-        {/* Matrix 게임 로딩 오버레이 — GlobeLoadingScreen 스타일 */}
-        {matrixLoading && (
-          <MatrixLoadingOverlay
-            countryName={matrixCountry?.name ?? ''}
-            onComplete={() => setMatrixLoading(false)}
-          />
-        )}
-      </div>
-    );
-  }
-
-  // --- 전환 화면 ---
-  if (mode === 'transitioning') {
-    return (
-      <div style={{
-        width: '100vw', height: '100vh', display: 'flex',
-        alignItems: 'center', justifyContent: 'center',
-        backgroundColor: SK.bg, fontFamily: bodyFont,
-        fontWeight: 700, fontSize: '20px', color: SK.textPrimary,
-        letterSpacing: '3px',
-      }}>
-        {tLobby('deploying')}
-      </div>
-    );
-  }
-
-  // --- 게임 화면 ---
-  if (mode === 'playing') {
-    return (
-      <GameCanvas3D
-        dataRef={dataRef}
-        uiState={uiState}
-        sendInput={sendInput}
-        sendInputV16={sendInputV16}
-        respawn={respawn}
-        playerName={playerName}
-        skinId={skinId}
-        onExit={handleExitToLobby}
-        chooseUpgrade={chooseUpgrade}
-        dismissSynergyPopup={dismissSynergyPopup}
-        isArenaMode={true}
-        arStateRef={arStateRef}
-        arInterpRef={arInterpRef}
-        arEventQueueRef={arEventQueueRef}
-        arUiState={arUiState}
-        sendARChoice={sendARChoice}
-      />
-    );
-  }
-
-  // --- 로비 화면: CIC 디자인 ---
   return (
-    <div style={{
-      width: '100vw',
-      height: '100vh',
-      overflow: 'hidden',
-      position: 'relative',
-      opacity: fadeOut ? 0 : 1,
-      transition: 'opacity 300ms ease',
-    }}>
+    <>
+      {/* === 로비 레이어 (항상 마운트, 비-lobby 시 숨김) === */}
+      <div style={{
+        width: '100vw',
+        height: '100vh',
+        overflow: 'hidden',
+        position: isOverlayMode ? 'fixed' : 'relative',
+        inset: isOverlayMode ? 0 : undefined,
+        opacity: fadeOut ? 0 : (isOverlayMode ? 0 : 1),
+        transition: 'opacity 300ms ease',
+        pointerEvents: isOverlayMode ? 'none' : 'auto',
+        visibility: isOverlayMode ? 'hidden' : 'visible',
+        zIndex: 0,
+      }}>
       {/* v17: 시네마틱 인트로 오버레이 */}
       <IntroSequence
         onIntroComplete={handleIntroComplete}
@@ -652,6 +570,7 @@ export default function Home() {
         resources={[]}
         spyOps={[]}
         nukes={[]}
+        paused={isOverlayMode}
       />
 
       {/* 우상단: ONLINE 인디케이터 + 명예의전당 + 설정 버튼 */}
@@ -1218,5 +1137,103 @@ export default function Home() {
         </div>
       )}
     </div>
+
+      {/* === 오버레이: Iso 국가 관리 === */}
+      {mode === 'iso' && isoCountry && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 100,
+          opacity: fadeOut ? 0 : 1,
+          transition: 'opacity 300ms ease',
+        }}>
+          <IsoCanvas
+            countryIso3={isoCountry.iso3}
+            countryName={isoCountry.name}
+            onBackToGlobe={handleBackToGlobe}
+            spectating={isoCountry.spectating}
+          />
+        </div>
+      )}
+
+      {/* === 오버레이: Matrix 인게임 === */}
+      {mode === 'matrix' && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 100,
+          opacity: fadeOut ? 0 : 1,
+          transition: 'opacity 300ms ease',
+        }}>
+          <MatrixApp
+            countryIso3={matrixCountry?.iso3}
+            countryName={matrixCountry?.name}
+            onExitToLobby={() => {
+              setFadeOut(true);
+              setTimeout(() => {
+                setMode('lobby');
+                setMatrixCountry(null);
+                setMatrixLoading(false);
+                setFadeOut(false);
+              }, 300);
+            }}
+          />
+          {matrixLoading && (
+            <MatrixLoadingOverlay
+              countryName={matrixCountry?.name ?? ''}
+              onComplete={() => setMatrixLoading(false)}
+            />
+          )}
+        </div>
+      )}
+
+      {/* === 오버레이: 전환 화면 === */}
+      {mode === 'transitioning' && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 100,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backgroundColor: SK.bg,
+          fontFamily: bodyFont,
+          fontWeight: 700,
+          fontSize: '20px',
+          color: SK.textPrimary,
+          letterSpacing: '3px',
+        }}>
+          {tLobby('deploying')}
+        </div>
+      )}
+
+      {/* === 오버레이: 게임 화면 === */}
+      {mode === 'playing' && (
+        <div style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 100,
+        }}>
+          <GameCanvas3D
+            dataRef={dataRef}
+            uiState={uiState}
+            sendInput={sendInput}
+            sendInputV16={sendInputV16}
+            respawn={respawn}
+            playerName={playerName}
+            skinId={skinId}
+            onExit={handleExitToLobby}
+            chooseUpgrade={chooseUpgrade}
+            dismissSynergyPopup={dismissSynergyPopup}
+            isArenaMode={true}
+            arStateRef={arStateRef}
+            arInterpRef={arInterpRef}
+            arEventQueueRef={arEventQueueRef}
+            arUiState={arUiState}
+            sendARChoice={sendARChoice}
+          />
+        </div>
+      )}
+    </>
   );
 }

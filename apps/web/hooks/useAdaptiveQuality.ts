@@ -141,9 +141,28 @@ export function useAdaptiveQuality(): React.RefObject<QualityPreset> {
   const lastTierChangeTime = useRef(0);
   const TIER_CHANGE_COOLDOWN = 3.0; // 티어 변경 후 3초간 추가 변경 금지
 
+  // v37: clock 리셋 감지용 (frameloop demand→always 전환 시 clock.elapsedTime이 0으로 리셋됨)
+  const lastElapsedRef = useRef(0);
+
   useFrame((_state, delta) => {
     // delta가 비정상적으로 클 때 (탭 전환 등) 무시
     if (delta > 0.5) return;
+
+    const elapsed = _state.clock.elapsedTime;
+
+    // v37: clock 리셋 감지 — frameloop 전환 시 elapsedTime이 0으로 돌아감
+    // FPS 버퍼와 타이머를 리셋하여 이전 세션 데이터로 잘못된 다운그레이드 방지
+    if (elapsed < lastElapsedRef.current - 1) {
+      fpsBuffer.current.fill(0);
+      fpsIndex.current = 0;
+      fpsFilled.current = false;
+      downgradeTimer.current = 0;
+      upgradeTimer.current = 0;
+      lastTierChangeTime.current = 0;
+      lastElapsedRef.current = elapsed;
+      return;
+    }
+    lastElapsedRef.current = elapsed;
 
     const fps = 1 / Math.max(delta, 0.001);
 
@@ -162,7 +181,6 @@ export function useAdaptiveQuality(): React.RefObject<QualityPreset> {
     const avgFps = sum / count;
 
     // 쿨다운 체크
-    const elapsed = _state.clock.elapsedTime;
     if (elapsed - lastTierChangeTime.current < TIER_CHANGE_COOLDOWN) {
       return;
     }

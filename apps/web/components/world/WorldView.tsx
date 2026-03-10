@@ -72,6 +72,8 @@ interface WorldViewProps {
   spyOps?: SpyOpData[];
   /** v23 Phase 5: 핵실험 이벤트 */
   nukes?: NukeData[];
+  /** v37: 인게임 중 Globe 렌더링 일시정지 */
+  paused?: boolean;
 }
 
 export function WorldView({
@@ -93,6 +95,7 @@ export function WorldView({
   resources,
   spyOps,
   nukes,
+  paused,
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -265,6 +268,7 @@ export function WorldView({
           spyOps={spyOps}
           nukes={nukes}
           onReady={handleGlobeReady}
+          paused={paused}
         />
       </div>
 

@@ -644,8 +644,8 @@ function MatrixLevelUpInner({
                     {/* Left: Icon + Level */}
                     <div style={{ position: 'relative', flexShrink: 0 }}>
                       <div style={{
-                        width: 48,
-                        height: 48,
+                        width: 56,
+                        height: 56,
                         border: `1px solid ${opt.color}80`,
                         display: 'flex',
                         alignItems: 'center',
@@ -653,7 +653,7 @@ function MatrixLevelUpInner({
                         background: isUltimateUpgrade ? `${SK.gold}20` : SK.bg,
                         clipPath: apexClip.sm,
                       }}>
-                        <SkillIcon type={opt.type} size={24} style={{ color: opt.color }} />
+                        <SkillIcon type={opt.type} size={44} style={{ color: opt.color }} />
                       </div>
                       {isUltimateUpgrade && (
                         <Crown style={{

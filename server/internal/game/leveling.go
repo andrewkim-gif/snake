@@ -34,28 +34,29 @@ const (
 // ============================================================
 
 // V14XPTable maps level → XP required for next level.
-// Index 0 = level 1→2 (50 XP), ... index 18 = level 19→20 (2120 XP).
+// v33 rebalance: ~40% reduction across all levels for faster progression.
+// 5분 라운드에서 레벨 10~12 도달 가능, 적극적 전투 시 15+ 가능.
 var V14XPTable = [V14MaxLevel]int{
 	0,    // Level 1 (starting level, no XP needed)
-	50,   // 1→2
-	80,   // 2→3
-	120,  // 3→4
-	170,  // 4→5
-	230,  // 5→6
-	300,  // 6→7
-	380,  // 7→8
-	470,  // 8→9
-	570,  // 9→10
-	680,  // 10→11
-	800,  // 11→12
-	930,  // 12→13
-	1070, // 13→14
-	1220, // 14→15
-	1380, // 15→16
-	1550, // 16→17
-	1730, // 17→18
-	1920, // 18→19
-	2120, // 19→20
+	30,   // 1→2  (was 50)
+	50,   // 2→3  (was 80)
+	75,   // 3→4  (was 120)
+	100,  // 4→5  (was 170)
+	140,  // 5→6  (was 230)
+	180,  // 6→7  (was 300)
+	230,  // 7→8  (was 380)
+	280,  // 8→9  (was 470)
+	340,  // 9→10 (was 570)
+	410,  // 10→11 (was 680)
+	480,  // 11→12 (was 800)
+	560,  // 12→13 (was 930)
+	650,  // 13→14 (was 1070)
+	750,  // 14→15 (was 1220)
+	850,  // 15→16 (was 1380)
+	960,  // 16→17 (was 1550)
+	1080, // 17→18 (was 1730)
+	1200, // 18→19 (was 1920)
+	1350, // 19→20 (was 2120)
 }
 
 // V14XPForNextLevel returns the XP required to advance from `level` to `level+1`.
@@ -85,13 +86,13 @@ func V14CumulativeXP(level int) int {
 
 // XP source constants
 const (
-	XPOrbMin          = 1  // 오브 최소 XP
-	XPOrbMax          = 5  // 오브 최대 XP
-	XPNPCMin          = 20 // NPC 처치 최소 XP
-	XPNPCMax          = 50 // NPC 처치 최대 XP
-	XPStrategicPerSec = 5  // 전략 포인트 점령 XP/s
-	XPKillBase        = 100
-	XPKillPerLevel    = 10
+	XPOrbMin          = 3   // 오브 최소 XP (v33: 1→3)
+	XPOrbMax          = 10  // 오브 최대 XP (v33: 5→10)
+	XPNPCMin          = 30  // NPC 처치 최소 XP (v33: 20→30)
+	XPNPCMax          = 80  // NPC 처치 최대 XP (v33: 50→80)
+	XPStrategicPerSec = 8   // 전략 포인트 점령 XP/s (v33: 5→8)
+	XPKillBase        = 120 // 킬 기본 XP (v33: 100→120)
+	XPKillPerLevel    = 15  // 킬 레벨당 추가 XP (v33: 10→15)
 	XPAssistFraction  = 0.40 // 어시스트 = 킬 XP의 40%
 )
 

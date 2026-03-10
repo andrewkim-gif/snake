@@ -167,6 +167,8 @@ interface GlobeViewProps {
   spyOps?: SpyOpData[];
   nukes?: NukeData[];
   onReady?: () => void;
+  /** v37: 인게임 중 Globe 렌더링 일시정지 (Canvas 유지, RAF 중지) */
+  paused?: boolean;
 }
 
 // ─── AdaptiveOrbitControls ───
@@ -258,6 +260,20 @@ function AdaptiveBloom({ qualityRef }: { qualityRef: React.RefObject<QualityPres
       />
     </EffectComposer>
   );
+}
+
+// ─── v37: frameloop demand→always 전환 시 RAF 루프 재시작 킥 ───
+function FrameloopKick({ paused }: { paused?: boolean }) {
+  const invalidate = useThree((s) => s.invalidate);
+  const prevPausedRef = useRef(paused);
+  useEffect(() => {
+    // demand→always 전환 시에만 invalidate 호출 (RAF 루프 재시작)
+    if (prevPausedRef.current && !paused) {
+      invalidate();
+    }
+    prevPausedRef.current = paused;
+  }, [paused, invalidate]);
+  return null;
 }
 
 // ─── GlobeScene (Canvas inner) ───
@@ -601,6 +617,7 @@ export function GlobeView({
   spyOps,
   nukes,
   onReady,
+  paused,
 }: GlobeViewProps) {
   const domStates = dominationStates ?? EMPTY_DOM_MAP;
   const warList = wars ?? EMPTY_ARRAY;
@@ -624,8 +641,10 @@ export function GlobeView({
         camera={{ position: cameraStartPos, fov: 50, near: 1, far: 1000 }}
         gl={{ antialias: true, alpha: false, toneMappingExposure: 1.0 }}
         dpr={[1, 2]}
+        frameloop={paused ? 'demand' : 'always'}
         onCreated={({ gl }) => { gl.setClearColor(BG); onReady?.(); }}
       >
+        <FrameloopKick paused={paused} />
         <SizeGate>
           <GlobeScene
             onCountryClick={onCountryClick}

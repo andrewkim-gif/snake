@@ -64,7 +64,6 @@ import ArenaHUD from './ArenaHUD';
 
 // ─── v3 시스템 시각 UI (v32 Phase 1) ───
 import BreakTimeOverlay from './BreakTimeOverlay';
-import ComboCounter from './ComboCounter';
 import QuizChallengeCard, { QuizPenaltyIndicator } from './QuizChallengeCard';
 
 // ─── v32 Phase 3: Branch Selection + Synergy Notification ───
@@ -95,6 +94,9 @@ import CapturePointUI from './CapturePointUI';
 import EpochResultScreen from './EpochResultScreen';
 import TokenBuffDisplay from './TokenBuffDisplay';
 import type { MatrixResultPayload, MatrixBuffPayload, MatrixScorePayload } from '@/hooks/useMatrixSocket';
+
+// ─── 디버그 패널 ───
+import DebugSkillPanel from './DebugSkillPanel';
 
 // ─── MatrixCanvas (무거워서 dynamic import) ───
 const MatrixCanvas = dynamic(
@@ -518,6 +520,15 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     gameState.handleSelectUpgrade(weaponType, maxHP);
   }, [gameState, skillBuild]);
 
+  // 디버그 패널: 즉시 무기 레벨업 (isLevelUp 상태 무시)
+  const handleDebugUpgrade = useCallback((weaponType: string) => {
+    gameState.setWeapons((prev: Record<string, number>) => ({
+      ...prev,
+      [weaponType]: (prev[weaponType] || 0) + 1,
+    }));
+    soundManager.playSFX('powerup');
+  }, [gameState]);
+
   // v32 Phase 3: Handle branch selection
   const handleBranchSelect = useCallback((branch: 'A' | 'B') => {
     if (!branchPending) return;
@@ -671,18 +682,19 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   // ─────────────────────────────────────────
   // gameActive 계산 (MatrixCanvas에 전달)
   // ─────────────────────────────────────────
+  // ESC(일시정지)는 게임 로직을 멈추지 않음 — 서버 기반 온라인 모드에서
+  // 서버는 계속 돌아가므로, 클라이언트도 로직을 유지해야 함.
+  // isPaused는 UI 오버레이만 표시하고, 입력만 차단.
   const gameActive = useMemo(() => {
     return (
       gameState.gameState.isPlaying &&
       !gameState.gameState.isLevelUp &&
-      !gameState.isMenuOpen &&
-      !isPaused
+      !gameState.isMenuOpen
     );
   }, [
     gameState.gameState.isPlaying,
     gameState.gameState.isLevelUp,
     gameState.isMenuOpen,
-    isPaused,
   ]);
 
   // ─────────────────────────────────────────
@@ -1040,8 +1052,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
             onTriggerUltimate={handleTriggerUltimate}
           />
 
-          {/* ComboCounter: 10단계 콤보 티어 표시 */}
-          <ComboCounter combo={v3State.combo} />
+          {/* ComboCounter 제거 — Canvas 렌더링으로 통합 (캐릭터 위 표시) */}
 
           {/* QuizChallengeCard: 미션 목표 카드 */}
           <QuizChallengeCard challenge={v3State.quiz.activeChallenge} />
@@ -1100,6 +1111,14 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
           weapons={resultWeapons}
           onRetry={handleRestart}
           onExitToLobby={handleExitToLobby}
+        />
+      )}
+
+      {/* ─── 디버그 스킬 패널 (우측 상단) ─── */}
+      {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <DebugSkillPanel
+          weapons={gameState.weapons}
+          onUpgrade={handleDebugUpgrade}
         />
       )}
     </div>
