@@ -230,16 +230,15 @@ function WarArcLine({
 
   // Animate
   useFrame((_, delta) => {
+    // v33 Phase 4: ended 상태에서는 useFrame 스킵
+    if (state === 'ended') return;
     timeRef.current += delta;
 
-    // Animate dashed line
-    if (lineObjRef.current) {
-      lineObjRef.current.computeLineDistances();
-      // Pulse opacity during active war
-      if (state === 'active') {
-        const pulse = 0.6 + 0.4 * Math.sin(timeRef.current * 3);
-        lineMaterial.opacity = pulse;
-      }
+    // Animate dashed line — pulse opacity during active war
+    // v33 Phase 4: computeLineDistances()는 geometry 변경 시에만 필요 (useEffect에서 1회 호출)
+    if (lineObjRef.current && state === 'active') {
+      const pulse = 0.6 + 0.4 * Math.sin(timeRef.current * 3);
+      lineMaterial.opacity = pulse;
     }
 
     // Animate arrow particles along arc
@@ -1203,6 +1202,8 @@ function WarFog({
       _tempObj3D.updateMatrix();
       meshRef.current.setMatrixAt(i, _tempObj3D.matrix);
     }
+    // v33 Phase 4: count 복원 (meshRefCb에서 count=0으로 시작)
+    meshRef.current.count = WAR_FOG_SPHERE_COUNT;
     meshRef.current.instanceMatrix.needsUpdate = true;
   });
 

@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
 import { createArcCurve } from '@/lib/effect-utils';
 import { ARC_HEIGHT, COLORS_3D, RENDER_ORDER } from '@/lib/effect-constants';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
@@ -28,6 +29,8 @@ export interface GlobeAllianceBeamProps {
   centroidsMap: Map<string, [number, number]>;
   globeRadius?: number;
   visible?: boolean;
+  /** v33 Phase 4: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
 }
 
 // ─── Constants ───
@@ -82,9 +85,12 @@ export function GlobeAllianceBeam({
   centroidsMap,
   globeRadius = DEFAULT_RADIUS,
   visible = true,
+  distanceLOD,
 }: GlobeAllianceBeamProps) {
   const groupRef = useRef<THREE.Group>(null);
   const beamsRef = useRef<BeamRenderData[]>([]);
+  // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+  const frameCountRef = useRef(0);
 
   // 파티클 공유 geometry + material
   const particleGeo = useMemo(
@@ -113,6 +119,10 @@ export function GlobeAllianceBeam({
       group.remove(beam.particleMesh);
       beam.line.geometry.dispose();
       beam.lineMaterial.dispose();
+      // v33 Phase 4: clone된 particle material도 dispose
+      if (beam.particleMesh.material) {
+        (beam.particleMesh.material as THREE.Material).dispose();
+      }
       beam.particleMesh.dispose();
     }
     beamsRef.current = [];
@@ -154,12 +164,26 @@ export function GlobeAllianceBeam({
   // 매 프레임: 라인 opacity 파동 + 파티클 위치 업데이트
   useFrame(({ clock }) => {
     if (!visible) return;
+    // v33 Phase 4: 동맹 빔이 없으면 스킵
+    if (beamsRef.current.length === 0) return;
+    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    frameCountRef.current++;
+    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
     const elapsed = clock.getElapsedTime();
+
+    // v33 Phase 4: far LOD에서 파티클 스킵
+    const showParticles = distanceLOD?.showParticles ?? true;
 
     for (const beam of beamsRef.current) {
       // 라인 opacity 파동 애니메이션
       const pulse = 0.5 + 0.3 * Math.sin(elapsed * 2.0);
       beam.lineMaterial.opacity = pulse;
+
+      // v33 Phase 4: far LOD에서 파티클 숨김
+      if (!showParticles) {
+        beam.particleMesh.count = 0;
+        continue;
+      }
 
       // 파티클 위치: 곡선을 따라 등간격 이동
       for (let i = 0; i < FLOW_PARTICLES_PER_BEAM; i++) {
@@ -186,6 +210,10 @@ export function GlobeAllianceBeam({
       for (const beam of beamsRef.current) {
         beam.line.geometry.dispose();
         beam.lineMaterial.dispose();
+        // v33 Phase 4: clone된 particle material도 dispose
+        if (beam.particleMesh.material) {
+          (beam.particleMesh.material as THREE.Material).dispose();
+        }
         beam.particleMesh.dispose();
       }
       particleGeo.dispose();

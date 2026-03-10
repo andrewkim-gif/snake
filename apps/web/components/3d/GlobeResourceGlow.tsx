@@ -113,6 +113,8 @@ export function GlobeResourceGlow({
 }: GlobeResourceGlowProps) {
   const groupRef = useRef<THREE.Group>(null);
   const dataRef = useRef<ResourceRenderData[]>([]);
+  // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+  const frameCountRef = useRef(0);
 
   // 공유 geometry
   const ringGeo = useMemo(
@@ -208,6 +210,11 @@ export function GlobeResourceGlow({
   // 매 프레임: 셰이더 time + 파티클 상승 (LOD + reduced motion 반영)
   useFrame(({ clock }) => {
     if (!visible) return;
+    // v33 Phase 4: 자원 데이터가 없으면 스킵
+    if (dataRef.current.length === 0) return;
+    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    frameCountRef.current++;
+    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
     const elapsed = clock.getElapsedTime();
 
     // LOD 기반 파티클 표시/숨김 + 배율

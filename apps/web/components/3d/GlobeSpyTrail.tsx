@@ -114,6 +114,8 @@ export function GlobeSpyTrail({
 }: GlobeSpyTrailProps) {
   const groupRef = useRef<THREE.Group>(null);
   const dataRef = useRef<SpyRenderData[]>([]);
+  // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+  const frameCountRef = useRef(0);
 
   // v24 Phase 6: 공유 SpriteMaterial (clone 제거)
   const sharedEyeMaterial = useMemo(
@@ -193,6 +195,11 @@ export function GlobeSpyTrail({
   // 매 프레임: 라인 opacity 진동 + 눈 깜빡임 (LOD + reduced motion 반영)
   useFrame(({ clock }) => {
     if (!visible) return;
+    // v33 Phase 4: 첩보 작전이 없으면 스킵
+    if (dataRef.current.length === 0) return;
+    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    frameCountRef.current++;
+    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
     const elapsed = clock.getElapsedTime();
     const showIcons = distanceLOD?.showIcons ?? true;
 

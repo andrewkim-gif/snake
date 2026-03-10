@@ -16,6 +16,7 @@ import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js
 import { latLngToVector3 } from '@/lib/globe-utils';
 import { getArcPointGCFree } from '@/lib/effect-utils';
 import { ARC_HEIGHT } from '@/lib/effect-constants';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
@@ -41,6 +42,8 @@ export interface GlobeMissileEffectProps {
   visible?: boolean;
   /** 모바일 LOD — 동시 미사일 최대 수 (기본 10) */
   maxMissiles?: number;
+  /** v33 Phase 4: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
 }
 
 // ─── Constants ───
@@ -158,10 +161,13 @@ export function GlobeMissileEffect({
   onImpact,
   visible = true,
   maxMissiles = MAX_MISSILES,
+  distanceLOD,
 }: GlobeMissileEffectProps) {
   const groupRef = useRef<THREE.Group>(null);
   const clockRef = useRef(0);
   const lastLaunchRef = useRef<Map<string, number>>(new Map());
+  // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+  const frameCountRef = useRef(0);
   const missilesRef = useRef<MissileState[]>(
     Array.from({ length: MAX_MISSILES }, () => ({
       active: false,
@@ -249,12 +255,30 @@ export function GlobeMissileEffect({
   );
 
   useFrame((_, delta) => {
-    clockRef.current += delta;
-    const now = clockRef.current;
-    const missiles = missilesRef.current;
     const headMesh = headInstancedRef.current;
     const smokeMesh = smokeInstancedRef.current;
     if (!headMesh || !smokeMesh) return;
+
+    // v33 Phase 4: 활성 전쟁이 없고 모든 미사일 비활성이면 스킵 (closure 회피)
+    const missiles = missilesRef.current;
+    let hasWork = false;
+    for (let i = 0; i < wars.length; i++) {
+      if (wars[i].state === 'active') { hasWork = true; break; }
+    }
+    if (!hasWork) {
+      for (let i = 0; i < missiles.length; i++) {
+        if (missiles[i].active) { hasWork = true; break; }
+      }
+    }
+    if (!hasWork) return;
+    // v33 Phase 4: far LOD에서 매 2프레임마다 1회 업데이트 (미사일은 빈도 높게)
+    frameCountRef.current++;
+    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 2 !== 0) return;
+
+    clockRef.current += delta;
+    const now = clockRef.current;
+    // v33 Phase 4: far LOD에서 연기 파티클 스킵 여부 (루프 밖에서 1회 계산)
+    const _showSmoke = distanceLOD?.showParticles ?? true;
 
     // ─── Launch missiles for active wars ───
     for (const war of wars) {
@@ -343,6 +367,14 @@ export function GlobeMissileEffect({
       // ─── Smoke trail: 미사일 뒤에 빌보드 파티클 ───
       for (let j = 0; j < SMOKE_PARTICLES_PER_MISSILE; j++) {
         const sIdx = i * SMOKE_PARTICLES_PER_MISSILE + j;
+        // v33 Phase 4: far LOD에서 연기 파티클 스킵 (미사일 헤드만 표시)
+        if (!_showSmoke) {
+          _smokeDummy.position.set(0, 0, -9999);
+          _smokeDummy.scale.setScalar(0);
+          _smokeDummy.updateMatrix();
+          smokeMesh.setMatrixAt(sIdx, _smokeDummy.matrix);
+          continue;
+        }
         const tailT = Math.max(0, t - (j + 1) * 0.035);
 
         getArcPointGCFree(m.startPos, m.endPos, tailT, m.arcHeight, _tempVec3);

@@ -19,6 +19,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RENDER_ORDER } from '@/lib/effect-constants';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
@@ -55,6 +56,9 @@ export interface GlobeDominationLayerProps {
 
   /** Visibility toggle */
   visible?: boolean;
+
+  /** v33 Phase 4: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
 }
 
 // ─── Constants ───
@@ -256,10 +260,13 @@ export function GlobeDominationLayer({
   countryGeometries,
   globeRadius = DEFAULT_GLOBE_RADIUS,
   visible = true,
+  distanceLOD,
 }: GlobeDominationLayerProps) {
   const groupRef = useRef<THREE.Group>(null);
   const meshDataRef = useRef<Map<string, DominationMeshData>>(new Map());
   const transitionTimers = useRef<Map<string, number>>(new Map());
+  // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+  const frameCountRef = useRef(0);
 
   // Create or update meshes when geometries or states change
   useEffect(() => {
@@ -362,6 +369,11 @@ export function GlobeDominationLayer({
   // Animate: pulse glow, transition fades, v15 effects
   useFrame((_, delta) => {
     if (!visible) return;
+    // v33 Phase 4: 지배 상태 데이터가 없으면 스킵
+    if (meshDataRef.current.size === 0) return;
+    // v33 Phase 4: far LOD에서 매 4프레임마다 1회 업데이트 (셰이더 펄스는 느려도 OK)
+    frameCountRef.current++;
+    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 4 !== 0) return;
 
     const meshMap = meshDataRef.current;
 

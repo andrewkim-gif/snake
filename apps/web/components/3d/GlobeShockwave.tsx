@@ -13,12 +13,15 @@ import { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { COLORS_3D, RENDER_ORDER } from '@/lib/effect-constants';
+import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
 
 // ─── Types ───
 
 export interface GlobeShockwaveProps {
   globeRadius?: number;
   visible?: boolean;
+  /** v33 Phase 4: 카메라 거리 LOD 설정 */
+  distanceLOD?: DistanceLODConfig;
 }
 
 export interface GlobeShockwaveHandle {
@@ -35,6 +38,10 @@ const SHOCKWAVE_INITIAL_SCALE = 0.5;
 const RING_COLOR = COLORS_3D.war;
 const RING_INNER_RATIO = 0.85;        // inner radius ratio
 
+// v33 Task 6: Module-scope temp objects (GC prevention in useFrame loop)
+const _upVec = new THREE.Vector3(0, 1, 0);
+const _tempQuat = new THREE.Quaternion();
+
 // ─── Shockwave state per pool item ───
 
 interface ShockwaveState {
@@ -49,9 +56,11 @@ interface ShockwaveState {
 import { forwardRef, useImperativeHandle } from 'react';
 
 export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwaveProps>(
-  function GlobeShockwave({ globeRadius = 100, visible = true }, ref) {
+  function GlobeShockwave({ globeRadius = 100, visible = true, distanceLOD }, ref) {
     const groupRef = useRef<THREE.Group>(null);
     const clockRef = useRef(0);
+    // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+    const frameCountRef = useRef(0);
     const poolRef = useRef<ShockwaveState[]>(
       Array.from({ length: POOL_SIZE }, () => ({
         active: false,
@@ -68,16 +77,16 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
       [],
     );
 
-    // Procedural shockwave material: additive blending, transparent
-    const ringMaterial = useMemo(
-      () => new THREE.MeshBasicMaterial({
-        color: RING_COLOR,
+    // v33 Phase 4: per-pool material 배열 (clone 제거 — 렌더마다 새 clone 방지)
+    const poolMaterials = useMemo(
+      () => Array.from({ length: POOL_SIZE }, () => new THREE.MeshBasicMaterial({
+        color: RING_COLOR.clone(),
         transparent: true,
         opacity: 1.0,
         blending: THREE.AdditiveBlending,
         depthWrite: false,
         side: THREE.DoubleSide,
-      }),
+      })),
       [],
     );
 
@@ -114,6 +123,16 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
       const now = clockRef.current;
       const pool = poolRef.current;
 
+      // v33 Phase 4: 활성 충격파가 없으면 스킵
+      let hasActive = false;
+      for (let i = 0; i < POOL_SIZE; i++) {
+        if (pool[i].active) { hasActive = true; break; }
+      }
+      if (!hasActive) return;
+      // v33 Phase 4: far LOD에서 매 2프레임마다 1회 업데이트
+      frameCountRef.current++;
+      if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 2 !== 0) return;
+
       for (let i = 0; i < POOL_SIZE; i++) {
         const mesh = meshRefs.current[i];
         if (!mesh) continue;
@@ -139,9 +158,9 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
         mesh.position.copy(state.position);
 
         // Orient ring to face outward from globe surface
-        const up = new THREE.Vector3(0, 1, 0);
-        const quat = new THREE.Quaternion().setFromUnitVectors(up, state.normal);
-        mesh.quaternion.copy(quat);
+        // v33 Task 6: Reuse module-scope _upVec + _tempQuat (no per-frame allocation)
+        _tempQuat.setFromUnitVectors(_upVec, state.normal);
+        mesh.quaternion.copy(_tempQuat);
         // Rotate to lie flat on surface (ring is in XY plane by default)
         mesh.rotateX(-Math.PI / 2);
 
@@ -152,7 +171,7 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
 
         // Fade out opacity
         const opacity = 1.0 - easeOut;
-        (mesh.material as THREE.MeshBasicMaterial).opacity = opacity * 0.8;
+        poolMaterials[i].opacity = opacity * 0.8;
       }
     });
 
@@ -160,9 +179,12 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
     useEffect(() => {
       return () => {
         ringGeometry.dispose();
-        ringMaterial.dispose();
+        // v33 Phase 4: per-pool material 개별 dispose
+        for (const mat of poolMaterials) {
+          mat.dispose();
+        }
       };
-    }, [ringGeometry, ringMaterial]);
+    }, [ringGeometry, poolMaterials]);
 
     if (!visible) return null;
 
@@ -173,7 +195,7 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
             key={i}
             ref={(el) => { meshRefs.current[i] = el; }}
             geometry={ringGeometry}
-            material={ringMaterial.clone()}
+            material={poolMaterials[i]}
             visible={false}
             renderOrder={RENDER_ORDER.SURFACE_GLOW}
           />

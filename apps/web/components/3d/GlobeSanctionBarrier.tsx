@@ -82,6 +82,8 @@ export function GlobeSanctionBarrier({
 }: GlobeSanctionBarrierProps) {
   const groupRef = useRef<THREE.Group>(null);
   const arcDataRef = useRef<SanctionArcData[]>([]);
+  // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
+  const frameCountRef = useRef(0);
 
   // InstancedMesh refs
   const xBar1Ref = useRef<THREE.InstancedMesh>(null);
@@ -237,6 +239,11 @@ export function GlobeSanctionBarrier({
   // 매 프레임: X 마크 펄스 + 링 회전 (LOD + reduced motion 반영)
   useFrame(({ clock }) => {
     if (!visible) return;
+    // v33 Phase 4: 제재가 없으면 스킵
+    if (instanceCountRef.current === 0) return;
+    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    frameCountRef.current++;
+    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
 
     const elapsed = clock.getElapsedTime();
     const showIcons = distanceLOD?.showIcons ?? true;
