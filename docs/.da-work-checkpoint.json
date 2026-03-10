@@ -1,14 +1,1 @@
-{
-  "pipeline": "da:work",
-  "execution_mode": "plan",
-  "pipeline_mode": "turbo",
-  "plan_file": "docs/designs/v37-ingame-overhaul-plan.md",
-  "project_type": "GAME",
-  "current_stage": 3,
-  "current_phase": 1,
-  "total_phases": 10,
-  "phases_status": {"1":"done","2":"pending","3":"pending","4":"pending","5":"pending","6":"pending","7":"pending","8":"pending","9":"pending","10":"pending"},
-  "iterations": {"arch":0,"dev":0,"e2e":0},
-  "last_skill": "da:game_phase1_done",
-  "last_update": "2026-03-10T00:01:00Z"
-}
+{"pipeline":"da:work","execution_mode":"plan","pipeline_mode":"turbo","plan_file":"docs/designs/v37-ingame-overhaul-plan.md","project_type":"GAME","current_stage":3,"current_phase":2,"total_phases":10,"phases_status":{"1":"done","2":"done","3":"pending","4":"pending","5":"pending","6":"pending","7":"pending","8":"pending","9":"pending","10":"pending"},"iterations":{"arch":0,"dev":0,"e2e":0},"last_skill":"da:game_phase2_done","last_update":"2026-03-10T00:03:00Z"}
