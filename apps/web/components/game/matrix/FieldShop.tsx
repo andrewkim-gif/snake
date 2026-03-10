@@ -29,6 +29,8 @@ import {
   type ShopItemConfig,
 } from '@/lib/matrix/config/shop.config';
 import type { EconomySnapshot } from '@/lib/matrix/systems/economy';
+import BattleStats from './BattleStats';
+import type { BattleStatsData } from './BattleStats';
 
 // ============================================
 // PLACEHOLDER: Props
@@ -49,6 +51,8 @@ export interface FieldShopProps {
   estimatedFinalGold: number;
   /** 예상 RP */
   estimatedRP: number;
+  /** v37 Phase 8: 전투 통계 데이터 (Stats 탭용) */
+  battleStats?: BattleStatsData;
 }
 
 // ============================================
@@ -104,7 +108,15 @@ if (typeof window !== 'undefined' && !document.getElementById(KEYFRAMES_ID)) {
 // 탭 목록
 // ============================================
 
-const TABS: ShopCategory[] = ['consumable', 'stat_boost', 'investment'];
+/** Extended tab type including stats */
+type FieldShopTab = ShopCategory | 'stats';
+
+const TABS: FieldShopTab[] = ['consumable', 'stat_boost', 'investment', 'stats'];
+
+/** Tab display config — extended for stats tab */
+const TAB_DISPLAY: Record<string, { color: string; labelKo: string }> = {
+  stats: { color: '#6366F1', labelKo: 'STATS' },
+};
 
 // ============================================
 // Sub: ShopItemCard
@@ -349,8 +361,9 @@ function FieldShopInner({
   remainingTime,
   estimatedFinalGold,
   estimatedRP,
+  battleStats,
 }: FieldShopProps) {
-  const [activeTab, setActiveTab] = useState<ShopCategory>('consumable');
+  const [activeTab, setActiveTab] = useState<FieldShopTab>('consumable');
   const panelRef = useRef<HTMLDivElement>(null);
 
   // ESC 키로 닫기
@@ -366,9 +379,9 @@ function FieldShopInner({
     return () => window.removeEventListener('keydown', handler);
   }, [isOpen, onClose]);
 
-  // 1~9 키로 빠른 구매
+  // 1~9 키로 빠른 구매 (stats 탭에서는 비활성)
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || activeTab === 'stats') return;
     const handler = (e: KeyboardEvent) => {
       const num = parseInt(e.key);
       if (num >= 1 && num <= 9) {
@@ -385,7 +398,8 @@ function FieldShopInner({
 
   if (!isOpen) return null;
 
-  const tabItems = SHOP_ITEMS.filter(it => it.category === activeTab);
+  const isStatsTab = activeTab === 'stats';
+  const tabItems = isStatsTab ? [] : SHOP_ITEMS.filter(it => it.category === activeTab);
 
   return (
     <div
@@ -487,7 +501,9 @@ function FieldShopInner({
           flexShrink: 0,
         }}>
           {TABS.map((tab) => {
-            const info = SHOP_CATEGORY_DISPLAY[tab];
+            const info = tab === 'stats'
+              ? TAB_DISPLAY.stats
+              : SHOP_CATEGORY_DISPLAY[tab as ShopCategory];
             const isActive = activeTab === tab;
             return (
               <button
@@ -514,7 +530,7 @@ function FieldShopInner({
           })}
         </div>
 
-        {/* 아이템 목록 */}
+        {/* 아이템 목록 or Stats */}
         <div style={{
           flex: 1,
           overflowY: 'auto',
@@ -523,18 +539,34 @@ function FieldShopInner({
           flexDirection: 'column',
           gap: 6,
         }}>
-          {tabItems.map((item) => {
-            const purchaseCount = economy.purchases[item.id]?.count ?? 0;
-            return (
-              <ShopItemCard
-                key={item.id}
-                item={item}
-                purchaseCount={purchaseCount}
-                currentGold={economy.gold.current}
-                onPurchase={onPurchase}
-              />
-            );
-          })}
+          {isStatsTab ? (
+            battleStats ? (
+              <BattleStats stats={battleStats} compact />
+            ) : (
+              <div style={{
+                fontFamily: bodyFont,
+                fontSize: 11,
+                color: SK.textMuted,
+                textAlign: 'center',
+                padding: '20px 0',
+              }}>
+                No battle data yet
+              </div>
+            )
+          ) : (
+            tabItems.map((item) => {
+              const purchaseCount = economy.purchases[item.id]?.count ?? 0;
+              return (
+                <ShopItemCard
+                  key={item.id}
+                  item={item}
+                  purchaseCount={purchaseCount}
+                  currentGold={economy.gold.current}
+                  onPurchase={onPurchase}
+                />
+              );
+            })
+          )}
         </div>
 
         {/* 보상 예측 위젯 */}

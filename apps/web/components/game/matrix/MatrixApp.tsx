@@ -100,6 +100,19 @@ import FieldShop from './FieldShop';
 import { EconomyManager, type EconomySnapshot } from '@/lib/matrix/systems/economy';
 import { getShopItem, getInflatedPrice } from '@/lib/matrix/config/shop.config';
 
+// ─── v37 Phase 8: KillFeed + DeathRecap + SpectateMode + BattleStats ───
+import KillFeed from './KillFeed';
+import type { KillFeedEntry } from './KillFeed';
+import DeathRecap from './DeathRecap';
+import type { KillerInfo, DeathStats } from './DeathRecap';
+import SpectateMode from './SpectateMode';
+import type { SpectateTarget } from './SpectateMode';
+import BattleStats from './BattleStats';
+import type { BattleStatsData, WeaponKillStat, CategoryDamageStat } from './BattleStats';
+import { ARENA_AGENT_IDENTITIES } from '@/lib/matrix/config/arena-agents.config';
+import { getSkillCategory } from '@/lib/matrix/utils/skill-icons';
+import type { SkillCategory } from '@/lib/matrix/types';
+
 // ─── 디버그 패널 ───
 import DebugSkillPanel from './DebugSkillPanel';
 
@@ -386,6 +399,27 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const [isShopOpen, setIsShopOpen] = useState(false);
   const [economySnapshot, setEconomySnapshot] = useState<EconomySnapshot>(() => economyRef.current!.getSnapshot());
 
+  // ─────────────────────────────────────────
+  // v37 Phase 8: KillFeed + DeathRecap + SpectateMode + BattleStats
+  // ─────────────────────────────────────────
+  const [killFeedEntries, setKillFeedEntries] = useState<KillFeedEntry[]>([]);
+  const [showDeathRecap, setShowDeathRecap] = useState(false);
+  const [deathRecapKiller, setDeathRecapKiller] = useState<KillerInfo | null>(null);
+  const [deathRecapStats, setDeathRecapStats] = useState<DeathStats>({
+    kills: 0,
+    deaths: 0,
+    survivalTime: 0,
+    goldEarned: 0,
+  });
+  const [isSpectating, setIsSpectating] = useState(false);
+  const [spectateTargetIndex, setSpectateTargetIndex] = useState(0);
+  const killFeedIdRef = useRef(0);
+  // Battle stats tracking
+  const weaponKillsRef = useRef<Record<string, number>>({});
+  const weaponDamageRef = useRef<Record<string, number>>({});
+  const totalDamageRef = useRef(0);
+  const deathCountRef = useRef(0);
+
   // Economy phase + snapshot 업데이트 (gameTime 변경 시)
   useEffect(() => {
     const eco = economyRef.current;
@@ -644,6 +678,120 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const handleChestCollected = useCallback(() => {}, []);
   const handleMaterialCollected = useCallback(() => {}, []);
 
+  // ─────────────────────────────────────────
+  // v37 Phase 8: KillFeed push helper
+  // ─────────────────────────────────────────
+  const pushKillFeedEntry = useCallback((entry: Omit<KillFeedEntry, 'id' | 'timestamp'>) => {
+    killFeedIdRef.current += 1;
+    const fullEntry: KillFeedEntry = {
+      ...entry,
+      id: `kf_${killFeedIdRef.current}`,
+      timestamp: Date.now(),
+    };
+    setKillFeedEntries(prev => [fullEntry, ...prev].slice(0, 20)); // keep buffer of 20
+  }, []);
+
+  // v37 Phase 8: Death recap + spectate mode triggers
+  const handleDeathRecapShow = useCallback(() => {
+    const eco = economyRef.current;
+    setDeathRecapStats({
+      kills: sessionKills,
+      deaths: deathCountRef.current + 1,
+      survivalTime: gameState.gameTime,
+      goldEarned: eco?.getSnapshot().gold.totalEarned ?? 0,
+    });
+    deathCountRef.current += 1;
+    setShowDeathRecap(true);
+    setIsSpectating(false);
+  }, [sessionKills, gameState.gameTime]);
+
+  const handleDeathRecapRespawn = useCallback(() => {
+    setShowDeathRecap(false);
+    setIsSpectating(false);
+    // Trigger game restart
+    // (delegated to handleRestart below)
+  }, []);
+
+  const handleDeathRecapSpectate = useCallback(() => {
+    setShowDeathRecap(false);
+    setIsSpectating(true);
+    setSpectateTargetIndex(0);
+  }, []);
+
+  const handleSpectateExit = useCallback(() => {
+    setIsSpectating(false);
+    // exit to lobby on spectate exit
+    onExitToLobby();
+  }, [onExitToLobby]);
+
+  // Spectate targets: alive agents
+  const spectateTargets: SpectateTarget[] = useMemo(() => {
+    return arena.agents
+      .filter((a: { isAlive: boolean }) => a.isAlive && !a.isLocalPlayer)
+      .map((a: { id: string; displayName?: string; playerClass: PlayerClass; kills: number; isAlive: boolean; health?: number; maxHealth?: number; level?: number }) => {
+        const identity = ARENA_AGENT_IDENTITIES[a.playerClass];
+        const hp = a.health ?? 100;
+        const maxHP = a.maxHealth ?? 100;
+        return {
+          agentId: a.id,
+          displayName: identity?.displayName ?? a.displayName ?? a.playerClass,
+          playerClass: a.playerClass,
+          kills: a.kills,
+          healthPercent: maxHP > 0 ? (hp / maxHP) * 100 : 100,
+          level: a.level ?? 1,
+          isAlive: a.isAlive,
+        } satisfies SpectateTarget;
+      });
+  }, [arena.agents]);
+
+  // Battle stats computation
+  const battleStatsData: BattleStatsData = useMemo(() => {
+    const timeMin = Math.max(1, gameState.gameTime / 60);
+    const eco = economyRef.current?.getSnapshot();
+    const goldEarned = eco?.gold.totalEarned ?? 0;
+
+    const weaponKillsList: WeaponKillStat[] = Object.entries(weaponKillsRef.current)
+      .filter(([, kills]) => kills > 0)
+      .map(([type, kills]) => {
+        const wt = type as WeaponType;
+        const cat = getSkillCategory(wt) ?? 'CODE';
+        const weaponData = WEAPON_DATA[wt as keyof typeof WEAPON_DATA];
+        return {
+          weaponType: wt,
+          weaponName: weaponData?.name ?? type,
+          kills,
+          damage: weaponDamageRef.current[type] ?? 0,
+          category: cat as SkillCategory,
+        };
+      });
+
+    // Category damage aggregation
+    const catDmgMap: Record<string, number> = {};
+    let catDmgTotal = 0;
+    for (const ws of weaponKillsList) {
+      catDmgMap[ws.category] = (catDmgMap[ws.category] ?? 0) + ws.damage;
+      catDmgTotal += ws.damage;
+    }
+    const categoryDamage: CategoryDamageStat[] = Object.entries(catDmgMap).map(
+      ([cat, dmg]) => ({
+        category: cat as SkillCategory,
+        totalDamage: dmg,
+        percentage: catDmgTotal > 0 ? (dmg / catDmgTotal) * 100 : 0,
+      })
+    );
+
+    return {
+      dps: gameState.gameTime > 0 ? totalDamageRef.current / gameState.gameTime : 0,
+      gpm: goldEarned / timeMin,
+      spm: gameState.score / timeMin,
+      goldPerKill: sessionKills > 0 ? goldEarned / sessionKills : 0,
+      totalKills: sessionKills,
+      totalDamage: totalDamageRef.current,
+      weaponKills: weaponKillsList,
+      categoryDamage,
+    };
+  }, [gameState.gameTime, gameState.score, sessionKills]);
+
   // 재시작
   const handleRestart = useCallback(() => {
     const cls = selectedClassRef.current;
@@ -654,6 +802,14 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     setSessionKills(0);
     // v37: Economy 리셋
     economyRef.current?.reset();
+    // v37 Phase 8: Kill tracking 리셋
+    weaponKillsRef.current = {};
+    weaponDamageRef.current = {};
+    totalDamageRef.current = 0;
+    deathCountRef.current = 0;
+    setKillFeedEntries([]);
+    setShowDeathRecap(false);
+    setIsSpectating(false);
     setEconomySnapshot(economyRef.current?.getSnapshot() ?? economySnapshot);
     setIsShopOpen(false);
 
@@ -1233,8 +1389,42 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
           remainingTime={shopRemainingTime}
           estimatedFinalGold={shopEstimatedFinalGold}
           estimatedRP={shopEstimatedRP}
+          battleStats={battleStatsData}
         />
       )}
+
+      {/* ─── v37 Phase 8: KillFeed (우측 상단, 플레이 중) ─── */}
+      {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <KillFeed
+          entries={killFeedEntries}
+          localPlayerId={matrixPlayerId ?? 'local_player'}
+          maxDisplay={5}
+          fadeOutMs={3000}
+        />
+      )}
+
+      {/* ─── v37 Phase 8: SpectateMode (사망 후 관전) ─── */}
+      <SpectateMode
+        isActive={isSpectating}
+        targets={spectateTargets}
+        currentTargetIndex={spectateTargetIndex}
+        onTargetChange={setSpectateTargetIndex}
+        onExit={handleSpectateExit}
+        rewardBonusPercent={10}
+      />
+
+      {/* ─── v37 Phase 8: DeathRecap (사망 시 원인 분석) ─── */}
+      <DeathRecap
+        isVisible={showDeathRecap}
+        killer={deathRecapKiller}
+        stats={deathRecapStats}
+        onRespawn={() => {
+          handleDeathRecapRespawn();
+          handleRestart();
+        }}
+        onSpectate={handleDeathRecapSpectate}
+        onExitToLobby={handleExitToLobby}
+      />
 
       {/* ─── 디버그 스킬 패널 (우측 상단) ─── */}
       {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (

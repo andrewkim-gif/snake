@@ -5,7 +5,7 @@
  * (터렛 시스템의 agents.config.ts와 별도)
  */
 
-import { PlayerClass, AIPersonality } from '../types';
+import { PlayerClass, AIPersonality, WeaponType } from '../types';
 
 /**
  * 에이전트 아이덴티티 정의
@@ -18,6 +18,166 @@ export interface ArenaAgentIdentity {
   chatStyle: 'formal' | 'casual' | 'aggressive' | 'mysterious';
   color: string;             // 이름표 색상
   catchphrases: string[];    // 자주 쓰는 말 (폴백용)
+}
+
+// ============================================
+// v37 Phase 8: AI 에이전트 전투/경제 성향
+// ============================================
+
+/** 전투/경제 성향 비율 (합계 1.0) */
+export interface AgentCombatEconomyTraits {
+  /** 공격 성향 비율 (0~1) — 공격적 무기/킬 추구 */
+  attackRatio: number;
+  /** 방어 성향 비율 (0~1) — 생존/방어 무기 선호 */
+  defenseRatio: number;
+  /** 경제 성향 비율 (0~1) — Gold 수집, 경제 패시브 선호 */
+  economyRatio: number;
+  /** 선호 무기 목록 (레벨업 시 우선 선택) */
+  preferredWeapons: WeaponType[];
+  /** 상점 이용 성향 */
+  shopBehavior: AgentShopBehavior;
+  /** Gold 임계값 — 이 이상 모이면 상점 이용 */
+  shopGoldThreshold: number;
+}
+
+/** AI 에이전트 상점 이용 행동 */
+export type AgentShopBehavior =
+  | 'aggressive_buyer'   // 공격력 아이템 우선 구매
+  | 'defensive_buyer'    // HP/실드 아이템 우선 구매
+  | 'economy_investor'   // 경제 투자 아이템 우선 구매
+  | 'balanced_buyer'     // 상황에 따라 균형 구매
+  | 'hoarder';           // Gold를 모으고 잘 안 씀
+
+/**
+ * 9개 PlayerClass별 전투/경제 성향 설정
+ * 기획서 6.4 AI 에이전트 개성 강화 참조
+ */
+export const AGENT_COMBAT_TRAITS: Record<PlayerClass, AgentCombatEconomyTraits> = {
+  neo: {
+    attackRatio: 0.4,
+    defenseRatio: 0.3,
+    economyRatio: 0.3,
+    preferredWeapons: ['knife', 'wand'],
+    shopBehavior: 'balanced_buyer',
+    shopGoldThreshold: 1500,
+  },
+  trinity: {
+    attackRatio: 0.6,
+    defenseRatio: 0.15,
+    economyRatio: 0.25,
+    preferredWeapons: ['bow', 'shard'],
+    shopBehavior: 'aggressive_buyer',
+    shopGoldThreshold: 800,
+  },
+  morpheus: {
+    attackRatio: 0.3,
+    defenseRatio: 0.3,
+    economyRatio: 0.4,
+    preferredWeapons: ['lightning', 'bridge'],
+    shopBehavior: 'economy_investor',
+    shopGoldThreshold: 1200,
+  },
+  tank: {
+    attackRatio: 0.2,
+    defenseRatio: 0.6,
+    economyRatio: 0.2,
+    preferredWeapons: ['garlic', 'stablecoin'],
+    shopBehavior: 'defensive_buyer',
+    shopGoldThreshold: 1000,
+  },
+  cypher: {
+    attackRatio: 0.15,
+    defenseRatio: 0.25,
+    economyRatio: 0.6,
+    preferredWeapons: ['aggregator', 'gold_reward'],
+    shopBehavior: 'hoarder',
+    shopGoldThreshold: 3000,
+  },
+  niobe: {
+    attackRatio: 0.7,
+    defenseRatio: 0.1,
+    economyRatio: 0.2,
+    preferredWeapons: ['beam', 'airdrop'],
+    shopBehavior: 'aggressive_buyer',
+    shopGoldThreshold: 600,
+  },
+  oracle: {
+    attackRatio: 0.2,
+    defenseRatio: 0.4,
+    economyRatio: 0.4,
+    preferredWeapons: ['oracle', 'focus'],
+    shopBehavior: 'economy_investor',
+    shopGoldThreshold: 2000,
+  },
+  mouse: {
+    attackRatio: 0.25,
+    defenseRatio: 0.25,
+    economyRatio: 0.5,
+    preferredWeapons: ['bridge', 'ping'],
+    shopBehavior: 'economy_investor',
+    shopGoldThreshold: 1500,
+  },
+  dozer: {
+    attackRatio: 0.2,
+    defenseRatio: 0.5,
+    economyRatio: 0.3,
+    preferredWeapons: ['pool', 'bible'],
+    shopBehavior: 'defensive_buyer',
+    shopGoldThreshold: 1200,
+  },
+};
+
+/**
+ * 에이전트의 전투/경제 성향 가져오기
+ */
+export function getAgentCombatTraits(playerClass: PlayerClass): AgentCombatEconomyTraits {
+  return AGENT_COMBAT_TRAITS[playerClass];
+}
+
+/**
+ * AI 에이전트의 상점 구매 결정 — 현재 Gold와 성향에 따라 구매 아이템 ID 반환
+ * @returns 구매할 아이템 ID 또는 null (구매 안 함)
+ */
+export function decideShopPurchase(
+  playerClass: PlayerClass,
+  currentGold: number,
+  _matchTimeSeconds: number,
+): string | null {
+  const traits = AGENT_COMBAT_TRAITS[playerClass];
+  if (currentGold < traits.shopGoldThreshold) return null;
+
+  // 간단한 확률 기반 결정
+  const roll = Math.random();
+
+  switch (traits.shopBehavior) {
+    case 'aggressive_buyer':
+      if (roll < 0.5) return 'stat_dmg';
+      if (roll < 0.8) return 'stat_spd';
+      return 'con_hp';
+
+    case 'defensive_buyer':
+      if (roll < 0.5) return 'con_hp';
+      if (roll < 0.8) return 'con_shield';
+      return 'stat_spd';
+
+    case 'economy_investor':
+      if (roll < 0.5) return 'inv_gold_boost';
+      if (roll < 0.8) return 'stat_dmg';
+      return 'con_hp';
+
+    case 'balanced_buyer':
+      if (roll < 0.33) return 'stat_dmg';
+      if (roll < 0.66) return 'con_hp';
+      return 'inv_gold_boost';
+
+    case 'hoarder':
+      // 거의 안 삼 — 30% 확률로 HP 키트만
+      if (roll < 0.3) return 'con_hp';
+      return null;
+
+    default:
+      return null;
+  }
 }
 
 /**
