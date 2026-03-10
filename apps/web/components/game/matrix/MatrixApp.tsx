@@ -95,6 +95,11 @@ import EpochResultScreen from './EpochResultScreen';
 import TokenBuffDisplay from './TokenBuffDisplay';
 import type { MatrixResultPayload, MatrixBuffPayload, MatrixScorePayload } from '@/hooks/useMatrixSocket';
 
+// ─── v37 Phase 7: Field Shop + Economy ───
+import FieldShop from './FieldShop';
+import { EconomyManager, type EconomySnapshot } from '@/lib/matrix/systems/economy';
+import { getShopItem, getInflatedPrice } from '@/lib/matrix/config/shop.config';
+
 // ─── 디버그 패널 ───
 import DebugSkillPanel from './DebugSkillPanel';
 
@@ -371,6 +376,80 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     return () => cancelAnimationFrame(rafId);
   }, [isOnline]);
 
+  // ─────────────────────────────────────────
+  // v37 Phase 7: Economy + Field Shop
+  // ─────────────────────────────────────────
+  const economyRef = useRef<EconomyManager | null>(null);
+  if (!economyRef.current) {
+    economyRef.current = new EconomyManager();
+  }
+  const [isShopOpen, setIsShopOpen] = useState(false);
+  const [economySnapshot, setEconomySnapshot] = useState<EconomySnapshot>(() => economyRef.current!.getSnapshot());
+
+  // Economy phase + snapshot 업데이트 (gameTime 변경 시)
+  useEffect(() => {
+    const eco = economyRef.current;
+    if (!eco) return;
+    eco.updatePhase(gameState.gameTime);
+    setEconomySnapshot(eco.getSnapshot());
+  }, [gameState.gameTime]);
+
+  // Tab 키 핸들러 — 상점 열기/닫기
+  useEffect(() => {
+    if (!gameState.gameState.isPlaying || gameState.gameState.isGameOver) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Tab') {
+        // 레벨업/일시정지 중에는 상점 열기 방지
+        if (gameState.gameState.isLevelUp || isPaused) return;
+        e.preventDefault();
+        setIsShopOpen(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [gameState.gameState.isPlaying, gameState.gameState.isGameOver, gameState.gameState.isLevelUp, isPaused]);
+
+  // 상점 아이템 구매 핸들러
+  const handleShopPurchase = useCallback((itemId: string) => {
+    const eco = economyRef.current;
+    if (!eco) return;
+    const item = getShopItem(itemId);
+    if (!item) return;
+
+    const purchaseCount = eco.getPurchaseCount(itemId);
+    if (purchaseCount >= item.maxStack) return;
+
+    const price = getInflatedPrice(item.basePrice, purchaseCount);
+    if (!eco.spendGold(price)) return;
+
+    eco.recordPurchase(itemId, item.basePrice);
+
+    // 효과 적용
+    switch (item.effectType) {
+      case 'gold_multiplier':
+        eco.addShopGoldBonus(item.effectValue / 100);
+        break;
+      case 'kill_reward':
+        eco.addShopKillBonus(item.effectValue / 100);
+        break;
+      case 'score_multiplier':
+        eco.addShopScoreBonus(item.effectValue / 100);
+        break;
+      // 소모품/스텟업 효과는 게임 시스템에서 별도 처리 (TODO: wire to game systems)
+      default:
+        break;
+    }
+
+    // 스냅샷 갱신
+    setEconomySnapshot(eco.getSnapshot());
+    soundManager.playSFX('powerup');
+  }, []);
+
+  // 상점 닫기 핸들러
+  const handleShopClose = useCallback(() => {
+    setIsShopOpen(false);
+  }, []);
+
   // v32 Phase 3: Branch selection + Synergy notification
   const [branchPending, setBranchPending] = useState<{
     skill: WeaponType;
@@ -573,6 +652,10 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
     // Arena 재초기화
     arena.initializeArena(cls);
     setSessionKills(0);
+    // v37: Economy 리셋
+    economyRef.current?.reset();
+    setEconomySnapshot(economyRef.current?.getSnapshot() ?? economySnapshot);
+    setIsShopOpen(false);
 
     // 무기 초기화
     const initialWeapons: Record<string, number> = {};
@@ -813,6 +896,22 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         color: AGENT_COLORS[idx % AGENT_COLORS.length],
       }));
   }, [arena.agents]);
+
+  // ─────────────────────────────────────────
+  // v37 Phase 7: Economy derived data (FieldShop용)
+  // ─────────────────────────────────────────
+  const shopRemainingTime = useMemo(() => {
+    return Math.max(0, 300 - gameState.gameTime); // 5분 매치
+  }, [gameState.gameTime]);
+
+  const shopEstimatedFinalGold = useMemo(() => {
+    return economyRef.current?.getEstimatedFinalGold(shopRemainingTime) ?? 0;
+  }, [shopRemainingTime, economySnapshot]);
+
+  const shopEstimatedRP = useMemo(() => {
+    return economyRef.current?.getEstimatedRP() ?? 0;
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [economySnapshot]);
 
   // ─────────────────────────────────────────
   // v33 Phase 4: 멀티플레이어 렌더링 콜백
@@ -1121,6 +1220,19 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
           weapons={resultWeapons}
           onRetry={handleRestart}
           onExitToLobby={handleExitToLobby}
+        />
+      )}
+
+      {/* ─── v37 Phase 7: 전장 상점 ─── */}
+      {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
+        <FieldShop
+          isOpen={isShopOpen}
+          onClose={handleShopClose}
+          economy={economySnapshot}
+          onPurchase={handleShopPurchase}
+          remainingTime={shopRemainingTime}
+          estimatedFinalGold={shopEstimatedFinalGold}
+          estimatedRP={shopEstimatedRP}
         />
       )}
 
