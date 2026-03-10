@@ -14,6 +14,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { COLORS_3D, RENDER_ORDER } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -61,6 +62,8 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
     const clockRef = useRef(0);
     // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
     const frameCountRef = useRef(0);
+    // v33 Phase 5: AdaptiveQuality context
+    const qualityRef = useAdaptiveQualityContext();
     const poolRef = useRef<ShockwaveState[]>(
       Array.from({ length: POOL_SIZE }, () => ({
         active: false,
@@ -129,9 +132,11 @@ export const GlobeShockwave = forwardRef<GlobeShockwaveHandle, GlobeShockwavePro
         if (pool[i].active) { hasActive = true; break; }
       }
       if (!hasActive) return;
-      // v33 Phase 4: far LOD에서 매 2프레임마다 1회 업데이트
+      // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
       frameCountRef.current++;
-      if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 2 !== 0) return;
+      const distSkip = distanceLOD?.distanceTier === 'far' ? 2 : 1;
+      const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+      if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
       for (let i = 0; i < POOL_SIZE; i++) {
         const mesh = meshRefs.current[i];

@@ -20,6 +20,7 @@ import * as THREE from 'three';
 import { latLngToVector3 } from '@/lib/globe-utils';
 import { COLORS_3D, SURFACE_ALT, RENDER_ORDER, REDUCED_MOTION } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -115,6 +116,8 @@ export function GlobeResourceGlow({
   const dataRef = useRef<ResourceRenderData[]>([]);
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   // 공유 geometry
   const ringGeo = useMemo(
@@ -212,9 +215,11 @@ export function GlobeResourceGlow({
     if (!visible) return;
     // v33 Phase 4: 자원 데이터가 없으면 스킵
     if (dataRef.current.length === 0) return;
-    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
+    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
     const elapsed = clock.getElapsedTime();
 
     // LOD 기반 파티클 표시/숨김 + 배율

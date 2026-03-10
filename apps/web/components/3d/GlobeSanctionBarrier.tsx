@@ -23,6 +23,7 @@ import {
   ARC_HEIGHT, COLORS_3D, COLORS_BASE, RENDER_ORDER, REDUCED_MOTION,
 } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -84,6 +85,8 @@ export function GlobeSanctionBarrier({
   const arcDataRef = useRef<SanctionArcData[]>([]);
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   // InstancedMesh refs
   const xBar1Ref = useRef<THREE.InstancedMesh>(null);
@@ -241,9 +244,11 @@ export function GlobeSanctionBarrier({
     if (!visible) return;
     // v33 Phase 4: 제재가 없으면 스킵
     if (instanceCountRef.current === 0) return;
-    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
+    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
     const elapsed = clock.getElapsedTime();
     const showIcons = distanceLOD?.showIcons ?? true;

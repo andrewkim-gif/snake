@@ -20,6 +20,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { RENDER_ORDER } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -267,6 +268,8 @@ export function GlobeDominationLayer({
   const transitionTimers = useRef<Map<string, number>>(new Map());
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   // Create or update meshes when geometries or states change
   useEffect(() => {
@@ -371,9 +374,11 @@ export function GlobeDominationLayer({
     if (!visible) return;
     // v33 Phase 4: 지배 상태 데이터가 없으면 스킵
     if (meshDataRef.current.size === 0) return;
-    // v33 Phase 4: far LOD에서 매 4프레임마다 1회 업데이트 (셰이더 펄스는 느려도 OK)
+    // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 4 !== 0) return;
+    const distSkip = distanceLOD?.distanceTier === 'far' ? 4 : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
     const meshMap = meshDataRef.current;
 

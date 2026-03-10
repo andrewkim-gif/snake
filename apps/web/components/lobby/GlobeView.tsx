@@ -72,6 +72,14 @@ import { GlobeIntroCamera } from '@/components/3d/GlobeIntroCamera';
 // v21 Phase 4: Bloom post-processing
 import { EffectComposer, Bloom } from '@react-three/postprocessing';
 
+// v33 Phase 5: AdaptiveQuality 시스템
+import {
+  useAdaptiveQuality,
+  AdaptiveQualityContext,
+  useAdaptiveQualityContext,
+  type QualityPreset,
+} from '@/hooks/useAdaptiveQuality';
+
 // v20: Landmark sprites
 import { GlobeLandmarks } from '@/components/3d/GlobeLandmarks';
 // v17: Conflict indicators
@@ -199,6 +207,35 @@ function AdaptiveOrbitControls() {
   );
 }
 
+// ─── v33 Phase 5: AdaptiveBloom — 품질 ref 기반 Bloom 조건부 렌더링 ───
+
+function AdaptiveBloom({ qualityRef }: { qualityRef: React.RefObject<QualityPreset> }) {
+  // ref 기반이라 리렌더 없음 — useFrame에서 EffectComposer 활성/비활성 제어
+  // EffectComposer 자체의 마운트/언마운트가 비용이 크므로
+  // intensity를 0으로 내려 비활성화하는 방식 사용
+  const bloomRef = useRef<any>(null);
+
+  useFrame(() => {
+    if (!bloomRef.current) return;
+    const enable = qualityRef.current.enableBloom;
+    // intensity를 0으로 내리면 GPU 비용 최소화
+    bloomRef.current.intensity = enable ? 0.8 : 0;
+  });
+
+  return (
+    <EffectComposer>
+      <Bloom
+        ref={bloomRef}
+        luminanceThreshold={0.7}
+        luminanceSmoothing={0.15}
+        intensity={0.8}
+        radius={0.5}
+        mipmapBlur
+      />
+    </EffectComposer>
+  );
+}
+
 // ─── GlobeScene (Canvas inner) ───
 
 function GlobeScene({
@@ -270,6 +307,9 @@ function GlobeScene({
   const distanceLOD = useGlobeLODDistance();
   const reducedMotion = useReducedMotion();
 
+  // v33 Phase 5: AdaptiveQuality — FPS 모니터링 + 자동 품질 조절
+  const qualityRef = useAdaptiveQuality();
+
   const isMobile = useMemo(() => {
     if (typeof window === 'undefined') return false;
     return window.innerWidth < 768 || navigator.maxTouchPoints > 0;
@@ -316,6 +356,7 @@ function GlobeScene({
   }, []);
 
   return (
+    <AdaptiveQualityContext.Provider value={qualityRef}>
     <SharedTickContext.Provider value={sharedTickRef}>
       {/* Intro camera */}
       {introActive && (
@@ -334,7 +375,8 @@ function GlobeScene({
 
       {/* Globe group */}
       <group ref={globeGroupRef}>
-        <EarthGroup sunDirRef={sunDirRef} />
+        {/* v33 Phase 5: LOW 품질에서 구름 숨김 */}
+        <EarthGroup sunDirRef={sunDirRef} qualityRef={qualityRef} />
         <GlobeTitle />
         <CountryLayer countries={countries} />
         <GlobeCountryNameLabels countries={countries} sharedTickRef={sharedTickRef} />
@@ -507,20 +549,10 @@ function GlobeScene({
         />
       )}
 
-      {/* Bloom post-processing */}
-      {!isMobile && (
-        <EffectComposer>
-          {/* v33 Task 3: Raised threshold + reduced intensity/radius for GPU savings */}
-          <Bloom
-            luminanceThreshold={0.7}
-            luminanceSmoothing={0.15}
-            intensity={0.8}
-            radius={0.5}
-            mipmapBlur
-          />
-        </EffectComposer>
-      )}
+      {/* Bloom post-processing — v33 Phase 5: HIGH 품질에서만 활성화 */}
+      {!isMobile && <AdaptiveBloom qualityRef={qualityRef} />}
     </SharedTickContext.Provider>
+    </AdaptiveQualityContext.Provider>
   );
 }
 

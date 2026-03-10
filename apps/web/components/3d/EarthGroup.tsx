@@ -27,6 +27,8 @@ import {
 } from '@/lib/globe-shaders';
 // v33 Phase 3: SharedTickData for Starfield
 import type { SharedTickData } from '@/components/lobby/GlobeView';
+// v33 Phase 5: AdaptiveQuality context
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Sun direction helper (UTC-based realtime position, GC-free) ───
 
@@ -129,9 +131,15 @@ function EarthSphere({ sunDirRef }: SunDirProp) {
 
 // ─── EarthClouds ───
 
-function EarthClouds({ sunDirRef }: SunDirProp) {
+interface EarthCloudsProps extends SunDirProp {
+  /** v33 Phase 5: 품질 프리셋 ref (LOW에서 비활성화) */
+  qualityRef?: React.RefObject<import('@/hooks/useAdaptiveQuality').QualityPreset>;
+}
+
+function EarthClouds({ sunDirRef, qualityRef }: EarthCloudsProps) {
   const cloudsTextureRef = useRef<THREE.Texture | null>(null);
   const matRef = useRef<THREE.ShaderMaterial | null>(null);
+  const meshRef = useRef<THREE.Mesh>(null);
   const [ready, setReady] = useState(false);
 
   useEffect(() => {
@@ -178,8 +186,14 @@ function EarthClouds({ sunDirRef }: SunDirProp) {
 
   // v33 Phase 3: useFrame 제거 — sunDirRef.current를 직접 공유하므로 복사 불필요
 
+  // v33 Phase 5: LOW 품질에서 구름 숨김
+  useFrame(() => {
+    if (!meshRef.current || !qualityRef) return;
+    meshRef.current.visible = qualityRef.current.enableClouds;
+  });
+
   return (
-    <mesh material={cloudsMat} renderOrder={50}>
+    <mesh ref={meshRef} material={cloudsMat} renderOrder={50}>
       <sphereGeometry args={[GLOBE_RADIUS * 1.005, 64, 64]} />
     </mesh>
   );
@@ -290,6 +304,8 @@ interface StarfieldProps {
 function Starfield({ sharedTickRef }: StarfieldProps) {
   const { scene } = useThree();
   const milkyWayTexture = useLoader(THREE.TextureLoader, '/textures/stars-milky-way.jpg');
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   useMemo(() => {
     milkyWayTexture.colorSpace = THREE.SRGBColorSpace;
@@ -298,8 +314,17 @@ function Starfield({ sharedTickRef }: StarfieldProps) {
   }, [milkyWayTexture, scene]);
 
   // v33 Phase 3: SharedTickRef에서 cameraDist/cameraDir 읽기 → 중복 계산 제거
+  // v33 Phase 5: MEDIUM/LOW 품질에서 별 intensity 최소화
   useFrame(() => {
     const tick = sharedTickRef.current;
+
+    // v33 Phase 5: 별 비활성화 시 최소 intensity (완전 검정 대신 미세한 배경)
+    if (!qualityRef.current.enableStars) {
+      scene.backgroundIntensity = 0.05;
+      scene.backgroundRotation.set(0, 0, 0);
+      return;
+    }
+
     const t = THREE.MathUtils.clamp((tick.cameraDist - 150) / (400 - 150), 0, 1);
     const smooth = t * t * (3 - 2 * t);
 
@@ -329,13 +354,16 @@ function Starfield({ sharedTickRef }: StarfieldProps) {
 
 interface EarthGroupProps {
   sunDirRef: React.RefObject<THREE.Vector3>;
+  /** v33 Phase 5: 품질 프리셋 ref (LOW에서 구름 숨김) */
+  qualityRef?: React.RefObject<import('@/hooks/useAdaptiveQuality').QualityPreset>;
 }
 
-export function EarthGroup({ sunDirRef }: EarthGroupProps) {
+export function EarthGroup({ sunDirRef, qualityRef }: EarthGroupProps) {
   return (
     <>
       <EarthSphere sunDirRef={sunDirRef} />
-      <EarthClouds sunDirRef={sunDirRef} />
+      {/* v33 Phase 5: LOW 품질에서 구름 opacity 제어 */}
+      <EarthClouds sunDirRef={sunDirRef} qualityRef={qualityRef} />
       <AtmosphereGlow sunDirRef={sunDirRef} />
     </>
   );

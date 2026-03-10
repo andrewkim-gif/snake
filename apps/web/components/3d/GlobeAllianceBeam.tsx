@@ -15,6 +15,7 @@ import { latLngToVector3 } from '@/lib/globe-utils';
 import { createArcCurve } from '@/lib/effect-utils';
 import { ARC_HEIGHT, COLORS_3D, RENDER_ORDER } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -91,6 +92,8 @@ export function GlobeAllianceBeam({
   const beamsRef = useRef<BeamRenderData[]>([]);
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   // 파티클 공유 geometry + material
   const particleGeo = useMemo(
@@ -166,9 +169,11 @@ export function GlobeAllianceBeam({
     if (!visible) return;
     // v33 Phase 4: 동맹 빔이 없으면 스킵
     if (beamsRef.current.length === 0) return;
-    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
+    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
     const elapsed = clock.getElapsedTime();
 
     // v33 Phase 4: far LOD에서 파티클 스킵

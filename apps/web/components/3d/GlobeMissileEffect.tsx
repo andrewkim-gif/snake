@@ -17,6 +17,7 @@ import { latLngToVector3 } from '@/lib/globe-utils';
 import { getArcPointGCFree } from '@/lib/effect-utils';
 import { ARC_HEIGHT } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -168,6 +169,8 @@ export function GlobeMissileEffect({
   const lastLaunchRef = useRef<Map<string, number>>(new Map());
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
   const missilesRef = useRef<MissileState[]>(
     Array.from({ length: MAX_MISSILES }, () => ({
       active: false,
@@ -271,9 +274,11 @@ export function GlobeMissileEffect({
       }
     }
     if (!hasWork) return;
-    // v33 Phase 4: far LOD에서 매 2프레임마다 1회 업데이트 (미사일은 빈도 높게)
+    // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 2 !== 0) return;
+    const distSkip = distanceLOD?.distanceTier === 'far' ? 2 : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
     clockRef.current += delta;
     const now = clockRef.current;

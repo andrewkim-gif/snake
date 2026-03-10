@@ -59,6 +59,7 @@ import { getBlockAtlasTexture } from '@/lib/mc-texture-atlas';
 import { BIOME_LANDMARK_TINTS, BIOME_INDEX } from '@/lib/biome-landmark-tints';
 import { MATERIAL_PROPS } from '@/lib/mc-blocks';
 import { useGlobeLODDistance } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Constants ───
 
@@ -513,6 +514,8 @@ export function LandmarkMeshes({
 
   // v33 Phase 2: LOD 연동 — 카메라 거리 기반 업데이트 빈도 조절
   const distanceLOD = useGlobeLODDistance();
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   // v33 Phase 2: Archetype별 런타임 데이터 맵 (통합 useFrame에서 사용)
   const runtimeMapRef = useRef<Map<string, ArchetypeRuntimeData>>(new Map());
@@ -590,12 +593,11 @@ export function LandmarkMeshes({
       sharedMaterial.uniforms.uTime.value = state.clock.elapsedTime;
     }
 
-    // ── 2. LOD 기반 업데이트 빈도 제어 ──
+    // ── 2. LOD + AdaptiveQuality 기반 업데이트 빈도 제어 ──
     frameCountRef.current++;
-    if (distanceLOD.distanceTier === 'far') {
-      // 'far' 티어: 매 FAR_LOD_UPDATE_INTERVAL 프레임마다만 인스턴스 업데이트
-      if (frameCountRef.current % FAR_LOD_UPDATE_INTERVAL !== 0) return;
-    }
+    const distSkip = distanceLOD.distanceTier === 'far' ? FAR_LOD_UPDATE_INTERVAL : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
 
     // ── 3. 카메라 dirty flag 체크 ──
     const camPos = camera.position;

@@ -19,6 +19,7 @@ import { latLngToVector3 } from '@/lib/globe-utils';
 import { createArcPoints } from '@/lib/effect-utils';
 import { ARC_HEIGHT, COLORS_BASE, RENDER_ORDER, REDUCED_MOTION } from '@/lib/effect-constants';
 import type { DistanceLODConfig } from '@/hooks/useGlobeLOD';
+import { useAdaptiveQualityContext } from '@/hooks/useAdaptiveQuality';
 
 // ─── Types ───
 
@@ -116,6 +117,8 @@ export function GlobeSpyTrail({
   const dataRef = useRef<SpyRenderData[]>([]);
   // v33 Phase 4: far LOD에서 프레임 스킵용 카운터
   const frameCountRef = useRef(0);
+  // v33 Phase 5: AdaptiveQuality context
+  const qualityRef = useAdaptiveQualityContext();
 
   // v24 Phase 6: 공유 SpriteMaterial (clone 제거)
   const sharedEyeMaterial = useMemo(
@@ -197,9 +200,11 @@ export function GlobeSpyTrail({
     if (!visible) return;
     // v33 Phase 4: 첩보 작전이 없으면 스킵
     if (dataRef.current.length === 0) return;
-    // v33 Phase 4: far LOD에서 매 3프레임마다 1회 업데이트
+    // v33 Phase 4+5: far LOD + AdaptiveQuality 기반 프레임 스킵
     frameCountRef.current++;
-    if (distanceLOD?.distanceTier === 'far' && frameCountRef.current % 3 !== 0) return;
+    const distSkip = distanceLOD?.distanceTier === 'far' ? 3 : 1;
+    const skip = Math.max(qualityRef.current.effectFrameSkip, distSkip);
+    if (skip > 1 && frameCountRef.current % skip !== 0) return;
     const elapsed = clock.getElapsedTime();
     const showIcons = distanceLOD?.showIcons ?? true;
 
