@@ -3,6 +3,8 @@
 package api
 
 import (
+	"crypto/rand"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"log/slog"
@@ -13,6 +15,24 @@ import (
 	"github.com/andrewkim-gif/snake/server/internal/auth"
 	"github.com/go-chi/chi/v5"
 )
+
+// --- Public Registration types ---
+
+// PublicRegisterRequest is the body for POST /api/v1/agents/register (no auth required).
+type PublicRegisterRequest struct {
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+	Nationality string `json:"nationality"`
+	OwnerWallet string `json:"owner_wallet,omitempty"`
+	CallbackURL string `json:"callback_url,omitempty"`
+}
+
+// PublicRegisterResponse is returned after successful public registration.
+type PublicRegisterResponse struct {
+	AgentID   string `json:"agent_id"`
+	APIKey    string `json:"api_key"`
+	CreatedAt string `json:"created_at"`
+}
 
 // --- Request/Response types ---
 
@@ -141,6 +161,17 @@ type GetFactionIDFunc func(userID string) string
 
 // --- AgentRouter ---
 
+// agentRecord stores a registered agent's metadata.
+type agentRecord struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description"`
+	Nationality string `json:"nationality"`
+	OwnerWallet string `json:"owner_wallet,omitempty"`
+	KeyPrefix   string `json:"key_prefix"`
+	CreatedAt   string `json:"created_at"`
+}
+
 // AgentRouter provides the REST API routes for agent management.
 type AgentRouter struct {
 	mu sync.RWMutex
@@ -158,13 +189,21 @@ type AgentRouter struct {
 
 	// In-memory battle log store
 	battleLogs map[string][]BattleLogEntry // agentID → logs
+
+	// In-memory agent registry (public registration)
+	agents map[string]*agentRecord // agentID → record
+
+	// Rate limiter for public registration (5 per minute per IP)
+	registerLimiter *auth.RateLimiter
 }
 
 // NewAgentRouter creates a new AgentRouter.
 func NewAgentRouter() *AgentRouter {
 	return &AgentRouter{
-		strategies: make(map[string]*StrategyRequest),
-		battleLogs: make(map[string][]BattleLogEntry),
+		strategies:      make(map[string]*StrategyRequest),
+		battleLogs:      make(map[string][]BattleLogEntry),
+		agents:          make(map[string]*agentRecord),
+		registerLimiter: auth.NewRateLimiter(5, time.Minute),
 	}
 }
 
@@ -564,6 +603,109 @@ func (ar *AgentRouter) handleOpenAPISpec(w http.ResponseWriter, r *http.Request)
 	}
 
 	writeJSON(w, http.StatusOK, spec)
+}
+
+// PublicRoutes returns a chi.Router with unauthenticated agent endpoints.
+// Mounted at /api/v1/agents (no auth middleware).
+func (ar *AgentRouter) PublicRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.Post("/register", ar.handlePublicRegister)
+	return r
+}
+
+// handlePublicRegister handles POST /api/v1/agents/register
+// No authentication required — generates agent_id + api_key for new agents.
+func (ar *AgentRouter) handlePublicRegister(w http.ResponseWriter, r *http.Request) {
+	// Rate limit by IP
+	ip := r.RemoteAddr
+	if fwd := r.Header.Get("X-Forwarded-For"); fwd != "" {
+		ip = fwd
+	}
+	if !ar.registerLimiter.Allow(ip) {
+		w.Header().Set("Retry-After", "60")
+		writeError(w, http.StatusTooManyRequests, "rate limit exceeded, try again in 60s")
+		return
+	}
+
+	var req PublicRegisterRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	// Validate required fields
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if len(req.Name) > 64 {
+		writeError(w, http.StatusBadRequest, "name must be 64 characters or less")
+		return
+	}
+	if req.Nationality == "" {
+		writeError(w, http.StatusBadRequest, "nationality is required (ISO 3166-1 alpha-3)")
+		return
+	}
+	if len(req.Nationality) != 3 {
+		writeError(w, http.StatusBadRequest, "nationality must be a 3-letter ISO code (e.g. KOR, USA)")
+		return
+	}
+
+	// Check duplicate name
+	ar.mu.RLock()
+	for _, a := range ar.agents {
+		if a.Name == req.Name {
+			ar.mu.RUnlock()
+			writeError(w, http.StatusConflict, fmt.Sprintf("agent name %q already taken", req.Name))
+			return
+		}
+	}
+	ar.mu.RUnlock()
+
+	// Generate API key
+	fullKey, prefix, _, err := auth.GenerateAPIKey()
+	if err != nil {
+		slog.Error("failed to generate API key", "error", err)
+		writeError(w, http.StatusInternalServerError, "failed to generate API key")
+		return
+	}
+
+	// Generate agent ID (aww_ag_ + 16 hex chars)
+	idBytes := make([]byte, 8)
+	if _, err := rand.Read(idBytes); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to generate agent ID")
+		return
+	}
+	agentID := "aww_ag_" + hex.EncodeToString(idBytes)
+
+	now := time.Now().UTC()
+	record := &agentRecord{
+		ID:          agentID,
+		Name:        req.Name,
+		Description: req.Description,
+		Nationality: req.Nationality,
+		OwnerWallet: req.OwnerWallet,
+		KeyPrefix:   prefix,
+		CreatedAt:   now.Format(time.RFC3339),
+	}
+
+	ar.mu.Lock()
+	ar.agents[agentID] = record
+	ar.mu.Unlock()
+
+	slog.Info("agent registered",
+		"agent_id", agentID,
+		"name", req.Name,
+		"nationality", req.Nationality,
+		"key_prefix", prefix,
+		"ip", ip,
+	)
+
+	writeJSON(w, http.StatusCreated, PublicRegisterResponse{
+		AgentID:   agentID,
+		APIKey:    fullKey,
+		CreatedAt: now.Format(time.RFC3339),
+	})
 }
 
 // --- Helpers ---

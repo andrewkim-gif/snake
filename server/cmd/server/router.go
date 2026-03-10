@@ -469,6 +469,15 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	}
 
 	// ==============================================================
+	// Agent Public API (no auth) — Registration endpoint
+	// ==============================================================
+	if d.AgentRouter != nil {
+		r.Route("/api/v1/agents", func(r chi.Router) {
+			r.Mount("/", d.AgentRouter.PublicRoutes())
+		})
+	}
+
+	// ==============================================================
 	// Agent REST API (S24, Phase 5) — DualAuth (JWT or API Key)
 	// ==============================================================
 	if d.AgentRouter != nil {
