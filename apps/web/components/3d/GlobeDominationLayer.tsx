@@ -257,10 +257,13 @@ export function getNationColor(iso3: string): string {
   return `hsl(${hue}, 65%, 50%)`;
 }
 
-// ─── Helper: parse hex to THREE.Color ───
+// ─── Helper: parse hex to r/g/b (GC-free, 모듈 스코프 재사용) ───
 
+const _parseColor = new THREE.Color();
+
+/** hex → {r,g,b} 를 모듈 스코프 _parseColor에 파싱. 반환 객체는 즉시 읽고 버릴 것 (재사용됨). */
 function hexToThreeColor(hex: string): THREE.Color {
-  return new THREE.Color(hex);
+  return _parseColor.set(hex);
 }
 
 // ─── v33 Phase 7: per-country 애니메이션 상태 (CPU 측) ───
@@ -368,15 +371,15 @@ function buildMergedGeometry(
     }
 
     // per-vertex attribute 초기값: 기본 회색 (나중에 상태 업데이트에서 덮어씀)
-    const defaultColor = hexToThreeColor(UNDOMINATED_COLOR);
+    hexToThreeColor(UNDOMINATED_COLOR);
     for (let i = 0; i < count; i++) {
       const vi = offset + i;
-      colorArray[vi * 3] = defaultColor.r;
-      colorArray[vi * 3 + 1] = defaultColor.g;
-      colorArray[vi * 3 + 2] = defaultColor.b;
-      prevColorArray[vi * 3] = defaultColor.r;
-      prevColorArray[vi * 3 + 1] = defaultColor.g;
-      prevColorArray[vi * 3 + 2] = defaultColor.b;
+      colorArray[vi * 3] = _parseColor.r;
+      colorArray[vi * 3 + 1] = _parseColor.g;
+      colorArray[vi * 3 + 2] = _parseColor.b;
+      prevColorArray[vi * 3] = _parseColor.r;
+      prevColorArray[vi * 3 + 1] = _parseColor.g;
+      prevColorArray[vi * 3 + 2] = _parseColor.b;
       paramsArray[vi * 4] = 1.0;     // transition (완료 상태)
       paramsArray[vi * 4 + 1] = 0.0; // glowIntensity
       paramsArray[vi * 4 + 2] = 0.0; // pulseAmplitude
@@ -561,19 +564,23 @@ export function GlobeDominationLayer({
         if (!merged.countryVertexRanges.has(iso3)) return;
 
         const prevAnim = prevAnimStates.get(iso3);
-        const color = state.dominantNation
-          ? hexToThreeColor(state.color || getNationColor(state.dominantNation))
-          : hexToThreeColor(UNDOMINATED_COLOR);
-        const prevColor = state.previousColor
-          ? hexToThreeColor(state.previousColor)
-          : color.clone();
+        // v33 perf: hexToThreeColor는 _parseColor를 재사용하므로 즉시 r/g/b 복사
+        hexToThreeColor(state.dominantNation
+          ? (state.color || getNationColor(state.dominantNation))
+          : UNDOMINATED_COLOR);
+        const cR = _parseColor.r, cG = _parseColor.g, cB = _parseColor.b;
+        if (state.previousColor) {
+          hexToThreeColor(state.previousColor);
+        }
+        // previousColor 없으면 _parseColor는 이미 current color 상태
+        const pR = _parseColor.r, pG = _parseColor.g, pB = _parseColor.b;
 
         const isNewHegemony = state.level === 'hegemony' &&
           state.previousLevel !== 'hegemony';
 
         const anim: CountryAnimState = {
-          colorR: color.r, colorG: color.g, colorB: color.b,
-          prevColorR: prevColor.r, prevColorG: prevColor.g, prevColorB: prevColor.b,
+          colorR: cR, colorG: cG, colorB: cB,
+          prevColorR: pR, prevColorG: pG, prevColorB: pB,
           transition: state.transitionProgress,
           glowIntensity: state.level === 'hegemony' ? HEGEMONY_GLOW_INTENSITY : 0,
           pulseAmplitude: state.level === 'sovereignty'
@@ -621,18 +628,20 @@ export function GlobeDominationLayer({
           updateAnimFromState(existingAnim, state);
         } else {
           // 새 국가 (이론적으로 여기에 오면 rebuild 필요하나 안전 처리)
-          const color = state.dominantNation
-            ? hexToThreeColor(state.color || getNationColor(state.dominantNation))
-            : hexToThreeColor(UNDOMINATED_COLOR);
-          const prevColor = state.previousColor
-            ? hexToThreeColor(state.previousColor)
-            : color.clone();
+          hexToThreeColor(state.dominantNation
+            ? (state.color || getNationColor(state.dominantNation))
+            : UNDOMINATED_COLOR);
+          const cR2 = _parseColor.r, cG2 = _parseColor.g, cB2 = _parseColor.b;
+          if (state.previousColor) {
+            hexToThreeColor(state.previousColor);
+          }
+          const pR2 = _parseColor.r, pG2 = _parseColor.g, pB2 = _parseColor.b;
           const isNewHegemony = state.level === 'hegemony' &&
             state.previousLevel !== 'hegemony';
 
           const anim: CountryAnimState = {
-            colorR: color.r, colorG: color.g, colorB: color.b,
-            prevColorR: prevColor.r, prevColorG: prevColor.g, prevColorB: prevColor.b,
+            colorR: cR2, colorG: cG2, colorB: cB2,
+            prevColorR: pR2, prevColorG: pG2, prevColorB: pB2,
             transition: state.transitionProgress,
             glowIntensity: state.level === 'hegemony' ? HEGEMONY_GLOW_INTENSITY : 0,
             pulseAmplitude: state.level === 'sovereignty'
@@ -782,13 +791,13 @@ function updateAnimFromState(anim: CountryAnimState, newState: CountryDomination
     anim.prevColorG = anim.colorG;
     anim.prevColorB = anim.colorB;
 
-    // new target color
-    const targetColor = newState.dominantNation
-      ? hexToThreeColor(newState.color || getNationColor(newState.dominantNation))
-      : hexToThreeColor(UNDOMINATED_COLOR);
-    anim.colorR = targetColor.r;
-    anim.colorG = targetColor.g;
-    anim.colorB = targetColor.b;
+    // new target color (v33 perf: _parseColor 재사용)
+    hexToThreeColor(newState.dominantNation
+      ? (newState.color || getNationColor(newState.dominantNation))
+      : UNDOMINATED_COLOR);
+    anim.colorR = _parseColor.r;
+    anim.colorG = _parseColor.g;
+    anim.colorB = _parseColor.b;
 
     // transition 리셋
     anim.transition = 0;

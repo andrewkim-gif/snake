@@ -19,6 +19,7 @@ import { useFrame, useThree, useLoader } from '@react-three/fiber';
 import * as THREE from 'three';
 import { latLngToXYZ } from '@/lib/globe-utils';
 import { SURFACE_ALT, RENDER_ORDER, EFFECT_COLORS } from '@/lib/effect-constants';
+import { useSharedTick } from '@/components/lobby/GlobeView';
 
 // ─── Constants ───
 
@@ -175,6 +176,8 @@ export function GlobeConflictIndicators({
     if (mesh) { mesh.count = 0; ringMeshRef.current = mesh; }
   }, []);
   const { camera } = useThree();
+  // v33 perf: SharedTickData에서 cameraDist, cameraDir 참조 (중복 계산 제거)
+  const sharedTickRef = useSharedTick();
 
   // Gemini 생성 아이콘 텍스처
   const iconTexture = useLoader(
@@ -190,8 +193,10 @@ export function GlobeConflictIndicators({
     }
   }, [iconTexture]);
 
-  // per-instance alpha 버퍼 (아이콘 + 링 공유)
+  // per-instance alpha 버퍼 (아이콘용 + 링용 별도)
   const alphaBuf = useMemo(() => new Float32Array(MAX_ICONS).fill(1), []);
+  // v33 perf: 링 전용 alpha 버퍼 (lazy-init 시 Float32Array 복사 제거)
+  const ringAlphaBuf = useMemo(() => new Float32Array(MAX_ICONS).fill(0.6), []);
 
   // Geometry
   const iconGeo = useMemo(() => new THREE.PlaneGeometry(ICON_SIZE, ICON_SIZE), []);
@@ -264,7 +269,8 @@ export function GlobeConflictIndicators({
     iconMat.uniforms.uTime.value = t;
     ringMat.uniforms.uTime.value = t;
 
-    const camDist = camera.position.length();
+    // v33 perf: SharedTickData에서 cameraDist 읽기
+    const camDist = sharedTickRef.current.cameraDist;
 
     if (camDist > CAM_HIDE_DIST || activeConflictCountries.size === 0) {
       iconMesh.count = 0;
@@ -282,11 +288,13 @@ export function GlobeConflictIndicators({
         new THREE.InstancedBufferAttribute(alphaBuf, 1));
     }
     if (!ringMesh.geometry.getAttribute('alphaVal')) {
+      // v33 perf: 전용 ringAlphaBuf 직접 사용 (Float32Array 복사 제거)
       ringMesh.geometry.setAttribute('alphaVal',
-        new THREE.InstancedBufferAttribute(new Float32Array(alphaBuf), 1));
+        new THREE.InstancedBufferAttribute(ringAlphaBuf, 1));
     }
 
-    _camDir.copy(camera.position).normalize();
+    // v33 perf: SharedTickData에서 cameraDir 읽기 (normalize() 제거)
+    const _camDir = sharedTickRef.current.cameraDir;
 
     let idx = 0;
 
@@ -352,9 +360,9 @@ export function GlobeConflictIndicators({
     }
     const ringAlpha = ringMesh.geometry.getAttribute('alphaVal') as THREE.InstancedBufferAttribute;
     if (ringAlpha) {
-      // 링은 alpha를 공유하되 alpha 값 복사
+      // v33 perf: ringAlphaBuf에 직접 기록 (backing buffer 동일 → array cast 불필요)
       for (let i = 0; i < idx; i++) {
-        (ringAlpha.array as Float32Array)[i] = alphaBuf[i] * 0.6; // 링은 좀 더 투명
+        ringAlphaBuf[i] = alphaBuf[i] * 0.6;
       }
       ringAlpha.needsUpdate = true;
     }

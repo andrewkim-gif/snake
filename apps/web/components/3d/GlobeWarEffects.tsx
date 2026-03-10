@@ -585,7 +585,7 @@ function Explosion3D({
   useEffect(() => {
     if (fireballRef.current) {
       for (let i = 0; i < EXPLOSION_FIREBALL_COUNT; i++) {
-        fireballRef.current.setColorAt(i, new THREE.Color(0xffcc00));
+        fireballRef.current.setColorAt(i, _tempColor.set(0xffcc00));
       }
       if (fireballRef.current.instanceColor) {
         fireballRef.current.instanceColor.needsUpdate = true;
@@ -769,7 +769,7 @@ function VictoryFireworks3D({
   useEffect(() => {
     if (explosionMeshRef.current) {
       for (let i = 0; i < totalExplosionParticles; i++) {
-        explosionMeshRef.current.setColorAt(i, new THREE.Color(0xffd700));
+        explosionMeshRef.current.setColorAt(i, _fwColor.set(0xffd700));
       }
       if (explosionMeshRef.current.instanceColor) {
         explosionMeshRef.current.instanceColor.needsUpdate = true;
@@ -1253,25 +1253,33 @@ export function GlobeWarEffects({
 }: GlobeWarEffectsProps) {
   const prevWarIdsRef = useRef<Set<string>>(new Set());
 
-  // Get 3D positions for countries
+  // v33 perf: 국가 3D 위치 캐시 (latLngToVector3 호출 + Vector3 할당 최소화)
+  const positionCache = useMemo(() => {
+    const cache = new Map<string, THREE.Vector3>();
+    countryCentroids.forEach((centroid, iso3) => {
+      cache.set(iso3, latLngToVector3(centroid[0], centroid[1], globeRadius * 1.01));
+    });
+    return cache;
+  }, [countryCentroids, globeRadius]);
+
+  // Get 3D positions for countries (캐시 조회, 할당 없음)
   const getCountryPosition = useCallback(
     (iso3: string): THREE.Vector3 | null => {
-      const centroid = countryCentroids.get(iso3);
-      if (!centroid) return null;
-      return latLngToVector3(centroid[0], centroid[1], globeRadius * 1.01);
+      return positionCache.get(iso3) ?? null;
     },
-    [countryCentroids, globeRadius],
+    [positionCache],
   );
 
   // Get midpoint between two countries (for border effects)
   const getBorderCenter = useCallback(
     (a: string, b: string): THREE.Vector3 | null => {
-      const posA = getCountryPosition(a);
-      const posB = getCountryPosition(b);
+      const posA = positionCache.get(a);
+      const posB = positionCache.get(b);
       if (!posA || !posB) return null;
+      // v33 perf: 결과를 clone()으로 반환 (warEffects useMemo에 저장되므로 고유 객체 필요)
       return new THREE.Vector3().addVectors(posA, posB).multiplyScalar(0.5).normalize().multiplyScalar(globeRadius * 1.01);
     },
-    [getCountryPosition, globeRadius],
+    [positionCache, globeRadius],
   );
 
   // v24: Camera auto-rotation to new war zones (shake는 CameraController가 처리)

@@ -26,6 +26,7 @@ import { getArchetypeHeight } from '@/lib/landmark-geometries';
 import type { FlagAtlasResult } from '@/lib/flag-atlas';
 import type { CountryClientState } from '@/lib/globe-data';
 import type { CountryDominationState } from '@/components/3d/GlobeDominationLayer';
+import { useSharedTick } from '@/components/lobby/GlobeView';
 
 // ─── Constants ───
 
@@ -151,6 +152,8 @@ export function GlobeCountryLabels({
     if (mesh) { mesh.count = 0; meshRef.current = mesh; }
   }, []);
   const { camera } = useThree();
+  // v33 perf: SharedTickData에서 cameraDist, cameraDir 참조 (중복 length()/normalize() 제거)
+  const sharedTickRef = useSharedTick();
   const prevLodRef = useRef(0);
 
   // 라벨 엔트리 빌드 (centroid가 변경될 때만)
@@ -381,7 +384,8 @@ export function GlobeCountryLabels({
     const mesh = meshRef.current;
     if (!mesh || entries.length === 0) return;
 
-    const camDist = camera.position.length();
+    // v33 perf: SharedTickData에서 cameraDist 읽기 (Math.sqrt 제거)
+    const camDist = sharedTickRef.current.cameraDist;
 
     // 카메라 거리 초과 시 전부 숨김
     if (camDist > CAM_HIDE_DIST) {
@@ -415,7 +419,8 @@ export function GlobeCountryLabels({
         new THREE.InstancedBufferAttribute(alphaBuf, 1));
     }
 
-    _camDir.copy(camera.position).normalize();
+    // v33 perf: SharedTickData에서 cameraDir 읽기 (normalize() 제거)
+    const _camDir = sharedTickRef.current.cameraDir;
     const prevKeys = prevKeysRef.current;
 
     let needsTextureUpdate = false;

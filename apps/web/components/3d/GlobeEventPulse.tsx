@@ -208,10 +208,14 @@ export function GlobeEventPulse({
       }
     }
 
-    // 2. 만료된 활성 펄스 제거
-    activePulsesRef.current = activePulsesRef.current.filter(pulse => {
-      return (now - pulse.startTime) < PULSE_DURATION;
-    });
+    // 2. 만료된 활성 펄스 제거 (v33 perf: in-place swap-and-pop, 배열 할당 제거)
+    const pulses = activePulsesRef.current;
+    for (let i = pulses.length - 1; i >= 0; i--) {
+      if ((now - pulses[i].startTime) >= PULSE_DURATION) {
+        pulses[i] = pulses[pulses.length - 1];
+        pulses.pop();
+      }
+    }
 
     // 3. 빈 슬롯에 대기열에서 꺼내서 활성화
     let cameraFocusTriggered = false;
@@ -291,10 +295,15 @@ export function GlobeEventPulse({
       }
     }
 
-    // 5. 처리된 이벤트 ID 캐시 정리 (최대 200개 유지)
+    // 5. 처리된 이벤트 ID 캐시 정리 (v33 perf: 점진적 삭제, 배열 할당 제거)
     if (processedRef.current.size > 200) {
-      const ids = Array.from(processedRef.current);
-      processedRef.current = new Set(ids.slice(-100));
+      let count = 0;
+      const target = processedRef.current.size - 100;
+      for (const id of processedRef.current) {
+        if (count >= target) break;
+        processedRef.current.delete(id);
+        count++;
+      }
     }
   });
 
