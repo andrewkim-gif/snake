@@ -174,3 +174,28 @@ export {
   triggerFallbackChat,
   type ChatMessage,
 } from './agent-chat';
+
+// Sound Manager (v37 Phase 9)
+export {
+  SoundManager,
+  type SoundCategory,
+  type SoundAsset,
+  type SoundManagerConfig,
+} from './sound';
+
+// Mobile UX (v37 Phase 9)
+export {
+  isTouchDevice,
+  isMobileDevice,
+  isTabletDevice,
+  resetTouchCache,
+  TOUCH_TARGETS,
+  LEVELUP_MOBILE,
+  SHOP_MOBILE,
+  getJoystickZone,
+  detectSwipe,
+  getTouchFriendlyStyle,
+  getHUDScaleFactor,
+  type SwipeDirection,
+  type JoystickZone,
+} from './mobile-ux';

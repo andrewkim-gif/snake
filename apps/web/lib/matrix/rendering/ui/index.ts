@@ -146,3 +146,30 @@ export {
   getActiveCoinParticleCount,
 } from './coinParticleCanvas';
 export type { KillType } from './coinParticleCanvas';
+
+// ===== v37 Phase 9: 진화 컷씬 =====
+export {
+  triggerEvolutionCutscene,
+  isEvolutionCutsceneActive,
+  updateAndDrawEvolutionCutscene,
+  clearEvolutionCutscene,
+} from './evolutionCutscene';
+
+// ===== v37 Phase 9: 궁극 컷씬 =====
+export {
+  triggerUltimateCutscene,
+  isUltimateCutsceneActive,
+  updateAndDrawUltimateCutscene,
+  clearUltimateCutscene,
+} from './ultimateCutscene';
+
+// ===== v37 Phase 9: 성능 최적화 =====
+export {
+  ObjectPool,
+  OffscreenBufferCache,
+  AdaptiveQuality,
+  isInViewport,
+  shouldSimplify,
+  type QualityLevel,
+  type QualitySettings,
+} from './performanceOptimizer';
