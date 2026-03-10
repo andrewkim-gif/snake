@@ -1,1 +1,14 @@
-{"pipeline":"da:work","execution_mode":"plan","pipeline_mode":"turbo","plan_file":"docs/designs/v33-online-matrix-plan.md","project_type":"GAME","current_stage":3,"current_phase":5,"total_phases":8,"phases":[{"name":"Phase 1: 서버 OnlineMatrixEngine 코어","design_needed":false,"status":"done"},{"name":"Phase 2: WebSocket 프로토콜 확장","design_needed":false,"status":"done"},{"name":"Phase 3: 클라이언트 온라인 연결 레이어","design_needed":false,"status":"done"},{"name":"Phase 4: 멀티플레이어 렌더링","design_needed":true,"status":"done"},{"name":"Phase 5: 에폭 HUD + 스코어보드","design_needed":true,"status":"pending","tasks":["EpochHUD 리디자인","국가 스코어보드","캡처 포인트 UI","에폭 결과 화면","토큰 버프 표시"]},{"name":"Phase 6: 토큰 경제 연동","design_needed":false,"status":"pending","tasks":["보상 지급 플로우","토큰 버프 조회 API","토큰 보유량 캐시","보상 히스토리 UI","일일 상한 적용"]},{"name":"Phase 7: 에이전트 SDK 통합","design_needed":false,"status":"pending","tasks":["MatrixGameClient 신규 구현","MatrixStrategy 인터페이스","matrix_agent_state 이벤트","LLM 국가 배치 전략","에이전트 배치 비용","서버 에이전트 핸들러"]},{"name":"Phase 8: 통합 테스트 + 성능 최적화","design_needed":false,"status":"pending","tasks":["멀티플레이어 통합 테스트","서버 부하 테스트","Delta compression","클라이언트 성능 최적화","안티치트 통합 테스트","빌드 최종 검증"]}],"iterations":{"arch":0,"dev":0,"e2e":0},"last_skill":"turbo_phase4_done","last_update":"2026-03-11T01:00:00Z"}
+{
+  "pipeline": "da:work",
+  "execution_mode": "plan",
+  "pipeline_mode": "turbo",
+  "plan_file": "docs/designs/v37-ingame-overhaul-plan.md",
+  "project_type": "GAME",
+  "current_stage": 3,
+  "current_phase": 1,
+  "total_phases": 10,
+  "phases_status": {"1":"done","2":"pending","3":"pending","4":"pending","5":"pending","6":"pending","7":"pending","8":"pending","9":"pending","10":"pending"},
+  "iterations": {"arch":0,"dev":0,"e2e":0},
+  "last_skill": "da:game_phase1_done",
+  "last_update": "2026-03-10T00:01:00Z"
+}

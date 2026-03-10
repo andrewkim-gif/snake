@@ -143,16 +143,16 @@ export const CHARACTER_START_WEAPON: Record<PlayerClass, WeaponType> = {
 export const PASSIVE_SKILLS: PassiveSkillDef[] = [
   {
     id: 'focus',
-    name: '결사 항전',
-    description: '크리티컬 확률 증가',
+    name: '정밀 조준',
+    description: '치명타 확률 증가',
     maxLevel: 10,
     effectPerLevel: 5,
     isPercent: true,
   },
   {
     id: 'overclock',
-    name: '진군 나팔',
-    description: '이동속도 증가',
+    name: '강행군',
+    description: '이동 속도 증가',
     maxLevel: 10,
     effectPerLevel: 10,
     isPercent: true,
@@ -160,7 +160,7 @@ export const PASSIVE_SKILLS: PassiveSkillDef[] = [
   {
     id: 'gold_reward',
     name: '전리품',
-    description: '획득 골드 증가',
+    description: '골드 획득량 증가',
     maxLevel: 10,
     effectPerLevel: 20,
     isPercent: true,
@@ -173,7 +173,7 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   {
     skill: 'neural_net',
     name: '첩보망',
-    description: '정보 네트워크 공격',
+    description: '적 위치 탐지 + 크리티컬 강화',
     requirements: [
       { category: 'DATA', minTier: 3 },
       { category: 'SYSTEM', minTier: 2 },
@@ -182,7 +182,7 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   {
     skill: 'chatgpt',
     name: '프로파간다',
-    description: '선전 방송 공격',
+    description: '적 AI 혼란 유발',
     requirements: [
       { category: 'NETWORK', minTier: 3 },
       { category: 'DATA', minTier: 2 },
@@ -190,8 +190,8 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   },
   {
     skill: 'deepfake',
-    name: '도플갱어 작전',
-    description: '분신 생성',
+    name: '이중 첩자',
+    description: '적 1체를 아군으로 전환',
     requirements: [
       { category: 'CODE', minTier: 3 },
       { category: 'DATA', minTier: 3 },
@@ -199,8 +199,8 @@ export const SYNERGY_CONDITIONS: SynergyCondition[] = [
   },
   {
     skill: 'singularity_core',
-    name: '블랙사이트',
-    description: '궁극의 정보 병기',
+    name: '세계 정복',
+    description: '전 스텟 강화 + 무적',
     requirements: [
       { category: 'CODE', minTier: 4 },
       { category: 'DATA', minTier: 4 },

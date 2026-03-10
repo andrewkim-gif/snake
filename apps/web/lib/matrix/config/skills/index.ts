@@ -77,6 +77,15 @@ export {
 
 export type { SkillBuild } from './presets';
 
+// Category display config (v37 centralized display names/colors)
+export {
+  CATEGORY_DISPLAY_NAMES,
+  CATEGORY_DISPLAY_NAMES_KO,
+  CATEGORY_DISPLAY_COLORS,
+  getCategoryDisplayName,
+  getCategoryDisplayColor,
+} from './category-display.config';
+
 // Progressive tree exports
 export {
   PROGRESSIVE_TREE,

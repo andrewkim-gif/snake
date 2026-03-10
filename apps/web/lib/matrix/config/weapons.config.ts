@@ -89,7 +89,7 @@ const generateTieredProgression = (
     area: Math.floor(current.area * 1.3),
     amount: current.amount + 5,
     isUltimate: true,
-    evolvedName: `최강 ${ultimateName}`
+    evolvedName: `궁극 ${ultimateName}`
   };
   levels.push(ultimateStats);
 
@@ -174,7 +174,7 @@ const generateFocusProgression = (): WeaponStats[] => {
     level: 11,
     amount: 250,
     isEvolved: true,
-    evolvedName: "극한 집중"
+    evolvedName: "정밀 사격"
   });
 
   // Lv 12-19: 후반 성장 (25% → 33%)
@@ -185,7 +185,7 @@ const generateFocusProgression = (): WeaponStats[] => {
       level: i,
       amount,
       isEvolved: true,
-      evolvedName: "극한 집중"
+      evolvedName: "정밀 사격"
     });
   }
 
@@ -195,7 +195,7 @@ const generateFocusProgression = (): WeaponStats[] => {
     level: 20,
     amount: 350,
     isUltimate: true,
-    evolvedName: "최강 극한 집중"
+    evolvedName: "초정밀 사격"
   });
 
   return levels;
@@ -220,7 +220,7 @@ const generateOverclockProgression = (): WeaponStats[] => {
     level: 11,
     amount: 560,
     isEvolved: true,
-    evolvedName: "터보 오버클럭"
+    evolvedName: "돌격 행군"
   });
 
   // Lv 12-19: 후반 성장 (56% → 84%)
@@ -231,7 +231,7 @@ const generateOverclockProgression = (): WeaponStats[] => {
       level: i,
       amount,
       isEvolved: true,
-      evolvedName: "터보 오버클럭"
+      evolvedName: "돌격 행군"
     });
   }
 
@@ -241,7 +241,7 @@ const generateOverclockProgression = (): WeaponStats[] => {
     level: 20,
     amount: 900,
     isUltimate: true,
-    evolvedName: "극한 오버클럭"
+    evolvedName: "전격 돌파"
   });
 
   return levels;
@@ -297,10 +297,10 @@ const generateLaserProgression = (): WeaponStats[] => {
     upgrade.duration = Math.min(3.0, current.duration + 0.05);
     upgrade.cooldown = Math.max(baseCooldown * 0.35, current.cooldown * 0.97);
     current = upgrade;
-    levels.push({ ...current, isEvolved: true, evolvedName: "사이버 톱날" });
+    levels.push({ ...current, isEvolved: true, evolvedName: "사이버 톱날" }); // evolvedName은 stats 레벨 내부 - 기존 유지 (이펙트 참조용)
   }
 
-  // Lv 20: 궁극 - "최강 사이버 톱날" (이중 회전)
+  // Lv 20: 궁극 - "오비탈 쏘" (이중 회전)
   const ultimateStats: WeaponStats = {
     ...current,
     level: 20,
@@ -310,7 +310,7 @@ const generateLaserProgression = (): WeaponStats[] => {
     duration: 3.0,
     cooldown: Math.max(baseCooldown * 0.3, current.cooldown * 0.9),
     isUltimate: true,
-    evolvedName: "최강 사이버 톱날"
+    evolvedName: "오비탈 쏘"
   };
   levels.push(ultimateStats);
 
@@ -323,166 +323,166 @@ export const WEAPON_DATA: Partial<Record<WeaponType, {
   stats: WeaponStats[];
   color: string;
 }>> = {
-  // === 근접 무기 (Melee) ===
+  // === STEEL (강철) — 근접/직접 데미지 ===
   whip: {
-    name: "손코딩",
-    desc: "키보드 없이 허공에 코드를 쓰며 공격합니다.",
-    color: "#00FF41",
-    stats: generateTieredProgression(BASE_WHIP, { damage: 250, area: 300, cooldown: 0.6 }, "마스터 코딩") // v5.9.2: area 150→300 (2배)
+    name: "전투 채찍",
+    desc: "강철 체인으로 적을 후려칩니다.",
+    color: "#EF4444",
+    stats: generateTieredProgression(BASE_WHIP, { damage: 250, area: 300, cooldown: 0.6 }, "전자기 채찍") // v5.9.2: area 150→300 (2배)
   },
   punch: {
-    name: "키보드 펀치",
-    desc: "기계식 키보드로 강력한 펀치를 날립니다.",
-    color: "#ef4444",
-    stats: generateTieredProgression(BASE_PUNCH, { damage: 600, area: 50, knockback: 120 }, "청축 스매시")
+    name: "강철 주먹",
+    desc: "충격파를 동반한 강타를 날립니다.",
+    color: "#EF4444",
+    stats: generateTieredProgression(BASE_PUNCH, { damage: 600, area: 50, knockback: 120 }, "파워 스매시")
   },
-  // === 투사체 무기 (Projectile) ===
+  // === TERRITORY (영토) — 원거리/투사체 ===
   wand: {
-    name: "API 호출",
-    desc: "REST API 요청을 발사합니다.",
-    color: "#3b82f6",
-    stats: generateTieredProgression(BASE_WAND, { damage: 60, cooldown: 0.1 }, "GraphQL 쿼리")
+    name: "에너지 볼트",
+    desc: "유도 에너지탄을 발사합니다.",
+    color: "#3B82F6",
+    stats: generateTieredProgression(BASE_WAND, { damage: 60, cooldown: 0.1 }, "플라즈마 볼트")
   },
   knife: {
-    name: "Git Push",
-    desc: "날카로운 커밋 메시지를 투척합니다.",
-    color: "#facc15",
-    stats: generateTieredProgression(BASE_KNIFE, { damage: 100, pierce: 999 }, "Force Push")
+    name: "전투 단검",
+    desc: "날카로운 투척 단검을 발사합니다.",
+    color: "#3B82F6",
+    stats: generateTieredProgression(BASE_KNIFE, { damage: 100, pierce: 999 }, "진동 단검")
   },
   axe: {
-    name: "서버 던지기",
-    desc: "무거운 서버 랙을 투척합니다.",
-    color: "#ef4444",
-    stats: generateTieredProgression(BASE_AXE, { damage: 400, area: 100, cooldown: 1.2 }, "데이터센터 투척")
+    name: "전술 토마호크",
+    desc: "부메랑 궤도의 전투 도끼를 투척합니다.",
+    color: "#3B82F6",
+    stats: generateTieredProgression(BASE_AXE, { damage: 400, area: 100, cooldown: 1.2 }, "유도 토마호크")
   },
   bow: {
-    name: "GraphQL 쿼리",
-    desc: "정밀한 쿼리로 적을 관통합니다.",
-    color: "#84cc16",
-    stats: generateTieredProgression(BASE_BOW, { damage: 300, pierce: 10 }, "N+1 쿼리 폭격")
+    name: "레일건",
+    desc: "관통형 초고속 탄환을 발사합니다.",
+    color: "#3B82F6",
+    stats: generateTieredProgression(BASE_BOW, { damage: 300, pierce: 10 }, "전자기 레일건")
   },
 
-  // === 회전/궤도 무기 (Orbital) ===
+  // === SOVEREIGNTY (주권) — 방어/생존 ===
   bible: {
-    name: "문서화",
-    desc: "두꺼운 기술 문서가 주변을 회전합니다.",
-    color: "#0ea5e9",
-    stats: generateTieredProgression(BASE_BIBLE, { damage: 150, speed: 15, duration: 9999 }, "컨플루언스 오비탈")
+    name: "가디언 위성",
+    desc: "궤도를 도는 방어 유닛이 적을 타격합니다.",
+    color: "#22C55E",
+    stats: generateTieredProgression(BASE_BIBLE, { damage: 150, speed: 15, duration: 9999 }, "전투 위성")
   },
   garlic: {
-    name: "디버그 오라",
-    desc: "버그 탐지 필드로 주변 적에게 지속 피해를 줍니다.",
-    color: "#10b981",
-    stats: generateTieredProgression(BASE_GARLIC, { damage: 80, area: 150 }, "프로파일러 필드")
+    name: "방어 필드",
+    desc: "주변 적에게 지속 피해를 주는 에너지 필드를 전개합니다.",
+    color: "#22C55E",
+    stats: generateTieredProgression(BASE_GARLIC, { damage: 80, area: 150 }, "강화 필드")
   },
 
-  // === 지역 무기 (Area) ===
+  // === SOVEREIGNTY (주권) — 지역 효과 ===
   pool: {
-    name: "방화벽",
-    desc: "바닥에 방화벽 존을 설치하여 적에게 피해를 줍니다.",
-    color: "#06b6d4",
-    stats: generateTieredProgression(BASE_POOL, { damage: 150, area: 130, duration: 8 }, "엔터프라이즈 방화벽") // v7.11: area 100→130
+    name: "지뢰밭",
+    desc: "바닥에 피해 구역을 설치합니다.",
+    color: "#22C55E",
+    stats: generateTieredProgression(BASE_POOL, { damage: 150, area: 130, duration: 8 }, "네이팜 지역") // v7.11: area 100→130
   },
   genesis: {
-    name: "시스템 크래시",
-    desc: "거대한 블루스크린 폭발을 일으킵니다.",
-    color: "#0066FF",
-    stats: generateTieredProgression(BASE_GENESIS, { damage: 1000, area: 125, cooldown: 5.0 }, "커널 패닉")
+    name: "전술 핵",
+    desc: "대폭발 광역 피해를 일으킵니다.",
+    color: "#06B6D4",
+    stats: generateTieredProgression(BASE_GENESIS, { damage: 1000, area: 125, cooldown: 5.0 }, "열핵탄")
   },
 
-  // === 빔/레이저 무기 (Beam) ===
+  // === MORALE (사기) — 빔/특수 ===
   beam: {
-    name: "매트릭스 비전",
-    desc: "코드를 꿰뚫어 보는 눈. 적의 약점을 관통하는 녹색 레이저.",
-    color: "#00FF41",
-    stats: generateTieredProgression(BASE_BEAM, { damage: 350, area: 40 }, "트루 비전")
+    name: "레이저 캐논",
+    desc: "직선 관통 레이저를 발사합니다.",
+    color: "#06B6D4",
+    stats: generateTieredProgression(BASE_BEAM, { damage: 350, area: 40 }, "입자 빔")
   },
   laser: {
-    name: "재귀 루프",
-    desc: "무한 루프로 주변을 회전하며 적을 베어냅니다.",
-    color: "#f43f5e",
+    name: "회전 레이저",
+    desc: "360도 회전하며 적을 베어냅니다.",
+    color: "#06B6D4",
     stats: generateLaserProgression()
   },
 
-  // === 특수 무기 (Special) ===
+  // === ALLIANCE (동맹) — 체인/광역 ===
   lightning: {
-    name: "Claude 어시스트",
-    desc: "AI 어시스트 낙뢰가 랜덤 적에게 연쇄 공격합니다.",
-    color: "#D97706",
-    stats: generateTieredProgression(BASE_LIGHTNING, { damage: 600, cooldown: 1.5 }, "Opus 어시스트")
+    name: "전술 번개",
+    desc: "적 사이를 연쇄하는 전기 공격을 가합니다.",
+    color: "#8B5CF6",
+    stats: generateTieredProgression(BASE_LIGHTNING, { damage: 600, cooldown: 1.5 }, "이온 체인")
   },
   phishing: {
-    name: "MCP 서버",
-    desc: "Model Context Protocol로 화면의 모든 적을 제거합니다.",
-    color: "#be123c",
-    stats: generateTieredProgression(BASE_PHISHING, { cooldown: 30 }, "MCP 클러스터")
+    name: "궤도 폭격",
+    desc: "화면 전체를 소탕하는 궤도 타격을 요청합니다.",
+    color: "#06B6D4",
+    stats: generateTieredProgression(BASE_PHISHING, { cooldown: 30 }, "이온 캐논")
   },
   stablecoin: {
-    name: "타입 세이프티",
-    desc: "TypeScript 타입 보호막으로 피해를 막습니다.",
-    color: "#3178C6",
-    stats: generateTieredProgression(BASE_STABLECOIN, { amount: 8, cooldown: 12 }, "Strict Mode")
+    name: "에너지 실드",
+    desc: "데미지를 흡수하는 보호막을 전개합니다.",
+    color: "#22C55E",
+    stats: generateTieredProgression(BASE_STABLECOIN, { amount: 8, cooldown: 12 }, "강화 실드")
   },
   bridge: {
-    name: "Async/Await",
-    desc: "비동기 대기로 적을 일시 정지시킵니다.",
-    color: "#6366f1",
-    stats: generateTieredProgression(BASE_BRIDGE, { area: 100, cooldown: 1.0 }, "Promise.all")
+    name: "냉각 폭탄",
+    desc: "적을 동결시키는 광역 공격을 가합니다.",
+    color: "#8B5CF6",
+    stats: generateTieredProgression(BASE_BRIDGE, { area: 100, cooldown: 1.0 }, "극저온 폭탄")
   },
   ping: {
-    name: "Ping 패킷",
-    desc: "적들 사이를 튕기며 연쇄 공격합니다.",
-    color: "#0ea5e9",
-    stats: generateTieredProgression(BASE_PING, { damage: 200, pierce: 8, amount: 3 }, "DDoS 패킷")
+    name: "소나 펄스",
+    desc: "벽을 튕기며 연쇄 타격하는 음파를 발사합니다.",
+    color: "#8B5CF6",
+    stats: generateTieredProgression(BASE_PING, { damage: 200, pierce: 8, amount: 3 }, "초음파 소나")
   },
   shard: {
-    name: "코드 조각",
-    desc: "적 히트 시 3방향으로 분열합니다.",
-    color: "#8b5cf6",
-    stats: generateTieredProgression(BASE_SHARD, { damage: 180, pierce: 5, amount: 4 }, "스니펫 폭발")
+    name: "클러스터탄",
+    desc: "착탄 시 3방향으로 분열하는 탄두를 발사합니다.",
+    color: "#3B82F6",
+    stats: generateTieredProgression(BASE_SHARD, { damage: 180, pierce: 5, amount: 4 }, "확산 클러스터")
   },
   airdrop: {
-    name: "NPM Install",
-    desc: "하늘에서 패키지들이 쏟아집니다.",
-    color: "#CB3837",
-    stats: generateTieredProgression(BASE_AIRDROP, { damage: 400, area: 40, amount: 8 }, "node_modules 폭격")
+    name: "공습",
+    desc: "하늘에서 폭격이 쏟아집니다.",
+    color: "#06B6D4",
+    stats: generateTieredProgression(BASE_AIRDROP, { damage: 400, area: 40, amount: 8 }, "융단 폭격")
   },
   fork: {
-    name: "Git Fork",
-    desc: "직진 후 2갈래로 분기합니다.",
-    color: "#06b6d4",
-    stats: generateTieredProgression(BASE_FORK, { damage: 200, pierce: 6, amount: 3 }, "Merge Conflict")
+    name: "분열탄",
+    desc: "전진 후 2갈래로 분기하는 탄환을 발사합니다.",
+    color: "#8B5CF6",
+    stats: generateTieredProgression(BASE_FORK, { damage: 200, pierce: 6, amount: 3 }, "다탄두 분열")
   },
 
-  // === 패시브/유틸리티 (Passive) ===
+  // === INTELLIGENCE (정보) — 패시브/유틸리티 ===
   aggregator: {
-    name: "Auto Import",
-    desc: "경험치 자동 수집 범위를 증가시킵니다.",
-    color: "#ec4899",
-    stats: generateTieredProgression(BASE_AGGREGATOR, { area: 400 }, "VSCode 자동완성")
+    name: "보급 체계",
+    desc: "아이템 수집 반경이 증가합니다.",
+    color: "#F59E0B",
+    stats: generateTieredProgression(BASE_AGGREGATOR, { area: 400 }, "전선 보급망")
   },
   oracle: {
-    name: "코드 리뷰",
-    desc: "행운 수치를 높여 희귀 아이템 확률을 높입니다.",
-    color: "#f59e0b",
-    stats: generateTieredProgression(BASE_ORACLE, { amount: 500 }, "시니어 리뷰")
+    name: "정보 분석",
+    desc: "레어 드롭 확률이 증가합니다.",
+    color: "#F59E0B",
+    stats: generateTieredProgression(BASE_ORACLE, { amount: 500 }, "전술 정보국")
   },
   focus: {
-    name: "딥워크",
-    desc: "집중력을 높여 크리티컬 확률이 증가합니다.",
-    color: "#f472b6",
+    name: "정밀 조준",
+    desc: "치명타 확률이 증가합니다.",
+    color: "#F59E0B",
     stats: generateFocusProgression()
   },
   overclock: {
-    name: "오버클럭",
-    desc: "CPU 클럭을 올려 이동속도가 증가합니다.",
-    color: "#f97316",
+    name: "강행군",
+    desc: "이동 속도가 증가합니다.",
+    color: "#F59E0B",
     stats: generateOverclockProgression()
   },
   gold_reward: {
-    name: "긴급 보상",
-    desc: "즉시 보상 획득",
-    color: "#facc15",
+    name: "전리품",
+    desc: "골드 획득량이 증가합니다.",
+    color: "#F59E0B",
     stats: []
   }
 };
@@ -495,26 +495,26 @@ export const WEAPON_DATA: Partial<Record<WeaponType, {
 
 // Agent용: 원거리 투사체 무기
 export const RANGED_WEAPONS: WeaponType[] = [
-  'bow',        // GraphQL 쿼리 - 직선, 관통
-  'wand',       // API 호출 - 유도
-  'knife',      // Git Push - 회전, 복귀
-  'axe',        // 서버 던지기 - 부메랑
-  'ping',       // Ping 패킷 - 바운스
-  'shard',      // 코드 조각 - 분열
-  'fork',       // Git Fork - 분기
-  'airdrop',    // NPM Install - 공중 투하
-  'beam',       // 스택 트레이스 - 빔
+  'bow',        // 레일건 - 직선, 관통
+  'wand',       // 에너지 볼트 - 유도
+  'knife',      // 전투 단검 - 회전, 복귀
+  'axe',        // 전술 토마호크 - 부메랑
+  'ping',       // 소나 펄스 - 바운스
+  'shard',      // 클러스터탄 - 분열
+  'fork',       // 분열탄 - 분기
+  'airdrop',    // 공습 - 공중 투하
+  'beam',       // 레이저 캐논 - 빔
 ];
 
 // Skill용: 근접/범위 무기
 export const MELEE_WEAPONS: WeaponType[] = [
-  'garlic',     // 디버그 오라 - 주변 AOE
-  'whip',       // 손코딩 - 넓은 호
-  'punch',      // 키보드 펀치 - 넉백
-  'bible',      // 문서화 - 회전 오비탈
-  'pool',       // 방화벽 - 지역 설치
-  'laser',      // 재귀 루프 - 회전 빔
-  'lightning',  // Claude 어시스트 - 연쇄 번개
+  'garlic',     // 방어 필드 - 주변 AOE
+  'whip',       // 전투 채찍 - 넓은 호
+  'punch',      // 강철 주먹 - 넉백
+  'bible',      // 가디언 위성 - 회전 오비탈
+  'pool',       // 지뢰밭 - 지역 설치
+  'laser',      // 회전 레이저 - 회전 빔
+  'lightning',  // 전술 번개 - 연쇄 번개
 ];
 
 // 무기가 원거리인지 확인

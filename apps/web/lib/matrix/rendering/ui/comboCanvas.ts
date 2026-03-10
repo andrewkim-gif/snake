@@ -52,8 +52,11 @@ export function drawComboAboveCharacter(
   // 숫자 포맷팅
   const displayNumber = formatComboNumber(combo.count);
 
+  // 50% 축소 적용
+  ctx.scale(0.5, 0.5);
+
   // 폰트 설정
-  ctx.font = 'bold 36px "Teko", "Arial Black", sans-serif';
+  ctx.font = 'bold 36px "Chakra Petch", -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
@@ -74,7 +77,7 @@ export function drawComboAboveCharacter(
   ctx.fillText(displayNumber, 0, 0);
 
   // COMBO 라벨
-  ctx.font = 'bold 14px "Apex Mk2", "Arial", sans-serif';
+  ctx.font = 'bold 14px "Chakra Petch", -apple-system, BlinkMacSystemFont, sans-serif';
   ctx.letterSpacing = '0.3em';
   ctx.shadowBlur = 0;
 
@@ -91,7 +94,7 @@ export function drawComboAboveCharacter(
   // 티어 배지 (티어가 있을 때만)
   if (tierConfig) {
     ctx.globalAlpha = 1;
-    ctx.font = 'bold 10px "Apex Mk2", "Arial", sans-serif';
+    ctx.font = 'bold 10px "Chakra Petch", -apple-system, BlinkMacSystemFont, sans-serif';
 
     // i18n 번역 사용, 없으면 config의 name 폴백
     const badgeText: string = (t?.combo?.[combo.tier] as string) || tierConfig.name;
