@@ -134,6 +134,27 @@ const MatrixScene = dynamic(
 // 렌더 모드 타입 (2D Classic / 3D Enhanced)
 type RenderMode = '2d' | '3d';
 
+// v38 Phase 8: WebGL 지원 감지 (캐싱)
+let _webglSupported: boolean | null = null;
+function isWebGLSupported(): boolean {
+  if (_webglSupported !== null) return _webglSupported;
+  if (typeof window === 'undefined' || typeof document === 'undefined') {
+    _webglSupported = false;
+    return false;
+  }
+  try {
+    const canvas = document.createElement('canvas');
+    _webglSupported = !!(
+      canvas.getContext('webgl2') ||
+      canvas.getContext('webgl') ||
+      canvas.getContext('experimental-webgl')
+    );
+  } catch {
+    _webglSupported = false;
+  }
+  return _webglSupported;
+}
+
 // ============================================
 // Props
 // ============================================
@@ -199,13 +220,17 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const [isPaused, setIsPaused] = useState(false);
   const [entityCounts, setEntityCounts] = useState({ enemies: 0, particles: 0, projectiles: 0 });
   const [isAutoHunt, setIsAutoHunt] = useState(true);  // Matrix는 기본 Auto Hunt
-  // v38: 2D/3D 렌더 모드 토글 (localStorage 저장)
+  // v38 Phase 8: 2D/3D 렌더 모드 토글 (localStorage 저장 + WebGL fallback)
   const [renderMode, setRenderMode] = useState<RenderMode>(() => {
     if (typeof window !== 'undefined') {
+      // WebGL 미지원 시 강제 2D
+      if (!isWebGLSupported()) return '2d';
       return (localStorage.getItem('matrix-render-mode') as RenderMode) || '2d';
     }
     return '2d';
   });
+  // v38 Phase 8: 모드 전환 트랜지션 (200ms fade)
+  const [modeTransition, setModeTransition] = useState(false);
   const [sessionKills, setSessionKills] = useState(0);
   const [playerPosition, setPlayerPosition] = useState({ x: 0, y: 0 });
   const playerPositionRef = useRef({ x: 0, y: 0 });
@@ -1268,13 +1293,38 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         />
       )}
 
-      {/* v38: 2D/3D 렌더 모드 토글 버튼 (좌측 하단) */}
+      {/* v38 Phase 8: 모드 전환 트랜지션 페이드 오버레이 */}
+      {modeTransition && (
+        <div
+          style={{
+            position: 'absolute',
+            inset: 0,
+            backgroundColor: '#000',
+            zIndex: 99999,
+            opacity: 1,
+            transition: 'opacity 200ms ease-out',
+            pointerEvents: 'none',
+          }}
+        />
+      )}
+
+      {/* v38 Phase 8: 2D/3D 렌더 모드 토글 버튼 (좌측 하단, 개선된 UI) */}
       <button
         onClick={() => {
-          const next = renderMode === '2d' ? '3d' : '2d';
-          setRenderMode(next);
-          localStorage.setItem('matrix-render-mode', next);
+          // WebGL 미지원 시 전환 불가
+          if (renderMode === '2d' && !isWebGLSupported()) return;
+
+          // 200ms transition fade
+          setModeTransition(true);
+          setTimeout(() => {
+            const next = renderMode === '2d' ? '3d' : '2d';
+            setRenderMode(next);
+            localStorage.setItem('matrix-render-mode', next);
+            // 전환 완료 후 페이드 해제
+            setTimeout(() => setModeTransition(false), 200);
+          }, 200);
         }}
+        title={!isWebGLSupported() && renderMode === '2d' ? 'WebGL not supported — 3D mode unavailable' : `Switch to ${renderMode === '2d' ? '3D Enhanced' : '2D Classic'} mode`}
         style={{
           position: 'absolute',
           bottom: 16,
@@ -1283,17 +1333,21 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
           padding: '8px 16px',
           backgroundColor: renderMode === '3d' ? '#CC9933' : '#333',
           color: '#E8E0D4',
-          border: '1px solid #555',
+          border: renderMode === '3d' ? '1px solid #CC9933' : '1px solid #555',
           borderRadius: 6,
           fontSize: 12,
           fontFamily: '"Rajdhani", sans-serif',
           fontWeight: 600,
-          cursor: 'pointer',
-          opacity: 0.8,
+          cursor: !isWebGLSupported() && renderMode === '2d' ? 'not-allowed' : 'pointer',
+          opacity: !isWebGLSupported() && renderMode === '2d' ? 0.4 : 0.8,
           transition: 'all 0.2s',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
         }}
       >
-        {renderMode === '2d' ? '3D MODE' : '2D MODE'}
+        <span style={{ fontSize: 14 }}>{renderMode === '2d' ? '\u25B3' : '\u25A1'}</span>
+        {renderMode === '2d' ? '3D ENHANCED' : '2D CLASSIC'}
       </button>
 
       {/* ─── MatrixHUD: v37 Tactical War Room Layout ─── */}
