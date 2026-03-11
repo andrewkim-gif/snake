@@ -64,6 +64,11 @@ import { WorldUI } from './3d/WorldUI';
 import { DamageNumbers } from './3d/DamageNumbers';
 import { EntityUI } from './3d/EntityUI';
 import { SafeZone3D } from './3d/SafeZone3D';
+// Phase 4 (HUD Integration): DOM Overlay HUD 컴포넌트
+import { GameHUD3D } from './3d/GameHUD3D';
+import { Minimap3D } from './3d/Minimap3D';
+import { WeaponSlots3D } from './3d/WeaponSlots3D';
+import { MobileControls3D } from './3d/MobileControls3D';
 
 /**
  * MatrixSceneProps — Phase 0 최소 props
@@ -700,9 +705,7 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
       {/* Phase 5: Screen Flash Overlay (S33) — DOM 기반 */}
       <ScreenFlashOverlay flashRef={flashRef} />
 
-      {/* Phase 6: HUD Overlay (S39) — 기존 React HUD 컴포넌트 그대로 overlay */}
-      {/* MatrixApp에서 HUD props를 전달받아 여기에 렌더링 */}
-      {/* 현재는 슬롯만 준비 — 실제 HUD는 MatrixApp에서 조건부 렌더링 */}
+      {/* Phase 4: HUD Overlay — DOM 기반 HUD 컴포넌트 통합 */}
       <div
         style={{
           position: 'absolute',
@@ -712,18 +715,24 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
         }}
         className="matrix-scene-hud-overlay"
       >
-        {/* 모바일 조이스틱 overlay 영역 */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '40%',
-            pointerEvents: 'auto',
-          }}
-          className="matrix-scene-joystick-area"
+        {/* HP/XP/Level/Score/Kills 표시 */}
+        <GameHUD3D
+          playerRef={refs.player}
+          enemyCount={refs.enemies.current.length}
+          gameTime={refs.gameTime.current}
         />
+
+        {/* 미니맵 — 우측 하단 */}
+        <Minimap3D
+          playerRef={refs.player}
+          enemiesRef={refs.enemies}
+        />
+
+        {/* 무기 슬롯 — 하단 중앙 */}
+        <WeaponSlots3D playerRef={refs.player} />
+
+        {/* 모바일 가상 조이스틱 — 좌측 하단 (모바일만 표시) */}
+        <MobileControls3D keysPressedRef={refs.keysPressed} />
       </div>
     </div>
   );
