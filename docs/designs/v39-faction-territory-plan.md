@@ -1218,8 +1218,8 @@ v37의 군사/전략 테마 스킬 시스템은 **100% 호환**:
 | 지역 건설 시스템 | 5종 건물 건설/효과/파괴 로직 |
 | 인텔 미션 확장 | 영토 연동 인텔 미션 (정찰, 교란, 사보타주) |
 
-- **design**: N
-- **verify**: 랜덤 이벤트 발동, 건물 건설/효과 확인
+- **design**: Y (round_event_engine.go, building_system.go, intel_missions.go 신규, region.ts 타입 추가)
+- **verify**: Go build + tsc 통과, 6종 랜덤 이벤트, 4종 건물, 5종 인텔 미션 구현 완료
 
 ### Phase 10: 통합 테스트 & 빌드
 | Task | 설명 |

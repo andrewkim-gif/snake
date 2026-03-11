@@ -1146,3 +1146,549 @@ export interface ISovereigntyChange {
   /** 새 주권 레벨 */
   newLevel: SovereigntyLevel;
 }
+
+// ── v39 Phase 9: 라운드 이벤트 시스템 타입 ──
+
+/** 라운드 이벤트 종류 */
+export type RoundEventKind =
+  | 'resource_surge'   // 자원 2배
+  | 'fast_shrink'      // 세이프존 빠른 수축
+  | 'npc_rage'         // NPC 강화
+  | 'bonus_airdrop'    // 보너스 에어드롭
+  | 'fog_of_war'       // 안개 전쟁
+  | 'trade_open';      // 무역 개방
+
+/** 라운드 이벤트 라이프사이클 페이즈 */
+export type RoundEventPhase = 'pending' | 'announced' | 'active' | 'expired';
+
+/** 라운드 이벤트 적용 대상 */
+export type RoundEventTarget = 'pve' | 'br';
+
+/** 라운드 이벤트 스냅샷 (서버 → 클라이언트 전송) */
+export interface IRoundEventSnapshot {
+  /** 이벤트 고유 ID */
+  id: string;
+  /** 이벤트 종류 */
+  kind: RoundEventKind;
+  /** 이벤트 이름 */
+  name: string;
+  /** 이벤트 한국어 이름 */
+  nameKo: string;
+  /** 이벤트 설명 */
+  description: string;
+  /** 이벤트 아이콘 키 */
+  icon: string;
+  /** 현재 이벤트 페이즈 */
+  phase: RoundEventPhase;
+  /** 예고 남은 시간 (초) */
+  announceTimer?: number;
+  /** 활성 남은 시간 (초) */
+  activeTimer?: number;
+  /** 이벤트 효과 값 (배율/수량 등) */
+  value: number;
+}
+
+/** 라운드 이벤트 알림 (WebSocket 이벤트) */
+export interface IRoundEventNotification {
+  /** 알림 종류 */
+  type: 'announced' | 'activated' | 'expired';
+  /** 이벤트 데이터 */
+  event: IRoundEventSnapshot;
+}
+
+/** 라운드 이벤트 상수 (서버 round_event_engine.go와 동기화) */
+export const ROUND_EVENT_CONSTANTS = {
+  /** 이벤트 예고 시간 (초) */
+  ANNOUNCE_DURATION: 30,
+  /** 라운드당 최소 이벤트 수 */
+  MIN_PER_ROUND: 1,
+  /** 라운드당 최대 이벤트 수 */
+  MAX_PER_ROUND: 2,
+  /** 자원 2배 배율 */
+  RESOURCE_SURGE_MULT: 2.0,
+  /** 세이프존 수축 가속 배율 */
+  FAST_SHRINK_MULT: 1.5,
+  /** NPC 강화 배율 */
+  NPC_RAGE_MULT: 1.5,
+  /** 보너스 에어드롭 수 */
+  BONUS_AIRDROP_COUNT: 5,
+  /** 안개 전쟁 시야 배율 */
+  FOG_OF_WAR_VISION: 0.5,
+  /** 무역 개방 수수료 할인 */
+  TRADE_OPEN_DISCOUNT: 1.0,
+} as const;
+
+/** 라운드 이벤트 표시 정보 */
+export const ROUND_EVENT_DISPLAY: Record<RoundEventKind, {
+  name: string;
+  nameKo: string;
+  icon: string;
+  color: string;
+  description: string;
+}> = {
+  resource_surge: {
+    name: 'Resource Surge',
+    nameKo: '자원 폭등',
+    icon: '💎',
+    color: '#22C55E',
+    description: 'Resource nodes spawn at 2x rate',
+  },
+  fast_shrink: {
+    name: 'Fast Shrink',
+    nameKo: '빠른 수축',
+    icon: '🌀',
+    color: '#EF4444',
+    description: 'Safe zone shrinks 50% faster',
+  },
+  npc_rage: {
+    name: 'NPC Rage',
+    nameKo: 'NPC 광폭화',
+    icon: '💀',
+    color: '#DC2626',
+    description: 'Garrison NPCs gain +50% stats',
+  },
+  bonus_airdrop: {
+    name: 'Bonus Airdrop',
+    nameKo: '보너스 에어드롭',
+    icon: '📦',
+    color: '#8B5CF6',
+    description: '5 bonus airdrops deploy immediately',
+  },
+  fog_of_war: {
+    name: 'Fog of War',
+    nameKo: '안개 전쟁',
+    icon: '🌫️',
+    color: '#6B7280',
+    description: 'Minimap disabled, vision reduced 50%',
+  },
+  trade_open: {
+    name: 'Trade Open',
+    nameKo: '무역 개방',
+    icon: '🤝',
+    color: '#F59E0B',
+    description: 'Trade fees reduced to 0%',
+  },
+} as const;
+
+// ── v39 Phase 9: 건물 시스템 타입 ──
+
+/** 건물 유형 */
+export type BuildingType =
+  | 'defense_tower'
+  | 'resource_accelerator'
+  | 'healing_station'
+  | 'scout_post';
+
+/** 건물 효과 */
+export interface IBuildingEffect {
+  /** 방어탑: 공격 데미지 */
+  attackDamage?: number;
+  /** 방어탑: 공격 사거리 (px) */
+  attackRange?: number;
+  /** 방어탑: 공격 쿨다운 (초) */
+  attackCd?: number;
+  /** 자원 가속기: 채취 속도 보너스 */
+  gatherRateBonus?: number;
+  /** 치유소: 초당 HP 재생량 */
+  healPerSec?: number;
+  /** 치유소: 효과 범위 (px) */
+  healRange?: number;
+  /** 정찰소: 미니맵 감지 범위 (px) */
+  scoutRange?: number;
+}
+
+/** 건물 정의 (정적 데이터) */
+export interface IBuildingDef {
+  /** 건물 유형 */
+  type: BuildingType;
+  /** 건물명 */
+  name: string;
+  /** 한국어 건물명 */
+  nameKo: string;
+  /** 설명 */
+  description: string;
+  /** 아이콘 키 */
+  icon: string;
+  /** 최대 HP */
+  maxHp: number;
+  /** 건설 비용 */
+  cost: {
+    gold?: number;
+    oil?: number;
+    minerals?: number;
+    food?: number;
+    tech?: number;
+    influence?: number;
+  };
+  /** 건물 효과 */
+  effect: IBuildingEffect;
+  /** 건설 시간 (초) */
+  buildTime: number;
+}
+
+/** 건물 스냅샷 (서버 → 클라이언트 전송) */
+export interface IBuildingSnapshot {
+  /** 건물 고유 ID */
+  id: string;
+  /** 건물 유형 */
+  type: BuildingType;
+  /** 소유 팩션 ID */
+  ownerFaction: string;
+  /** 팩션 컬러 */
+  factionColor: string;
+  /** 위치 X */
+  x: number;
+  /** 위치 Y */
+  y: number;
+  /** 현재 HP */
+  hp: number;
+  /** 최대 HP */
+  maxHp: number;
+  /** 활성 여부 */
+  active: boolean;
+  /** 건설 중 여부 */
+  building: boolean;
+  /** 건설 남은 시간 (초) */
+  buildTimer?: number;
+}
+
+/** 건물 이벤트 종류 */
+export type BuildingEventType =
+  | 'build_start'
+  | 'build_done'
+  | 'build_damaged'
+  | 'build_destroyed'
+  | 'build_deactivated'
+  | 'build_activated';
+
+/** 건물 이벤트 */
+export interface IBuildingEvent {
+  /** 이벤트 종류 */
+  type: BuildingEventType;
+  /** 건물 정보 */
+  building: IBuildingSnapshot;
+  /** 지역 ID */
+  regionId: string;
+}
+
+/** 건물 슬롯 상수 (서버 building_system.go와 동기화) */
+export const BUILDING_CONSTANTS = {
+  /** Active Domination 슬롯 수 */
+  SLOTS_ACTIVE_DOM: 2,
+  /** Sovereignty 슬롯 수 */
+  SLOTS_SOVEREIGNTY: 3,
+  /** Hegemony 슬롯 수 */
+  SLOTS_HEGEMONY: 5,
+  /** 인수 비용 비율 (50%) */
+  ACTIVATION_COST_RATIO: 0.5,
+} as const;
+
+/** 건물 정의 목록 (서버 building_system.go와 동기화) */
+export const BUILDING_DEFS: Record<BuildingType, IBuildingDef> = {
+  defense_tower: {
+    type: 'defense_tower',
+    name: 'Defense Tower',
+    nameKo: '방어탑',
+    description: 'Auto-attacks enemies within range during BR',
+    icon: 'tower',
+    maxHp: 500,
+    cost: { minerals: 100, tech: 50 },
+    effect: { attackDamage: 15, attackRange: 200, attackCd: 2.0 },
+    buildTime: 30,
+  },
+  resource_accelerator: {
+    type: 'resource_accelerator',
+    name: 'Resource Accelerator',
+    nameKo: '자원 가속기',
+    description: 'Increases resource gather rate by 30%',
+    icon: 'accelerator',
+    maxHp: 300,
+    cost: { minerals: 80, gold: 60 },
+    effect: { gatherRateBonus: 0.30 },
+    buildTime: 20,
+  },
+  healing_station: {
+    type: 'healing_station',
+    name: 'Healing Station',
+    nameKo: '치유소',
+    description: 'Heals nearby allies for 2 HP/s',
+    icon: 'heal',
+    maxHp: 250,
+    cost: { food: 80, influence: 30 },
+    effect: { healPerSec: 2.0, healRange: 150 },
+    buildTime: 25,
+  },
+  scout_post: {
+    type: 'scout_post',
+    name: 'Scout Post',
+    nameKo: '정찰소',
+    description: 'Reveals enemy positions on minimap within extended range',
+    icon: 'scout',
+    maxHp: 200,
+    cost: { gold: 50, tech: 40 },
+    effect: { scoutRange: 300 },
+    buildTime: 15,
+  },
+} as const;
+
+/** 주권 레벨별 건물 슬롯 수 반환 */
+export function getBuildingSlotsForLevel(level: SovereigntyLevel): number {
+  switch (level) {
+    case 'hegemony': return BUILDING_CONSTANTS.SLOTS_HEGEMONY;
+    case 'sovereignty': return BUILDING_CONSTANTS.SLOTS_SOVEREIGNTY;
+    case 'active_domination': return BUILDING_CONSTANTS.SLOTS_ACTIVE_DOM;
+    default: return 0;
+  }
+}
+
+/** 건물 표시 정보 */
+export const BUILDING_DISPLAY: Record<BuildingType, {
+  name: string;
+  nameKo: string;
+  icon: string;
+  color: string;
+  description: string;
+}> = {
+  defense_tower: {
+    name: 'Defense Tower',
+    nameKo: '방어탑',
+    icon: '🗼',
+    color: '#EF4444',
+    description: 'Auto-attacks enemies during BR',
+  },
+  resource_accelerator: {
+    name: 'Resource Accelerator',
+    nameKo: '자원 가속기',
+    icon: '⚡',
+    color: '#22C55E',
+    description: 'Gather rate +30%',
+  },
+  healing_station: {
+    name: 'Healing Station',
+    nameKo: '치유소',
+    icon: '💚',
+    color: '#10B981',
+    description: 'Heals allies 2 HP/s',
+  },
+  scout_post: {
+    name: 'Scout Post',
+    nameKo: '정찰소',
+    icon: '🔭',
+    color: '#3B82F6',
+    description: 'Extended minimap vision',
+  },
+} as const;
+
+// ── v39 Phase 9: 인텔 미션 타입 ──
+
+/** 인텔 미션 종류 */
+export type IntelMissionType =
+  | 'enemy_presence'    // 적 팩션 주둔 정보
+  | 'resource_map'      // 자원 분포 정보
+  | 'garrison_strength' // NPC 수비대 강도
+  | 'building_intel'    // 적 건물 정보
+  | 'tactical_scan';    // 종합 전술 스캔
+
+/** 인텔 미션 정의 */
+export interface IIntelMissionDef {
+  /** 미션 종류 */
+  type: IntelMissionType;
+  /** 미션명 */
+  name: string;
+  /** 한국어 미션명 */
+  nameKo: string;
+  /** 설명 */
+  description: string;
+  /** 인텔 포인트 비용 */
+  cost: number;
+  /** 결과 유효 시간 (초) */
+  duration: number;
+}
+
+/** 인텔 미션 스냅샷 (클라이언트 표시용) */
+export interface IIntelMissionSnapshot {
+  /** 미션 종류 */
+  type: IntelMissionType;
+  /** 미션명 */
+  name: string;
+  /** 한국어 미션명 */
+  nameKo: string;
+  /** 설명 */
+  description: string;
+  /** 인텔 포인트 비용 */
+  cost: number;
+  /** 포인트 충분 여부 */
+  available: boolean;
+}
+
+/** 인텔 결과 (서버 → 클라이언트 전송) */
+export interface IIntelResult {
+  /** 결과 고유 ID */
+  id: string;
+  /** 미션 종류 */
+  missionType: IntelMissionType;
+  /** 대상 지역 ID */
+  regionId: string;
+  /** 요청 팩션 ID */
+  factionId: string;
+  /** 결과 데이터 (미션별 상이) */
+  data: unknown;
+  /** 만료 시각 (ISO 8601) */
+  expiresAt: string;
+  /** 생성 시각 (ISO 8601) */
+  createdAt: string;
+}
+
+/** 적 팩션 정찰 결과 */
+export interface IIntelEnemyPresenceResult {
+  /** 대상 지역 ID */
+  regionId: string;
+  /** 적 팩션 목록 */
+  factions: {
+    factionId: string;
+    factionName: string;
+    memberCount: number;
+    aliveCount: number;
+    color: string;
+  }[];
+  /** 스캔 시각 */
+  scannedAt: string;
+}
+
+/** 자원 분포 분석 결과 */
+export interface IIntelResourceMapResult {
+  /** 대상 지역 ID */
+  regionId: string;
+  /** 총 노드 수 */
+  totalNodes: number;
+  /** 활성 노드 수 */
+  activeNodes: number;
+  /** 자원 유형별 노드 수 */
+  nodesByType: Record<string, number>;
+  /** 특산 자원 유형 */
+  specialtyType: string;
+  /** 특산 자원 노드 수 */
+  specialtyNodes: number;
+  /** 스캔 시각 */
+  scannedAt: string;
+}
+
+/** 수비대 정찰 결과 */
+export interface IIntelGarrisonResult {
+  /** 대상 지역 ID */
+  regionId: string;
+  /** 지배 팩션 ID */
+  controllerFaction?: string;
+  /** 주권 레벨 */
+  sovereigntyLevel: SovereigntyLevel;
+  /** 총 수비대 수 */
+  totalGuards: number;
+  /** 생존 수비대 수 */
+  aliveGuards: number;
+  /** 평균 HP */
+  avgHp: number;
+  /** 스탯 배율 */
+  statMultiplier: number;
+  /** 스캔 시각 */
+  scannedAt: string;
+}
+
+/** 건물 정찰 결과 */
+export interface IIntelBuildingResult {
+  /** 대상 지역 ID */
+  regionId: string;
+  /** 적 건물 목록 */
+  buildings: {
+    type: BuildingType;
+    ownerFaction: string;
+    hp: number;
+    maxHp: number;
+    active: boolean;
+    building: boolean;
+    x: number;
+    y: number;
+  }[];
+  /** 스캔 시각 */
+  scannedAt: string;
+}
+
+/** 인텔 포인트 스냅샷 */
+export interface IIntelPointsSnapshot {
+  /** 팩션 ID */
+  factionId: string;
+  /** 보유 포인트 */
+  points: number;
+}
+
+/** 인텔 미션 상수 (서버 intel_missions.go와 동기화) */
+export const INTEL_CONSTANTS = {
+  /** 적 팩션 정찰 비용 */
+  COST_ENEMY_PRESENCE: 20,
+  /** 자원 분포 분석 비용 */
+  COST_RESOURCE_MAP: 30,
+  /** 수비대 정찰 비용 */
+  COST_GARRISON_STRENGTH: 35,
+  /** 건물 정찰 비용 */
+  COST_BUILDING_INFO: 25,
+  /** 전술 스캔 비용 */
+  COST_TACTICAL_SCAN: 80,
+  /** PvE 킬 포인트 */
+  POINTS_PER_PVE_KILL: 2,
+  /** 자원 채취 포인트 */
+  POINTS_PER_GATHER: 1,
+  /** 정찰소 라운드 보너스 */
+  POINTS_SCOUT_POST_BONUS: 10,
+  /** 인텔 결과 유효 시간 (초) */
+  RESULT_DURATION: 300,
+} as const;
+
+/** 인텔 미션 표시 정보 */
+export const INTEL_MISSION_DISPLAY: Record<IntelMissionType, {
+  name: string;
+  nameKo: string;
+  icon: string;
+  color: string;
+  description: string;
+  cost: number;
+}> = {
+  enemy_presence: {
+    name: 'Enemy Presence',
+    nameKo: '적 팩션 정찰',
+    icon: '👁️',
+    color: '#EF4444',
+    description: 'Reveal enemy faction presence',
+    cost: 20,
+  },
+  resource_map: {
+    name: 'Resource Analysis',
+    nameKo: '자원 분포 분석',
+    icon: '🗺️',
+    color: '#22C55E',
+    description: 'Reveal resource node distribution',
+    cost: 30,
+  },
+  garrison_strength: {
+    name: 'Garrison Recon',
+    nameKo: '수비대 정찰',
+    icon: '🛡️',
+    color: '#F59E0B',
+    description: 'Reveal NPC garrison strength',
+    cost: 35,
+  },
+  building_intel: {
+    name: 'Building Intel',
+    nameKo: '건물 정찰',
+    icon: '🏗️',
+    color: '#8B5CF6',
+    description: 'Reveal enemy buildings',
+    cost: 25,
+  },
+  tactical_scan: {
+    name: 'Tactical Scan',
+    nameKo: '전술 스캔',
+    icon: '🎯',
+    color: '#DC2626',
+    description: 'Comprehensive intel package',
+    cost: 80,
+  },
+} as const;
