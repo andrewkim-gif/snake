@@ -95,7 +95,7 @@ function computeGrid(count: number): GridLayout {
 
 // ─── SVG 상수 ───
 
-const TILE_GAP = 8;
+const TILE_GAP = 12;
 const TILE_RADIUS = 0; // Apex 스타일: 직각
 
 // ─── 툴팁 컴포넌트 ───
@@ -117,8 +117,8 @@ function Tooltip({
   const typeLabel = REGION_TYPE_LABELS[entry.type] ?? entry.type;
   const resourceIcon = RESOURCE_ICONS[entry.primaryResource] ?? '📦';
 
-  const tooltipWidth = 200;
-  const tooltipHeight = 130;
+  const tooltipWidth = 280;
+  const tooltipHeight = 180;
   // 좌우 경계를 넘지 않도록 위치 보정
   const tx = Math.min(Math.max(x - tooltipWidth / 2, 4), svgWidth - tooltipWidth - 4);
   const ty = y - tooltipHeight - 8;
@@ -129,33 +129,33 @@ function Tooltip({
         style={{
           background: 'rgba(9, 9, 11, 0.95)',
           border: `1px solid ${SK.accentBorder}`,
-          padding: '10px 12px',
+          padding: '14px 16px',
           fontFamily: bodyFont,
-          fontSize: '11px',
+          fontSize: '14px',
           color: SK.textPrimary,
           pointerEvents: 'none',
         }}
       >
         {/* 헤더 */}
-        <div style={{ fontFamily: headingFont, fontSize: '13px', marginBottom: '6px' }}>
+        <div style={{ fontFamily: headingFont, fontSize: '16px', marginBottom: '8px' }}>
           {typeIcon} {entry.nameEn}
         </div>
-        <div style={{ color: SK.textMuted, marginBottom: '4px', fontSize: '10px' }}>
+        <div style={{ color: SK.textMuted, marginBottom: '6px', fontSize: '13px' }}>
           {entry.name}
         </div>
         {/* 유형 + 자원 */}
-        <div style={{ display: 'flex', gap: '12px', marginBottom: '4px', color: SK.textSecondary }}>
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '6px', color: SK.textSecondary, fontSize: '13px' }}>
           <span>{typeLabel}</span>
           <span>{resourceIcon} {entry.primaryResource}</span>
         </div>
         {/* 접속 인원 + 상태 */}
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: entry.currentPlayers > 0 ? SK.green : SK.textMuted }}>
+          <span style={{ color: entry.currentPlayers > 0 ? SK.green : SK.textMuted, fontSize: '14px' }}>
             👥 {entry.currentPlayers}/{entry.maxPlayers}
           </span>
           <span style={{
             color: stateStyle.color,
-            fontSize: '10px',
+            fontSize: '12px',
             fontFamily: headingFont,
             letterSpacing: '0.5px',
           }}>
@@ -165,16 +165,16 @@ function Tooltip({
         {/* 지배 팩션 */}
         {entry.controllingFactionId && (
           <div style={{
-            marginTop: '4px',
+            marginTop: '6px',
             display: 'flex',
             alignItems: 'center',
-            gap: '4px',
+            gap: '6px',
             color: SK.textSecondary,
-            fontSize: '10px',
+            fontSize: '12px',
           }}>
             <div style={{
-              width: '6px',
-              height: '6px',
+              width: '8px',
+              height: '8px',
               borderRadius: '50%',
               background: entry.controllingFactionColor || SK.accent,
               display: 'inline-block',
@@ -203,9 +203,9 @@ export default function CountryRegionMap({
   // 그리드 레이아웃 계산
   const grid = useMemo(() => computeGrid(regions.length), [regions.length]);
 
-  // SVG 뷰포트 크기
-  const svgWidth = 460;
-  const svgHeight = 400;
+  // SVG 뷰포트 크기 (viewBox — 실제 렌더링은 100% width/height로 스케일)
+  const svgWidth = 800;
+  const svgHeight = 600;
 
   // 타일 크기 계산
   const tileW = (svgWidth - (grid.cols + 1) * TILE_GAP) / grid.cols;
@@ -358,7 +358,7 @@ export default function CountryRegionMap({
             <rect
               x={x}
               y={y}
-              width={3}
+              width={5}
               height={tileH}
               fill={entry.controllingFactionColor || SK.textMuted}
             />
@@ -366,10 +366,10 @@ export default function CountryRegionMap({
             {/* 유형 아이콘 (큰 중앙) */}
             <text
               x={x + tileW / 2}
-              y={y + tileH * 0.35}
+              y={y + tileH * 0.32}
               textAnchor="middle"
               dominantBaseline="middle"
-              fontSize="28"
+              fontSize="42"
               style={{ pointerEvents: 'none' }}
             >
               {typeIcon}
@@ -378,26 +378,26 @@ export default function CountryRegionMap({
             {/* 지역 영문명 */}
             <text
               x={x + tileW / 2}
-              y={y + tileH * 0.58}
+              y={y + tileH * 0.56}
               textAnchor="middle"
               dominantBaseline="middle"
               fill={SK.textPrimary}
-              fontSize="12"
+              fontSize="18"
               fontFamily={headingFont}
-              fontWeight={600}
+              fontWeight={700}
               style={{ pointerEvents: 'none' }}
             >
-              {entry.nameEn.length > 14 ? entry.nameEn.slice(0, 13) + '...' : entry.nameEn}
+              {entry.nameEn.length > 18 ? entry.nameEn.slice(0, 17) + '...' : entry.nameEn}
             </text>
 
             {/* 한글 지역명 */}
             <text
               x={x + tileW / 2}
-              y={y + tileH * 0.70}
+              y={y + tileH * 0.68}
               textAnchor="middle"
               dominantBaseline="middle"
               fill={SK.textMuted}
-              fontSize="10"
+              fontSize="14"
               fontFamily={bodyFont}
               style={{ pointerEvents: 'none' }}
             >
@@ -407,12 +407,13 @@ export default function CountryRegionMap({
             {/* 접속 인원 */}
             <text
               x={x + tileW / 2}
-              y={y + tileH * 0.85}
+              y={y + tileH * 0.82}
               textAnchor="middle"
               dominantBaseline="middle"
               fill={entry.currentPlayers > 0 ? SK.green : SK.textMuted}
-              fontSize="10"
+              fontSize="16"
               fontFamily={bodyFont}
+              fontWeight={600}
               style={{ pointerEvents: 'none' }}
             >
               👥 {entry.currentPlayers}/{entry.maxPlayers}
@@ -420,22 +421,22 @@ export default function CountryRegionMap({
 
             {/* 상태 뱃지 (우상단) */}
             <rect
-              x={x + tileW - 50}
-              y={y + 6}
-              width={44}
-              height={16}
+              x={x + tileW - 76}
+              y={y + 8}
+              width={64}
+              height={24}
               rx={0}
               fill={isJoining ? 'rgba(99, 102, 241, 0.15)' : stateStyle.bg}
               stroke={isJoining ? `${SK.accent}40` : `${stateStyle.color}40`}
               strokeWidth={0.5}
             />
             <text
-              x={x + tileW - 28}
-              y={y + 14}
+              x={x + tileW - 44}
+              y={y + 20}
               textAnchor="middle"
               dominantBaseline="middle"
               fill={isJoining ? SK.accent : stateStyle.color}
-              fontSize="8"
+              fontSize="12"
               fontFamily={headingFont}
               fontWeight={600}
               letterSpacing="0.5"
@@ -448,18 +449,18 @@ export default function CountryRegionMap({
             {entry.controllingFactionId && (
               <>
                 <circle
-                  cx={x + 14}
-                  cy={y + 14}
-                  r={4}
+                  cx={x + 20}
+                  cy={y + 20}
+                  r={6}
                   fill={entry.controllingFactionColor || SK.accent}
                 />
                 {entry.controlStreak > 1 && (
                   <text
-                    x={x + 22}
-                    y={y + 14}
+                    x={x + 32}
+                    y={y + 20}
                     dominantBaseline="middle"
                     fill={SK.orange}
-                    fontSize="8"
+                    fontSize="12"
                     fontFamily={bodyFont}
                     style={{ pointerEvents: 'none' }}
                   >

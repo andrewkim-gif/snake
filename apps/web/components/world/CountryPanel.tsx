@@ -1021,29 +1021,29 @@ export function CountryPanel({
   const regionMapPanel = (
     <div style={{
       flex: 1,
-      minWidth: isMobile ? 'auto' : '300px',
-      padding: isMobile ? '16px' : '20px',
+      minWidth: isMobile ? 'auto' : '400px',
+      padding: isMobile ? '16px' : '24px',
       display: 'flex',
       flexDirection: 'column',
-      borderLeft: isMobile ? 'none' : `1px solid ${SK.glassBorder}`,
-      borderTop: isMobile ? `1px solid ${SK.glassBorder}` : 'none',
+      borderLeft: isMobile ? 'none' : `1px solid ${SK.border}`,
+      borderTop: isMobile ? `1px solid ${SK.border}` : 'none',
     }}>
       {/* 지역 맵 헤더 */}
       <div style={{
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '12px',
+        marginBottom: '16px',
       }}>
         <div style={{
-          fontFamily: bodyFont,
-          fontSize: SKFont.sm,
-          color: SK.textSecondary,
+          fontFamily: headingFont,
+          fontSize: SKFont.h3,
+          color: SK.textPrimary,
           letterSpacing: '1px',
           textTransform: 'uppercase',
-          fontWeight: 600,
+          fontWeight: 700,
         }}>
-          Regions — Select to Enter
+          REGIONS
         </div>
         {/* 연결 상태 인디케이터 */}
         <div style={{
@@ -1065,7 +1065,7 @@ export function CountryPanel({
       </div>
 
       {/* CountryRegionMap (SVG 기반 지역 지도) */}
-      <div style={{ flex: 1, minHeight: '360px' }}>
+      <div style={{ flex: 1, minHeight: '400px' }}>
         <CountryRegionMap
           regions={regions}
           loading={regionLoading || connectionState !== 'connected'}
@@ -1178,7 +1178,7 @@ export function CountryPanel({
         onClick={onClose}
       />
 
-      {/* v41: 와이드 팝업 패널 — 960px 2-column */}
+      {/* v41: 풀스크린 패널 — SystemPopup과 동일 크기 */}
       <div style={{
         position: 'fixed',
         top: '50%',
@@ -1187,20 +1187,19 @@ export function CountryPanel({
           ? 'translate(-50%, -50%) scale(1)'
           : 'translate(-50%, -48%) scale(0.96)',
         opacity: visible ? 1 : 0,
-        width: 'min(960px, calc(100vw - 32px))',
-        maxHeight: '80vh',
+        width: 'calc(100vw - 48px)',
+        height: 'calc(100vh - 48px)',
+        maxWidth: 'calc(100vw - 48px)',
+        maxHeight: 'calc(100vh - 48px)',
         zIndex: 101,
         transition: 'transform 250ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease',
         display: 'flex',
         flexDirection: 'column',
-        background: 'rgba(9, 9, 11, 0.94)',
-        backdropFilter: 'blur(24px)',
-        WebkitBackdropFilter: 'blur(24px)',
-        border: `1px solid ${SK.glassBorder}`,
+        background: SK.bg,
+        border: `1px solid ${SK.border}`,
         borderTop: '1px solid rgba(239, 68, 68, 0.5)',
         overflow: 'hidden',
         boxShadow: '0 24px 80px rgba(0, 0, 0, 0.7), 0 0 1px rgba(239, 68, 68, 0.3)',
-        clipPath: 'polygon(0 0, 100% 0, 100% 100%, 16px 100%, 0 calc(100% - 16px))',
         pointerEvents: visible ? 'auto' : 'none',
       }}>
         {/* 헤더 (탭 위에 고정) */}
@@ -1213,10 +1212,11 @@ export function CountryPanel({
           flexDirection: 'row',
           overflow: 'hidden',
         }}>
-          {/* 좌측 컬럼: 탭 + 탭 콘텐츠 (480px) */}
+          {/* 좌측 컬럼: 탭 + 탭 콘텐츠 (40%) */}
           <div style={{
-            width: '480px',
+            width: '40%',
             minWidth: '380px',
+            maxWidth: '560px',
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
@@ -1238,15 +1238,15 @@ export function CountryPanel({
           {regionMapPanel}
         </div>
 
-        {/* 왼쪽 아래 붉은 삼각형 */}
+        {/* 상단 액센트 라인 */}
         <div style={{
           position: 'absolute',
-          bottom: -1,
-          left: -1,
-          width: 0,
-          height: 0,
-          borderLeft: '16px solid #EF4444',
-          borderTop: '16px solid transparent',
+          top: 0,
+          left: 0,
+          right: 0,
+          height: '2px',
+          zIndex: 2,
+          borderTop: '1px solid rgba(239, 68, 68, 0.5)',
           pointerEvents: 'none',
         }} />
       </div>
