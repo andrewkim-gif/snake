@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0 Foundation)
+ * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1)
  *
  * Canvas 2D MatrixCanvas.tsx의 3D 대체 컴포넌트.
  * 게임 로직(useGameLoop)은 동일하게 재사용하고,
@@ -14,7 +14,11 @@
  * - GameCamera (Isometric OrthographicCamera + LERP + Zoom + Shake)
  * - GameLighting (Ambient + Directional x2 + Shadows)
  * - 테스트 큐브 (플레이어 위치 표시)
- * - Ground plane (기본 지면)
+ *
+ * Phase 1 통합 항목 (Terrain):
+ * - VoxelTerrain (Chunked 3D 지형 + Biome + Noise)
+ * - TerrainObjects (InstancedMesh 지형 오브젝트)
+ * - PickupRenderer (XP Orb + Item Drop 3D)
  */
 
 import React, { useRef, useMemo } from 'react';
@@ -24,6 +28,9 @@ import { useGameRefs, type GameRefs } from '@/lib/matrix/hooks/useGameRefs';
 import { useGameLoop } from '@/lib/matrix/hooks/useGameLoop';
 import { GameCamera } from './3d/GameCamera';
 import { GameLighting } from './3d/GameLighting';
+import { VoxelTerrain } from './3d/VoxelTerrain';
+import { TerrainObjects } from './3d/TerrainObjects';
+import { PickupRenderer } from './3d/PickupRenderer';
 import type { Player } from '@/lib/matrix/types';
 
 /**
@@ -70,35 +77,23 @@ function TestPlayerCube({ playerRef }: { playerRef: React.MutableRefObject<Playe
 }
 
 /**
- * GroundPlane — 기본 지면 (테스트용)
- * Phase 1에서 VoxelTerrain 컴포넌트로 교체 예정
+ * GroundPlane — 기본 지면 (테스트 fallback)
+ * Phase 1: VoxelTerrain이 주 지형이며, 이 컴포넌트는 fallback으로 유지
  */
 function GroundPlane() {
   return (
     <mesh
       receiveShadow
       rotation={[-Math.PI / 2, 0, 0]}
-      position={[0, 0, 0]}
+      position={[0, -0.01, 0]}
     >
       <planeGeometry args={[200, 200]} />
       <meshStandardMaterial
-        color="#1a1a2e" // 다크 전술 테마 지면 색상
+        color="#1a1a2e"
         roughness={0.9}
         metalness={0.1}
       />
     </mesh>
-  );
-}
-
-/**
- * GridHelper — 디버그용 그리드 (좌표계 확인)
- */
-function DebugGrid() {
-  return (
-    <gridHelper
-      args={[200, 20, '#333333', '#222222']}
-      position={[0, 0.01, 0]}
-    />
   );
 }
 
@@ -123,13 +118,33 @@ function SceneContent({ refs }: { refs: GameRefs }) {
       {/* 조명 — Ambient + Directional x2 + Shadows */}
       <GameLighting />
 
-      {/* 지면 */}
+      {/* Phase 1: Chunked 3D 지형 (VoxelTerrain + biome + noise) */}
+      <VoxelTerrain
+        playerRef={refs.player}
+        stageId={refs.currentStageId.current}
+        gameMode="stage"
+        seed={42}
+      />
+
+      {/* Phase 1: 지형 오브젝트 (InstancedMesh) */}
+      <TerrainObjects
+        playerRef={refs.player}
+        stageId={refs.currentStageId.current}
+        gameMode="stage"
+        seed={42}
+      />
+
+      {/* Phase 1: Pickup 아이템 (XP Orb + Item Drop) */}
+      <PickupRenderer
+        gemsRef={refs.gems}
+        pickupsRef={refs.pickups}
+        playerRef={refs.player}
+      />
+
+      {/* Fallback 지면 (VoxelTerrain 로드 전 또는 극한 거리) */}
       <GroundPlane />
 
-      {/* 디버그 그리드 */}
-      <DebugGrid />
-
-      {/* 테스트 큐브 — 플레이어 위치 표시 */}
+      {/* 테스트 큐브 — 플레이어 위치 표시 (Phase 2에서 VoxelCharacter로 교체) */}
       <TestPlayerCube playerRef={refs.player} />
     </>
   );

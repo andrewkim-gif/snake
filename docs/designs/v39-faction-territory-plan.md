@@ -71,11 +71,11 @@
 
 | 국가 티어 | 지역 수 | 예시 | 국가 수 |
 |----------|---------|------|---------|
-| **S** (강대국) | 7 | 미국, 중국, 러시아, 인도 | ~10 |
-| **A** (지역 강국) | 5 | 한국, 일본, 독일, 프랑스, 브라질 | ~20 |
-| **B** (중견국) | 4 | 태국, 폴란드, 이집트, 멕시코 | ~40 |
-| **C** (소국) | 3 | 싱가포르, 포르투갈, 체코 | ~60 |
-| **D** (도시국가/소도서국) | 3 | 모나코, 바티칸, 투발루 | ~65 |
+| **S** (강대국) | 7 | 미국, 중국, 러시아, 인도, 일본, 독일, 영국, 프랑스 | 8 |
+| **A** (지역 강국) | 5 | 한국, 브라질, 캐나다, 호주, 이탈리아, 터키, 사우디 | 20 |
+| **B** (중견국) | 4 | 태국, 폴란드, 이집트, 멕시코 | 40 |
+| **C** (소국) | 3 | 싱가포르, 포르투갈, 체코 | 80 |
+| **D** (도시국가/소도서국) | 3 | 모나코, 바티칸, 투발루 | 47 |
 
 **예시 — 한국 (A티어, 5지역)**:
 | 지역 | 실제 기반 | 고유 자원 | 환경 테마 | 지역 효과 |
@@ -134,11 +134,11 @@ interface Region {
     lastSettlement: Date;                 // 마지막 일일 정산 시점
   };
 
-  // 아레나 설정
+  // 아레나 설정 (티어별 차등 크기)
   arena: {
     maxPlayers: number;     // 30
-    mapWidth: number;       // 8000
-    mapHeight: number;      // 8000
+    mapWidth: number;       // 티어별: S=6000, A=5000, B=4000, C=3000, D=2500
+    mapHeight: number;      // mapWidth와 동일 (정사각형)
   };
 }
 
@@ -152,6 +152,18 @@ interface CountryRegions {
   };
 }
 ```
+
+**티어별 아레나 크기** (v33의 8000px 기본 크기 대비 조정):
+
+| 국가 티어 | 아레나 크기 (px) | 밀도 사유 | maxPlayers |
+|----------|----------------|----------|------------|
+| **S** | 6000 × 6000 | 강대국 = 넓은 전장, 전략적 깊이 | 30 |
+| **A** | 5000 × 5000 | 지역 강국 = 중형 전장 | 30 |
+| **B** | 4000 × 4000 | 중견국 = 적당한 밀도 | 25 |
+| **C** | 3000 × 3000 | 소국 = 좁고 빠른 전투 | 20 |
+| **D** | 2500 × 2500 | 도시국가 = 초밀집 즉발 교전 | 15 |
+
+> **설계 근거**: v33 Arena 기준 8000px에서 30명이 플레이하면 밀도가 낮다. 티어별 축소하여 교전 빈도를 높이고, D티어 도시국가는 좁은 맵에서 즉각적인 팩션 충돌이 발생하도록 한다.
 
 ---
 
@@ -210,11 +222,11 @@ interface CountryRegions {
 ### 3.2 배틀로얄 페이즈 (5분)
 
 ```
-세이프존 수축 타임라인:
-  10:00 (배틀 시작)  → 전체 맵 (8000×8000)
-  11:00 (1분 경과)   → 반경 3000px (1단계 수축)
-  13:00 (3분 경과)   → 반경 1500px (2단계 수축)
-  14:30 (4분30초)    → 반경 500px  (최종 수축)
+세이프존 수축 타임라인 (아레나 크기에 비례):
+  10:00 (배틀 시작)  → 전체 맵 (티어별: S=6000, A=5000, B=4000, C=3000, D=2500)
+  11:00 (1분 경과)   → 맵 대각선의 50% 반경 (1단계 수축)
+  13:00 (3분 경과)   → 맵 대각선의 25% 반경 (2단계 수축)
+  14:30 (4분30초)    → 반경 500px  (최종 수축, 티어 무관 동일)
   15:00 (라운드 종료) → 시간 종료 판정
 ```
 
@@ -236,6 +248,31 @@ interface CountryRegions {
 - 플레이어 발 밑에 팩션 컬러 원형 링 표시
 - 네임플레이트에 `[팩션태그] 닉네임` 형식
 - 아군: 초록 네임 + 미니맵 초록 점 / 적군: 빨강 네임 + 미니맵 빨강 점
+
+### 3.2.1 전략 거점 (Capture Points → Strategic Control Points)
+
+v33의 Capture Point 시스템을 v39 라운드 사이클에 맞게 **전략 거점(Strategic Control Point)**으로 재설계한다.
+
+**PvE 페이즈에서의 역할** (0:00 ~ 10:00):
+- 맵에 3~5개 **전략 거점** 배치 (맵 크기에 비례)
+- 거점 점령: 거점 내 5초 체류 → 점령 완료 (팩션 최초 1인 기준)
+- 점령 효과: 해당 거점 반경 300px 내 **자원 채취 속도 ×2**, **XP 획득 +20%** 버프
+- 경쟁: 여러 팩션이 동시 점령 시도 → 인원수 우세 팩션이 점령 (PvE 중에는 데미지 없이 인원 경쟁만)
+- PvE 중 전투 없이 순수 위치 경쟁이므로, 팩션 간 **전략적 맵 통제** 요소 제공
+
+**배틀로얄 페이즈에서의 역할** (10:00 ~ 15:00):
+- PvE 때 점령한 거점이 **배틀로얄 보급 거점**으로 전환
+- 거점 보유 팩션: 해당 위치에서 에어드롭 우선 배치 + 방어 보너스 (+5% 방어력)
+- 세이프존 수축 시 **거점 위치가 세이프존 중심에 가까울수록 유리** (전략적 점령 보상)
+- 거점 재탈취 가능: 적 팩션이 거점 내에서 해당 팩션 전원 처치 시 탈취
+
+**v33 Capture Point와의 호환 매핑**:
+| v33 Capture Point | v39 Strategic Control Point |
+|-------------------|---------------------------|
+| 에폭 중 점령 → Nation Score | PvE 중 점령 → 자원/XP 버프 |
+| 점령 시 영역 효과 | 점령 시 반경 300px 버프 존 |
+| 3개/맵 고정 | 3~5개/맵 (티어별 조정: S=5, A=4, B/C/D=3) |
+| 단일 플레이어 점령 | 팩션 단위 점령 (인원수 기준) |
 
 ### 3.3 정산 & 다음 라운드
 
@@ -362,6 +399,50 @@ interface CountryRegions {
 
 > **AI 에이전트 팩션 전술**: aww-agent-skill SDK의 NationAgent가 30초 주기로 팩션 전술을 결정할 수 있다. LLM이 "핀서 vs 수비 vs 분산" 중 최적 전략을 선택하는 것이 가능.
 
+### 4.4 PvP 유형 구분: 배틀로얄 vs 전쟁 선포 (War Declaration)
+
+v35의 **War State Machine** (Declaration → Prep 24h → Active 72h → End → Cooldown 24h)과 v39의 **라운드 배틀로얄**은 **독립적으로 공존하는 두 가지 PvP 레이어**다.
+
+```
+PvP 계층 구조:
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │ Layer 1: 라운드 배틀로얄 (v39 — 지역 단위)                   │
+  │ • 15분 라운드 내 자동 PvP (매 라운드 반복)                   │
+  │ • 같은 지역 아레나 내 팩션 간 교전                           │
+  │ • 보상: Region Points (+3/+1/+0) + Gold/Token                │
+  │ • 규모: 소규모 (1개 아레나, 최대 30명)                       │
+  │ • 조건: 없음 (라운드마다 자동 발생)                          │
+  └─────────────────────────────────────────────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │ Layer 2: 전쟁 선포 (v35 War System — 국가 단위)              │
+  │ • 팩션 리더가 적대 팩션에 전쟁 선포 (외교 행동)              │
+  │ • Prep(24h) → Active(72h max) → End → Cooldown(24h)         │
+  │ • 보상: 패배 팩션 지역 즉시 탈취 + War Spoils (국고 약탈)   │
+  │ • 규모: 대규모 (복수 지역 동시 교전, Cross-Arena Invasion)   │
+  │ • 조건: 팩션 리더 선포 + 국고 자원 소모 (전쟁 비용)         │
+  └─────────────────────────────────────────────────────────────┘
+```
+
+**전쟁 선포 시 배틀로얄과의 상호작용**:
+
+| 상태 | 배틀로얄 | 전쟁 선포 효과 |
+|------|---------|--------------|
+| **평시** (War 없음) | 정상 진행, 모든 팩션 참가 | - |
+| **전쟁 Prep** (24h) | 정상 진행 | 선포 팩션 아레나에 "⚔️ WAR INCOMING" 경고 HUD |
+| **전쟁 Active** (72h) | 배틀로얄 PvP 데미지 **+20% 보너스** (전쟁 팩션 간) | Cross-Arena Invasion 가능: 전쟁 상대 팩션의 지역 아레나에 직접 침공 |
+| **전쟁 End** | 정상 복귀 | 승리 팩션이 패배 팩션의 지배 지역 1개 즉시 탈취 |
+| **전쟁 Cooldown** (24h) | 정상 진행 | 전쟁 재선포 불가, 방어 집중 기간 |
+
+**Cross-Arena Invasion** (전쟁 Active 중 특수 메커니즘):
+- 전쟁 Active 기간 중 공격 팩션 리더가 **"침공"** 버튼으로 적 팩션 지배 지역에 팩션원 전송
+- 침공 팩션은 해당 지역의 **배틀로얄 페이즈에 참가** (외부 팩션으로 등장)
+- 침공 팩션이 해당 지역에서 배틀로얄 1위 → 해당 라운드 Region Points를 **방어 팩션 대신 획득**
+- 3일간의 전쟁 기간 중 누적 Region Points 비교로 전쟁 승패 결정
+
+> **설계 근거**: 배틀로얄은 "일상적 영토 경쟁" (매일 96라운드), 전쟁 선포는 "전략적 대규모 공세" (최대 72시간). 두 레이어가 겹치면 전투 강도가 증폭되어 전쟁 기간이 게임 내 가장 긴장감 높은 이벤트가 된다.
+
 ---
 
 ## 5. 영토 지배 시스템
@@ -418,11 +499,57 @@ interface CountryRegions {
 **지배 유지**:
 - 지배 확정 후에도 **매일 정산으로 재판정**
 - 다른 팩션이 다음 날 더 많은 RP를 모으면 **지배 교체**
-- **연속 지배 일수**에 따라 방어 보너스 증가 (§7.3 참조)
+- **연속 지배 일수**에 따라 Sovereignty Escalation Ladder 단계 상승
+
+**Sovereignty Escalation Ladder** (v35 호환):
+
+v35의 3단계 주권 사다리를 v39의 일일 정산 모델에 통합한다. v35의 `None → Active Domination (6 epochs/1hr) → Sovereignty (24hr) → Hegemony (7 days)` 구조에서, v39에서는 에폭 단위가 아닌 **일 단위**로 재정의한다.
+
+```
+Sovereignty Escalation Ladder (지역 단위):
+
+  ┌──────────────────────────────────────────────────────────────┐
+  │ Tier 0: None (미지배)                                         │
+  │ → 어느 팩션도 지배 미확정 또는 경합 중                        │
+  │ → 효과: 없음                                                  │
+  ├──────────────────────────────────────────────────────────────┤
+  │ Tier 1: Active Domination (1일 연속 지배)                     │
+  │ → 일일 정산에서 지배 확정 1회 이상                            │
+  │ → 효과: 기본 지배 보상 (§5.4) + 팩션 깃발 표시               │
+  │ → v35 매핑: Active Domination (6 epochs ≈ 1 day in v39)      │
+  ├──────────────────────────────────────────────────────────────┤
+  │ Tier 2: Sovereignty (3일 연속 지배)                           │
+  │ → 동일 팩션이 3일 연속 지배 유지                              │
+  │ → 효과: +수비대 NPC 1기, 방어 보너스 +5%                     │
+  │ → v35 매핑: Sovereignty (24hr continuous → 3 days in v39)     │
+  ├──────────────────────────────────────────────────────────────┤
+  │ Tier 3: Hegemony (14일 연속 지배)                             │
+  │ → 동일 팩션이 14일 연속 지배 유지                             │
+  │ → 효과: "항구적 주권" — 교체 시 48시간 쿨다운 부여            │
+  │ →        지역 요새화 (-10% 공격 디버프), 보상 ×1.5           │
+  │ → v35 매핑: Hegemony (7 days → 14 days in v39)               │
+  └──────────────────────────────────────────────────────────────┘
+
+  * v35의 binary 모델(controllingFactionId만)에서 v39는
+    sovereigntyTier: 0|1|2|3 필드를 추가하여 단계를 관리한다.
+  * 지배 교체 시 → sovereigntyTier 즉시 0으로 리셋 (이전 지배 기간 무효)
+```
+
+```typescript
+// v39 확장 — Region 인터페이스에 추가
+interface RegionDominance {
+  controllingFactionId: string | null;
+  controlSince: Date | null;
+  consecutiveDays: number;          // 연속 지배 일수 (0~30)
+  sovereigntyTier: 0 | 1 | 2 | 3;  // None | Active | Sovereignty | Hegemony
+  dailyScores: Record<string, number>;
+  lastSettlement: Date;
+}
+```
 
 ### 5.3 국가 지배 (전체 지역 통일)
 
-**한 팩션이 특정 국가의 모든 지역을 동시에 지배**하면 → **국가 주권(National Sovereignty)** 획득.
+**한 팩션이 특정 국가의 모든 지역을 동시에 지배**하면 → **국가 주권(National Sovereignty)** 획득. 국가 주권은 개별 지역의 Sovereignty Tier와 별도로, **모든 지역을 통일**한 상위 레이어다.
 
 ```
 예시: 한국 (5 지역)
@@ -471,13 +598,14 @@ interface CountryRegions {
 | 국기 표시 | 글로브 3D | 지구본에 팩션 깃발 표시 |
 | 시즌 보상 배율 | ×1.5 | 시즌 종료 시 보상 50% 증가 |
 
-**연속 지배 스트릭 보너스**:
+**연속 지배 스트릭 보너스** (Sovereignty Escalation Ladder와 연동):
 
-| 연속 일수 | 추가 효과 |
-|----------|----------|
-| 3일 연속 | 수비대 +1 NPC |
-| 7일 연속 | 지역 요새화 (공격 -10% 디버프) |
-| 14일 연속 | "항구적 주권" 선언 가능 (교체 시 48시간 쿨다운 부여) |
+| 연속 일수 | Sovereignty Tier | 추가 효과 |
+|----------|-----------------|----------|
+| 1일 (최초 지배) | Tier 1: Active Domination | 팩션 깃발 표시, 기본 보상 시작 |
+| 3일 연속 | Tier 2: Sovereignty | 수비대 +1 NPC, 방어 보너스 +5% |
+| 7일 연속 | (Tier 2 강화) | 지역 요새화 (공격 -10% 디버프) |
+| 14일 연속 | Tier 3: Hegemony | "항구적 주권" — 교체 시 48시간 쿨다운, 보상 ×1.5 |
 | 30일 연속 (시즌 전체) | 시즌 최종 보상 ×2, 특수 칭호 |
 
 ---
@@ -854,10 +982,35 @@ type DominanceState struct {
 | End (0:05) | 5초 | → **Settlement Phase** (15초로 확장) |
 | Transition (0:10) | 10초 | → Settlement에 포함 |
 
-**호환 전략**: 기존 `EpochManager`의 인터페이스는 유지하되, 내부 타이밍과 페이즈 정의만 변경.
+**마이그레이션 전략**: `EpochManager`를 **deprecated** 처리하고 새로운 `RoundEngine`을 생성한다. 기존 v33 모드는 레거시 호환을 위해 유지하되, v39 지역 아레나는 반드시 `RoundEngine`을 사용한다.
+
+```
+마이그레이션 경로:
+
+  Phase 1 (v39 초기):
+    EpochManager (v33, deprecated) — 기존 Matrix/Singularity 모드에서 계속 사용
+    RoundEngine  (v39, 신규)       — Region Arena 전용으로 병행 운영
+
+  Phase 2 (v39 안정화 후):
+    EpochManager → RoundEngine 어댑터 추가 (EpochManager 호출 → 내부 RoundEngine 위임)
+    기존 모든 모드가 RoundEngine 기반으로 전환
+
+  Phase 3 (v40 이후):
+    EpochManager 완전 제거
+    RoundEngine 이 유일한 게임 사이클 엔진
+```
+
+**DominationEngine 변환 (v35 6-epoch → v39 4-round)**:
+
+v35의 `Active Domination` 진입 조건이 "6 epochs (약 1시간)"인데, v39에서는 epoch 대신 round를 사용한다. 1 round = 15분이므로:
+
+| v35 기준 | v35 에폭 수 | v39 라운드 수 | v39 실시간 |
+|---------|------------|-------------|----------|
+| Active Domination 진입 | 6 epochs | **4 rounds** | ~1시간 (4 × 15분) |
+| 일일 정산 주기 | ~60 epochs | **96 rounds** | 24시간 |
 
 ```go
-// 기존 (v33)
+// 기존 (v33) — DEPRECATED, v39 이후 사용 금지
 const (
     EpochPhasePeace       = iota  // 290s
     EpochPhaseWarCountdown        // 10s
@@ -867,13 +1020,38 @@ const (
     EpochPhaseTransition          // 10s
 )
 
-// 신규 (v39)
+// 신규 (v39) — RoundEngine
 const (
     RoundPhasePvE         = iota  // 600s (10분)
     RoundPhaseBattleRoyale        // 300s (5분)
     RoundPhaseSettlement          // 15s
 )
+
+// RoundEngine — EpochManager를 대체하는 신규 사이클 엔진
+type RoundEngine struct {
+    phase        int
+    phaseStart   time.Time
+    roundNumber  int
+    regionID     string
+    onPhaseChange func(phase int, timeLeft int)
+}
+
+// EpochAdapter — 기존 EpochManager 호출을 RoundEngine으로 위임 (Phase 2 마이그레이션)
+type EpochAdapter struct {
+    engine *RoundEngine
+}
+func (a *EpochAdapter) GetCurrentPhase() int {
+    // EpochPhase 상수를 RoundPhase로 변환
+    switch a.engine.phase {
+    case RoundPhasePvE:          return EpochPhasePeace
+    case RoundPhaseBattleRoyale: return EpochPhaseWar
+    case RoundPhaseSettlement:   return EpochPhaseEnd
+    default:                     return EpochPhasePeace
+    }
+}
 ```
+
+> **핵심 결정**: v33의 compile-time tick 상수(20Hz)는 RoundEngine에서도 유지한다. 변경되는 것은 페이즈 정의와 타이밍뿐이며, 게임 루프 틱 레이트는 그대로 20Hz다.
 
 ### 9.2 v35 토큰 이코노미 연결
 

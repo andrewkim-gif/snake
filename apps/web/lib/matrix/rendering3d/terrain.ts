@@ -1,0 +1,447 @@
+/**
+ * rendering3d/terrain.ts — Chunked 3D 지형 시스템
+ *
+ * S07: Ground Plane Chunked Mesh (200x200 unit chunks)
+ * S08: Biome Texture Atlas (canvas 기반 atlas 생성 + UV 매핑)
+ * S09: Simplex Noise Biome 통합 (noise.ts + biomes.ts 재사용)
+ *
+ * 좌표 매핑: 2D(x,y) → 3D(x, 0, -y)
+ * 각 chunk는 PlaneGeometry + biome 기반 vertex colors 사용
+ * Merged Geometry로 chunk 내 타일 통합 (1 draw call per chunk)
+ */
+
+import * as THREE from 'three';
+import { fbm2D, normalizeNoise, seededSimplex2D } from '../map/noise';
+import { BIOME_CONFIGS, getBiomeAt, getStageMapConfig } from '../map/biomes';
+import type { BiomeType, StageMapConfig } from '../map/types';
+
+// ============================================
+// Constants
+// ============================================
+
+/** chunk 크기 (월드 단위) */
+export const CHUNK_SIZE = 200;
+
+/** chunk 내 타일 해상도 (한 축 기준 타일 수) */
+export const TILES_PER_CHUNK = 10;
+
+/** 타일 1개의 월드 크기 */
+export const TILE_SIZE = CHUNK_SIZE / TILES_PER_CHUNK;
+
+/** 카메라 주변 렌더링할 chunk 반경 (chunk 수) */
+export const CHUNK_RENDER_RADIUS = 4;
+
+/** chunk 로드/언로드 여유 거리 (hysteresis) */
+export const CHUNK_LOAD_MARGIN = 1;
+
+/** 기본 시드 */
+export const DEFAULT_SEED = 42;
+
+// ============================================
+// Biome Color Palette (3D용)
+// ============================================
+
+/** 바이옴별 3D 지면 색상 (vertex color용) */
+export const BIOME_GROUND_COLORS: Record<BiomeType, THREE.Color> = {
+  grass: new THREE.Color('#3a6b3a'),
+  stone: new THREE.Color('#5a5a6a'),
+  concrete: new THREE.Color('#4a4a54'),
+  special: new THREE.Color('#4a2a6a'),
+  void: new THREE.Color('#0a1a0a'),
+};
+
+/** 바이옴별 보조 색상 (타일 변화용) */
+export const BIOME_ACCENT_COLORS: Record<BiomeType, THREE.Color> = {
+  grass: new THREE.Color('#4a8050'),
+  stone: new THREE.Color('#6a6a78'),
+  concrete: new THREE.Color('#555560'),
+  special: new THREE.Color('#5a3a7a'),
+  void: new THREE.Color('#0a2a0a'),
+};
+
+// ============================================
+// Atlas 텍스처 생성 (Canvas 기반)
+// ============================================
+
+/** atlas 내 biome 타일 크기 */
+const ATLAS_TILE_SIZE = 64;
+/** atlas 레이아웃: 7 biomes x 1 row */
+const ATLAS_COLS = 7;
+
+/** biome 순서 (atlas UV 인덱스) */
+const BIOME_ORDER: BiomeType[] = ['grass', 'stone', 'concrete', 'special', 'void'];
+
+/** biome → atlas 인덱스 매핑 */
+export const BIOME_ATLAS_INDEX: Record<BiomeType, number> = {
+  grass: 0,
+  stone: 1,
+  concrete: 2,
+  special: 3,
+  void: 4,
+};
+
+/**
+ * Canvas 기반 biome atlas 텍스처 생성
+ * 각 biome에 대해 procedural 패턴 생성
+ */
+export function createBiomeAtlasTexture(): THREE.CanvasTexture {
+  const width = ATLAS_TILE_SIZE * ATLAS_COLS;
+  const height = ATLAS_TILE_SIZE;
+
+  // SSR 안전: document 없으면 빈 텍스처 반환
+  if (typeof document === 'undefined') {
+    return new THREE.CanvasTexture(new OffscreenCanvas(width, height));
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = width;
+  canvas.height = height;
+  const ctx = canvas.getContext('2d')!;
+
+  // 각 biome 타일 렌더링
+  for (let i = 0; i < BIOME_ORDER.length; i++) {
+    const biome = BIOME_ORDER[i];
+    const x = i * ATLAS_TILE_SIZE;
+    drawBiomeTile(ctx, x, 0, ATLAS_TILE_SIZE, biome);
+  }
+
+  // 나머지 슬롯(5,6)은 변형 타일
+  drawBiomeTile(ctx, 5 * ATLAS_TILE_SIZE, 0, ATLAS_TILE_SIZE, 'grass', true);
+  drawBiomeTile(ctx, 6 * ATLAS_TILE_SIZE, 0, ATLAS_TILE_SIZE, 'stone', true);
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestMipMapLinearFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+
+  return texture;
+}
+
+/**
+ * 개별 biome 타일을 canvas에 그리기
+ */
+function drawBiomeTile(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  size: number,
+  biome: BiomeType,
+  variant: boolean = false
+): void {
+  const baseColor = BIOME_GROUND_COLORS[biome];
+  const accentColor = BIOME_ACCENT_COLORS[biome];
+
+  // 기본 색상 채우기
+  const r = Math.floor(baseColor.r * 255);
+  const g = Math.floor(baseColor.g * 255);
+  const b = Math.floor(baseColor.b * 255);
+  ctx.fillStyle = `rgb(${r},${g},${b})`;
+  ctx.fillRect(x, y, size, size);
+
+  // 텍스처 패턴 추가 (biome별 고유)
+  const ar = Math.floor(accentColor.r * 255);
+  const ag = Math.floor(accentColor.g * 255);
+  const ab = Math.floor(accentColor.b * 255);
+
+  switch (biome) {
+    case 'grass': {
+      // 풀 패턴: 작은 점들
+      ctx.fillStyle = variant ? `rgba(${ar},${ag},${ab},0.4)` : `rgba(${ar},${ag},${ab},0.3)`;
+      for (let i = 0; i < 20; i++) {
+        const px = x + Math.random() * size;
+        const py = y + Math.random() * size;
+        ctx.fillRect(px, py, 2, 3);
+      }
+      break;
+    }
+    case 'stone': {
+      // 돌 패턴: 불규칙 선
+      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.3)`;
+      ctx.lineWidth = 1;
+      for (let i = 0; i < 5; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + Math.random() * size, y + Math.random() * size);
+        ctx.lineTo(x + Math.random() * size, y + Math.random() * size);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'concrete': {
+      // 콘크리트 패턴: 격자
+      ctx.strokeStyle = `rgba(${ar},${ag},${ab},0.15)`;
+      ctx.lineWidth = 1;
+      const gridSize = size / 4;
+      for (let i = 1; i < 4; i++) {
+        ctx.beginPath();
+        ctx.moveTo(x + i * gridSize, y);
+        ctx.lineTo(x + i * gridSize, y + size);
+        ctx.stroke();
+        ctx.beginPath();
+        ctx.moveTo(x, y + i * gridSize);
+        ctx.lineTo(x + size, y + i * gridSize);
+        ctx.stroke();
+      }
+      break;
+    }
+    case 'special': {
+      // 특수: 글로우 패턴
+      ctx.fillStyle = `rgba(${ar},${ag},${ab},0.2)`;
+      for (let i = 0; i < 8; i++) {
+        const px = x + Math.random() * size;
+        const py = y + Math.random() * size;
+        ctx.beginPath();
+        ctx.arc(px, py, 3, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'void': {
+      // 매트릭스: 디지털 패턴
+      ctx.fillStyle = `rgba(0,255,65,0.15)`;
+      for (let i = 0; i < 10; i++) {
+        const px = x + Math.random() * size;
+        const py = y + Math.random() * size;
+        ctx.fillRect(px, py, 1, 4);
+      }
+      break;
+    }
+  }
+}
+
+// ============================================
+// Chunk 키 유틸
+// ============================================
+
+/** chunk 좌표로 키 생성 */
+export function chunkKey(cx: number, cz: number): string {
+  return `${cx},${cz}`;
+}
+
+/** 월드 좌표 → chunk 좌표 */
+export function worldToChunk(worldX: number, worldZ: number): [number, number] {
+  return [
+    Math.floor(worldX / CHUNK_SIZE),
+    Math.floor(worldZ / CHUNK_SIZE),
+  ];
+}
+
+// ============================================
+// Chunk Geometry 생성
+// ============================================
+
+/**
+ * chunk에 대한 biome 기반 PlaneGeometry 생성
+ * vertex color를 사용하여 타일별 biome 색상 적용
+ *
+ * @param chunkX chunk X 인덱스
+ * @param chunkZ chunk Z 인덱스
+ * @param stageId 현재 스테이지
+ * @param gameMode 게임 모드
+ * @param seed 노이즈 시드
+ */
+export function createChunkGeometry(
+  chunkX: number,
+  chunkZ: number,
+  stageId: number = 1,
+  gameMode: 'stage' | 'singularity' | 'tutorial' = 'stage',
+  seed: number = DEFAULT_SEED
+): THREE.PlaneGeometry {
+  const mapConfig = getStageMapConfig(stageId, gameMode);
+  const segments = TILES_PER_CHUNK;
+
+  // PlaneGeometry: (width, height, widthSegments, heightSegments)
+  const geometry = new THREE.PlaneGeometry(CHUNK_SIZE, CHUNK_SIZE, segments, segments);
+
+  // XZ 평면으로 회전 (기본은 XY)
+  geometry.rotateX(-Math.PI / 2);
+
+  // 월드 좌표 오프셋 (chunk 중심)
+  const offsetX = chunkX * CHUNK_SIZE;
+  const offsetZ = chunkZ * CHUNK_SIZE;
+
+  // vertex color 배열 생성
+  const posAttr = geometry.getAttribute('position');
+  const count = posAttr.count;
+  const colors = new Float32Array(count * 3);
+
+  for (let i = 0; i < count; i++) {
+    // vertex 월드 좌표 계산
+    const vx = posAttr.getX(i) + offsetX + CHUNK_SIZE / 2;
+    const vz = posAttr.getZ(i) + offsetZ + CHUNK_SIZE / 2;
+
+    // 3D(x,z) → 2D(x,y): z → -y (부호 반전)
+    const worldX2D = vx;
+    const worldY2D = -vz;
+
+    // biome 결정 (기존 noise.ts + biomes.ts 재사용)
+    const biome = getBiomeAt(worldX2D, worldY2D, mapConfig, seed);
+
+    // biome 색상 가져오기
+    const baseColor = BIOME_GROUND_COLORS[biome];
+    const accentColor = BIOME_ACCENT_COLORS[biome];
+
+    // 부드러운 색상 변화 (세부 노이즈 추가)
+    const detailNoise = normalizeNoise(
+      seededSimplex2D(vx * 0.05, vz * 0.05, seed + 1234)
+    );
+
+    // biome 전환 블렌딩
+    const blendNoise = normalizeNoise(
+      fbm2D(worldX2D, worldY2D, 2, 0.5, mapConfig.noiseScale * 2, seed + 5678)
+    );
+
+    // base와 accent 색상 블렌딩
+    const blendFactor = detailNoise * 0.3;
+    const r = THREE.MathUtils.lerp(baseColor.r, accentColor.r, blendFactor);
+    const g = THREE.MathUtils.lerp(baseColor.g, accentColor.g, blendFactor);
+    const b = THREE.MathUtils.lerp(baseColor.b, accentColor.b, blendFactor);
+
+    // 약간의 밝기 변화 (monotone 방지)
+    const brightness = 0.9 + blendNoise * 0.2;
+
+    colors[i * 3] = r * brightness;
+    colors[i * 3 + 1] = g * brightness;
+    colors[i * 3 + 2] = b * brightness;
+  }
+
+  geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+
+  return geometry;
+}
+
+/**
+ * chunk 머티리얼 생성 (vertex color 사용)
+ */
+export function createChunkMaterial(): THREE.MeshStandardMaterial {
+  return new THREE.MeshStandardMaterial({
+    vertexColors: true,
+    roughness: 0.85,
+    metalness: 0.05,
+    side: THREE.FrontSide,
+  });
+}
+
+// ============================================
+// Chunk Manager
+// ============================================
+
+export interface ChunkData {
+  key: string;
+  chunkX: number;
+  chunkZ: number;
+  mesh: THREE.Mesh;
+}
+
+/**
+ * 플레이어 위치 기반 visible chunk 목록 계산
+ * @param playerWorldX 플레이어 3D 월드 X
+ * @param playerWorldZ 플레이어 3D 월드 Z
+ * @param radius chunk 반경
+ */
+export function getVisibleChunkCoords(
+  playerWorldX: number,
+  playerWorldZ: number,
+  radius: number = CHUNK_RENDER_RADIUS
+): Array<[number, number]> {
+  const [pcx, pcz] = worldToChunk(playerWorldX, playerWorldZ);
+  const coords: Array<[number, number]> = [];
+
+  for (let dx = -radius; dx <= radius; dx++) {
+    for (let dz = -radius; dz <= radius; dz++) {
+      coords.push([pcx + dx, pcz + dz]);
+    }
+  }
+
+  return coords;
+}
+
+/**
+ * 새로 생성할 chunk와 파괴할 chunk 계산
+ */
+export function diffChunks(
+  currentKeys: Set<string>,
+  targetCoords: Array<[number, number]>
+): {
+  toCreate: Array<[number, number]>;
+  toDestroy: string[];
+} {
+  const targetKeys = new Set(targetCoords.map(([x, z]) => chunkKey(x, z)));
+
+  // 새로 생성할 chunk
+  const toCreate = targetCoords.filter(
+    ([x, z]) => !currentKeys.has(chunkKey(x, z))
+  );
+
+  // 파괴할 chunk
+  const toDestroy: string[] = [];
+  currentKeys.forEach((key) => {
+    if (!targetKeys.has(key)) {
+      toDestroy.push(key);
+    }
+  });
+
+  return { toCreate, toDestroy };
+}
+
+// ============================================
+// Biome Blend (S09: 인접 biome 블렌딩)
+// ============================================
+
+/**
+ * 특정 위치의 biome과 블렌드 가중치 반환
+ * 인접 biome 간 부드러운 전환을 위한 블렌딩 값
+ */
+export function getBiomeBlendAt(
+  worldX2D: number,
+  worldY2D: number,
+  config: StageMapConfig,
+  seed: number
+): { primary: BiomeType; secondary: BiomeType | null; blend: number } {
+  const primary = getBiomeAt(worldX2D, worldY2D, config, seed);
+
+  if (!config.secondaryBiome) {
+    return { primary, secondary: null, blend: 0 };
+  }
+
+  // 주변 샘플링으로 경계 감지
+  const sampleDist = TILE_SIZE * 2;
+  const neighbors = [
+    getBiomeAt(worldX2D + sampleDist, worldY2D, config, seed),
+    getBiomeAt(worldX2D - sampleDist, worldY2D, config, seed),
+    getBiomeAt(worldX2D, worldY2D + sampleDist, config, seed),
+    getBiomeAt(worldX2D, worldY2D - sampleDist, config, seed),
+  ];
+
+  // 인접 중 다른 biome 찾기
+  const otherBiome = neighbors.find((b) => b !== primary);
+  if (!otherBiome) {
+    return { primary, secondary: null, blend: 0 };
+  }
+
+  // 블렌드 값 계산 (경계 근처에서 0-1)
+  const noise = normalizeNoise(
+    fbm2D(worldX2D, worldY2D, 3, 0.5, config.noiseScale, seed)
+  );
+  // 0.5 근처에서 블렌드 (±0.1 범위)
+  const dist = Math.abs(noise - 0.6);
+  const blend = Math.max(0, 1 - dist / 0.15);
+
+  return { primary, secondary: otherBiome, blend };
+}
+
+/**
+ * 두 biome 색상을 블렌딩
+ */
+export function blendBiomeColors(
+  biome1: BiomeType,
+  biome2: BiomeType | null,
+  blend: number
+): THREE.Color {
+  const color1 = BIOME_GROUND_COLORS[biome1];
+  if (!biome2 || blend <= 0) return color1.clone();
+
+  const color2 = BIOME_GROUND_COLORS[biome2];
+  return color1.clone().lerp(color2, blend);
+}
