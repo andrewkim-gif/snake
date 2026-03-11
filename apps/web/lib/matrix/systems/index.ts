@@ -214,3 +214,91 @@ export {
   type SafeZoneVisual,
   type RoundEngineCallbacks,
 } from './round-engine-client';
+
+// v39: BR Elimination Client System (Phase 6)
+export {
+  BREliminationClientSystem,
+  brEliminationClient,
+  type EliminationNotification,
+  type SpectateState,
+  type EliminationClientCallbacks,
+} from './br-elimination-client';
+
+// v39: Faction Visual System (Phase 3)
+export {
+  FactionVisualSystem,
+  factionVisualSystem,
+  FACTION_COLORS,
+  getFactionColor,
+  MINIMAP_COLORS,
+  HP_BAR_COLORS,
+  DEFAULT_RING_CONFIG,
+  FACTION_BANNER_ICONS,
+  getFactionBannerIcon,
+  type FactionRelation,
+  type IFactionRingConfig,
+  type IFactionBadge,
+  type IFactionHUDEntry,
+  type IFactionKillEvent,
+  type IFactionAssistEvent,
+  type IFactionCombatScore,
+  type IUnderdogBoost,
+} from './faction-visual';
+
+// v39: Resource Harvest System (Phase 5)
+export {
+  ResourceHarvestSystem,
+  createEmptyInventory,
+  mergeInventories,
+  isInventoryEmpty,
+  inventorySummary,
+  getResourceTypeInfo,
+  GATHER_RANGE,
+  DEFAULT_GATHER_DURATION,
+  INVENTORY_CAPACITY,
+  PVE_DEATH_DROP_RATIO,
+  BR_DEATH_DROP_RATIO,
+  DROP_GATHER_DURATION,
+  AUTO_GATHER_CHECK_INTERVAL,
+  RESOURCE_TYPE_INFO,
+  type GatherState,
+  type IGatherSession,
+  type IGatherProgressUI,
+  type IInventoryChangeEvent,
+  type IResourceNodeRenderData,
+  type IResourceTypeInfo,
+} from './resource-harvest';
+
+// v39: Airdrop Client System (Phase 6)
+export {
+  AirdropClientSystem,
+  airdropClientSystem,
+  type AirdropVisual,
+  type PowerupVisual,
+  type AirdropClientCallbacks,
+} from './airdrop-client';
+
+// v39: Economy Manager (Phase 5)
+export {
+  EconomyManager,
+  type GoldSource,
+  type GoldHistoryEntry,
+  type EconomyModifiers,
+  type GoldState,
+  type ScoreState,
+  type PurchaseRecord,
+  type EconomySnapshot,
+} from './economy';
+
+// v39: Arena Mode Utilities
+export {
+  createArenaState,
+  updateArenaState,
+  isOutsideSafeZone,
+  getZoneDamage,
+  formatTime,
+  formatTimeRemaining,
+  getPhaseInfo,
+  type ArenaGameState,
+  type ArenaState,
+} from './arena-mode';
