@@ -9,7 +9,7 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import Link from 'next/link';
 import { BarChart3, Coins, Vote, Shield, Building2, X } from 'lucide-react';
-import { McButton } from '@/components/lobby/McButton';
+
 import { SK, SKFont, bodyFont, headingFont, sketchBorder, handDrawnRadius, radius } from '@/lib/sketch-ui';
 import { tierColors, resourceLabels, resourceIcons } from '@/lib/map-style';
 import type { CountryClientState } from '@/lib/globe-data';
@@ -27,6 +27,8 @@ import { useApiData } from '@/hooks/useApiData';
 import { useWalletStore } from '@/stores/wallet-store';
 import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import { KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
+import CountryRegionMap from './CountryRegionMap';
+import { useMatrixSocket, type RegionListEntry, type RegionListResponse, type RegionJoinedPayload } from '@/hooks/useMatrixSocket';
 
 // ─── Types ───────────────────────────────────────────────
 type CountryTab = 'OVERVIEW' | 'TOKEN' | 'VOTE' | 'FACTION' | 'CIVILIZATION';
@@ -48,8 +50,10 @@ interface CountryPanelProps {
   onClose: () => void;
   onEnterArena?: (iso3: string) => void;
   onSpectate?: (iso3: string) => void;
-  /** v29b: Globe → Matrix 게임 진입 */
+  /** v29b: Globe → Matrix 게임 진입 (하위호환 유지) */
   onManageCountry?: (iso3: string) => void;
+  /** v41: 지역 선택 콜백 — 지역 클릭 시 즉시 게임 입장 */
+  onRegionSelect?: (regionId: string) => void;
 }
 
 // ─── API Data Helpers ────────────────────────────────────
@@ -770,10 +774,68 @@ export function CountryPanel({
   onEnterArena,
   onSpectate,
   onManageCountry,
+  onRegionSelect,
 }: CountryPanelProps) {
   const [visible, setVisible] = useState(false);
   const [activeTab, setActiveTab] = useState<CountryTab>('OVERVIEW');
   const isMobile = useIsMobile();
+
+  // ─── v41: 소켓 상태 (지역 목록) ───
+  const [regions, setRegions] = useState<RegionListEntry[]>([]);
+  const [regionLoading, setRegionLoading] = useState(true);
+  const [joining, setJoining] = useState<string | null>(null);
+
+  const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:9000';
+  const countryCode = country?.iso3 || '';
+
+  // ─── v41: useMatrixSocket 통합 (CountryWidePanel 패턴) ───
+  const { connect, disconnect, requestRegionList, joinRegion, connectionState } = useMatrixSocket({
+    onRegionList: useCallback((data: RegionListResponse) => {
+      if (data.countryCode === countryCode) {
+        setRegions(data.regions);
+        setRegionLoading(false);
+      }
+    }, [countryCode]),
+    onRegionJoined: useCallback((data: RegionJoinedPayload) => {
+      setJoining(null);
+      if (data.success) {
+        onRegionSelect?.(data.regionId);
+      }
+    }, [onRegionSelect]),
+    onRegionState: useCallback((data: RegionListEntry[]) => {
+      setRegions(data);
+    }, []),
+  });
+
+  // v41: 패널 open 시 소켓 connect, 닫을 때 disconnect
+  const connectedRef = useRef(false);
+  useEffect(() => {
+    if (open && !connectedRef.current) {
+      connectedRef.current = true;
+      connect(serverUrl);
+    }
+    return () => {
+      if (connectedRef.current) {
+        disconnect();
+        connectedRef.current = false;
+      }
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // v41: 연결 완료 후 지역 목록 요청
+  useEffect(() => {
+    if (connectionState === 'connected' && countryCode) {
+      setRegionLoading(true);
+      requestRegionList(countryCode);
+    }
+  }, [connectionState, countryCode, requestRegionList]);
+
+  // v41: 지역 클릭 핸들러
+  const handleSelectRegion = useCallback((regionId: string) => {
+    setJoining(regionId);
+    joinRegion(countryCode, regionId);
+  }, [countryCode, joinRegion]);
 
   // ─── API Data Hooks ───
   const selectedCountry = country;
@@ -955,34 +1017,62 @@ export function CountryPanel({
     </div>
   );
 
-  // ─── 공통 하단 액션 ───
-  const footer = (
+  // ─── v41: 우측 지역 맵 패널 ───
+  const regionMapPanel = (
     <div style={{
-      padding: '14px 20px 20px',
-      borderTop: `1px solid rgba(239, 68, 68, 0.15)`,
+      flex: 1,
+      minWidth: isMobile ? 'auto' : '300px',
+      padding: isMobile ? '16px' : '20px',
       display: 'flex',
       flexDirection: 'column',
-      gap: '8px',
+      borderLeft: isMobile ? 'none' : `1px solid ${SK.glassBorder}`,
+      borderTop: isMobile ? `1px solid ${SK.glassBorder}` : 'none',
     }}>
-      {/* v29b: Matrix 게임 진입 버튼 (메인) */}
-      <McButton
-        variant="green"
-        onClick={() => country?.iso3 && onManageCountry?.(country.iso3)}
-        disabled={!country}
-        style={{
-          width: '100%',
-          fontSize: SKFont.body,
-          padding: '14px 20px',
+      {/* 지역 맵 헤더 */}
+      <div style={{
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '12px',
+      }}>
+        <div style={{
+          fontFamily: bodyFont,
+          fontSize: SKFont.sm,
+          color: SK.textSecondary,
+          letterSpacing: '1px',
+          textTransform: 'uppercase',
+          fontWeight: 600,
+        }}>
+          Regions — Select to Enter
+        </div>
+        {/* 연결 상태 인디케이터 */}
+        <div style={{
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          gap: '8px',
-          letterSpacing: '2px',
-        }}
-      >
-        <Building2 size={16} strokeWidth={2} /> ENTER {country?.name?.toUpperCase() || 'COUNTRY'}
-      </McButton>
+          gap: '6px',
+          fontFamily: bodyFont,
+          fontSize: SKFont.xs,
+          color: connectionState === 'connected' ? SK.green : SK.textMuted,
+        }}>
+          <div style={{
+            width: '6px',
+            height: '6px',
+            borderRadius: '50%',
+            background: connectionState === 'connected' ? SK.green : SK.textMuted,
+          }} />
+          {connectionState === 'connected' ? 'LIVE' : connectionState === 'connecting' ? 'CONNECTING...' : 'OFFLINE'}
+        </div>
+      </div>
 
+      {/* CountryRegionMap (SVG 기반 지역 지도) */}
+      <div style={{ flex: 1, minHeight: '360px' }}>
+        <CountryRegionMap
+          regions={regions}
+          loading={regionLoading || connectionState !== 'connected'}
+          joining={joining}
+          onSelectRegion={handleSelectRegion}
+        />
+      </div>
     </div>
   );
 
@@ -1050,17 +1140,19 @@ export function CountryPanel({
           {/* 탭 바 */}
           <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
-          {/* 탭 콘텐츠 (스크롤) */}
+          {/* 탭 콘텐츠 + 지역 맵 (상하 스택, 스크롤) */}
           <div style={{
             flex: 1,
             overflowY: 'auto',
-            padding: '16px 20px',
           }}>
-            {renderTabContent()}
-          </div>
+            {/* 탭 콘텐츠 */}
+            <div style={{ padding: '16px 20px' }}>
+              {renderTabContent()}
+            </div>
 
-          {/* 액션 버튼 */}
-          {footer}
+            {/* v41: 지역 맵 (하단 스택) */}
+            {regionMapPanel}
+          </div>
         </div>
 
         {/* 통일 pulse 키프레임 (overlay-tokens.ts) */}
@@ -1086,7 +1178,7 @@ export function CountryPanel({
         onClick={onClose}
       />
 
-      {/* 팝업 패널 — Apex 에이펙스 스타일 */}
+      {/* v41: 와이드 팝업 패널 — 960px 2-column */}
       <div style={{
         position: 'fixed',
         top: '50%',
@@ -1095,7 +1187,7 @@ export function CountryPanel({
           ? 'translate(-50%, -50%) scale(1)'
           : 'translate(-50%, -48%) scale(0.96)',
         opacity: visible ? 1 : 0,
-        width: 'min(520px, 92vw)',
+        width: 'min(960px, calc(100vw - 32px))',
         maxHeight: '80vh',
         zIndex: 101,
         transition: 'transform 250ms cubic-bezier(0.16, 1, 0.3, 1), opacity 200ms ease',
@@ -1114,20 +1206,37 @@ export function CountryPanel({
         {/* 헤더 (탭 위에 고정) */}
         {header}
 
-        {/* 탭 바 */}
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
-
-        {/* 탭 콘텐츠 (스크롤 영역) */}
+        {/* v41: 2-column 본문 (좌: 탭, 우: 지역맵) */}
         <div style={{
           flex: 1,
-          overflowY: 'auto',
-          padding: '16px 20px',
+          display: 'flex',
+          flexDirection: 'row',
+          overflow: 'hidden',
         }}>
-          {renderTabContent()}
-        </div>
+          {/* 좌측 컬럼: 탭 + 탭 콘텐츠 (480px) */}
+          <div style={{
+            width: '480px',
+            minWidth: '380px',
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
+          }}>
+            {/* 탭 바 */}
+            <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
 
-        {/* 하단 액션 버튼 (탭 아래에 고정) */}
-        {footer}
+            {/* 탭 콘텐츠 (스크롤 영역) */}
+            <div style={{
+              flex: 1,
+              overflowY: 'auto',
+              padding: '16px 20px',
+            }}>
+              {renderTabContent()}
+            </div>
+          </div>
+
+          {/* 우측 컬럼: 지역 맵 (flex: 1) */}
+          {regionMapPanel}
+        </div>
 
         {/* 왼쪽 아래 붉은 삼각형 */}
         <div style={{

@@ -50,6 +50,8 @@ interface WorldViewProps {
   onSpectate?: (iso3: string) => void;
   /** v29b: Globe → Matrix 게임 진입 콜백 */
   onManageCountry?: (iso3: string, name: string) => void;
+  /** v41 Phase 2: 지역 클릭 → 즉시 matrix 진입 콜백 (국가 iso3 + name 포함) */
+  onRegionSelect?: (regionId: string, countryIso3: string, countryName: string) => void;
   bottomOffset?: number;
   style?: React.CSSProperties;
   /** v14: Domination state overlay for globe countries */
@@ -85,6 +87,7 @@ export function WorldView({
   onEnterArena,
   onSpectate,
   onManageCountry,
+  onRegionSelect,
   bottomOffset = 0,
   style,
   dominationStates,
@@ -306,8 +309,8 @@ export function WorldView({
         }}
         onClickManage={(iso3) => {
           setHoverVisible(false);
-          const cs = statesRef.current.get(iso3);
-          onManageCountry?.(iso3, cs?.name ?? iso3);
+          // v41: 호버 패널에서 "Manage" 클릭 시 CountryPanel 열기 (지역맵 통합됨)
+          handleCountryClick(iso3, iso3);
         }}
       />
 
@@ -322,6 +325,11 @@ export function WorldView({
           const cs = statesRef.current.get(iso3);
           onManageCountry?.(iso3, cs?.name ?? iso3);
         }}
+        onRegionSelect={onRegionSelect ? (regionId: string) => {
+          // v41: 국가 정보와 함께 page.tsx에 전달
+          const cs = selectedCountry ? statesRef.current.get(selectedCountry) : null;
+          onRegionSelect(regionId, selectedCountry ?? '', cs?.name ?? selectedCountry ?? '');
+        } : undefined}
       />
     </div>
   );
