@@ -56,6 +56,11 @@ const MatrixApp = dynamic(
   () => import('@/components/game/matrix/MatrixApp').then(m => ({ default: m.MatrixApp })),
   { ssr: false },
 );
+// v39: 지역 선택 패널
+const RegionSelector = dynamic(
+  () => import('@/components/game/matrix/RegionSelector'),
+  { ssr: false },
+);
 
 const NEWS_FEED_HEIGHT = 36;
 
@@ -203,7 +208,7 @@ function MatrixLoadingOverlay({ countryName, onComplete }: { countryName: string
 export default function Home() {
   const tLobby = useTranslations('lobby');
   const searchParams = useSearchParams();
-  const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso' | 'matrix'>('lobby');
+  const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso' | 'region-select' | 'matrix'>('lobby');
   // v26: 아이소메트릭 국가 관리 대상 (Phase 8: spectating 플래그 추가)
   const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string; spectating?: boolean } | null>(null);
   // v29b Phase 2: Matrix 진입 시 국가 정보
@@ -450,15 +455,26 @@ export default function Home() {
   // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
-  // v29b Phase 2: Globe → Matrix 진입 (국가 선택 → 로딩바 → MatrixApp)
+  // v39: Globe → RegionSelector → Matrix 진입 (국가 선택 → 지역 선택 → 아레나)
   const handleManageCountry = useCallback((iso3: string, name: string) => {
     setMatrixCountry({ iso3, name });
+    setMode('region-select');
+  }, []);
+
+  // v39: 지역 선택 완료 → Matrix 진입
+  const handleRegionSelected = useCallback((regionId: string) => {
     setMatrixLoading(true);
     setFadeOut(true);
     setTimeout(() => {
       setMode('matrix');
       setFadeOut(false);
     }, 300);
+  }, []);
+
+  // v39: 지역 선택에서 뒤로가기 → 로비 복귀
+  const handleRegionBack = useCallback(() => {
+    setMatrixCountry(null);
+    setMode('lobby');
   }, []);
 
 
@@ -1154,6 +1170,16 @@ export default function Home() {
             spectating={isoCountry.spectating}
           />
         </div>
+      )}
+
+      {/* === 오버레이: v39 지역 선택 (Globe 위에 표시) === */}
+      {mode === 'region-select' && matrixCountry && (
+        <RegionSelector
+          countryCode={matrixCountry.iso3}
+          countryName={matrixCountry.name}
+          onSelectRegion={handleRegionSelected}
+          onBack={handleRegionBack}
+        />
       )}
 
       {/* === 오버레이: Matrix 인게임 === */}

@@ -95,6 +95,7 @@ export type {
   PersistentUpgrades,
   EventLogType,
   SingularityState,
+  SingularityEvent,
   SingularityResult,
   SingularityEventType,
 } from './types';

@@ -109,8 +109,8 @@ export function VoxelTerrain({
     if (!groupRef.current) return;
 
     frameCountRef.current++;
-    // 매 N프레임마다 chunk 갱신 (성능 최적화)
-    if (frameCountRef.current % CHUNK_UPDATE_INTERVAL !== 0) return;
+    // 첫 프레임은 즉시 실행, 이후 N프레임마다 갱신 (성능 최적화)
+    if (frameCountRef.current > 1 && frameCountRef.current % CHUNK_UPDATE_INTERVAL !== 0) return;
 
     const player = playerRef.current;
 

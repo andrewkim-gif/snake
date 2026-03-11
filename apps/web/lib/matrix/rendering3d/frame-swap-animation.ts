@@ -69,9 +69,12 @@ export interface AnimationClip {
 // 기본 포즈 위치 (createBaseCharacterGeometry 기준)
 // ============================================
 
-const legCenterY = LEG_HEIGHT / 2;
+// ★ 다리/팔 geometry가 translate(-height/2)되어 피벗이 관절(상단)에 배치됨
+//   → baseY는 관절 높이를 사용
+const legJointY = LEG_HEIGHT;  // 엉덩이 관절
 const bodyCenterY = LEG_HEIGHT + BODY_HEIGHT / 2;
 const headCenterY = LEG_HEIGHT + BODY_HEIGHT + HEAD_SIZE / 2;
+const armJointY = LEG_HEIGHT + BODY_HEIGHT; // 어깨 관절
 const leftLegX = -(LEG_WIDTH / 2 + LEG_GAP / 2);
 const rightLegX = LEG_WIDTH / 2 + LEG_GAP / 2;
 const leftArmX = -(BODY_WIDTH / 2 + ARM_WIDTH / 2);
@@ -369,10 +372,10 @@ export class AnimationController {
     // 각 파트에 보간된 트랜스폼 적용
     this.applyPartTransform(parts.head, prevFrame.head, currFrame.head, t, 0, headCenterY, 0);
     this.applyPartTransform(parts.body, prevFrame.body, currFrame.body, t, 0, bodyCenterY, 0);
-    this.applyPartTransform(parts.leftLeg, prevFrame.leftLeg, currFrame.leftLeg, t, leftLegX, legCenterY, 0);
-    this.applyPartTransform(parts.rightLeg, prevFrame.rightLeg, currFrame.rightLeg, t, rightLegX, legCenterY, 0);
-    this.applyPartTransform(parts.leftArm, prevFrame.leftArm, currFrame.leftArm, t, leftArmX, bodyCenterY, 0);
-    this.applyPartTransform(parts.rightArm, prevFrame.rightArm, currFrame.rightArm, t, rightArmX, bodyCenterY, 0);
+    this.applyPartTransform(parts.leftLeg, prevFrame.leftLeg, currFrame.leftLeg, t, leftLegX, legJointY, 0);
+    this.applyPartTransform(parts.rightLeg, prevFrame.rightLeg, currFrame.rightLeg, t, rightLegX, legJointY, 0);
+    this.applyPartTransform(parts.leftArm, prevFrame.leftArm, currFrame.leftArm, t, leftArmX, armJointY, 0);
+    this.applyPartTransform(parts.rightArm, prevFrame.rightArm, currFrame.rightArm, t, rightArmX, armJointY, 0);
   }
 
   /** 개별 파트에 보간된 트랜스폼 적용 */

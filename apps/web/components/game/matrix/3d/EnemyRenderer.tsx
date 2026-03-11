@@ -26,6 +26,7 @@ import {
   disposeAllTemplates,
   TEMPLATE_SIZES,
 } from '@/lib/matrix/rendering3d/enemy-templates';
+import { getTerrainHeight } from '@/lib/matrix/rendering3d/terrain';
 import {
   getEnemyColors,
   markColorNeedsUpdate,
@@ -84,6 +85,7 @@ const _tempPosition = new THREE.Vector3();
 const _tempQuaternion = new THREE.Quaternion();
 const _tempScale = new THREE.Vector3();
 const _tempColor = new THREE.Color();
+const _Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // ============================================
 // Template Pool
@@ -453,7 +455,7 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
         // LOW LOD: 단일 큐브
         if (lowLodCount >= MAX_INSTANCES_PER_TEMPLATE * 2) continue;
 
-        _tempPosition.set(x3d, LOW_LOD_CUBE_SIZE / 2, z3d);
+        _tempPosition.set(x3d, getTerrainHeight(x3d, z3d) + LOW_LOD_CUBE_SIZE / 2, z3d);
         _tempScale.set(scale, scale, scale);
         _tempMatrix.compose(_tempPosition, _tempQuaternion.identity(), _tempScale);
 
@@ -473,7 +475,7 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
         // MID LOD: 절반 스케일 Y (약간 납작하게)
         const scaleY = lod === 'MID' ? scale * 0.7 : scale;
 
-        _tempPosition.set(x3d, 0, z3d);
+        _tempPosition.set(x3d, getTerrainHeight(x3d, z3d), z3d);
         _tempScale.set(scale, scaleY, scale);
 
         // 8방향 facing (velocity 기반)
@@ -481,7 +483,7 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
         const vy = enemy.velocity.y;
         if (vx !== 0 || vy !== 0) {
           const angle = Math.atan2(-vy, vx); // 2D → 3D Y-axis rotation
-          _tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), -angle + Math.PI / 2);
+          _tempQuaternion.setFromAxisAngle(_Y_AXIS, -angle + Math.PI / 2);
         } else {
           _tempQuaternion.identity();
         }

@@ -54,13 +54,21 @@ const VACUUM_LERP = 0.15;
 // Pickup 색상 매핑
 // ============================================
 
-/** XP orb 색상 (가치별) */
+/** XP orb 색상 (가치별, 사전 할당 — GC 방지) */
+const GEM_COLORS = {
+  legendary: new THREE.Color('#ff6600'),
+  epic: new THREE.Color('#aa44ff'),
+  rare: new THREE.Color('#4488ff'),
+  magic: new THREE.Color('#44ddff'),
+  common: new THREE.Color('#44ff88'),
+} as const;
+
 function getGemColor(value: number): THREE.Color {
-  if (value >= 50) return new THREE.Color('#ff6600'); // 레전더리
-  if (value >= 20) return new THREE.Color('#aa44ff'); // 에픽
-  if (value >= 10) return new THREE.Color('#4488ff'); // 레어
-  if (value >= 5) return new THREE.Color('#44ddff');  // 매직
-  return new THREE.Color('#44ff88');                   // 일반
+  if (value >= 50) return GEM_COLORS.legendary;
+  if (value >= 20) return GEM_COLORS.epic;
+  if (value >= 10) return GEM_COLORS.rare;
+  if (value >= 5) return GEM_COLORS.magic;
+  return GEM_COLORS.common;
 }
 
 /** Pickup 타입별 색상 */
@@ -80,6 +88,11 @@ const PICKUP_SCALES: Record<string, number> = {
   magnet: 1.0,
   upgrade_material: 1.3,
 };
+
+/** 임시 행렬 (useFrame 내 재사용 — GC 방지) */
+const _tempRotMatrix = new THREE.Matrix4();
+const _tempScaleMatrix = new THREE.Matrix4();
+const _tempFallbackColor = new THREE.Color('#ffffff');
 
 // ============================================
 // XP Orb Renderer (InstancedMesh)
@@ -308,20 +321,20 @@ function PickupItemRenderer({ pickupsRef, playerRef }: PickupItemRendererProps) 
       const lifeRatio = pickup.life / 10; // 10초 기준
       const blink = lifeRatio < 0.3 ? (Math.sin(time * 10) > 0 ? 1 : 0.3) : 1;
 
-      // matrix 구성
-      const rotMatrix = new THREE.Matrix4().makeRotationY(rotY);
-      const scaleMatrix = new THREE.Matrix4().makeScale(
+      // matrix 구성 (사전 할당 행렬 재사용 — GC 방지)
+      _tempRotMatrix.makeRotationY(rotY);
+      _tempScaleMatrix.makeScale(
         finalScale * blink,
         finalScale * blink,
         finalScale * blink
       );
-      tempMatrix.multiplyMatrices(rotMatrix, scaleMatrix);
+      tempMatrix.multiplyMatrices(_tempRotMatrix, _tempScaleMatrix);
       tempMatrix.setPosition(px, baseY + floatY, pz);
 
       mesh.setMatrixAt(count, tempMatrix);
 
       // 타입별 색상
-      const color = PICKUP_COLORS[pickup.type] || new THREE.Color('#ffffff');
+      const color = PICKUP_COLORS[pickup.type] || _tempFallbackColor;
       mesh.setColorAt(count, color);
 
       count++;

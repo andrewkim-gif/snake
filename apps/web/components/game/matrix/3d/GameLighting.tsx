@@ -25,19 +25,19 @@ export function GameLighting() {
     <>
       {/* 앰비언트 라이트 — 기본 가시성 (모든 면에 균일 조명) */}
       <ambientLight
-        intensity={0.4}
-        color="#f0e6d2" // 다크 전술 테마: 따뜻한 offwhite
+        intensity={0.65}
+        color="#f5f0e8" // 밝은 warm white
       />
 
       {/* 메인 디렉셔널 라이트 — 태양광 (45° 각도, 그림자 캐스팅) */}
       <directionalLight
         ref={mainLightRef}
-        intensity={1.0}
-        color="#fff5e6" // 약간 따뜻한 태양광
+        intensity={1.2}
+        color="#fff8ee" // 밝은 따뜻한 태양광
         position={[500, 800, 500]} // 45° 각도 (isometric과 동일 방향)
         castShadow
-        shadow-mapSize-width={2048}
-        shadow-mapSize-height={2048}
+        shadow-mapSize-width={1024}
+        shadow-mapSize-height={1024}
         shadow-camera-left={-SHADOW_CAMERA_SIZE}
         shadow-camera-right={SHADOW_CAMERA_SIZE}
         shadow-camera-top={SHADOW_CAMERA_SIZE}

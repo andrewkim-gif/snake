@@ -35,16 +35,19 @@
  * - ScreenFlashOverlay (DOM 기반 화면 플래시, S33)
  */
 
-import React, { useRef, useMemo } from 'react';
+import React, { useRef, useMemo, useEffect, useCallback } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { useGameRefs, type GameRefs } from '@/lib/matrix/hooks/useGameRefs';
 import { useGameLoop } from '@/lib/matrix/hooks/useGameLoop';
+import { ZOOM_CONFIG } from '@/lib/matrix/constants';
 import { GameCamera } from './3d/GameCamera';
 import { GameLighting } from './3d/GameLighting';
 import { VoxelTerrain } from './3d/VoxelTerrain';
 import { TerrainObjects } from './3d/TerrainObjects';
 import { PickupRenderer } from './3d/PickupRenderer';
 import { VoxelCharacter } from './3d/VoxelCharacter';
+// Phase 3: Enemies
+import { EnemyRenderer } from './3d/EnemyRenderer';
 // Phase 5: Effects
 import { PostProcessingEffects, ScreenFlashOverlay, useScreenFlash } from './3d/PostProcessing';
 import { ParticleSystem } from './3d/ParticleSystem';
@@ -99,8 +102,11 @@ function SceneContent({
 }) {
   return (
     <>
-      {/* 배경색 */}
-      <color attach="background" args={['#111111']} />
+      {/* 배경색 — 밝은 블루그레이 (하늘감) */}
+      <color attach="background" args={['#2a3040']} />
+
+      {/* 안개 — 원거리 depth fade (카메라-지면 거리 ~1386 감안, 그 이후부터 fade) */}
+      <fog attach="fog" args={['#2a3040', 1800, 3500]} />
 
       {/* 카메라 — Isometric OrthographicCamera + LERP Follow + Zoom + Shake */}
       <GameCamera
@@ -136,13 +142,18 @@ function SceneContent({
         playerRef={refs.player}
       />
 
-      {/* Fallback 지면 (VoxelTerrain 로드 전 또는 극한 거리) */}
-      <GroundPlane />
+      {/* GroundPlane 제거 — VoxelTerrain이 전체 지형 담당, 어두운 fallback이 Z-fighting 유발 */}
 
       {/* Phase 2: Voxel 캐릭터 (3-head chibi, S13-S18) */}
       <VoxelCharacter
         playerRef={refs.player}
         playerClass={refs.player.current.playerClass ?? 'neo'}
+      />
+
+      {/* Phase 3: 적 렌더러 (InstancedMesh) */}
+      <EnemyRenderer
+        enemiesRef={refs.enemies}
+        playerRef={refs.player}
       />
 
       {/* Phase 5: 파티클 시스템 (S34) */}
@@ -167,9 +178,9 @@ function SceneContent({
         />
       </WorldUI>
 
-      {/* Phase 5: 후처리 이펙트 — Bloom + Vignette (S33) */}
+      {/* Phase 5: 후처리 이펙트 — Bloom + Vignette (S33) — 기본 LOW (성능 최적화) */}
       <PostProcessingEffects
-        qualityTier="HIGH"
+        qualityTier="LOW"
         warningIntensityRef={warningIntensityRef}
       />
     </>
@@ -196,30 +207,324 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
   // Phase 6: 위험 경고 강도 ref (SafeZone3D → PostProcessing 연동)
   const warningIntensityRef = useRef(0);
 
-  // useGameLoop — Worker 기반 게임 로직 실행
-  // 3D 모드에서는 render=null (R3F useFrame이 렌더링 담당)
-  // Phase 0: update는 플레이어 위치만 시뮬레이션 (테스트용)
+  // === WASD 키보드 입력 ===
+  useEffect(() => {
+    const keys = refs.keysPressed.current;
+    const handleKeyDown = (e: KeyboardEvent) => keys.add(e.key.toLowerCase());
+    const handleKeyUp = (e: KeyboardEvent) => keys.delete(e.key.toLowerCase());
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, [refs.keysPressed]);
+
+  // === 마우스 휠 줌 ===
+  const handleWheel = useCallback((e: WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.05 : 0.05; // 위로 스크롤 = 줌인
+    refs.currentZoom.current = Math.max(
+      ZOOM_CONFIG.MIN_ZOOM,
+      Math.min(ZOOM_CONFIG.MAX_ZOOM, refs.currentZoom.current + delta)
+    );
+  }, [refs.currentZoom]);
+
+  useEffect(() => {
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [handleWheel]);
+
+  // === 테스트 적/잼 스폰 (한 번만 실행) ===
+  useMemo(() => {
+    // 테스트용 적 20마리 (플레이어 주변 반경 200 내)
+    const testEnemies = [];
+    for (let i = 0; i < 20; i++) {
+      const angle = (Math.PI * 2 * i) / 20;
+      const dist = 60 + Math.random() * 140;
+      testEnemies.push({
+        id: `test-enemy-${i}`,
+        position: { x: Math.cos(angle) * dist, y: Math.sin(angle) * dist },
+        velocity: { x: 0, y: 0 },
+        radius: 12,
+        color: i < 3 ? '#ff4444' : '#44aaff',
+        health: 100,
+        maxHealth: 100,
+        damage: 10,
+        speed: 30,
+        enemyType: i < 3 ? 2 : 1, // 2=big, 1=normal
+        state: 'chasing' as const,
+        stunTimer: 0,
+        mass: 1,
+        hitBy: new Set<string>(),
+        isBoss: i === 0,
+        isFrozen: false,
+        skillCooldown: 0,
+        name: i === 0 ? 'TEST BOSS' : undefined,
+      });
+    }
+    refs.enemies.current = testEnemies as any;
+
+    // 테스트용 XP 잼 50개
+    const testGems = [];
+    for (let i = 0; i < 50; i++) {
+      testGems.push({
+        id: `test-gem-${i}`,
+        position: {
+          x: (Math.random() - 0.5) * 400,
+          y: (Math.random() - 0.5) * 400,
+        },
+        value: [1, 5, 10, 20, 50][Math.floor(Math.random() * 5)],
+        color: '#44ff88',
+        isCollected: false,
+      });
+    }
+    refs.gems.current = testGems;
+
+    // 테스트용 픽업 아이템 10개
+    const pickupTypes = ['chicken', 'chest', 'bomb', 'magnet', 'upgrade_material'];
+    const testPickups = [];
+    for (let i = 0; i < 10; i++) {
+      testPickups.push({
+        id: `test-pickup-${i}`,
+        type: pickupTypes[i % pickupTypes.length],
+        position: {
+          x: (Math.random() - 0.5) * 300,
+          y: (Math.random() - 0.5) * 300,
+        },
+        life: 10,
+        maxLife: 10,
+        radius: 15,
+        magnetRange: 100,
+        isCollected: false,
+      });
+    }
+    refs.pickups.current = testPickups as any;
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // === 게임 루프 (WASD 이동 + 적 AI + 플레이어 자동공격 + 잼 자석) ===
+  const PLAYER_SPEED = 150;
+  const PLAYER_ATTACK_RANGE = 60;    // 자동 공격 사거리
+  const PLAYER_ATTACK_COOLDOWN = 0.5; // 자동 공격 쿨다운 (초)
+  const PLAYER_ATTACK_DAMAGE = 25;   // 기본 공격 데미지
+  const PLAYER_KNOCKBACK = 60;       // 적 넉백 강도
+  const playerAttackTimerRef = useRef(0); // 공격 쿨다운 타이머
   const updateRef = useRef((_dt: number) => {});
   useMemo(() => {
-    // 테스트용: 원 운동으로 플레이어 위치 시뮬레이션
-    let time = 0;
     updateRef.current = (dt: number) => {
-      time += dt;
       const player = refs.player.current;
-      // 반경 30의 원 운동 (게임 로직 동작 확인용)
-      player.position.x = Math.cos(time * 0.5) * 30;
-      player.position.y = Math.sin(time * 0.5) * 30;
-      player.velocity.x = -Math.sin(time * 0.5) * 15;
-      player.velocity.y = Math.cos(time * 0.5) * 15;
+      const keys = refs.keysPressed.current;
+
+      // WASD 이동
+      let dx = 0, dy = 0;
+      if (keys.has('w') || keys.has('arrowup')) dy -= 1;
+      if (keys.has('s') || keys.has('arrowdown')) dy += 1;
+      if (keys.has('a') || keys.has('arrowleft')) dx -= 1;
+      if (keys.has('d') || keys.has('arrowright')) dx += 1;
+
+      // 대각선 정규화
+      if (dx !== 0 && dy !== 0) {
+        const inv = 1 / Math.SQRT2;
+        dx *= inv;
+        dy *= inv;
+      }
+
+      player.velocity.x = dx * PLAYER_SPEED;
+      player.velocity.y = dy * PLAYER_SPEED;
+      player.position.x += player.velocity.x * dt;
+      player.position.y += player.velocity.y * dt;
+
+      // facing 방향 업데이트 (캐릭터 회전용)
+      if (dx !== 0 || dy !== 0) {
+        refs.lastMoveFacing.current = { x: dx, y: dy };
+        refs.lastFacing.current = { x: dx, y: dy };
+      }
+
+      // === 플레이어 자동 공격 (가장 가까운 적 타겟팅) ===
+      playerAttackTimerRef.current -= dt;
+      if (playerAttackTimerRef.current <= 0) {
+        let closestEnemy: (typeof refs.enemies.current)[number] | null = null;
+        let closestDist = PLAYER_ATTACK_RANGE;
+
+        for (const enemy of refs.enemies.current) {
+          const edx = enemy.position.x - player.position.x;
+          const edy = enemy.position.y - player.position.y;
+          const d = Math.sqrt(edx * edx + edy * edy);
+          if (d < closestDist) {
+            closestDist = d;
+            closestEnemy = enemy;
+          }
+        }
+
+        if (closestEnemy) {
+          playerAttackTimerRef.current = PLAYER_ATTACK_COOLDOWN;
+
+          // 크리티컬 판정
+          const isCritical = Math.random() < (player.criticalChance ?? 0.05);
+          const dmg = Math.round(PLAYER_ATTACK_DAMAGE * (isCritical ? (player.criticalMultiplier ?? 2.0) : 1.0));
+
+          // 적 데미지
+          closestEnemy.health -= dmg;
+
+          // 적 넉백 (플레이어 반대 방향)
+          const edx = closestEnemy.position.x - player.position.x;
+          const edy = closestEnemy.position.y - player.position.y;
+          const eDist = Math.sqrt(edx * edx + edy * edy);
+          if (eDist > 0.1) {
+            closestEnemy.position.x += (edx / eDist) * PLAYER_KNOCKBACK * dt * 10;
+            closestEnemy.position.y += (edy / eDist) * PLAYER_KNOCKBACK * dt * 10;
+          }
+
+          // 데미지 넘버 (적 위치에 표시)
+          refs.damageNumbers.current.push({
+            id: `pdmg-${Date.now()}-${Math.random()}`,
+            position: { x: closestEnemy.position.x, y: closestEnemy.position.y },
+            value: dmg,
+            color: isCritical ? '#ffdd00' : '#ffffff',
+            life: 1.0,
+            maxLife: 1.0,
+            isCritical,
+            velocity: { x: (Math.random() - 0.5) * 40, y: -60 },
+          });
+
+          // 화면 쉐이크 (작게)
+          refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.08);
+          refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, 0.1);
+        }
+      }
+
+      // === 적 사망 처리 + gem 드롭 ===
+      refs.enemies.current = refs.enemies.current.filter(enemy => {
+        if (enemy.health <= 0) {
+          // gem 드롭
+          const gemValue = enemy.isBoss ? 50 : (Number(enemy.enemyType) >= 2 ? 20 : 10);
+          refs.gems.current.push({
+            id: `gem-drop-${Date.now()}-${Math.random()}`,
+            position: { x: enemy.position.x, y: enemy.position.y },
+            value: gemValue,
+            color: enemy.isBoss ? '#ffdd00' : '#44ff88',
+            isCollected: false,
+          });
+          // 점수 추가
+          player.score += gemValue;
+          return false; // 제거
+        }
+        return true;
+      });
+
+      // 적 AI: 플레이어 추적 + 공격
+      const ENEMY_ATTACK_RANGE = 25;
+      const ENEMY_ATTACK_COOLDOWN = 1.0;
+      const ENEMY_KNOCKBACK_FORCE = 80;
+
+      for (const enemy of refs.enemies.current) {
+        const ex = enemy.position.x - player.position.x;
+        const ey = enemy.position.y - player.position.y;
+        const dist = Math.sqrt(ex * ex + ey * ey);
+
+        if (dist > ENEMY_ATTACK_RANGE) {
+          // 추적: 플레이어를 향해 이동
+          const nx = -ex / dist;
+          const ny = -ey / dist;
+          enemy.position.x += nx * enemy.speed * dt;
+          enemy.position.y += ny * enemy.speed * dt;
+          enemy.velocity.x = nx * enemy.speed;
+          enemy.velocity.y = ny * enemy.speed;
+        } else {
+          // 공격 범위 진입: 데미지 + 넉백 + 데미지 넘버
+          enemy.velocity.x = 0;
+          enemy.velocity.y = 0;
+          enemy.skillCooldown -= dt;
+
+          if (enemy.skillCooldown <= 0) {
+            enemy.skillCooldown = ENEMY_ATTACK_COOLDOWN;
+
+            // 플레이어 데미지 (무적 아닌 경우)
+            if (player.invulnerabilityTimer <= 0) {
+              player.health = Math.max(0, player.health - enemy.damage);
+              player.hitFlashTimer = 0.15;
+              player.invulnerabilityTimer = 0.5;
+
+              // 넉백
+              if (dist > 0.1) {
+                player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
+                player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
+              }
+
+              // 화면 쉐이크
+              refs.screenShakeTimer.current = 0.2;
+              refs.screenShakeIntensity.current = 0.3;
+
+              // 데미지 넘버
+              refs.damageNumbers.current.push({
+                id: `dmg-${Date.now()}-${Math.random()}`,
+                position: { x: player.position.x, y: player.position.y },
+                value: enemy.damage,
+                color: '#ff4444',
+                life: 1.0,
+                maxLife: 1.0,
+                isCritical: false,
+                velocity: { x: (Math.random() - 0.5) * 40, y: -60 },
+              });
+            }
+          }
+        }
+      }
+
+      // 무적 타이머 감소
+      if (player.invulnerabilityTimer > 0) {
+        player.invulnerabilityTimer -= dt;
+      }
+
+      // 넉백 적용 + 감쇠
+      if (Math.abs(player.knockback.x) > 0.1 || Math.abs(player.knockback.y) > 0.1) {
+        player.position.x += player.knockback.x * dt;
+        player.position.y += player.knockback.y * dt;
+        player.knockback.x *= 0.9;
+        player.knockback.y *= 0.9;
+      }
+
+      // Hit flash 감소
+      if (player.hitFlashTimer > 0) {
+        player.hitFlashTimer -= dt;
+      }
+
+      // 화면 쉐이크 감쇠
+      if (refs.screenShakeTimer.current > 0) {
+        refs.screenShakeTimer.current -= dt;
+        refs.screenShakeIntensity.current *= 0.92;
+      }
+
+      // 잼 자석 수집 (50px 이내)
+      const GEM_COLLECT_RANGE = 50;
+      refs.gems.current = refs.gems.current.filter(gem => {
+        if (gem.isCollected) return false;
+        const gdx = gem.position.x - player.position.x;
+        const gdy = gem.position.y - player.position.y;
+        const gd = Math.sqrt(gdx * gdx + gdy * gdy);
+        if (gd < GEM_COLLECT_RANGE) {
+          // 수집: XP 추가
+          player.xp += gem.value;
+          player.score += gem.value;
+          return false; // 제거
+        }
+        // 자석 범위 (100px): 플레이어 방향으로 끌어당기기
+        if (gd < 100 && gd > 1) {
+          gem.position.x -= (gdx / gd) * 200 * dt;
+          gem.position.y -= (gdy / gd) * 200 * dt;
+        }
+        return true;
+      });
+
       // Screen Flash 업데이트
       updateFlash(dt);
     };
-  }, [refs.player, updateFlash]);
+  }, [refs.player, refs.keysPressed, refs.enemies, refs.gems, refs.lastMoveFacing, refs.lastFacing, refs.damageNumbers, refs.screenShakeTimer, refs.screenShakeIntensity, updateFlash]);
 
   useGameLoop({
     gameActive,
     update: (dt: number) => updateRef.current(dt),
-    render: null, // 3D 모드: rAF 불필요 (R3F가 자체 렌더링)
+    render: null, // 3D 모드: R3F가 자체 렌더링
   });
 
   return (
@@ -240,11 +545,11 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
         }}
         dpr={[1, Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2)]}
         frameloop="always"
-        shadows="soft"
+        shadows="basic"
         style={{
           position: 'absolute',
           inset: 0,
-          background: '#111111',
+          background: '#2a3040',
         }}
       >
         <SceneContent refs={refs} warningIntensityRef={warningIntensityRef} />

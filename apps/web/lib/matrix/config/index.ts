@@ -43,13 +43,18 @@ export const WAVE_DURATION = 60; // seconds per wave (used for arena timing)
 
 // Singularity Bosses Config - removed for Arena mode
 
-// Achievements Config - stub (achievements.config.ts not yet ported)
-export type Achievement = any;
-export type AchievementCategory = string;
-export type AchievementCondition = any;
-export const ACHIEVEMENTS: Achievement[] = [];
-export const ACHIEVEMENT_CATEGORIES: AchievementCategory[] = [];
-export function getAchievementProgress(_id: string): number { return 0; }
+// Achievements Config
+export {
+  ACHIEVEMENTS,
+  getAchievementById,
+  getAchievementsByCategory,
+  getTotalAchievementCount,
+  getVisibleAchievements,
+  getCharacterAchievements,
+  ACHIEVEMENT_CATEGORIES,
+  getAchievementProgress,
+} from './achievements.config';
+export type { Achievement, AchievementCategory, AchievementCondition, AchievementReward } from './achievements.config';
 
 // Skins Config
 export {
@@ -164,6 +169,76 @@ export type {
   VibeTimeOption,
   BoosterConfig,
 } from './items.config';
+
+// Event Log Config
+export {
+  EVENT_LOG_COLORS,
+  EVENT_LOG_TAGS,
+  EVENT_LOG_CONFIG,
+  createInitialEventLogState,
+  generateEventId,
+  getCharacterDisplayName,
+  getWeaponDisplayName,
+  getPickupDisplayName,
+} from './eventlog.config';
+export type { EventLogType, EventLogMessage, EventLogState } from './eventlog.config';
+
+// Ramp Config
+export {
+  RAMP_CONFIG,
+  getRampUrl,
+  buildCatalogUrl,
+  openRampPopup,
+} from './ramp.config';
+export type { RampEnvironment, RampAssetId } from './ramp.config';
+
+// Tutorial Config
+export {
+  CHARACTER_STYLES,
+  TUTORIAL_STEPS,
+  EVENT_BASED_STEPS,
+  getTutorialStepById,
+  getTutorialStepByTrigger,
+  getTutorialStepsByPhase,
+  getNextTutorialStep,
+  getVibeCodingTutorialStep,
+} from './tutorial.config';
+export type { TutorialDialog, TutorialCondition, TutorialStep } from './tutorial.config';
+
+// Upgrade Materials Config
+export {
+  MAX_STAT_LEVEL,
+  STAT_BONUS_PER_LEVEL,
+  BASE_UPGRADE_COST,
+  COST_MULTIPLIER,
+  getStatUpgradeCost,
+  getStatBonus,
+  getStatMultiplier,
+  getAllStatMultipliers,
+  canUpgradeStat,
+  STAT_INFO,
+  STAT_ORDER,
+  MATERIAL_DATA,
+  UPGRADE_COSTS,
+  MAX_UPGRADE_LEVEL,
+  getUpgradeBonus,
+  getMaterialsNeeded,
+  getTotalMaterialsNeeded,
+  DROP_CONFIG,
+} from './upgrade-materials.config';
+export type { StatType, CharacterStats, StatInfo, MaterialInfo } from './upgrade-materials.config';
+
+// Witty Messages Config
+export {
+  WITTY_MESSAGES,
+  WITTY_CONFIG,
+  selectRandomCategory,
+  getRandomMessageFromCategory,
+  getRandomWittyMessage,
+  getNextMessageDelay,
+  TOTAL_WITTY_MESSAGES,
+} from './witty-messages.config';
+export type { WittyCategory, WittyMessage } from './witty-messages.config';
 
 // Skills Config (full skill system)
 export * from './skills';

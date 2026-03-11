@@ -11,42 +11,19 @@
  *          RegionSelector가 지역 목록 표시 → 지역 선택 → 해당 지역 아레나 진입
  */
 
-import { useState, useCallback, useMemo } from 'react';
+import { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { SK, SKFont, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 import { OVERLAY, overlayPanelStyle } from '@/lib/overlay-tokens';
-import type { IRegionDef, RegionType, ResourceType, RegionState } from '@/lib/matrix/types/region';
+import { useMatrixSocket, type RegionListEntry, type RegionListResponse, type RegionJoinedPayload } from '@/hooks/useMatrixSocket';
 
-// ── 타입 ──
-
-/** 지역 목록 항목 — 서버에서 받는 region_list 데이터 */
-export interface IRegionListEntry {
-  regionId: string;
-  name: string;
-  nameEn: string;
-  type: string;
-  arenaSize: number;
-  maxPlayers: number;
-  currentPlayers: number;
-  state: string;
-  controllingFactionId?: string;
-  controllingFactionColor?: string;
-  controlStreak: number;
-  primaryResource: string;
-  specialtyResource: string;
-  biome: string;
-  specialEffect: string;
-}
+// ── 타입 (RegionListEntry는 useMatrixSocket에서 import) ──
 
 interface RegionSelectorProps {
   /** 국가 ISO3 코드 */
   countryCode: string;
   /** 국가 이름 */
   countryName: string;
-  /** 서버에서 받은 지역 목록 (없으면 클라이언트 데이터 사용) */
-  regions: IRegionListEntry[];
-  /** 로딩 상태 */
-  loading?: boolean;
-  /** 지역 선택 시 콜백 */
+  /** 지역 선택 완료 시 콜백 (regionId 전달) */
   onSelectRegion: (regionId: string) => void;
   /** 뒤로가기 (국가 패널로 복귀) */
   onBack: () => void;
@@ -87,7 +64,7 @@ const RESOURCE_ICONS: Record<string, string> = {
 
 type RegionEntryState = 'open' | 'full' | 'locked';
 
-function getEntryState(entry: IRegionListEntry): RegionEntryState {
+function getEntryState(entry: RegionListEntry): RegionEntryState {
   if (entry.state === 'idle' || entry.state === 'pve' || entry.state === 'br' || entry.state === 'settling') {
     if (entry.currentPlayers >= entry.maxPlayers) return 'full';
     return 'open';
@@ -106,14 +83,16 @@ const ENTRY_STATE_STYLES: Record<RegionEntryState, { color: string; label: strin
 function RegionCard({
   entry,
   onSelect,
+  isJoining = false,
 }: {
-  entry: IRegionListEntry;
+  entry: RegionListEntry;
   onSelect: () => void;
+  isJoining?: boolean;
 }) {
   const [hovered, setHovered] = useState(false);
   const entryState = getEntryState(entry);
   const stateStyle = ENTRY_STATE_STYLES[entryState];
-  const isClickable = entryState === 'open';
+  const isClickable = entryState === 'open' && !isJoining;
 
   const typeIcon = REGION_TYPE_ICONS[entry.type] ?? '📍';
   const typeLabel = REGION_TYPE_LABELS[entry.type] ?? entry.type;
@@ -185,13 +164,13 @@ function RegionCard({
         <div style={{
           fontFamily: headingFont,
           fontSize: SKFont.xs,
-          color: stateStyle.color,
-          background: stateStyle.bg,
+          color: isJoining ? SK.accent : stateStyle.color,
+          background: isJoining ? 'rgba(99, 102, 241, 0.12)' : stateStyle.bg,
           padding: '2px 8px',
-          border: `1px solid ${stateStyle.color}40`,
+          border: `1px solid ${isJoining ? SK.accent : stateStyle.color}40`,
           letterSpacing: '1px',
         }}>
-          {stateStyle.label}
+          {isJoining ? 'JOINING...' : stateStyle.label}
         </div>
       </div>
 
@@ -265,11 +244,59 @@ function RegionCard({
 export default function RegionSelector({
   countryCode,
   countryName,
-  regions,
-  loading = false,
   onSelectRegion,
   onBack,
 }: RegionSelectorProps) {
+  // 내부 상태: 소켓에서 받아온 지역 목록
+  const [regions, setRegions] = useState<RegionListEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [joining, setJoining] = useState<string | null>(null);
+
+  // 서버 URL
+  const serverUrl = process.env.NEXT_PUBLIC_SERVER_URL || 'http://localhost:9000';
+
+  // 소켓 연결 + 지역 목록 수신
+  const { connect, disconnect, requestRegionList, joinRegion, connectionState } = useMatrixSocket({
+    onRegionList: useCallback((data: RegionListResponse) => {
+      if (data.countryCode === countryCode) {
+        setRegions(data.regions);
+        setLoading(false);
+      }
+    }, [countryCode]),
+    onRegionJoined: useCallback((data: RegionJoinedPayload) => {
+      setJoining(null);
+      if (data.success) {
+        onSelectRegion(data.regionId);
+      }
+    }, [onSelectRegion]),
+    onRegionState: useCallback((data: RegionListEntry[]) => {
+      // 실시간 지역 상태 업데이트 (접속 인원 등)
+      setRegions(data);
+    }, []),
+  });
+
+  // 마운트 시 소켓 연결 + 지역 목록 요청
+  const connectedRef = useRef(false);
+  useEffect(() => {
+    if (!connectedRef.current) {
+      connectedRef.current = true;
+      connect(serverUrl);
+    }
+    return () => {
+      disconnect();
+      connectedRef.current = false;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // 연결 완료 후 지역 목록 요청
+  useEffect(() => {
+    if (connectionState === 'connected') {
+      setLoading(true);
+      requestRegionList(countryCode);
+    }
+  }, [connectionState, countryCode, requestRegionList]);
+
   // 지역 통계
   const stats = useMemo(() => {
     const totalPlayers = regions.reduce((sum, r) => sum + r.currentPlayers, 0);
@@ -279,8 +306,9 @@ export default function RegionSelector({
   }, [regions]);
 
   const handleSelectRegion = useCallback((regionId: string) => {
-    onSelectRegion(regionId);
-  }, [onSelectRegion]);
+    setJoining(regionId);
+    joinRegion(countryCode, regionId);
+  }, [countryCode, joinRegion]);
 
   return (
     <div style={{
@@ -389,7 +417,7 @@ export default function RegionSelector({
         flexDirection: 'column',
         gap: '8px',
       }}>
-        {loading ? (
+        {loading || connectionState !== 'connected' ? (
           <div style={{
             padding: '40px 0',
             textAlign: 'center',
@@ -397,7 +425,7 @@ export default function RegionSelector({
             fontSize: SKFont.sm,
             color: SK.textMuted,
           }}>
-            Loading regions...
+            {connectionState === 'connecting' ? 'Connecting...' : 'Loading regions...'}
           </div>
         ) : regions.length === 0 ? (
           <div style={{
@@ -415,6 +443,7 @@ export default function RegionSelector({
               key={entry.regionId}
               entry={entry}
               onSelect={() => handleSelectRegion(entry.regionId)}
+              isJoining={joining === entry.regionId}
             />
           ))
         )}

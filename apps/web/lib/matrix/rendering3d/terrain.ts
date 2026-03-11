@@ -22,8 +22,8 @@ import type { BiomeType, StageMapConfig } from '../map/types';
 /** chunk 크기 (월드 단위) */
 export const CHUNK_SIZE = 200;
 
-/** chunk 내 타일 해상도 (한 축 기준 타일 수) */
-export const TILES_PER_CHUNK = 10;
+/** chunk 내 타일 해상도 (한 축 기준 타일 수) — 높을수록 vertex color 해상도 증가 */
+export const TILES_PER_CHUNK = 40;
 
 /** 타일 1개의 월드 크기 */
 export const TILE_SIZE = CHUNK_SIZE / TILES_PER_CHUNK;
@@ -41,22 +41,22 @@ export const DEFAULT_SEED = 42;
 // Biome Color Palette (3D용)
 // ============================================
 
-/** 바이옴별 3D 지면 색상 (vertex color용) */
+/** 바이옴별 3D 지면 색상 (vertex color용) — 밝고 선명한 팔레트 */
 export const BIOME_GROUND_COLORS: Record<BiomeType, THREE.Color> = {
-  grass: new THREE.Color('#3a6b3a'),
-  stone: new THREE.Color('#5a5a6a'),
-  concrete: new THREE.Color('#4a4a54'),
-  special: new THREE.Color('#4a2a6a'),
-  void: new THREE.Color('#0a1a0a'),
+  grass: new THREE.Color('#5a9e50'),
+  stone: new THREE.Color('#8a8a98'),
+  concrete: new THREE.Color('#7a7a88'),
+  special: new THREE.Color('#7a4aaa'),
+  void: new THREE.Color('#1a3a1a'),
 };
 
 /** 바이옴별 보조 색상 (타일 변화용) */
 export const BIOME_ACCENT_COLORS: Record<BiomeType, THREE.Color> = {
-  grass: new THREE.Color('#4a8050'),
-  stone: new THREE.Color('#6a6a78'),
-  concrete: new THREE.Color('#555560'),
-  special: new THREE.Color('#5a3a7a'),
-  void: new THREE.Color('#0a2a0a'),
+  grass: new THREE.Color('#6ab868'),
+  stone: new THREE.Color('#9a9aaa'),
+  concrete: new THREE.Color('#8888a0'),
+  special: new THREE.Color('#9a6ac0'),
+  void: new THREE.Color('#1a4a2a'),
 };
 
 // ============================================
@@ -278,6 +278,21 @@ export function createChunkGeometry(
     // biome 결정 (기존 noise.ts + biomes.ts 재사용)
     const biome = getBiomeAt(worldX2D, worldY2D, mapConfig, seed);
 
+    // === 지형 높이 변형 (undulation) ===
+    const heightNoise = normalizeNoise(
+      fbm2D(vx, vz, 3, 0.5, 0.003, seed + 7777)
+    );
+    const biomeHeightScale: Record<BiomeType, number> = {
+      grass: 1.5,
+      stone: 0.8,
+      concrete: 0.3,
+      special: 1.0,
+      void: 0.1,
+    };
+    const heightScale = biomeHeightScale[biome] ?? 1.0;
+    const heightY = heightNoise * heightScale;
+    posAttr.setY(i, heightY);
+
     // biome 색상 가져오기
     const baseColor = BIOME_GROUND_COLORS[biome];
     const accentColor = BIOME_ACCENT_COLORS[biome];
@@ -294,32 +309,66 @@ export function createChunkGeometry(
 
     // base와 accent 색상 블렌딩
     const blendFactor = detailNoise * 0.3;
-    const r = THREE.MathUtils.lerp(baseColor.r, accentColor.r, blendFactor);
-    const g = THREE.MathUtils.lerp(baseColor.g, accentColor.g, blendFactor);
-    const b = THREE.MathUtils.lerp(baseColor.b, accentColor.b, blendFactor);
+    let r = THREE.MathUtils.lerp(baseColor.r, accentColor.r, blendFactor);
+    let g = THREE.MathUtils.lerp(baseColor.g, accentColor.g, blendFactor);
+    let b = THREE.MathUtils.lerp(baseColor.b, accentColor.b, blendFactor);
 
-    // 약간의 밝기 변화 (monotone 방지)
-    const brightness = 0.9 + blendNoise * 0.2;
+    // === 타일 격자 패턴 (텍스쳐 효과) ===
+    // 타일 경계에서 색상을 어둡게 하여 격자 라인 생성
+    const tileEdgeX = Math.abs(((vx % TILE_SIZE) + TILE_SIZE) % TILE_SIZE - TILE_SIZE / 2) / (TILE_SIZE / 2);
+    const tileEdgeZ = Math.abs(((vz % TILE_SIZE) + TILE_SIZE) % TILE_SIZE - TILE_SIZE / 2) / (TILE_SIZE / 2);
+    // 경계에 가까울수록 0→1 (중심=0, 가장자리=1)
+    const edgeFactor = Math.max(
+      Math.pow(Math.max(0, tileEdgeX - 0.7) / 0.3, 2),
+      Math.pow(Math.max(0, tileEdgeZ - 0.7) / 0.3, 2)
+    );
+    // 격자 라인: 경계에서 15% 어두워짐
+    const gridDarken = 1.0 - edgeFactor * 0.15;
+
+    // === 타일 내부 체커보드 패턴 ===
+    const tileIdxX = Math.floor(vx / TILE_SIZE);
+    const tileIdxZ = Math.floor(vz / TILE_SIZE);
+    const checkerboard = (tileIdxX + tileIdxZ) % 2 === 0 ? 1.0 : 0.94;
+
+    // 밝기 변화 + 높이 보정 + 격자 + 체커보드
+    const brightness = (0.95 + blendNoise * 0.15 + heightNoise * 0.1) * gridDarken * checkerboard;
 
     colors[i * 3] = r * brightness;
     colors[i * 3 + 1] = g * brightness;
     colors[i * 3 + 2] = b * brightness;
   }
 
+  // 높이 변경 후 normal 재계산 (조명이 올바르게 적용되도록)
+  posAttr.needsUpdate = true;
+  geometry.computeVertexNormals();
+
   geometry.setAttribute('color', new THREE.BufferAttribute(colors, 3));
 
   return geometry;
 }
 
+/** 공유 atlas 텍스처 (lazy init, 모든 chunk에서 재사용) */
+let _sharedAtlas: THREE.CanvasTexture | null = null;
+function getSharedAtlas(): THREE.CanvasTexture {
+  if (!_sharedAtlas) {
+    _sharedAtlas = createBiomeAtlasTexture();
+  }
+  return _sharedAtlas;
+}
+
 /**
- * chunk 머티리얼 생성 (vertex color 사용)
+ * chunk 머티리얼 생성 (vertex color + atlas 텍스처 결합)
+ * atlas 텍스처로 세부 패턴, vertex color로 biome 색상 틴트
  */
 export function createChunkMaterial(): THREE.MeshStandardMaterial {
+  const atlas = getSharedAtlas();
   return new THREE.MeshStandardMaterial({
+    map: atlas,
     vertexColors: true,
-    roughness: 0.85,
-    metalness: 0.05,
+    roughness: 0.7,
+    metalness: 0.08,
     side: THREE.FrontSide,
+    envMapIntensity: 0.3,
   });
 }
 
@@ -444,4 +493,47 @@ export function blendBiomeColors(
 
   const color2 = BIOME_GROUND_COLORS[biome2];
   return color1.clone().lerp(color2, blend);
+}
+
+// ============================================
+// 지형 높이 샘플링 (엔티티 Y 좌표 동기화용)
+// ============================================
+
+/** biome별 높이 스케일 (createChunkGeometry와 동일) */
+const BIOME_HEIGHT_SCALES: Record<BiomeType, number> = {
+  grass: 1.5,
+  stone: 0.8,
+  concrete: 0.3,
+  special: 1.0,
+  void: 0.1,
+};
+
+/**
+ * 3D 월드 좌표의 지형 높이를 반환
+ * VoxelCharacter, EnemyRenderer 등에서 엔티티 Y 좌표 설정에 사용
+ *
+ * @param worldX 3D X 좌표
+ * @param worldZ 3D Z 좌표
+ * @param stageId 스테이지 ID
+ * @param gameMode 게임 모드
+ * @param seed 노이즈 시드
+ * @returns Y 높이값
+ */
+export function getTerrainHeight(
+  worldX: number,
+  worldZ: number,
+  stageId: number = 1,
+  gameMode: 'stage' | 'singularity' | 'tutorial' = 'stage',
+  seed: number = DEFAULT_SEED
+): number {
+  const mapConfig = getStageMapConfig(stageId, gameMode);
+  // 2D 좌표로 변환 (biome 결정용)
+  const worldX2D = worldX;
+  const worldY2D = -worldZ;
+  const biome = getBiomeAt(worldX2D, worldY2D, mapConfig, seed);
+  const heightScale = BIOME_HEIGHT_SCALES[biome] ?? 1.0;
+  const heightNoise = normalizeNoise(
+    fbm2D(worldX, worldZ, 3, 0.5, 0.003, seed + 7777)
+  );
+  return heightNoise * heightScale;
 }

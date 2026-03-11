@@ -24,6 +24,7 @@ import {
   CHUNK_RENDER_RADIUS,
   chunkKey,
   worldToChunk,
+  getTerrainHeight,
 } from '@/lib/matrix/rendering3d/terrain';
 import {
   TERRAIN_PROP_REGISTRY,
@@ -51,6 +52,9 @@ const INSTANCE_POOL_SIZE = 500;
 
 /** 오브젝트 밀도 (0-1, 낮을수록 적음) */
 const OBJECT_DENSITY = 0.12;
+
+/** Y축 벡터 (GC 방지 — useFrame 내 재사용) */
+const Y_AXIS = new THREE.Vector3(0, 1, 0);
 
 // ============================================
 // Hash-based placement 유틸
@@ -160,14 +164,15 @@ export interface TerrainObjectsProps {
 
 /**
  * InstancedPropPool — 하나의 prop 타입에 대한 InstancedMesh 풀
+ * placements를 ref로 받아 useFrame에서 직접 읽음 (React 리렌더 불필요)
  */
 function InstancedPropPool({
   propDef,
-  placements,
+  placementsRef,
   playerRef,
 }: {
   propDef: TerrainPropDef;
-  placements: Array<{ worldX: number; worldZ: number; rotation: number; scale: number }>;
+  placementsRef: React.MutableRefObject<Array<{ worldX: number; worldZ: number; rotation: number; scale: number }>>;
   playerRef: React.MutableRefObject<Player>;
 }) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
@@ -191,6 +196,7 @@ function InstancedPropPool({
     const mesh = meshRef.current;
     if (!mesh) return;
 
+    const placements = placementsRef.current;
     const player = playerRef.current;
     const playerX = player.position.x;
     const playerZ = -player.position.y;
@@ -207,9 +213,9 @@ function InstancedPropPool({
 
       if (distSq > MAX_RENDER_DISTANCE * MAX_RENDER_DISTANCE) continue;
 
-      // matrix 설정
-      tempPosition.set(p.worldX, propDef.yOffset, p.worldZ);
-      tempQuaternion.setFromAxisAngle(new THREE.Vector3(0, 1, 0), p.rotation);
+      // matrix 설정 (지형 높이 반영)
+      tempPosition.set(p.worldX, getTerrainHeight(p.worldX, p.worldZ) + propDef.yOffset, p.worldZ);
+      tempQuaternion.setFromAxisAngle(Y_AXIS, p.rotation);
       tempScale.set(p.scale, p.scale, p.scale);
       tempMatrix.compose(tempPosition, tempQuaternion, tempScale);
 
@@ -343,7 +349,8 @@ export function TerrainObjects({
 }
 
 /**
- * Wrapper: propPlacementsRef에서 해당 prop의 placements를 읽어 전달
+ * Wrapper: propPlacementsRef에서 해당 prop의 placements를 읽어 ref로 전달
+ * ★ ref를 직접 전달하여 useFrame에서 최신 값을 읽을 수 있도록 함
  */
 function InstancedPropPoolWrapper({
   propDef,
@@ -358,10 +365,10 @@ function InstancedPropPoolWrapper({
   >;
   playerRef: React.MutableRefObject<Player>;
 }) {
-  // 초기 빈 placements
+  // 이 prop 전용 placements ref
   const placementsRef = useRef<Array<{ worldX: number; worldZ: number; rotation: number; scale: number }>>([]);
 
-  // useFrame에서 placements 동기화
+  // useFrame에서 placements 동기화 (ref → ref, 리렌더 불필요)
   useFrame(() => {
     const allPlacements = propPlacementsRef.current.get(propId);
     if (allPlacements) {
@@ -372,7 +379,7 @@ function InstancedPropPoolWrapper({
   return (
     <InstancedPropPool
       propDef={propDef}
-      placements={placementsRef.current}
+      placementsRef={placementsRef}
       playerRef={playerRef}
     />
   );

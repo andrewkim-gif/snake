@@ -37,9 +37,11 @@ const ZERO_SCALE_MATRIX = new THREE.Matrix4().makeScale(0, 0, 0);
 
 // 임시 연산용 오브젝트 (GC 방지)
 const _tempMatrix = new THREE.Matrix4();
+const _tempRotMatrix = new THREE.Matrix4();
 const _tempPosition = new THREE.Vector3();
 const _tempScale = new THREE.Vector3();
 const _tempColor = new THREE.Color();
+const _tempBurstColor = new THREE.Color();
 
 // ============================================
 // Burst Style 정의
@@ -351,8 +353,8 @@ export function ParticleSystem({ qualityTier = 'HIGH' }: ParticleSystemProps) {
 
       _tempMatrix.makeTranslation(_tempPosition.x, _tempPosition.y, _tempPosition.z);
       if (p.rotationSpeed !== 0) {
-        const rotMatrix = new THREE.Matrix4().makeRotationY(p.rotation);
-        _tempMatrix.multiply(rotMatrix);
+        _tempRotMatrix.makeRotationY(p.rotation);
+        _tempMatrix.multiply(_tempRotMatrix);
       }
       _tempMatrix.scale(_tempScale);
 
@@ -456,7 +458,7 @@ export function spawnBurst(
         : request.count;
 
   const speedMult = request.speedMultiplier ?? config.speedMultiplier;
-  const baseColor = new THREE.Color(request.color ?? config.color);
+  const baseColor = _tempBurstColor.set(request.color ?? config.color);
 
   for (let i = 0; i < actualCount; i++) {
     if (freeIndices.length === 0) break;
@@ -488,9 +490,9 @@ export function spawnBurst(
 
     // 색상: pixel 스타일은 랜덤, 나머지는 config
     if (request.style === 'pixel') {
-      p.color = new THREE.Color().setHSL(Math.random(), 0.8, 0.6);
+      p.color = new THREE.Color().setHSL(Math.random(), 0.8, 0.6); // burst 시 1회만 — 허용
     } else {
-      p.color = baseColor.clone();
+      p.color = baseColor.clone(); // burst 시 1회만 — 허용
       // 약간의 색상 변형
       p.color.offsetHSL(
         (Math.random() - 0.5) * 0.05,

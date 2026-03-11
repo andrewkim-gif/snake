@@ -88,7 +88,11 @@ let _bodyGeometry: THREE.BoxGeometry | null = null;
 let _legGeometry: THREE.BoxGeometry | null = null;
 let _armGeometry: THREE.BoxGeometry | null = null;
 
-/** 공유 geometry 가져오기 (lazy init) */
+/**
+ * 공유 geometry 가져오기 (lazy init)
+ * ★ 다리/팔 geometry는 translate로 피벗을 관절(상단)에 배치
+ *   → rotation.x 적용 시 엉덩이/어깨 기준으로 자연스럽게 스윙
+ */
 export function getSharedGeometries() {
   if (!_headGeometry) {
     _headGeometry = new THREE.BoxGeometry(HEAD_SIZE, HEAD_SIZE, HEAD_SIZE);
@@ -98,9 +102,13 @@ export function getSharedGeometries() {
   }
   if (!_legGeometry) {
     _legGeometry = new THREE.BoxGeometry(LEG_WIDTH, LEG_HEIGHT, LEG_DEPTH);
+    // 피벗을 다리 상단(엉덩이)에 배치 — geometry를 아래로 이동
+    _legGeometry.translate(0, -LEG_HEIGHT / 2, 0);
   }
   if (!_armGeometry) {
     _armGeometry = new THREE.BoxGeometry(ARM_WIDTH, ARM_HEIGHT, ARM_DEPTH);
+    // 피벗을 팔 상단(어깨)에 배치 — geometry를 아래로 이동
+    _armGeometry.translate(0, -ARM_HEIGHT / 2, 0);
   }
   return {
     head: _headGeometry,
@@ -185,9 +193,12 @@ export function createBaseCharacterGeometry(
   group.name = 'voxelCharacter';
 
   // Y 오프셋 계산 (발바닥 = y:0)
-  const legCenterY = LEG_HEIGHT / 2;
+  // ★ 다리/팔은 geometry가 translate(-height/2)되어 피벗이 상단(관절)에 있음
+  //   → mesh.position.y = 관절 높이 (엉덩이/어깨)
+  const legJointY = LEG_HEIGHT;  // 엉덩이 관절 = 다리 상단
   const bodyCenterY = LEG_HEIGHT + BODY_HEIGHT / 2;
   const headCenterY = LEG_HEIGHT + BODY_HEIGHT + HEAD_SIZE / 2;
+  const armJointY = LEG_HEIGHT + BODY_HEIGHT; // 어깨 관절 = 몸통 상단
 
   // === 머리 (head) ===
   const headMat = createPartMaterial(colors.head);
@@ -205,35 +216,35 @@ export function createBaseCharacterGeometry(
   body.castShadow = true;
   group.add(body);
 
-  // === 왼쪽 다리 (leftLeg) ===
+  // === 왼쪽 다리 (leftLeg) — 피벗: 엉덩이 관절 ===
   const leftLegMat = createPartMaterial(colors.legs);
   const leftLeg = new THREE.Mesh(geometries.leg, leftLegMat);
   leftLeg.name = PART_NAMES.LEFT_LEG;
-  leftLeg.position.set(-(LEG_WIDTH / 2 + LEG_GAP / 2), legCenterY, 0);
+  leftLeg.position.set(-(LEG_WIDTH / 2 + LEG_GAP / 2), legJointY, 0);
   leftLeg.castShadow = true;
   group.add(leftLeg);
 
-  // === 오른쪽 다리 (rightLeg) ===
+  // === 오른쪽 다리 (rightLeg) — 피벗: 엉덩이 관절 ===
   const rightLegMat = createPartMaterial(colors.legs);
   const rightLeg = new THREE.Mesh(geometries.leg, rightLegMat);
   rightLeg.name = PART_NAMES.RIGHT_LEG;
-  rightLeg.position.set(LEG_WIDTH / 2 + LEG_GAP / 2, legCenterY, 0);
+  rightLeg.position.set(LEG_WIDTH / 2 + LEG_GAP / 2, legJointY, 0);
   rightLeg.castShadow = true;
   group.add(rightLeg);
 
-  // === 왼쪽 팔 (leftArm) ===
+  // === 왼쪽 팔 (leftArm) — 피벗: 어깨 관절 ===
   const leftArmMat = createPartMaterial(colors.arms);
   const leftArm = new THREE.Mesh(geometries.arm, leftArmMat);
   leftArm.name = PART_NAMES.LEFT_ARM;
-  leftArm.position.set(-(BODY_WIDTH / 2 + ARM_WIDTH / 2), bodyCenterY, 0);
+  leftArm.position.set(-(BODY_WIDTH / 2 + ARM_WIDTH / 2), armJointY, 0);
   leftArm.castShadow = true;
   group.add(leftArm);
 
-  // === 오른쪽 팔 (rightArm) ===
+  // === 오른쪽 팔 (rightArm) — 피벗: 어깨 관절 ===
   const rightArmMat = createPartMaterial(colors.arms);
   const rightArm = new THREE.Mesh(geometries.arm, rightArmMat);
   rightArm.name = PART_NAMES.RIGHT_ARM;
-  rightArm.position.set(BODY_WIDTH / 2 + ARM_WIDTH / 2, bodyCenterY, 0);
+  rightArm.position.set(BODY_WIDTH / 2 + ARM_WIDTH / 2, armJointY, 0);
   rightArm.castShadow = true;
   group.add(rightArm);
 

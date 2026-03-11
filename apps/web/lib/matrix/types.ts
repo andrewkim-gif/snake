@@ -1450,21 +1450,39 @@ export type EventLogType =
 /** 특이점 상태 */
 export interface SingularityState {
   isActive: boolean;
-  time: number;
-  kills: number;
-  bossesDefeated: number;
+  survivalTime: number;
+  bestTime: number;
+  killCount: number;
+  currentDifficulty: number;
+  activeEvent: SingularityEvent | null;
+}
+
+/** 특이점 이벤트 */
+export interface SingularityEvent {
+  type: SingularityEventType;
+  name: string;
+  description: string;
+  duration: number;
+  remaining: number;
 }
 
 /** 특이점 결과 */
 export interface SingularityResult {
   survivalTime: number;
-  kills: number;
-  bossesDefeated: number;
-  isNewBest: boolean;
+  killCount: number;
+  score: number;
+  isNewRecord: boolean;
+  rewards: {
+    survivalBonus: number;
+    recordBonus: number;
+    killBonus: number;
+    total: number;
+  };
 }
 
 /** 특이점 이벤트 타입 */
 export type SingularityEventType =
+  | 'MINI_BOSS'
   | 'milestone'
   | 'boss_spawn'
   | 'boss_defeat'
