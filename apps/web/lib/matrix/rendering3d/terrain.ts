@@ -12,8 +12,34 @@
 
 import * as THREE from 'three';
 import { fbm2D, normalizeNoise, seededSimplex2D } from '../map/noise';
-import { BIOME_CONFIGS, getBiomeAt, getStageMapConfig } from '../map/biomes';
+import { getBiomeAt, getStageMapConfig } from '../map/biomes';
 import type { BiomeType, StageMapConfig } from '../map/types';
+import { createTerrainTextures, type TerrainTheme } from '@/lib/3d/terrain-textures';
+
+// ============================================
+// Biome → Theme 매핑 (MC 텍스처 테마 동적 결정)
+// ============================================
+
+/**
+ * BiomeType → TerrainTheme 매핑
+ * grass→forest, stone→mountain, concrete→urban, special→island, void→arctic
+ */
+const BIOME_THEME_MAP: Record<BiomeType, TerrainTheme> = {
+  grass: 'forest',
+  stone: 'mountain',
+  concrete: 'urban',
+  special: 'island',
+  void: 'arctic',
+};
+
+/**
+ * biome에 해당하는 MC 텍스처 테마를 반환
+ * @param biome BiomeType
+ * @returns TerrainTheme (forest/desert/mountain/urban/arctic/island)
+ */
+export function getBiomeTheme(biome: BiomeType): TerrainTheme {
+  return BIOME_THEME_MAP[biome] ?? 'forest';
+}
 
 // ============================================
 // Constants
@@ -293,49 +319,38 @@ export function createChunkGeometry(
     const heightY = heightNoise * heightScale;
     posAttr.setY(i, heightY);
 
-    // biome 색상 가져오기
-    const baseColor = BIOME_GROUND_COLORS[biome];
-    const accentColor = BIOME_ACCENT_COLORS[biome];
+    // === MC 텍스처 + vertex color tint 모드 ===
+    // MC ground 텍스처가 이미 색상을 가지고 있으므로,
+    // vertex color는 흰색 기반에서 biome별 미세 tint + 밝기 변화만 담당
+    // Three.js에서 map * vertexColor → multiply 블렌딩
 
-    // 부드러운 색상 변화 (세부 노이즈 추가)
+    // 부드러운 밝기 변화 (세부 노이즈)
     const detailNoise = normalizeNoise(
       seededSimplex2D(vx * 0.05, vz * 0.05, seed + 1234)
     );
 
-    // biome 전환 블렌딩
+    // biome 전환 노이즈 (밝기 변화용)
     const blendNoise = normalizeNoise(
       fbm2D(worldX2D, worldY2D, 2, 0.5, mapConfig.noiseScale * 2, seed + 5678)
     );
 
-    // base와 accent 색상 블렌딩
-    const blendFactor = detailNoise * 0.3;
-    let r = THREE.MathUtils.lerp(baseColor.r, accentColor.r, blendFactor);
-    let g = THREE.MathUtils.lerp(baseColor.g, accentColor.g, blendFactor);
-    let b = THREE.MathUtils.lerp(baseColor.b, accentColor.b, blendFactor);
+    // biome별 미세 tint (흰색 기반 — 텍스처 색상 살리기)
+    const biomeTint: Record<BiomeType, [number, number, number]> = {
+      grass:    [0.9, 1.0, 0.9],   // 약간 녹색 tint
+      stone:    [0.85, 0.85, 0.9], // 약간 청회색 tint
+      concrete: [0.88, 0.88, 0.92], // 약간 밝은 회색 tint
+      special:  [0.9, 0.85, 1.0],  // 약간 보라색 tint
+      void:     [0.7, 0.85, 0.7],  // 어두운 녹색 tint
+    };
 
-    // === 타일 격자 패턴 (텍스쳐 효과) ===
-    // 타일 경계에서 색상을 어둡게 하여 격자 라인 생성
-    const tileEdgeX = Math.abs(((vx % TILE_SIZE) + TILE_SIZE) % TILE_SIZE - TILE_SIZE / 2) / (TILE_SIZE / 2);
-    const tileEdgeZ = Math.abs(((vz % TILE_SIZE) + TILE_SIZE) % TILE_SIZE - TILE_SIZE / 2) / (TILE_SIZE / 2);
-    // 경계에 가까울수록 0→1 (중심=0, 가장자리=1)
-    const edgeFactor = Math.max(
-      Math.pow(Math.max(0, tileEdgeX - 0.7) / 0.3, 2),
-      Math.pow(Math.max(0, tileEdgeZ - 0.7) / 0.3, 2)
-    );
-    // 격자 라인: 경계에서 15% 어두워짐
-    const gridDarken = 1.0 - edgeFactor * 0.15;
+    const tint = biomeTint[biome] ?? [1, 1, 1];
 
-    // === 타일 내부 체커보드 패턴 ===
-    const tileIdxX = Math.floor(vx / TILE_SIZE);
-    const tileIdxZ = Math.floor(vz / TILE_SIZE);
-    const checkerboard = (tileIdxX + tileIdxZ) % 2 === 0 ? 1.0 : 0.94;
+    // 밝기 변화 (0.85~1.05 범위)
+    const brightness = 0.88 + blendNoise * 0.12 + detailNoise * 0.08 + heightNoise * 0.05;
 
-    // 밝기 변화 + 높이 보정 + 격자 + 체커보드
-    const brightness = (0.95 + blendNoise * 0.15 + heightNoise * 0.1) * gridDarken * checkerboard;
-
-    colors[i * 3] = r * brightness;
-    colors[i * 3 + 1] = g * brightness;
-    colors[i * 3 + 2] = b * brightness;
+    colors[i * 3]     = tint[0] * brightness;
+    colors[i * 3 + 1] = tint[1] * brightness;
+    colors[i * 3 + 2] = tint[2] * brightness;
   }
 
   // 높이 변경 후 normal 재계산 (조명이 올바르게 적용되도록)
@@ -347,29 +362,93 @@ export function createChunkGeometry(
   return geometry;
 }
 
-/** 공유 atlas 텍스처 (lazy init, 모든 chunk에서 재사용) */
-let _sharedAtlas: THREE.CanvasTexture | null = null;
-function getSharedAtlas(): THREE.CanvasTexture {
-  if (!_sharedAtlas) {
-    _sharedAtlas = createBiomeAtlasTexture();
-  }
-  return _sharedAtlas;
+/**
+ * MC 스타일 ground 텍스처를 chunk용으로 생성 (biome별 캐시)
+ * terrain-textures.ts의 biome별 ground를 RepeatWrapping으로 타일링
+ */
+const _mcGroundTextureCache = new Map<TerrainTheme, THREE.CanvasTexture>();
+
+/**
+ * biome 테마별 MC ground 텍스처 반환 (캐시)
+ */
+function getMcGroundTexture(theme: TerrainTheme = 'forest'): THREE.CanvasTexture | null {
+  const cached = _mcGroundTextureCache.get(theme);
+  if (cached) return cached;
+  if (typeof document === 'undefined') return null;
+  const texSet = createTerrainTextures(theme);
+  // ground 텍스처를 clone하여 chunk tiling용으로 설정
+  const tex = texSet.ground.clone();
+  tex.wrapS = THREE.RepeatWrapping;
+  tex.wrapT = THREE.RepeatWrapping;
+  // chunk 200단위에서 TILE_SIZE(5)마다 텍스처 1번 반복 → 200/5 = 40 repeat
+  tex.repeat.set(TILES_PER_CHUNK, TILES_PER_CHUNK);
+  tex.needsUpdate = true;
+  _mcGroundTextureCache.set(theme, tex);
+  return tex;
 }
 
 /**
- * chunk 머티리얼 생성 (vertex color + atlas 텍스처 결합)
- * atlas 텍스처로 세부 패턴, vertex color로 biome 색상 틴트
+ * 모든 캐시된 MC ground 텍스처 해제 (메모리 정리)
  */
-export function createChunkMaterial(): THREE.MeshStandardMaterial {
-  const atlas = getSharedAtlas();
-  return new THREE.MeshStandardMaterial({
-    map: atlas,
+export function disposeMcGroundTextures(): void {
+  for (const [, tex] of _mcGroundTextureCache) {
+    tex.dispose();
+  }
+  _mcGroundTextureCache.clear();
+}
+
+/**
+ * chunk 머티리얼 생성 — MC 스타일 텍스처 + vertex color tint
+ * vertex color는 biome별 미세 색상 변화용 (multiply 블렌딩)
+ *
+ * @param theme biome 테마 (기본 'forest')
+ */
+export function createChunkMaterial(theme: TerrainTheme = 'forest'): THREE.MeshLambertMaterial {
+  const tex = getMcGroundTexture(theme);
+  return new THREE.MeshLambertMaterial({
+    map: tex,
     vertexColors: true,
-    roughness: 0.7,
-    metalness: 0.08,
     side: THREE.FrontSide,
-    envMapIntensity: 0.3,
   });
+}
+
+/**
+ * chunk 중심의 dominant biome 결정 (가장 빈번한 biome)
+ * chunk 중앙 + 4 코너 샘플링으로 빠르게 판단
+ */
+export function getChunkDominantBiome(
+  chunkX: number,
+  chunkZ: number,
+  stageId: number = 1,
+  gameMode: 'stage' | 'singularity' | 'tutorial' = 'stage',
+  seed: number = DEFAULT_SEED
+): BiomeType {
+  const mapConfig = getStageMapConfig(stageId, gameMode);
+  const cx = chunkX * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const cz = chunkZ * CHUNK_SIZE + CHUNK_SIZE / 2;
+  const half = CHUNK_SIZE / 2;
+
+  // 5-포인트 샘플: 중앙 + 4 코너
+  const samples: BiomeType[] = [
+    getBiomeAt(cx, -cz, mapConfig, seed),
+    getBiomeAt(cx - half, -(cz - half), mapConfig, seed),
+    getBiomeAt(cx + half, -(cz - half), mapConfig, seed),
+    getBiomeAt(cx - half, -(cz + half), mapConfig, seed),
+    getBiomeAt(cx + half, -(cz + half), mapConfig, seed),
+  ];
+
+  // 가장 빈번한 biome 반환
+  const counts: Partial<Record<BiomeType, number>> = {};
+  let maxCount = 0;
+  let dominant: BiomeType = samples[0];
+  for (const s of samples) {
+    counts[s] = (counts[s] ?? 0) + 1;
+    if (counts[s]! > maxCount) {
+      maxCount = counts[s]!;
+      dominant = s;
+    }
+  }
+  return dominant;
 }
 
 // ============================================
@@ -381,6 +460,8 @@ export interface ChunkData {
   chunkX: number;
   chunkZ: number;
   mesh: THREE.Mesh;
+  /** chunk의 dominant biome 테마 */
+  theme: TerrainTheme;
 }
 
 /**
@@ -496,7 +577,7 @@ export function blendBiomeColors(
 }
 
 // ============================================
-// 지형 높이 샘플링 (엔티티 Y 좌표 동기화용)
+// 지형 높이 스케일 (biome별)
 // ============================================
 
 /** biome별 높이 스케일 (createChunkGeometry와 동일) */
@@ -508,9 +589,239 @@ const BIOME_HEIGHT_SCALES: Record<BiomeType, number> = {
   void: 0.1,
 };
 
+// ============================================
+// 장식 블록 생성 (높이 경계/언덕에 BoxGeometry InstancedMesh)
+// ============================================
+
+/** 장식 블록 배치 정보 */
+export interface DecoBlockData {
+  x: number;
+  y: number;
+  z: number;
+  isTop: boolean; // 최상단 블록 여부 (top 텍스처 적용)
+}
+
+/** 장식 오브젝트 배치 정보 (꽃/돌/잔디) */
+export interface DecoObjectData {
+  x: number;
+  y: number;
+  z: number;
+  type: 'flower' | 'stone' | 'grass_tuft';
+  colorIndex: number; // 색상 인덱스
+}
+
+/** biome별 장식 블록 밀도 (높이 임계값 이상에서만 생성) */
+const DECO_HEIGHT_THRESHOLD: Record<BiomeType, number> = {
+  grass: 0.8,
+  stone: 0.4,
+  concrete: 1.5,   // 거의 생성 안 함 (도시)
+  special: 0.6,
+  void: 1.2,
+};
+
+/** biome별 장식 블록 최대 높이 (블록 수) */
+const DECO_MAX_BLOCK_HEIGHT: Record<BiomeType, number> = {
+  grass: 3,
+  stone: 4,
+  concrete: 1,
+  special: 2,
+  void: 1,
+};
+
+/** biome별 장식 오브젝트 수 (청크당) */
+const DECO_OBJECT_COUNTS: Record<BiomeType, { flower: number; stone: number; grass: number }> = {
+  grass: { flower: 15, stone: 5, grass: 12 },
+  stone: { flower: 3, stone: 10, grass: 2 },
+  concrete: { flower: 2, stone: 3, grass: 0 },
+  special: { flower: 8, stone: 4, grass: 5 },
+  void: { flower: 0, stone: 2, grass: 0 },
+};
+
+/** 결정론적 의사 난수 (좌표 기반) */
+function decoHash(x: number, z: number, seed: number): number {
+  const n = Math.sin(x * 127.1 + z * 311.7 + seed * 43.3) * 43758.5453;
+  return n - Math.floor(n);
+}
+
+/**
+ * chunk에 대한 장식 블록 배치 데이터 생성
+ * 높이 경계/언덕 영역에 50-100개 BoxGeometry 블록
+ */
+export function generateChunkDecoBlocks(
+  chunkX: number,
+  chunkZ: number,
+  stageId: number = 1,
+  gameMode: 'stage' | 'singularity' | 'tutorial' = 'stage',
+  seed: number = DEFAULT_SEED
+): DecoBlockData[] {
+  const mapConfig = getStageMapConfig(stageId, gameMode);
+  const blocks: DecoBlockData[] = [];
+  const startX = chunkX * CHUNK_SIZE;
+  const startZ = chunkZ * CHUNK_SIZE;
+
+  // 블록 배치 간격 (TILE_SIZE의 2배 = 10 단위)
+  const spacing = TILE_SIZE * 2;
+  const maxBlocks = 80; // 청크당 최대 블록 수
+
+  for (let dx = spacing / 2; dx < CHUNK_SIZE; dx += spacing) {
+    for (let dz = spacing / 2; dz < CHUNK_SIZE; dz += spacing) {
+      if (blocks.length >= maxBlocks) break;
+
+      const wx = startX + dx;
+      const wz = startZ + dz;
+      const worldX2D = wx;
+      const worldY2D = -wz;
+
+      // biome 결정
+      const biome = getBiomeAt(worldX2D, worldY2D, mapConfig, seed);
+
+      // 높이 노이즈 계산
+      const heightNoise = normalizeNoise(
+        fbm2D(wx, wz, 3, 0.5, 0.003, seed + 7777)
+      );
+      const heightScale = BIOME_HEIGHT_SCALES[biome] ?? 1.0;
+      const height = heightNoise * heightScale;
+
+      // 높이 임계값 이상에서만 블록 생성
+      const threshold = DECO_HEIGHT_THRESHOLD[biome];
+      if (height < threshold) continue;
+
+      // hash로 일부만 생성 (50-70% 확률)
+      const h = decoHash(wx, wz, seed + 3333);
+      if (h > 0.65) continue;
+
+      // 블록 높이 결정 (1 ~ maxHeight)
+      const maxHeight = DECO_MAX_BLOCK_HEIGHT[biome];
+      const blockHeight = Math.max(1, Math.round(
+        (height - threshold) / (heightScale - threshold + 0.01) * maxHeight
+      ));
+      const clampedHeight = Math.min(blockHeight, maxHeight);
+
+      // 블록 스택 생성
+      for (let layer = 0; layer < clampedHeight; layer++) {
+        blocks.push({
+          x: wx,
+          y: layer + 0.5,   // Y = 블록 중심 (바닥 0 기준)
+          z: wz,
+          isTop: layer === clampedHeight - 1,
+        });
+      }
+    }
+    if (blocks.length >= maxBlocks) break;
+  }
+
+  return blocks;
+}
+
+/**
+ * chunk에 대한 장식 오브젝트 배치 데이터 생성
+ * 장식 블록 위 또는 평지에 꽃/돌/잔디 배치
+ */
+export function generateChunkDecoObjects(
+  chunkX: number,
+  chunkZ: number,
+  decoBlocks: DecoBlockData[],
+  stageId: number = 1,
+  gameMode: 'stage' | 'singularity' | 'tutorial' = 'stage',
+  seed: number = DEFAULT_SEED
+): DecoObjectData[] {
+  const mapConfig = getStageMapConfig(stageId, gameMode);
+  const objects: DecoObjectData[] = [];
+  const startX = chunkX * CHUNK_SIZE;
+  const startZ = chunkZ * CHUNK_SIZE;
+
+  // chunk 중심의 dominant biome
+  const centerX2D = startX + CHUNK_SIZE / 2;
+  const centerY2D = -(chunkZ * CHUNK_SIZE + CHUNK_SIZE / 2);
+  const biome = getBiomeAt(centerX2D, centerY2D, mapConfig, seed);
+  const counts = DECO_OBJECT_COUNTS[biome];
+
+  // 최상단 블록 위치 맵 (key=x,z → maxY)
+  const topBlockMap = new Map<string, number>();
+  for (const b of decoBlocks) {
+    if (b.isTop) {
+      topBlockMap.set(`${b.x},${b.z}`, b.y + 0.5); // 블록 상단 Y
+    }
+  }
+
+  // 각 타입별 오브젝트 배치
+  const types: Array<{ type: DecoObjectData['type']; count: number }> = [
+    { type: 'flower', count: counts.flower },
+    { type: 'stone', count: counts.stone },
+    { type: 'grass_tuft', count: counts.grass },
+  ];
+
+  for (const { type, count } of types) {
+    for (let i = 0; i < count; i++) {
+      const h1 = decoHash(i * 3.17 + startX, i * 7.31 + startZ, seed + (type === 'flower' ? 100 : type === 'stone' ? 200 : 300));
+      const h2 = decoHash(i * 5.31 + startX, i * 9.13 + startZ, seed + (type === 'flower' ? 100 : type === 'stone' ? 200 : 300));
+
+      const wx = startX + h1 * CHUNK_SIZE;
+      const wz = startZ + h2 * CHUNK_SIZE;
+
+      // 블록 위에 있는지 확인
+      const blockKey = `${Math.round(wx / (TILE_SIZE * 2)) * (TILE_SIZE * 2) + TILE_SIZE},${Math.round(wz / (TILE_SIZE * 2)) * (TILE_SIZE * 2) + TILE_SIZE}`;
+      const blockTopY = topBlockMap.get(blockKey);
+
+      // Y 위치: 블록 위 또는 지면
+      const baseY = blockTopY ?? normalizeNoise(
+        fbm2D(wx, wz, 3, 0.5, 0.003, seed + 7777)
+      ) * (BIOME_HEIGHT_SCALES[biome] ?? 1.0);
+
+      const yOffset = type === 'flower' ? 0.15 : type === 'stone' ? 0.12 : 0.2;
+      const colorIndex = Math.floor(decoHash(i * 11.7, wx + wz, seed + 400) * 4);
+
+      objects.push({
+        x: wx,
+        y: baseY + yOffset,
+        z: wz,
+        type,
+        colorIndex,
+      });
+    }
+  }
+
+  return objects;
+}
+
+// ============================================
+// 지형 높이 샘플링 (엔티티 Y 좌표 동기화용)
+// ============================================
+
+/**
+ * 장식 블록 높이 캐시 (chunk별)
+ * key: "chunkX,chunkZ" → Map<"blockX,blockZ" → blockTopY>
+ */
+const _decoBlockHeightCache = new Map<string, Map<string, number>>();
+
+/**
+ * 장식 블록 높이 캐시 등록
+ */
+export function registerDecoBlockHeights(
+  chunkKey: string,
+  blocks: DecoBlockData[]
+): void {
+  const blockMap = new Map<string, number>();
+  for (const b of blocks) {
+    const key = `${Math.floor(b.x)},${Math.floor(b.z)}`;
+    const existing = blockMap.get(key) ?? 0;
+    if (b.y + 0.5 > existing) {
+      blockMap.set(key, b.y + 0.5);
+    }
+  }
+  _decoBlockHeightCache.set(chunkKey, blockMap);
+}
+
+/**
+ * 장식 블록 높이 캐시 해제
+ */
+export function unregisterDecoBlockHeights(chunkKey: string): void {
+  _decoBlockHeightCache.delete(chunkKey);
+}
+
 /**
  * 3D 월드 좌표의 지형 높이를 반환
- * VoxelCharacter, EnemyRenderer 등에서 엔티티 Y 좌표 설정에 사용
+ * 장식 블록 영역은 이산 높이 반환, 평지는 기존 연속 높이 유지
  *
  * @param worldX 3D X 좌표
  * @param worldZ 3D Z 좌표
@@ -526,8 +837,20 @@ export function getTerrainHeight(
   gameMode: 'stage' | 'singularity' | 'tutorial' = 'stage',
   seed: number = DEFAULT_SEED
 ): number {
+  // 장식 블록 높이 캐시 확인 (이산 높이)
+  const [cx, cz] = worldToChunk(worldX, worldZ);
+  const cacheKey = chunkKey(cx, cz);
+  const blockCache = _decoBlockHeightCache.get(cacheKey);
+  if (blockCache) {
+    const blockKey = `${Math.floor(worldX)},${Math.floor(worldZ)}`;
+    const blockHeight = blockCache.get(blockKey);
+    if (blockHeight !== undefined) {
+      return blockHeight;
+    }
+  }
+
+  // 연속 높이 (기존 로직)
   const mapConfig = getStageMapConfig(stageId, gameMode);
-  // 2D 좌표로 변환 (biome 결정용)
   const worldX2D = worldX;
   const worldY2D = -worldZ;
   const biome = getBiomeAt(worldX2D, worldY2D, mapConfig, seed);

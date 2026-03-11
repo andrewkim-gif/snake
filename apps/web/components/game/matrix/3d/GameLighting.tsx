@@ -23,17 +23,17 @@ export function GameLighting() {
 
   return (
     <>
-      {/* 앰비언트 라이트 — 기본 가시성 (모든 면에 균일 조명) */}
+      {/* 앰비언트 라이트 — MC 스타일 톤다운 (로비와 유사) */}
       <ambientLight
-        intensity={0.65}
-        color="#f5f0e8" // 밝은 warm white
+        intensity={0.5}
+        color="#f0ece4" // 따뜻한 오프화이트
       />
 
-      {/* 메인 디렉셔널 라이트 — 태양광 (45° 각도, 그림자 캐스팅) */}
+      {/* 메인 디렉셔널 라이트 — 태양광 (톤다운, 그림자 캐스팅) */}
       <directionalLight
         ref={mainLightRef}
-        intensity={1.2}
-        color="#fff8ee" // 밝은 따뜻한 태양광
+        intensity={0.8}
+        color="#fff5e0" // 따뜻한 태양광 (톤다운)
         position={[500, 800, 500]} // 45° 각도 (isometric과 동일 방향)
         castShadow
         shadow-mapSize-width={1024}
@@ -48,10 +48,10 @@ export function GameLighting() {
         shadow-normalBias={0.02}
       />
 
-      {/* 필 라이트 — 반대 방향에서 그림자 영역 밝히기 (그림자 없음) */}
+      {/* 필 라이트 — 반대 방향에서 그림자 영역 밝히기 (톤다운) */}
       <directionalLight
-        intensity={0.5}
-        color="#ccd5e6" // 차가운 블루 틴트 (대비 효과)
+        intensity={0.35}
+        color="#c8d0e0" // 차가운 블루 틴트 (약하게)
         position={[-400, 600, -400]} // 메인 라이트 반대 방향
       />
     </>

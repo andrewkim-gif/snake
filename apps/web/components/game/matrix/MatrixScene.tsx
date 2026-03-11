@@ -102,11 +102,11 @@ function SceneContent({
 }) {
   return (
     <>
-      {/* 배경색 — 밝은 블루그레이 (하늘감) */}
-      <color attach="background" args={['#2a3040']} />
+      {/* 배경색 — 숲 안개톤 (MC 스타일) */}
+      <color attach="background" args={['#87CEAA']} />
 
-      {/* 안개 — 원거리 depth fade (카메라-지면 거리 ~1386 감안, 그 이후부터 fade) */}
-      <fog attach="fog" args={['#2a3040', 1800, 3500]} />
+      {/* 안개 — 중거리 depth fade (MC 스타일 분위기, 800-1800) */}
+      <fog attach="fog" args={['#87CEAA', 800, 1800]} />
 
       {/* 카메라 — Isometric OrthographicCamera + LERP Follow + Zoom + Shake */}
       <GameCamera
@@ -549,7 +549,7 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
         style={{
           position: 'absolute',
           inset: 0,
-          background: '#2a3040',
+          background: '#87CEAA',
         }}
       >
         <SceneContent refs={refs} warningIntensityRef={warningIntensityRef} />
