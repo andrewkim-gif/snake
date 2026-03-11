@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1)
+ * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1+2)
  *
  * Canvas 2D MatrixCanvas.tsx의 3D 대체 컴포넌트.
  * 게임 로직(useGameLoop)은 동일하게 재사용하고,
@@ -13,17 +13,18 @@
  * - useGameLoop (Worker 기반 게임 로직)
  * - GameCamera (Isometric OrthographicCamera + LERP + Zoom + Shake)
  * - GameLighting (Ambient + Directional x2 + Shadows)
- * - 테스트 큐브 (플레이어 위치 표시)
  *
  * Phase 1 통합 항목 (Terrain):
  * - VoxelTerrain (Chunked 3D 지형 + Biome + Noise)
  * - TerrainObjects (InstancedMesh 지형 오브젝트)
  * - PickupRenderer (XP Orb + Item Drop 3D)
+ *
+ * Phase 2 통합 항목 (Character):
+ * - VoxelCharacter (3-head chibi BoxGeometry 캐릭터, S16+S18)
  */
 
 import React, { useRef, useMemo } from 'react';
-import { Canvas, useFrame } from '@react-three/fiber';
-import * as THREE from 'three';
+import { Canvas } from '@react-three/fiber';
 import { useGameRefs, type GameRefs } from '@/lib/matrix/hooks/useGameRefs';
 import { useGameLoop } from '@/lib/matrix/hooks/useGameLoop';
 import { GameCamera } from './3d/GameCamera';
@@ -31,7 +32,7 @@ import { GameLighting } from './3d/GameLighting';
 import { VoxelTerrain } from './3d/VoxelTerrain';
 import { TerrainObjects } from './3d/TerrainObjects';
 import { PickupRenderer } from './3d/PickupRenderer';
-import type { Player } from '@/lib/matrix/types';
+import { VoxelCharacter } from './3d/VoxelCharacter';
 
 /**
  * MatrixSceneProps — Phase 0 최소 props
@@ -42,38 +43,6 @@ export interface MatrixSceneProps {
   gameActive: boolean;
   /** 외부에서 주입하는 GameRefs (MatrixApp에서 공유 시) */
   gameRefs?: GameRefs;
-}
-
-/**
- * TestPlayerCube — 플레이어 위치에 따라 이동하는 테스트 큐브
- * Phase 1+에서 VoxelCharacter 컴포넌트로 교체 예정
- */
-function TestPlayerCube({ playerRef }: { playerRef: React.MutableRefObject<Player> }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  // useFrame priority=0 (기본값) — R3F auto-render 유지
-  useFrame(() => {
-    if (!meshRef.current) return;
-    const player = playerRef.current;
-
-    // 2D → 3D 좌표 매핑: (x, y) → (x, 0.5, -y)
-    meshRef.current.position.x = player.position.x;
-    meshRef.current.position.y = 0.75; // 지면 위 (큐브 높이 절반)
-    meshRef.current.position.z = -player.position.y;
-
-    // 이동 방향으로 약간 회전 (시각적 피드백)
-    if (Math.abs(player.velocity.x) > 0.01 || Math.abs(player.velocity.y) > 0.01) {
-      const angle = Math.atan2(-player.velocity.y, player.velocity.x);
-      meshRef.current.rotation.y = angle;
-    }
-  });
-
-  return (
-    <mesh ref={meshRef} castShadow position={[0, 0.75, 0]}>
-      <boxGeometry args={[1.5, 1.5, 1.5]} />
-      <meshStandardMaterial color="#CC9933" /> {/* 골드 색상 — 다크 전술 테마 */}
-    </mesh>
-  );
 }
 
 /**
@@ -144,8 +113,11 @@ function SceneContent({ refs }: { refs: GameRefs }) {
       {/* Fallback 지면 (VoxelTerrain 로드 전 또는 극한 거리) */}
       <GroundPlane />
 
-      {/* 테스트 큐브 — 플레이어 위치 표시 (Phase 2에서 VoxelCharacter로 교체) */}
-      <TestPlayerCube playerRef={refs.player} />
+      {/* Phase 2: Voxel 캐릭터 (3-head chibi, S13-S18) */}
+      <VoxelCharacter
+        playerRef={refs.player}
+        playerClass={refs.player.current.playerClass ?? 'neo'}
+      />
     </>
   );
 }
