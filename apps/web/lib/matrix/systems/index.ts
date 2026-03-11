@@ -199,3 +199,18 @@ export {
   type SwipeDirection,
   type JoystickZone,
 } from './mobile-ux';
+
+// v39: Round Engine Client (EpochUIBridge 대체)
+export {
+  RoundEngineClient,
+  getRoundPhaseColor,
+  getRoundPhaseDisplayName,
+  getBRSubPhaseDisplayName,
+  getBRSubPhaseColor,
+  safeZoneRatioToRadius,
+  ROUND_TIMING_CLIENT,
+  type RoundPhaseUIConfig,
+  type BRSubPhaseUIConfig,
+  type SafeZoneVisual,
+  type RoundEngineCallbacks,
+} from './round-engine-client';
