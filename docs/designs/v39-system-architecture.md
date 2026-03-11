@@ -178,6 +178,29 @@ type BRSubPhase struct {
 }
 ```
 
+**BR 세이프존 설정** (기존 arena.config.ts 확장):
+```go
+// BRSafeZone — BR 페이즈 세이프존 (기존 SAFE_ZONE_PHASES 구조 재사용)
+type BRSafeZone struct {
+    Center        Vector2
+    CurrentRadius float64
+    TargetRadius  float64
+    Phase         int
+    DPS           float64
+    IsShrinking   bool
+    IsWarning     bool
+}
+
+// BR_SAFE_ZONE_PHASES — BR 5분 내 세이프존 수축 단계
+var BR_SAFE_ZONE_PHASES = []SafeZonePhase{
+    {Phase: 1, StartTime: 0,   WarningDur: 20, ShrinkDur: 20, TargetRadius: 0.8, DPS: 5},  // 80%
+    {Phase: 2, StartTime: 60,  WarningDur: 15, ShrinkDur: 20, TargetRadius: 0.5, DPS: 10}, // 50%
+    {Phase: 3, StartTime: 150, WarningDur: 10, ShrinkDur: 15, TargetRadius: 0.25, DPS: 20},// 25%
+    {Phase: 4, StartTime: 240, WarningDur: 5,  ShrinkDur: 15, TargetRadius: 0.1, DPS: 40}, // 10%
+}
+// TargetRadius는 arenaSize 대비 비율 (0.8 = 80%)
+```
+
 **BR SubPhase 기본값** (H-04 해결):
 | Sub-Phase | 시간 | Gold 배율 | Score 배율 | 세이프존 |
 |-----------|------|----------|-----------|---------|
@@ -688,6 +711,12 @@ type PlayerEconomy struct {
 }
 ```
 
+**필드 상점 리셋 정책** (H-03 해결):
+- 필드 상점 아이템(HP Kit, XP Boost, Shield 등 9종) → **매 라운드 리셋**
+- Round Gold로만 구매 가능 (Account Gold 사용 불가)
+- BR 시작 시 구매 아이템 효과 유지 (라운드 내 지속)
+- Settlement 시 모든 필드 상점 아이템 효과 소멸
+
 **S티어 국가 확정** (C-04 해결): v35 기준 **8개국** 확정
 - 미국, 중국, 러시아, 인도, 일본, 독일, 영국, 프랑스
 
@@ -894,6 +923,23 @@ round:results:{regionId}:{roundNum} → JSON RoundResult                TTL: 1h
 ## 6. API Design — WebSocket Protocol
 
 기존 `{e: event, d: data}` 커스텀 JSON 프레이밍 유지. 이벤트명은 `matrix_*` 컨벤션 준수 (H-01 해결).
+
+### 6.0 기존 프로토콜 하위 호환
+
+기존 `matrix_epoch` 이벤트를 `matrix_round_phase`로 **매핑**하여 하위 호환 유지:
+```
+matrix_epoch { phase: "peace", countdown: 300 }
+  → matrix_round_phase { phase: "pve", countdown: 600 }
+
+matrix_epoch { phase: "war", countdown: 180 }
+  → matrix_round_phase { phase: "br", countdown: 300, brSubPhase: "skirmish" }
+
+matrix_epoch { phase: "end", countdown: 5 }
+  → matrix_round_phase { phase: "settlement", countdown: 15 }
+```
+
+Feature flag `V39RoundEngine` OFF 시: 기존 `matrix_epoch` 이벤트 그대로 전송.
+Feature flag ON 시: `matrix_round_phase` 전송 + `matrix_epoch` 호환 이벤트 동시 전송 (1주 병행 후 폐기).
 
 ### 6.1 Client → Server 이벤트
 
