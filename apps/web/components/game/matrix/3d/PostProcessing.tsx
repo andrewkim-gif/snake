@@ -93,10 +93,14 @@ export function PostProcessingEffects({
     return null;
   }
 
+  // Bloom + Vignette 모두 비활성이면 EffectComposer도 마운트하지 않음
+  if (!config.bloom.enabled && !config.vignette.enabled) {
+    return null;
+  }
+
   return (
     <EffectComposer>
-      {/* Bloom — emissive 오브젝트에 selective bloom */}
-      {config.bloom.enabled && (
+      {config.bloom.enabled ? (
         <Bloom
           intensity={config.bloom.intensity}
           luminanceThreshold={config.bloom.threshold}
@@ -104,15 +108,18 @@ export function PostProcessingEffects({
           mipmapBlur
           kernelSize={KernelSize.MEDIUM}
         />
+      ) : (
+        <></>
       )}
 
-      {/* Vignette — 화면 가장자리 어둡게 (기존 radial gradient 대체) */}
-      {config.vignette.enabled && (
+      {config.vignette.enabled ? (
         <Vignette
           offset={config.vignette.offset}
           darkness={vignetteRef.current.darkness}
           blendFunction={BlendFunction.NORMAL}
         />
+      ) : (
+        <></>
       )}
     </EffectComposer>
   );

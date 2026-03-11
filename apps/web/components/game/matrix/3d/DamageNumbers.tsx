@@ -16,7 +16,7 @@ import React, { useRef, useMemo, useEffect, useCallback } from 'react';
 import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
-import type { DamageNumber } from '@/lib/matrix/types';
+import type { DamageNumber, Player } from '@/lib/matrix/types';
 
 // ============================================
 // Constants
@@ -94,7 +94,7 @@ export interface DamageNumbersProps {
   /** 데미지 넘버 소스 ref (외부 시스템에서 push) */
   damageNumbersRef?: React.MutableRefObject<DamageNumber[]>;
   /** 플레이어 좌표 ref (거리 컬링용) */
-  playerRef?: React.MutableRefObject<{ position: { x: number; y: number } }>;
+  playerRef?: React.MutableRefObject<Player>;
 }
 
 /**

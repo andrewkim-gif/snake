@@ -442,3 +442,89 @@ export const REGION_TYPE_EFFECTS: Record<RegionType, IRegionEffects> = {
     diplomacyBonus: 0.2,
   },
 } as const;
+
+// ── v39 Phase 3: 팩션 전투 타입 ──
+
+/** 팩션 간 데미지 매트릭스 관계 */
+export type FactionDamageRelation = 'same' | 'allied' | 'hostile';
+
+/** 팩션 데미지 타입 (공격 경로) */
+export type FactionDamageType = 'direct' | 'projectile' | 'area' | 'knockback';
+
+/** 팩션 전투 상수 (서버 faction_combat.go와 동기화) */
+export const FACTION_COMBAT = {
+  /** 영역 효과 데미지 배율 (적대 팩션) */
+  AREA_EFFECT_MULT: 0.8,
+  /** 어시스트 판정 시간 (초) */
+  ASSIST_WINDOW: 3.0,
+  /** 팩션당 최대 동맹 수 */
+  MAX_ALLIANCES: 2,
+  /** 팩션당 최대 멤버 수 */
+  MAX_MEMBERS: 50,
+  /** PvP 킬 Gold */
+  KILL_GOLD: 20,
+  /** PvP 킬 Nation Score */
+  KILL_NATION_SCORE: 15,
+  /** PvP 킬 Region Point */
+  KILL_RP: 2,
+  /** 어시스트 Gold */
+  ASSIST_GOLD: 8,
+  /** 어시스트 Nation Score */
+  ASSIST_NATION_SCORE: 5,
+  /** 어시스트 RP */
+  ASSIST_RP: 1,
+  /** 팩션 전멸 Gold */
+  WIPE_GOLD: 50,
+  /** 팩션 전멸 Nation Score */
+  WIPE_NATION_SCORE: 30,
+  /** 팩션 전멸 RP */
+  WIPE_RP: 5,
+} as const;
+
+/** 팩션 면역 규칙 (서버 동기화) */
+export interface IFactionImmunityRules {
+  /** 같은 팩션 공격 불가 (항상 true) */
+  sameFactionImmune: boolean;
+  /** BR에서 동맹 면역 (false = BR에서 동맹도 공격 가능) */
+  allianceImmuneInBR: boolean;
+  /** PvE에서 동맹 면역 (true) */
+  allianceImmuneInPvE: boolean;
+  /** 팩션당 최대 동맹 수 */
+  maxAlliancesPerFaction: number;
+}
+
+/** 기본 면역 규칙 */
+export const DEFAULT_IMMUNITY_RULES: IFactionImmunityRules = {
+  sameFactionImmune: true,
+  allianceImmuneInBR: false,
+  allianceImmuneInPvE: true,
+  maxAlliancesPerFaction: 2,
+};
+
+/** 데미지 매트릭스 결과 (클라이언트 표시용) */
+export interface IDamageMatrixEntry {
+  /** 공격자 → 피해자 관계 */
+  relation: FactionDamageRelation;
+  /** 데미지 타입 */
+  damageType: FactionDamageType;
+  /** 데미지 배율 (0.0 = 면역, 0.8 = 영역 80%, 1.0 = 정상) */
+  multiplier: number;
+  /** 면역 여부 */
+  immune: boolean;
+}
+
+/** 데미지 매트릭스 계산 (클라이언트 UI 표시용) */
+export function calcDamageMultiplier(
+  relation: FactionDamageRelation,
+  phase: RoundPhase,
+  dmgType: FactionDamageType,
+): number {
+  // 같은 팩션: 항상 0
+  if (relation === 'same') return 0;
+  // PvE 페이즈: 모든 PvP 0
+  if (phase === 'pve' || phase === 'br_countdown') return 0;
+  // 영역 효과: 80%
+  if (dmgType === 'area') return FACTION_COMBAT.AREA_EFFECT_MULT;
+  // 그 외: 100%
+  return 1.0;
+}

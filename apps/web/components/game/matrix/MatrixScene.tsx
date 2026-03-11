@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1+2)
+ * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1+2+5+6)
  *
  * Canvas 2D MatrixCanvas.tsx의 3D 대체 컴포넌트.
  * 게임 로직(useGameLoop)은 동일하게 재사용하고,
@@ -21,6 +21,18 @@
  *
  * Phase 2 통합 항목 (Character):
  * - VoxelCharacter (3-head chibi BoxGeometry 캐릭터, S16+S18)
+ *
+ * Phase 5 통합 항목 (Effects):
+ * - PostProcessingEffects (Bloom + Vignette, S33)
+ * - ParticleSystem (InstancedMesh 파티클, S34)
+ *
+ * Phase 6 통합 항목 (UI & HUD):
+ * - WorldUI (drei Html 앵커링 시스템, S35)
+ * - DamageNumbers (Object Pool DOM, S36)
+ * - EntityUI (HP바 + 네임태그, S37)
+ * - SafeZone3D (안전지대 3D 시각화, S38)
+ * - HUD Overlay (기존 React HUD 컴포넌트, S39)
+ * - ScreenFlashOverlay (DOM 기반 화면 플래시, S33)
  */
 
 import React, { useRef, useMemo } from 'react';
@@ -33,6 +45,14 @@ import { VoxelTerrain } from './3d/VoxelTerrain';
 import { TerrainObjects } from './3d/TerrainObjects';
 import { PickupRenderer } from './3d/PickupRenderer';
 import { VoxelCharacter } from './3d/VoxelCharacter';
+// Phase 5: Effects
+import { PostProcessingEffects, ScreenFlashOverlay, useScreenFlash } from './3d/PostProcessing';
+import { ParticleSystem } from './3d/ParticleSystem';
+// Phase 6: UI & HUD
+import { WorldUI } from './3d/WorldUI';
+import { DamageNumbers } from './3d/DamageNumbers';
+import { EntityUI } from './3d/EntityUI';
+import { SafeZone3D } from './3d/SafeZone3D';
 
 /**
  * MatrixSceneProps — Phase 0 최소 props
@@ -70,7 +90,13 @@ function GroundPlane() {
  * SceneContent — R3F Canvas 내부 3D 씬 콘텐츠
  * useFrame 등 R3F 훅은 Canvas 내부에서만 사용 가능
  */
-function SceneContent({ refs }: { refs: GameRefs }) {
+function SceneContent({
+  refs,
+  warningIntensityRef,
+}: {
+  refs: GameRefs;
+  warningIntensityRef: React.MutableRefObject<number>;
+}) {
   return (
     <>
       {/* 배경색 */}
@@ -118,6 +144,34 @@ function SceneContent({ refs }: { refs: GameRefs }) {
         playerRef={refs.player}
         playerClass={refs.player.current.playerClass ?? 'neo'}
       />
+
+      {/* Phase 5: 파티클 시스템 (S34) */}
+      <ParticleSystem qualityTier="HIGH" />
+
+      {/* Phase 6: 안전지대 3D (S38) */}
+      <SafeZone3D
+        playerRef={refs.player}
+        warningIntensityRef={warningIntensityRef}
+      />
+
+      {/* Phase 6: World UI — 데미지 넘버 + HP바/네임태그 (S35, S36, S37) */}
+      <WorldUI playerRef={refs.player}>
+        <DamageNumbers
+          damageNumbersRef={refs.damageNumbers}
+          playerRef={refs.player}
+        />
+        <EntityUI
+          playerRef={refs.player}
+          enemiesRef={refs.enemies}
+          qualityTier="HIGH"
+        />
+      </WorldUI>
+
+      {/* Phase 5: 후처리 이펙트 — Bloom + Vignette (S33) */}
+      <PostProcessingEffects
+        qualityTier="HIGH"
+        warningIntensityRef={warningIntensityRef}
+      />
     </>
   );
 }
@@ -136,6 +190,12 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
   const internalRefs = useGameRefs();
   const refs = gameRefs ?? internalRefs;
 
+  // Phase 5: Screen Flash (DOM overlay)
+  const { flashRef, trigger: triggerFlash, update: updateFlash } = useScreenFlash();
+
+  // Phase 6: 위험 경고 강도 ref (SafeZone3D → PostProcessing 연동)
+  const warningIntensityRef = useRef(0);
+
   // useGameLoop — Worker 기반 게임 로직 실행
   // 3D 모드에서는 render=null (R3F useFrame이 렌더링 담당)
   // Phase 0: update는 플레이어 위치만 시뮬레이션 (테스트용)
@@ -151,8 +211,10 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
       player.position.y = Math.sin(time * 0.5) * 30;
       player.velocity.x = -Math.sin(time * 0.5) * 15;
       player.velocity.y = Math.cos(time * 0.5) * 15;
+      // Screen Flash 업데이트
+      updateFlash(dt);
     };
-  }, [refs.player]);
+  }, [refs.player, updateFlash]);
 
   useGameLoop({
     gameActive,
@@ -161,7 +223,8 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
   });
 
   return (
-    <div style={{ position: 'absolute', top: 0, left: 0, width: '100%', height: '100%' }}>
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {/* R3F 3D Canvas */}
       <Canvas
         gl={{
           antialias: true,
@@ -178,10 +241,43 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
         dpr={[1, Math.min(typeof window !== 'undefined' ? window.devicePixelRatio : 1, 2)]}
         frameloop="always"
         shadows="soft"
-        style={{ background: '#111111' }}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          background: '#111111',
+        }}
       >
-        <SceneContent refs={refs} />
+        <SceneContent refs={refs} warningIntensityRef={warningIntensityRef} />
       </Canvas>
+
+      {/* Phase 5: Screen Flash Overlay (S33) — DOM 기반 */}
+      <ScreenFlashOverlay flashRef={flashRef} />
+
+      {/* Phase 6: HUD Overlay (S39) — 기존 React HUD 컴포넌트 그대로 overlay */}
+      {/* MatrixApp에서 HUD props를 전달받아 여기에 렌더링 */}
+      {/* 현재는 슬롯만 준비 — 실제 HUD는 MatrixApp에서 조건부 렌더링 */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          zIndex: 20,
+        }}
+        className="matrix-scene-hud-overlay"
+      >
+        {/* 모바일 조이스틱 overlay 영역 */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '40%',
+            pointerEvents: 'auto',
+          }}
+          className="matrix-scene-joystick-area"
+        />
+      </div>
     </div>
   );
 }
