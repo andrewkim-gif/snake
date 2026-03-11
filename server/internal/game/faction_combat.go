@@ -76,6 +76,23 @@ const (
 	UnderdogMaxDMGBoost = 0.20
 	// UnderdogMaxNPCSupport는 최소 팩션에 지원되는 최대 NPC 수
 	UnderdogMaxNPCSupport = 3
+
+	// ── Underdog Boost Phase 8 확장 상수 ──
+
+	// UnderdogSmallFactionThreshold는 소규모 팩션 기준 인원 (3명 이하)
+	UnderdogSmallFactionThreshold = 3
+	// UnderdogSmallFactionHPBoost는 소규모 팩션(≤3명) 고정 HP 보정 (+30%)
+	UnderdogSmallFactionHPBoost = 0.30
+	// UnderdogSmallFactionDMGBoost는 소규모 팩션(≤3명) 고정 DMG 보정 (+20%)
+	UnderdogSmallFactionDMGBoost = 0.20
+	// UnderdogRatioScaleMin는 동적 배율 시작 인원 비율 (평균 대비 50% 이하에서 발동)
+	UnderdogRatioScaleMin = 0.50
+	// UnderdogRPBonusMult는 Underdog 팩션 RP 보너스 배율 (1.5 = +50%)
+	UnderdogRPBonusMult = 1.5
+	// UnderdogXPBonusMult는 Underdog 팩션 XP 보너스 배율 (1.2 = +20%)
+	UnderdogXPBonusMult = 1.2
+	// UnderdogMaxGarrisonSupport는 Underdog 팩션에 지원되는 최대 NPC 수비대 수
+	UnderdogMaxGarrisonSupport = 5
 )
 
 // ── 팩션 관계 타입 ──
@@ -497,31 +514,79 @@ func (fcs *FactionCombatSystem) GetDamageMultiplier(
 
 // UnderdogBoostResult는 Underdog 보정 결과를 담는다.
 type UnderdogBoostResult struct {
-	HPMultiplier  float64 `json:"hpMultiplier"`  // HP 보정 배율 (1.0 ~ 1.3)
-	DMGMultiplier float64 `json:"dmgMultiplier"` // DMG 보정 배율 (1.0 ~ 1.2)
-	NPCSupport    int     `json:"npcSupport"`    // NPC 지원 수 (0 ~ 3)
+	HPMultiplier   float64 `json:"hpMultiplier"`   // HP 보정 배율 (1.0 ~ 1.3)
+	DMGMultiplier  float64 `json:"dmgMultiplier"`  // DMG 보정 배율 (1.0 ~ 1.2)
+	NPCSupport     int     `json:"npcSupport"`     // NPC 지원 수 (0 ~ 3)
+	RPBonusMult    float64 `json:"rpBonusMult"`    // RP 보너스 배율 (1.0 ~ 1.5)
+	XPBonusMult    float64 `json:"xpBonusMult"`    // XP 보너스 배율 (1.0 ~ 1.2)
+	IsSmallFaction bool    `json:"isSmallFaction"` // 소규모 팩션 여부 (≤3명)
+	PopRatio       float64 `json:"popRatio"`       // 인원 비율 (팩션 / 평균)
 }
 
 // CalculateUnderdogBoost는 팩션 크기 대비 Underdog 보정을 계산한다.
+// Phase 8 확장: 소규모 팩션(≤3명) 고정 부스트 + 인원 비율 기반 동적 배율.
+//
+// 동적 배율 계산:
+//   - 팩션 인원이 평균의 50% 이하일 때 Underdog 발동
+//   - deficit = 1.0 - (팩션인원 / 평균인원), 0~1 범위
+//   - HP: 1.0 + deficit * 0.30 (최대 +30%)
+//   - DMG: 1.0 + deficit * 0.20 (최대 +20%)
+//   - NPC 지원: ceil(deficit * 3) (최대 3체)
+//   - RP 보너스: 1.0 + deficit * 0.5 (최대 +50%)
+//   - XP 보너스: 1.0 + deficit * 0.2 (최대 +20%)
+//
+// 소규모 팩션(≤3명) 고정 보정:
+//   - HP +30%, DMG +20% 고정 적용 (동적 배율과 중 더 높은 값)
+//   - NPC 3체 고정 지원
 func (fcs *FactionCombatSystem) CalculateUnderdogBoost(factionId string) UnderdogBoostResult {
 	factionSize := fcs.factionRegistry.GetFactionMemberCount(factionId)
 	avgSize := fcs.factionRegistry.GetAverageSize()
 
+	result := UnderdogBoostResult{
+		HPMultiplier:  1.0,
+		DMGMultiplier: 1.0,
+		NPCSupport:    0,
+		RPBonusMult:   1.0,
+		XPBonusMult:   1.0,
+		PopRatio:      1.0,
+	}
+
+	// 평균 이상이면 부스트 없음
 	if factionSize >= avgSize || avgSize <= 0 {
-		return UnderdogBoostResult{
-			HPMultiplier:  1.0,
-			DMGMultiplier: 1.0,
-			NPCSupport:    0,
-		}
+		return result
 	}
 
 	ratio := float64(factionSize) / float64(avgSize)
+	result.PopRatio = ratio
 	deficit := 1.0 - ratio
 
+	// 소규모 팩션 (≤3명) 고정 부스트
+	isSmall := factionSize <= UnderdogSmallFactionThreshold
+	result.IsSmallFaction = isSmall
+
+	// 동적 배율 계산
 	hpMult := 1.0 + deficit*UnderdogMaxHPBoost
 	dmgMult := 1.0 + deficit*UnderdogMaxDMGBoost
 	npcSupport := int(math.Ceil(deficit * float64(UnderdogMaxNPCSupport)))
+	rpMult := 1.0 + deficit*(UnderdogRPBonusMult-1.0)
+	xpMult := 1.0 + deficit*(UnderdogXPBonusMult-1.0)
 
+	// 소규모 팩션이면 고정값과 동적값 중 높은 값 적용
+	if isSmall {
+		smallHP := 1.0 + UnderdogSmallFactionHPBoost
+		smallDMG := 1.0 + UnderdogSmallFactionDMGBoost
+		if smallHP > hpMult {
+			hpMult = smallHP
+		}
+		if smallDMG > dmgMult {
+			dmgMult = smallDMG
+		}
+		if npcSupport < UnderdogMaxNPCSupport {
+			npcSupport = UnderdogMaxNPCSupport
+		}
+	}
+
+	// 상한 클램핑
 	if hpMult > 1.0+UnderdogMaxHPBoost {
 		hpMult = 1.0 + UnderdogMaxHPBoost
 	}
@@ -531,12 +596,47 @@ func (fcs *FactionCombatSystem) CalculateUnderdogBoost(factionId string) Underdo
 	if npcSupport > UnderdogMaxNPCSupport {
 		npcSupport = UnderdogMaxNPCSupport
 	}
-
-	return UnderdogBoostResult{
-		HPMultiplier:  hpMult,
-		DMGMultiplier: dmgMult,
-		NPCSupport:    npcSupport,
+	if rpMult > UnderdogRPBonusMult {
+		rpMult = UnderdogRPBonusMult
 	}
+	if xpMult > UnderdogXPBonusMult {
+		xpMult = UnderdogXPBonusMult
+	}
+
+	result.HPMultiplier = hpMult
+	result.DMGMultiplier = dmgMult
+	result.NPCSupport = npcSupport
+	result.RPBonusMult = rpMult
+	result.XPBonusMult = xpMult
+
+	return result
+}
+
+// IsUnderdogFaction은 해당 팩션이 Underdog 부스트 대상인지 확인한다.
+func (fcs *FactionCombatSystem) IsUnderdogFaction(factionId string) bool {
+	factionSize := fcs.factionRegistry.GetFactionMemberCount(factionId)
+	avgSize := fcs.factionRegistry.GetAverageSize()
+
+	if avgSize <= 0 {
+		return false
+	}
+
+	// 소규모 팩션이거나 평균 50% 이하이면 Underdog
+	if factionSize <= UnderdogSmallFactionThreshold {
+		return true
+	}
+	ratio := float64(factionSize) / float64(avgSize)
+	return ratio < UnderdogRatioScaleMin
+}
+
+// GetAllUnderdogBoosts는 모든 팩션의 Underdog 부스트를 일괄 계산하여 반환한다.
+func (fcs *FactionCombatSystem) GetAllUnderdogBoosts() map[string]UnderdogBoostResult {
+	factionIds := fcs.factionRegistry.GetAllFactionIds()
+	result := make(map[string]UnderdogBoostResult, len(factionIds))
+	for _, fid := range factionIds {
+		result[fid] = fcs.CalculateUnderdogBoost(fid)
+	}
+	return result
 }
 
 // ── 데미지 추적 (어시스트 판정) ──

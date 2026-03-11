@@ -820,6 +820,245 @@ export const SOVEREIGNTY_DISPLAY: Record<SovereigntyLevel, {
   },
 } as const;
 
+// ── v39 Phase 8: NPC 수비대 타입 ──
+
+/** NPC 수비대 상태 */
+export type NPCGuardState = 'idle' | 'patrol' | 'combat' | 'dead' | 'respawning';
+
+/** NPC 수비대 스냅샷 (서버 → 클라이언트 전송) */
+export interface INPCGuardSnapshot {
+  /** 수비대 고유 ID */
+  id: string;
+  /** 소속 팩션 ID */
+  factionId: string;
+  /** 팩션 컬러 */
+  factionColor: string;
+  /** 위치 X */
+  x: number;
+  /** 위치 Y */
+  y: number;
+  /** 현재 HP */
+  hp: number;
+  /** 최대 HP */
+  maxHp: number;
+  /** 상태 */
+  state: NPCGuardState;
+  /** 타겟 플레이어 ID */
+  targetId?: string;
+}
+
+/** 수비대 배치 상수 (서버 garrison_system.go와 동기화) */
+export const GARRISON_CONSTANTS = {
+  /** Active Domination 수비대 수 */
+  COUNT_ACTIVE: 3,
+  /** Sovereignty 수비대 수 */
+  COUNT_SOVEREIGNTY: 5,
+  /** Hegemony 수비대 수 */
+  COUNT_HEGEMONY: 8,
+  /** 기본 HP */
+  BASE_HP: 150,
+  /** 기본 공격력 */
+  BASE_DMG: 12,
+  /** 적 감지 범위 (px) */
+  AGRO_RANGE: 200,
+  /** 공격 사거리 (px) */
+  ATTACK_RANGE: 80,
+  /** 리스폰 딜레이 (초) */
+  RESPAWN_DELAY: 60,
+  /** Active 스탯 배율 */
+  STAT_MULT_ACTIVE: 1.0,
+  /** Sovereignty 스탯 배율 */
+  STAT_MULT_SOVEREIGNTY: 1.3,
+  /** Hegemony 스탯 배율 */
+  STAT_MULT_HEGEMONY: 1.6,
+} as const;
+
+/** 주권 레벨별 수비대 수 반환 */
+export function getGarrisonCountForLevel(level: SovereigntyLevel): number {
+  switch (level) {
+    case 'hegemony': return GARRISON_CONSTANTS.COUNT_HEGEMONY;
+    case 'sovereignty': return GARRISON_CONSTANTS.COUNT_SOVEREIGNTY;
+    case 'active_domination': return GARRISON_CONSTANTS.COUNT_ACTIVE;
+    default: return 0;
+  }
+}
+
+/** 수비대 표시 정보 */
+export const GARRISON_DISPLAY = {
+  /** 수비대 이름 */
+  name: 'Garrison Guard',
+  /** 수비대 아이콘 */
+  icon: '🛡️',
+  /** 수비대 기본 색상 (팩션 컬러로 오버라이드) */
+  color: '#6B7280',
+  /** HP 바 표시 크기 */
+  hpBarWidth: 40,
+  /** HP 바 높이 */
+  hpBarHeight: 4,
+} as const;
+
+// ── v39 Phase 8: 용병 시스템 타입 ──
+
+/** 용병 등급 */
+export type MercenaryTier = 'recruit' | 'veteran' | 'elite';
+
+/** 용병 상태 */
+export type MercenaryNPCState = 'ready' | 'combat' | 'dead';
+
+/** 용병 스냅샷 (서버 → 클라이언트 전송) */
+export interface IMercenarySnapshot {
+  /** 용병 고유 ID */
+  id: string;
+  /** 소속 팩션 ID */
+  factionId: string;
+  /** 팩션 컬러 */
+  factionColor: string;
+  /** 등급 */
+  tier: MercenaryTier;
+  /** 위치 X */
+  x: number;
+  /** 위치 Y */
+  y: number;
+  /** 현재 HP */
+  hp: number;
+  /** 최대 HP */
+  maxHp: number;
+  /** 상태 */
+  state: MercenaryNPCState;
+  /** 타겟 플레이어 ID */
+  targetId?: string;
+}
+
+/** 용병 등급 정보 (서버 → 클라이언트 UI) */
+export interface IMercenaryTierInfo {
+  /** 등급 */
+  tier: MercenaryTier;
+  /** 등급명 */
+  name: string;
+  /** HP */
+  hp: number;
+  /** 공격력 */
+  damage: number;
+  /** 이동 속도 */
+  speed: number;
+  /** 고용 비용 (Round Gold) */
+  cost: number;
+  /** 할인 전 원래 비용 */
+  originalCost: number;
+  /** 할인 적용 여부 */
+  discounted: boolean;
+}
+
+/** 용병 상수 (서버 mercenary_system.go와 동기화) */
+export const MERCENARY_CONSTANTS = {
+  /** 팩션당 최대 용병 수 */
+  MAX_PER_FACTION: 5,
+  /** Underdog 할인율 (30%) */
+  UNDERDOG_DISCOUNT: 0.30,
+
+  /** 신병 비용 */
+  COST_RECRUIT: 50,
+  /** 숙련병 비용 */
+  COST_VETERAN: 120,
+  /** 정예병 비용 */
+  COST_ELITE: 250,
+
+  /** 신병 HP */
+  HP_RECRUIT: 100,
+  /** 숙련병 HP */
+  HP_VETERAN: 180,
+  /** 정예병 HP */
+  HP_ELITE: 280,
+
+  /** 신병 공격력 */
+  DMG_RECRUIT: 8,
+  /** 숙련병 공격력 */
+  DMG_VETERAN: 14,
+  /** 정예병 공격력 */
+  DMG_ELITE: 22,
+} as const;
+
+/** 용병 등급별 표시 정보 */
+export const MERCENARY_DISPLAY: Record<MercenaryTier, {
+  name: string;
+  nameKo: string;
+  icon: string;
+  color: string;
+  description: string;
+}> = {
+  recruit: {
+    name: 'Recruit',
+    nameKo: '신병',
+    icon: '⚔️',
+    color: '#9CA3AF',
+    description: 'Basic mercenary with low stats',
+  },
+  veteran: {
+    name: 'Veteran',
+    nameKo: '숙련병',
+    icon: '🗡️',
+    color: '#3B82F6',
+    description: 'Experienced fighter with balanced stats',
+  },
+  elite: {
+    name: 'Elite',
+    nameKo: '정예병',
+    icon: '⚜️',
+    color: '#EAB308',
+    description: 'Elite warrior with superior combat ability',
+  },
+} as const;
+
+// ── v39 Phase 8: Underdog Boost 타입 ──
+
+/** Underdog Boost 결과 (서버 → 클라이언트) */
+export interface IUnderdogBoostResult {
+  /** HP 보정 배율 (1.0 ~ 1.3) */
+  hpMultiplier: number;
+  /** DMG 보정 배율 (1.0 ~ 1.2) */
+  dmgMultiplier: number;
+  /** NPC 지원 수 (0 ~ 3) */
+  npcSupport: number;
+  /** RP 보너스 배율 (1.0 ~ 1.5) */
+  rpBonusMult: number;
+  /** XP 보너스 배율 (1.0 ~ 1.2) */
+  xpBonusMult: number;
+  /** 소규모 팩션 여부 (3명 이하) */
+  isSmallFaction: boolean;
+  /** 인원 비율 (팩션 / 평균) */
+  popRatio: number;
+}
+
+/** Underdog Boost 상수 (서버 faction_combat.go와 동기화) */
+export const UNDERDOG_CONSTANTS = {
+  /** 소규모 팩션 기준 (3명 이하) */
+  SMALL_FACTION_THRESHOLD: 3,
+  /** 최대 HP 보정 (+30%) */
+  MAX_HP_BOOST: 0.30,
+  /** 최대 DMG 보정 (+20%) */
+  MAX_DMG_BOOST: 0.20,
+  /** 최대 NPC 지원 수 */
+  MAX_NPC_SUPPORT: 3,
+  /** RP 보너스 배율 (+50%) */
+  RP_BONUS_MULT: 1.5,
+  /** XP 보너스 배율 (+20%) */
+  XP_BONUS_MULT: 1.2,
+  /** 동적 배율 시작 비율 (평균 대비 50% 이하) */
+  RATIO_SCALE_MIN: 0.50,
+} as const;
+
+/** 팩션 인원 상한 상수 */
+export const FACTION_CAP_CONSTANTS = {
+  /** 지역당 단일 팩션 최대 인원 기본값 */
+  DEFAULT_PER_REGION: 10,
+  /** 최소 보장 인원 */
+  MIN_PER_REGION: 3,
+  /** 과밀 판정 비율 (60%) */
+  OVERCROWDED_RATIO: 0.60,
+  /** 과밀 팩션 RP 페널티 (-20%) */
+  OVERCROWDED_PENALTY: 0.80,
+} as const;
+
 /** 영토 스냅샷 (서버 → 클라이언트 브로드캐스트) */
 export interface ITerritorySnapshot {
   /** 지역별 영토 상태 */

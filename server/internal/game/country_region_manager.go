@@ -99,6 +99,38 @@ type RegionJoinResult struct {
 	Error       string `json:"error,omitempty"`
 }
 
+// ── 팩션 인원 상한 상수 (Phase 8) ──
+
+const (
+	// FactionCapDefaultPerRegion는 지역당 단일 팩션 최대 인원 기본값
+	FactionCapDefaultPerRegion = 10
+	// FactionCapMinPerRegion는 지역당 단일 팩션 최소 보장 인원
+	FactionCapMinPerRegion = 3
+	// FactionCapRatioThreshold는 과밀 팩션 판정 비율 (전체 인원의 60% 이상이면 과밀)
+	FactionCapRatioThreshold = 0.60
+	// FactionCapOvercrowdedPenalty는 과밀 팩션 RP 페널티 배율 (0.8 = -20%)
+	FactionCapOvercrowdedPenalty = 0.80
+)
+
+// FactionBalanceConfig holds per-region faction population cap settings.
+type FactionBalanceConfig struct {
+	// MaxMembersPerFaction는 지역당 단일 팩션 최대 인원
+	MaxMembersPerFaction int `json:"maxMembersPerFaction"`
+	// OvercrowdedRatio는 과밀 판정 비율 (전체 접속 인원 대비)
+	OvercrowdedRatio float64 `json:"overcrowdedRatio"`
+	// Enabled는 팩션 밸런스 제한 활성 여부
+	Enabled bool `json:"enabled"`
+}
+
+// DefaultFactionBalanceConfig returns default faction balance settings.
+func DefaultFactionBalanceConfig() FactionBalanceConfig {
+	return FactionBalanceConfig{
+		MaxMembersPerFaction: FactionCapDefaultPerRegion,
+		OvercrowdedRatio:    FactionCapRatioThreshold,
+		Enabled:             true,
+	}
+}
+
 // CountryRegionManager manages region arenas for all countries.
 type CountryRegionManager struct {
 	mu sync.RWMutex
@@ -115,6 +147,9 @@ type CountryRegionManager struct {
 	// 설정
 	idleTimeoutSec float64 // 유휴 해제 시간 (초)
 
+	// Phase 8: 팩션 밸런스 설정
+	factionBalanceConfig FactionBalanceConfig
+
 	// 이벤트 콜백
 	OnRegionStateChange func(regionId string, state *RegionArenaState)
 }
@@ -122,10 +157,11 @@ type CountryRegionManager struct {
 // NewCountryRegionManager creates a new manager.
 func NewCountryRegionManager() *CountryRegionManager {
 	crm := &CountryRegionManager{
-		regions:           make(map[string]*RegionArenaState),
-		playerRegion:      make(map[string]string),
-		countryRegionDefs: make(map[string]*CountryRegionsDef),
-		idleTimeoutSec:    60.0,
+		regions:              make(map[string]*RegionArenaState),
+		playerRegion:         make(map[string]string),
+		countryRegionDefs:    make(map[string]*CountryRegionsDef),
+		idleTimeoutSec:       60.0,
+		factionBalanceConfig: DefaultFactionBalanceConfig(),
 	}
 
 	// 정적 데이터 초기화 — S/A 티어 국가를 등록한다.
@@ -133,6 +169,13 @@ func NewCountryRegionManager() *CountryRegionManager {
 	crm.initStaticRegionDefs()
 
 	return crm
+}
+
+// SetFactionBalanceConfig updates the faction balance configuration.
+func (crm *CountryRegionManager) SetFactionBalanceConfig(config FactionBalanceConfig) {
+	crm.mu.Lock()
+	defer crm.mu.Unlock()
+	crm.factionBalanceConfig = config
 }
 
 // initStaticRegionDefs registers static region definitions from region_types.go.
@@ -320,6 +363,19 @@ func (crm *CountryRegionManager) JoinRegion(req RegionJoinRequest) *RegionJoinRe
 		}
 	}
 
+	// Phase 8: 팩션 인원 상한 확인
+	if crm.factionBalanceConfig.Enabled && req.FactionId != "" {
+		factionCount := crm.countFactionMembersInArena(arena, req.FactionId)
+		maxPerFaction := crm.calculateFactionCap(arena)
+		if factionCount >= maxPerFaction {
+			arena.mu.Unlock()
+			return &RegionJoinResult{
+				Success: false,
+				Error:   fmt.Sprintf("faction %s is at capacity (%d/%d) in this region", req.FactionId, factionCount, maxPerFaction),
+			}
+		}
+	}
+
 	// 플레이어 추가
 	arena.Players[req.ClientID] = &RegionPlayer{
 		ClientID:    req.ClientID,
@@ -491,4 +547,106 @@ func (crm *CountryRegionManager) GetActiveRegionCount() int {
 	crm.mu.RLock()
 	defer crm.mu.RUnlock()
 	return len(crm.regions)
+}
+
+// ── Phase 8: 팩션 밸런스 로직 ──
+
+// countFactionMembersInArena counts how many members of a specific faction
+// are currently in the given region arena. Caller must hold arena.mu.
+func (crm *CountryRegionManager) countFactionMembersInArena(
+	arena *RegionArenaState,
+	factionId string,
+) int {
+	count := 0
+	for _, player := range arena.Players {
+		if player.FactionId == factionId {
+			count++
+		}
+	}
+	return count
+}
+
+// calculateFactionCap determines the max faction members allowed in a region.
+// 기본값은 FactionCapDefaultPerRegion이지만, 접속 인원이 적을 때는
+// maxPlayers / 활성 팩션 수로 동적 조정한다.
+// Caller must hold arena.mu (read lock sufficient).
+func (crm *CountryRegionManager) calculateFactionCap(arena *RegionArenaState) int {
+	baseCap := crm.factionBalanceConfig.MaxMembersPerFaction
+
+	// 현재 활성 팩션 수 계산
+	factionCounts := make(map[string]int)
+	for _, player := range arena.Players {
+		if player.FactionId != "" {
+			factionCounts[player.FactionId]++
+		}
+	}
+
+	activeFactions := len(factionCounts)
+	if activeFactions <= 1 {
+		// 팩션이 1개 이하면 기본 cap 적용
+		return baseCap
+	}
+
+	// 동적 계산: maxPlayers / 활성 팩션 수 (최소 FactionCapMinPerRegion 보장)
+	dynamicCap := arena.MaxPlayers / activeFactions
+	if dynamicCap < FactionCapMinPerRegion {
+		dynamicCap = FactionCapMinPerRegion
+	}
+
+	// 기본 cap과 동적 cap 중 작은 값 사용
+	if dynamicCap < baseCap {
+		return dynamicCap
+	}
+	return baseCap
+}
+
+// GetFactionCountsInRegion returns the number of members per faction in a region.
+func (crm *CountryRegionManager) GetFactionCountsInRegion(regionId string) map[string]int {
+	crm.mu.RLock()
+	arena, ok := crm.regions[regionId]
+	crm.mu.RUnlock()
+
+	if !ok {
+		return nil
+	}
+
+	arena.mu.RLock()
+	defer arena.mu.RUnlock()
+
+	counts := make(map[string]int)
+	for _, player := range arena.Players {
+		if player.FactionId != "" {
+			counts[player.FactionId]++
+		}
+	}
+	return counts
+}
+
+// IsRegionOvercrowded checks if a specific faction is overcrowded in a region.
+// Returns true if the faction's share exceeds OvercrowdedRatio of total players.
+func (crm *CountryRegionManager) IsRegionOvercrowded(regionId, factionId string) bool {
+	crm.mu.RLock()
+	arena, ok := crm.regions[regionId]
+	crm.mu.RUnlock()
+
+	if !ok || factionId == "" {
+		return false
+	}
+
+	arena.mu.RLock()
+	defer arena.mu.RUnlock()
+
+	if arena.PlayerCount == 0 {
+		return false
+	}
+
+	factionCount := 0
+	for _, player := range arena.Players {
+		if player.FactionId == factionId {
+			factionCount++
+		}
+	}
+
+	ratio := float64(factionCount) / float64(arena.PlayerCount)
+	return ratio >= crm.factionBalanceConfig.OvercrowdedRatio
 }
