@@ -78,13 +78,15 @@ export interface UseArenaReturn {
 
   // 액션
   initializeArena: (playerClass: PlayerClass) => void;
-  updateArena: (deltaTime: number) => void;
+  updateArena: (deltaTime: number, playerPos?: Vector2) => void;
   damageAgent: (agentId: string, damage: number, attackerId?: string) => void;
   killAgent: (agentId: string, killerId?: string) => void;
   respawnAgent: (agentId: string) => void;
   addAgentXp: (agentId: string, xp: number) => void;
   getArenaResult: () => ArenaResult;
   reset: () => void;
+  addBot: (personality?: AIPersonality) => void;
+  removeAllBots: () => void;
   // 에이전트 상태 직접 업데이트 (전투 시스템용)
   setAgents: React.Dispatch<React.SetStateAction<Agent[]>>;
 }
@@ -203,8 +205,8 @@ export function useArena(): UseArenaReturn {
       state: 'idle',
     });
 
-    // AI 에이전트 생성 (8명) - 플레이어 주변 원형 배치
-    for (let i = 0; i < 8; i++) {
+    // AI 에이전트는 디버그 패널의 "Add Bot" 버튼으로 동적 추가
+    for (let i = 0; i < 0; i++) {
       const aiClass = availableForAI[i % availableForAI.length];
       const personality = shuffledPersonalities[i] || 'balanced';
       const aiStartingWeapon = CLASS_STARTING_WEAPONS[aiClass];
@@ -294,8 +296,8 @@ export function useArena(): UseArenaReturn {
   // v8.1.5: 스폰 채팅 플래그 (게임 시작 후 한 번만 실행)
   const spawnChatFiredRef = useRef(false);
 
-  // Arena 업데이트 (매 프레임)
-  const updateArena = useCallback((deltaTime: number) => {
+  // Arena 업데이트 (매 프레임) — playerPos: 실제 플레이어 월드 좌표
+  const updateArena = useCallback((deltaTime: number, playerPos?: Vector2) => {
     if (arenaPhase !== 'playing') return;
 
     setGameTime(prev => prev + deltaTime);
@@ -357,13 +359,12 @@ export function useArena(): UseArenaReturn {
         if (!updatedAgent.isLocalPlayer && updatedAgent.isAlive) {
           const agentId = updatedAgent.agentId;
 
-          // 로컬 플레이어 위치 찾기 (플레이어 주변 유지용)
-          const localPlayer = prevAgents.find(a => a.isLocalPlayer);
-          const playerPos = localPlayer?.position || { x: 0, y: 0 };
+          // 실제 플레이어 월드 좌표 사용 (파라미터로 전달받음)
+          const actualPlayerPos = playerPos || { x: 0, y: 0 };
 
           // 플레이어와의 거리 계산
-          const dxPlayer = updatedAgent.position.x - playerPos.x;
-          const dyPlayer = updatedAgent.position.y - playerPos.y;
+          const dxPlayer = updatedAgent.position.x - actualPlayerPos.x;
+          const dyPlayer = updatedAgent.position.y - actualPlayerPos.y;
           const distToPlayer = Math.sqrt(dxPlayer * dxPlayer + dyPlayer * dyPlayer);
 
           // 1000px 초과 시 텔레포트 (플레이어 근처 300-500px 범위로)
@@ -376,99 +377,155 @@ export function useArena(): UseArenaReturn {
             updatedAgent = {
               ...updatedAgent,
               position: {
-                x: playerPos.x + Math.cos(teleportAngle) * teleportDist,
-                y: playerPos.y + Math.sin(teleportAngle) * teleportDist,
+                x: actualPlayerPos.x + Math.cos(teleportAngle) * teleportDist,
+                y: actualPlayerPos.y + Math.sin(teleportAngle) * teleportDist,
               },
               velocity: { x: 0, y: 0 },
               state: 'idle' as const,
             };
           } else {
-            // v8.1.5: 전투 거리 유지 AI - 다른 에이전트 타겟팅
+            // aww-agent-skill 전략 기반 AI (aggressive/defensive/balanced/collector)
             const weaponRange = getAgentWeaponRange(updatedAgent);
-            const idealDistance = weaponRange * 0.75; // 사거리의 75%
-            const tolerance = 40; // ±40px 허용
+            const personality = updatedAgent.aiPersonality;
+            const hpPct = updatedAgent.health / updatedAgent.maxHealth;
 
-            // 가장 가까운 타겟 찾기 (다른 에이전트 또는 로컬 플레이어)
-            let nearestTarget: Agent | null = null;
-            let nearestDist = Infinity;
+            // 가장 가까운 적 에이전트 찾기
+            let nearestEnemy: Agent | null = null;
+            let nearestEnemyDist = Infinity;
+            let weakEnemy: Agent | null = null;
+            let weakEnemyDist = Infinity;
+            let strongEnemy: Agent | null = null;
+            let strongEnemyDist = Infinity;
+
             for (const other of prevAgents) {
-              if (other.agentId === agentId) continue;
-              if (!other.isAlive) continue;
+              if (other.agentId === agentId || !other.isAlive) continue;
               const tdx = other.position.x - updatedAgent.position.x;
               const tdy = other.position.y - updatedAgent.position.y;
               const tdist = Math.sqrt(tdx * tdx + tdy * tdy);
-              if (tdist < nearestDist && tdist < 600) {
-                nearestDist = tdist;
-                nearestTarget = other;
+
+              if (tdist < nearestEnemyDist) {
+                nearestEnemyDist = tdist;
+                nearestEnemy = other;
+              }
+              // 약한 적: 체력이 나보다 낮음
+              if (other.health < updatedAgent.health * 0.8 && tdist < weakEnemyDist) {
+                weakEnemyDist = tdist;
+                weakEnemy = other;
+              }
+              // 강한 적: 체력이 나보다 높음
+              if (other.health > updatedAgent.health * 1.2 && tdist < strongEnemyDist) {
+                strongEnemyDist = tdist;
+                strongEnemy = other;
               }
             }
 
-            // 방향 변경 타이머 체크
+            // 방향 타이머
             let timer = aiDirectionTimersRef.current.get(agentId) || 0;
             timer -= deltaTime;
 
             if (timer <= 0) {
-              if (nearestTarget) {
-                // 타겟이 있으면 전투 거리 유지
-                const tdx = nearestTarget.position.x - updatedAgent.position.x;
-                const tdy = nearestTarget.position.y - updatedAgent.position.y;
-                const targetAngle = Math.atan2(tdy, tdx);
+              let moveAngle = 0;
+              let moveSpeed = updatedAgent.speed;
+              let newTimer = 0.5;
 
-                if (nearestDist > idealDistance + tolerance) {
-                  // 타겟에 접근
-                  aiTargetDirectionsRef.current.set(agentId, {
-                    x: Math.cos(targetAngle) * updatedAgent.speed,
-                    y: Math.sin(targetAngle) * updatedAgent.speed,
-                  });
-                  timer = 0.3 + Math.random() * 0.3;
-                } else if (nearestDist < idealDistance - tolerance && weaponRange > 100) {
-                  // 타겟에서 후퇴 (원거리 무기만)
-                  aiTargetDirectionsRef.current.set(agentId, {
-                    x: -Math.cos(targetAngle) * updatedAgent.speed * 0.6,
-                    y: -Math.sin(targetAngle) * updatedAgent.speed * 0.6,
-                  });
-                  timer = 0.3 + Math.random() * 0.3;
+              // ── 전략별 행동 결정 (aww-agent-skill 포팅) ──
+              if (personality === 'aggressive') {
+                // Aggressive: 강한 적 회피 → 약한 적 사냥 → 플레이어 근처 배회
+                if (strongEnemy && strongEnemyDist < 150) {
+                  // 강한 적 도주 (boost)
+                  moveAngle = Math.atan2(
+                    updatedAgent.position.y - strongEnemy.position.y,
+                    updatedAgent.position.x - strongEnemy.position.x
+                  );
+                  moveSpeed = updatedAgent.speed * 1.3;
+                  newTimer = 0.3;
+                } else if (weakEnemy && weakEnemyDist < 400) {
+                  // 약한 적 추격
+                  moveAngle = Math.atan2(
+                    weakEnemy.position.y - updatedAgent.position.y,
+                    weakEnemy.position.x - updatedAgent.position.x
+                  );
+                  moveSpeed = updatedAgent.speed * (weakEnemyDist < 200 ? 1.2 : 1.0);
+                  newTimer = 0.3;
+                } else if (distToPlayer > MAX_PLAYER_DISTANCE) {
+                  moveAngle = Math.atan2(-dyPlayer, -dxPlayer);
+                  newTimer = 0.5;
                 } else {
-                  // 적정 거리 - 측면 이동
-                  const strafeDir = Math.random() < 0.5 ? 1 : -1;
-                  const strafeAngle = targetAngle + (Math.PI / 2) * strafeDir;
-                  aiTargetDirectionsRef.current.set(agentId, {
-                    x: Math.cos(strafeAngle) * updatedAgent.speed * 0.4,
-                    y: Math.sin(strafeAngle) * updatedAgent.speed * 0.4,
-                  });
-                  timer = 0.5 + Math.random() * 1.0;
+                  moveAngle = Math.random() * Math.PI * 2;
+                  moveSpeed = updatedAgent.speed * 0.6;
+                  newTimer = 1 + Math.random() * 1.5;
                 }
-              } else if (distToPlayer > MAX_PLAYER_DISTANCE) {
-                // 타겟 없고 플레이어에서 멀면 복귀
-                const toPlayerAngle = Math.atan2(-dyPlayer, -dxPlayer);
-                const angleVariation = (Math.random() - 0.5) * 0.5;
-                aiTargetDirectionsRef.current.set(agentId, {
-                  x: Math.cos(toPlayerAngle + angleVariation) * updatedAgent.speed * 1.2,
-                  y: Math.sin(toPlayerAngle + angleVariation) * updatedAgent.speed * 1.2,
-                });
-                timer = 0.5 + Math.random() * 0.5;
+              } else if (personality === 'defensive') {
+                // Defensive: 모든 적 회피 → 안전 거리 유지 → 플레이어 근처 궤도
+                if (nearestEnemy && nearestEnemyDist < 200) {
+                  // 모든 적 도주
+                  moveAngle = Math.atan2(
+                    updatedAgent.position.y - nearestEnemy.position.y,
+                    updatedAgent.position.x - nearestEnemy.position.x
+                  );
+                  moveSpeed = updatedAgent.speed * (nearestEnemyDist < 100 ? 1.4 : 1.1);
+                  newTimer = 0.3;
+                } else if (distToPlayer > MAX_PLAYER_DISTANCE * 0.7) {
+                  // 플레이어에 가까이
+                  moveAngle = Math.atan2(-dyPlayer, -dxPlayer);
+                  moveSpeed = updatedAgent.speed * 0.8;
+                  newTimer = 0.5;
+                } else {
+                  // 플레이어 주변 궤도 (안전 배회)
+                  const orbitAngle = Math.atan2(dyPlayer, dxPlayer) + Math.PI / 6;
+                  moveAngle = orbitAngle;
+                  moveSpeed = updatedAgent.speed * 0.5;
+                  newTimer = 1 + Math.random() * 2;
+                }
               } else {
-                // 플레이어 근처에서 자유 배회
-                const angle = Math.random() * Math.PI * 2;
-                const speed = updatedAgent.speed * (0.4 + Math.random() * 0.4);
-                aiTargetDirectionsRef.current.set(agentId, {
-                  x: Math.cos(angle) * speed,
-                  y: Math.sin(angle) * speed,
-                });
-                timer = 1 + Math.random() * 2;
+                // Balanced / Collector: 적응형 — 강한 적 도주, 체력 높으면 사냥, 아니면 배회
+                if (strongEnemy && strongEnemyDist < 180) {
+                  moveAngle = Math.atan2(
+                    updatedAgent.position.y - strongEnemy.position.y,
+                    updatedAgent.position.x - strongEnemy.position.x
+                  );
+                  moveSpeed = updatedAgent.speed * 1.2;
+                  newTimer = 0.3;
+                } else if (hpPct > 0.6 && weakEnemy && weakEnemyDist < 300) {
+                  // 체력 60% 이상이면 약한 적 사냥
+                  moveAngle = Math.atan2(
+                    weakEnemy.position.y - updatedAgent.position.y,
+                    weakEnemy.position.x - updatedAgent.position.x
+                  );
+                  newTimer = 0.4;
+                } else if (nearestEnemy && nearestEnemyDist < weaponRange * 0.8) {
+                  // 전투 거리 유지 (측면 이동)
+                  const targetAngle = Math.atan2(
+                    nearestEnemy.position.y - updatedAgent.position.y,
+                    nearestEnemy.position.x - updatedAgent.position.x
+                  );
+                  const strafeDir = Math.random() < 0.5 ? 1 : -1;
+                  moveAngle = targetAngle + (Math.PI / 2) * strafeDir;
+                  moveSpeed = updatedAgent.speed * 0.5;
+                  newTimer = 0.5 + Math.random() * 0.5;
+                } else if (distToPlayer > MAX_PLAYER_DISTANCE) {
+                  moveAngle = Math.atan2(-dyPlayer, -dxPlayer);
+                  newTimer = 0.5;
+                } else {
+                  moveAngle = Math.random() * Math.PI * 2;
+                  moveSpeed = updatedAgent.speed * 0.5;
+                  newTimer = 1 + Math.random() * 2;
+                }
               }
+
+              aiTargetDirectionsRef.current.set(agentId, {
+                x: Math.cos(moveAngle) * moveSpeed,
+                y: Math.sin(moveAngle) * moveSpeed,
+              });
+              timer = newTimer;
             }
             aiDirectionTimersRef.current.set(agentId, timer);
 
-            // 목표 방향으로 이동
+            // 목표 방향으로 부드러운 이동 (lerp)
             const targetDir = aiTargetDirectionsRef.current.get(agentId) || { x: 0, y: 0 };
-
-            // 부드러운 방향 전환 (lerp)
             const lerpFactor = Math.min(1, deltaTime * 3);
             const newVelX = updatedAgent.velocity.x + (targetDir.x - updatedAgent.velocity.x) * lerpFactor;
             const newVelY = updatedAgent.velocity.y + (targetDir.y - updatedAgent.velocity.y) * lerpFactor;
-
-            // 위치 업데이트
             const newPosX = updatedAgent.position.x + newVelX * deltaTime;
             const newPosY = updatedAgent.position.y + newVelY * deltaTime;
 
@@ -714,6 +771,83 @@ export function useArena(): UseArenaReturn {
     };
   }, [agents, gameTime]);
 
+  // 봇 동적 추가 (디버그 메뉴에서 호출)
+  const botCounterRef = useRef(0);
+  const addBot = useCallback((personality: AIPersonality = 'balanced') => {
+    const idx = botCounterRef.current++;
+    const availableClasses = AVAILABLE_CLASSES;
+    const aiClass = availableClasses[idx % availableClasses.length];
+    const aiStartingWeapon = CLASS_STARTING_WEAPONS[aiClass];
+
+    // 플레이어 위치 근처에 스폰
+    const currentAgents = agentsRef.current;
+    const localPlayer = currentAgents.find(a => a.isLocalPlayer);
+    const playerPos = localPlayer?.position || { x: 0, y: 0 };
+    const spawnAngle = Math.random() * Math.PI * 2;
+    const spawnDist = 300 + Math.random() * 300;
+
+    const newAgent: Agent = {
+      id: `bot_${aiClass}_${idx}`,
+      agentId: `bot_${aiClass}_${idx}`,
+      playerClass: aiClass,
+      isLocalPlayer: false,
+      aiPersonality: personality,
+
+      position: {
+        x: playerPos.x + Math.cos(spawnAngle) * spawnDist,
+        y: playerPos.y + Math.sin(spawnAngle) * spawnDist,
+      },
+      velocity: { x: 0, y: 0 },
+      radius: 16,
+      color: CLASS_DATA[aiClass]?.color || '#ff0000',
+      health: 100,
+      maxHealth: 100,
+      speed: CLASS_DATA[aiClass]?.speed || 120,
+
+      kills: 0,
+      deaths: 0,
+      score: 0,
+
+      isAlive: true,
+      respawnTimer: 0,
+      respawnInvincibility: 2,
+
+      weapons: {
+        [aiStartingWeapon]: createStartingWeapon(aiStartingWeapon),
+      },
+      weaponCooldowns: {},
+
+      level: 1,
+      xp: 0,
+      nextLevelXp: 100,
+
+      statMultipliers: {
+        speed: 1,
+        cooldown: 1,
+        damage: 1,
+        health: 1,
+      },
+
+      state: 'idle',
+    };
+
+    setAgents(prev => [...prev, newAgent]);
+
+    // 스프라이트 로드
+    loadSpriteSheet(aiClass).catch(() => {});
+
+    // 스폰 채팅
+    setTimeout(() => {
+      triggerFallbackChat(newAgent, 'spawn');
+    }, 300);
+  }, []);
+
+  // 모든 봇 제거
+  const removeAllBots = useCallback(() => {
+    setAgents(prev => prev.filter(a => a.isLocalPlayer));
+    botCounterRef.current = 0;
+  }, []);
+
   // 리셋
   const reset = useCallback(() => {
     setAgents([]);
@@ -749,6 +883,8 @@ export function useArena(): UseArenaReturn {
     addAgentXp,
     getArenaResult,
     reset,
+    addBot,
+    removeAllBots,
     setAgents,
   };
 }

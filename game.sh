@@ -222,8 +222,11 @@ case "${1:-dev}" in
         echo ""
         echo -e "${CYAN}Go server:  http://localhost:$GO_PORT${NC}"
         echo -e "${CYAN}Game client: http://localhost:$WEB_PORT${NC}"
+        echo -e "${CYAN}Game test:  http://localhost:$WEB_PORT/game${NC}"
         echo -e "${CYAN}Press Ctrl+C to stop all.${NC}"
         echo ""
+        # Open /game page in browser after a short delay for server startup
+        (sleep 4 && open "http://localhost:$WEB_PORT/game") &
         # Wait and forward interrupt to stop all
         trap 'echo ""; stop_all; exit 0' INT TERM
         # Wait for either process to exit

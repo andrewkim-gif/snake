@@ -28,6 +28,7 @@ import { soundManager } from '@/lib/matrix/utils/audio';
 import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 import { OVERLAY } from '@/lib/overlay-tokens';
 import { getWeaponCategory } from '@/lib/matrix/config/skills/progressive-tree.config';
+import { LEVELUP_MOBILE } from '@/lib/matrix/systems/mobile-ux';
 import {
   CATEGORY_DISPLAY_NAMES,
   CATEGORY_DISPLAY_COLORS,
@@ -477,13 +478,15 @@ function MatrixLevelUpInner({
   // ─── Auto Hunt timer ───
   const [autoTimerInitialized, setAutoTimerInitialized] = useState(false);
 
+  const AUTO_TIMER = LEVELUP_MOBILE.AUTO_SELECT_TIMER; // 10초 (mobile-ux.ts 설정)
+
   useEffect(() => {
     if (isDevMode) { setAutoSelectTimer(null); setAutoTimerInitialized(false); return; }
     if (isAutoHunt && options.length > 0 && !autoTimerInitialized) {
       setAutoTimerInitialized(true);
-      setAutoSelectTimer(5);
+      setAutoSelectTimer(AUTO_TIMER);
     }
-  }, [isAutoHunt, options.length, isDevMode, autoTimerInitialized]);
+  }, [isAutoHunt, options.length, isDevMode, autoTimerInitialized, AUTO_TIMER]);
 
   useEffect(() => {
     if (isDevMode || !isAutoHunt || autoSelectTimer === null || options.length === 0 || isHoveringOptions) return;
@@ -525,13 +528,13 @@ function MatrixLevelUpInner({
       generateOptions();
       if (isAutoHunt) {
         setAutoTimerInitialized(false);
-        setAutoSelectTimer(5);
+        setAutoSelectTimer(AUTO_TIMER);
         setTimeout(() => setAutoTimerInitialized(true), 0);
       }
     }
   };
 
-  const timerPct = autoSelectTimer !== null ? (autoSelectTimer / 5) * 100 : 0;
+  const timerPct = autoSelectTimer !== null ? (autoSelectTimer / AUTO_TIMER) * 100 : 0;
 
   // ─── Card border/bg by type ───
   function getCardStyle(opt: UpgradeOption): { bg: string; border: string; glow: string } {

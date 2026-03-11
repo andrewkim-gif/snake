@@ -164,7 +164,7 @@ export function drawWhipProjectile(params: MeleeWeaponParams): void {
     alpha = 1 - Math.pow((swingProgress - 0.6) / 0.4, 1.5);
   }
 
-  ctx.rotate(p.angle + swingAngle);
+  ctx.rotate(isoRenderAngle(p.angle + swingAngle));
 
   ctx.save();
   ctx.globalAlpha = alpha;

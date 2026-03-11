@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useEffect, useCallback, useRef } from 'react';
+import React, { useEffect, useCallback, useRef, useMemo } from 'react';
 import { GAME_CONFIG, XP_THRESHOLDS, WEAPON_DATA, PICKUP_DATA, SPECIAL_SKILL, CLASS_DATA, getWaveForTime, getWaveForStage, ZOOM_CONFIG } from '@/lib/matrix/constants';
+import { useGameLoop } from '@/lib/matrix/hooks/useGameLoop';
 // STAGE_CONFIGS removed for Arena mode
 import { getSpriteManager } from '@/lib/matrix/sprites';
 import type { AnimationType } from '@/lib/matrix/sprites/types';
@@ -214,7 +215,7 @@ interface MatrixCanvasProps {
     // Arena (Battle Royale) 모드 - 9명의 AI 에이전트
     arenaAgents?: import('@/lib/matrix/types').Agent[];
     arenaKillFeed?: import('@/lib/matrix/rendering/ui/chatBubble').KillFeedEntry[];
-    onArenaUpdate?: (deltaTime: number) => void;
+    onArenaUpdate?: (deltaTime: number, playerPos?: { x: number; y: number }) => void;
     onArenaAgentDamage?: (agentId: string, damage: number, attackerId?: string) => void;
     onArenaAgentKill?: (agentId: string, killerId?: string) => void;
     // v8.1: 에이전트 XP 부여 (젬 수집 시)
@@ -1817,7 +1818,7 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
 
         // Arena 모드 업데이트 (에이전트 AI, 세이프존, 리스폰 등)
         if (onArenaUpdate) {
-            onArenaUpdate(scaledDelta);
+            onArenaUpdate(scaledDelta, playerRef.current?.position);
         }
 
         // Arena 채팅 메시지 페이드아웃 업데이트
@@ -2581,7 +2582,9 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
 
             // v8.1 Arena: 모든 살아있는 에이전트 목록 (몬스터 타겟팅용)
             const arenaAgents = arenaAgentsRef.current;
-            const aliveAgents = arenaAgents.filter(a => a.isAlive);
+            // 로컬 플레이어 에이전트 제외 — 로컬 플레이어는 player.position으로 이미 추적됨
+            // isLocalPlayer 에이전트를 포함하면 (0,0) 고정 좌표로 적이 잘못된 지점에 모임
+            const aliveAgents = arenaAgents.filter(a => a.isAlive && !a.isLocalPlayer);
             const hasArenaAgents = aliveAgents.length > 0;
 
             // 적 충돌 체크 최적화: 10프레임마다만 수행
@@ -5150,50 +5153,18 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
         ctx.restore();
     };
 
-    // 게임 루프 - Web Worker 기반 (탭 비활성화 시에도 게임 진행)
-    const MAX_DELTA_TIME = 0.1; // 100ms 상한 (한 프레임에 너무 큰 deltaTime 방지)
-    const workerRef = useRef<Worker | null>(null);
-
-    // 렌더링 전용 루프 (화면 표시만 담당)
-    const renderLoop = useCallback(() => {
+    // 게임 루프 - useGameLoop 훅으로 추출 (Web Worker + rAF)
+    // 2D Canvas 렌더링 콜백
+    const renderCanvas = useCallback(() => {
         const ctx = canvasRef.current?.getContext('2d');
         if (ctx) draw(ctx);
-        requestRef.current = requestAnimationFrame(renderLoop);
     }, []);
 
-    // Web Worker 기반 게임 루프
-    useEffect(() => {
-        // Worker 생성 (Vite는 ?worker 쿼리로 Worker 지원)
-        const worker = new Worker(
-            new URL('@/lib/matrix/workers/game-timer.worker.ts', import.meta.url),
-            { type: 'module' }
-        );
-        workerRef.current = worker;
-
-        // Worker 메시지 핸들러
-        worker.onmessage = (e) => {
-            const { type, deltaTime } = e.data;
-
-            if (type === 'tick' && gameActive) {
-                const clampedDelta = Math.min(deltaTime, MAX_DELTA_TIME);
-                // 백그라운드에서도 게임 로직 실행 (렌더링은 requestAnimationFrame이 자동으로 스킵)
-                update(clampedDelta);
-            }
-        };
-
-        // 렌더링 루프 시작
-        requestRef.current = requestAnimationFrame(renderLoop);
-
-        // Worker 시작
-        worker.postMessage({ type: 'start' });
-
-        return () => {
-            worker.postMessage({ type: 'stop' });
-            worker.terminate();
-            workerRef.current = null;
-            if (requestRef.current) cancelAnimationFrame(requestRef.current);
-        };
-    }, [gameActive, isAutoHunt, renderLoop]);
+    useGameLoop({
+        gameActive,
+        update,
+        render: renderCanvas,
+    });
 
     // NOTE: Resize listener moved into draw loop for better mobile stability, 
     // but we keep this to force initial size

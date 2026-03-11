@@ -125,6 +125,15 @@ const MatrixCanvas = dynamic(
   { ssr: false },
 );
 
+// ─── MatrixScene (3D 모드, Phase 0) ───
+const MatrixScene = dynamic(
+  () => import('./MatrixScene').then(m => ({ default: m.MatrixScene })),
+  { ssr: false },
+);
+
+// 렌더 모드 타입 (2D Classic / 3D Enhanced)
+type RenderMode = '2d' | '3d';
+
 // ============================================
 // Props
 // ============================================
@@ -190,6 +199,13 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const [isPaused, setIsPaused] = useState(false);
   const [entityCounts, setEntityCounts] = useState({ enemies: 0, particles: 0, projectiles: 0 });
   const [isAutoHunt, setIsAutoHunt] = useState(true);  // Matrix는 기본 Auto Hunt
+  // v38: 2D/3D 렌더 모드 토글 (localStorage 저장)
+  const [renderMode, setRenderMode] = useState<RenderMode>(() => {
+    if (typeof window !== 'undefined') {
+      return (localStorage.getItem('matrix-render-mode') as RenderMode) || '2d';
+    }
+    return '2d';
+  });
   const [sessionKills, setSessionKills] = useState(0);
   const [playerPosition, setPlayerPosition] = useState({ x: 0, y: 0 });
   const playerPositionRef = useRef({ x: 0, y: 0 });
@@ -1162,87 +1178,123 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
       userSelect: 'none',
     }}>
 
-      {/* ─── MatrixCanvas: 68개 props 바인딩 ─── */}
-      <MatrixCanvas
-        // === 점수/상태 업데이트 콜백 (12개) ===
-        onScoreUpdate={gameState.handleScoreUpdate}
-        onHealthUpdate={gameState.handleHealthUpdate}
-        onXpUpdate={gameState.handleXpUpdate}
-        onTimeUpdate={gameState.handleTimeUpdate}
-        onLevelUp={gameState.handleLevelUpTrigger}
-        onGameOver={handleGameOver}
-        onDamageTaken={handleDamageTaken}
-        onSpecialUpdate={gameState.handleSpecialUpdate}
-        onWeaponCooldownsUpdate={gameState.handleWeaponCooldownsUpdate}
-        onChestCollected={handleChestCollected}
-        onMaterialCollected={handleMaterialCollected}
+      {/* ─── 렌더 엔진: 2D(MatrixCanvas) / 3D(MatrixScene) 분기 ─── */}
+      {renderMode === '3d' ? (
+        /* v38 Phase 0: 3D 모드 (R3F) — 테스트 큐브 + 카메라 + 조명 */
+        <MatrixScene
+          gameActive={gameActive}
+        />
+      ) : (
+        /* 기존 2D 모드 (Canvas 2D) — 68개 props 바인딩 */
+        <MatrixCanvas
+          // === 점수/상태 업데이트 콜백 (12개) ===
+          onScoreUpdate={gameState.handleScoreUpdate}
+          onHealthUpdate={gameState.handleHealthUpdate}
+          onXpUpdate={gameState.handleXpUpdate}
+          onTimeUpdate={gameState.handleTimeUpdate}
+          onLevelUp={gameState.handleLevelUpTrigger}
+          onGameOver={handleGameOver}
+          onDamageTaken={handleDamageTaken}
+          onSpecialUpdate={gameState.handleSpecialUpdate}
+          onWeaponCooldownsUpdate={gameState.handleWeaponCooldownsUpdate}
+          onChestCollected={handleChestCollected}
+          onMaterialCollected={handleMaterialCollected}
 
-        // === 보스 콜백 (4개) - Arena에서는 stub ===
-        onBossSpawn={handleBossSpawn}
-        onBossUpdate={handleBossUpdate}
-        onBossDefeated={handleBossDefeated}
-        onBossWarning={handleBossWarning}
+          // === 보스 콜백 (4개) - Arena에서는 stub ===
+          onBossSpawn={handleBossSpawn}
+          onBossUpdate={handleBossUpdate}
+          onBossDefeated={handleBossDefeated}
+          onBossWarning={handleBossWarning}
 
-        // === 게임 상태 (8개) ===
-        gameActive={gameActive}
-        upgrades={gameState.weapons}
-        resetTrigger={gameState.resetTrigger}
-        gameState={gameState.gameState}
-        playerClass={gameState.selectedClass}
-        appliedReward={gameState.appliedReward}
-        isAutoHunt={isAutoHunt}
-        persistentUpgrades={DEFAULT_PERSISTENT_UPGRADES}
+          // === 게임 상태 (8개) ===
+          gameActive={gameActive}
+          upgrades={gameState.weapons}
+          resetTrigger={gameState.resetTrigger}
+          gameState={gameState.gameState}
+          playerClass={gameState.selectedClass}
+          appliedReward={gameState.appliedReward}
+          isAutoHunt={isAutoHunt}
+          persistentUpgrades={DEFAULT_PERSISTENT_UPGRADES}
 
-        // === 모드/시간 (3개) ===
-        timeScale={1.0}
-        testerMode={false}
-        gameMode={gameMode}
+          // === 모드/시간 (3개) ===
+          timeScale={1.0}
+          testerMode={false}
+          gameMode={gameMode}
 
-        // === Singularity 콜백 (5개) ===
-        singularityDifficultyMultiplier={undefined}
-        onSingularityTimeUpdate={undefined}
-        onSingularityKill={handleSingularityKill}
-        onSingularityBossCheck={undefined}
-        onSingularityMilestoneCheck={undefined}
-        onMilestoneAchieved={undefined}
+          // === Singularity 콜백 (5개) ===
+          singularityDifficultyMultiplier={undefined}
+          onSingularityTimeUpdate={undefined}
+          onSingularityKill={handleSingularityKill}
+          onSingularityBossCheck={undefined}
+          onSingularityMilestoneCheck={undefined}
+          onMilestoneAchieved={undefined}
 
-        // === NFT/튜토리얼 (5개) - 비활성 ===
-        nftEffects={undefined}
-        onTutorialMove={undefined}
-        onTutorialKill={undefined}
-        onTutorialGemCollect={undefined}
+          // === NFT/튜토리얼 (5개) - 비활성 ===
+          nftEffects={undefined}
+          onTutorialMove={undefined}
+          onTutorialKill={undefined}
+          onTutorialGemCollect={undefined}
 
-        // === 캐릭터 보너스 (1개) ===
-        characterBonus={DEFAULT_CHARACTER_BONUS}
+          // === 캐릭터 보너스 (1개) ===
+          characterBonus={DEFAULT_CHARACTER_BONUS}
 
-        // === 알림/이벤트 (3개) ===
-        onNotifyItem={undefined}
-        onV3Update={handleV3Update}
-        onEventLog={undefined}
+          // === 알림/이벤트 (3개) ===
+          onNotifyItem={undefined}
+          onV3Update={handleV3Update}
+          onEventLog={undefined}
 
-        // === 스킨 (1개) ===
-        skinColors={undefined}
+          // === 스킨 (1개) ===
+          skinColors={undefined}
 
-        // === 터렛/에이전트 (3개) ===
-        placedTurrets={[]}
-        onTurretsUpdate={undefined}
-        onPlayerPositionUpdate={handlePlayerPositionUpdate}
+          // === 터렛/에이전트 (3개) ===
+          placedTurrets={[]}
+          onTurretsUpdate={undefined}
+          onPlayerPositionUpdate={handlePlayerPositionUpdate}
 
-        // === 시스템 통계 (2개) ===
-        onEntityCountUpdate={setEntityCounts}
-        debugMode={false}
+          // === 시스템 통계 (2개) ===
+          onEntityCountUpdate={setEntityCounts}
+          debugMode={false}
 
-        // === Arena (Battle Royale) (5개) ===
-        arenaAgents={arena.agents}
-        arenaKillFeed={arena.killFeed}
-        onArenaUpdate={arena.updateArena}
-        onArenaAgentDamage={arena.damageAgent}
-        onArenaAgentKill={arena.killAgent}
-        addAgentXp={arena.addAgentXp}
+          // === Arena (Battle Royale) (5개) ===
+          arenaAgents={arena.agents}
+          arenaKillFeed={arena.killFeed}
+          onArenaUpdate={arena.updateArena}
+          onArenaAgentDamage={arena.damageAgent}
+          onArenaAgentKill={arena.killAgent}
+          addAgentXp={arena.addAgentXp}
 
-        // === v33 Phase 4: Multiplayer Rendering ===
-        onMultiplayerRender={isOnline ? handleMultiplayerRender : undefined}
-      />
+          // === v33 Phase 4: Multiplayer Rendering ===
+          onMultiplayerRender={isOnline ? handleMultiplayerRender : undefined}
+        />
+      )}
+
+      {/* v38: 2D/3D 렌더 모드 토글 버튼 (좌측 하단) */}
+      <button
+        onClick={() => {
+          const next = renderMode === '2d' ? '3d' : '2d';
+          setRenderMode(next);
+          localStorage.setItem('matrix-render-mode', next);
+        }}
+        style={{
+          position: 'absolute',
+          bottom: 16,
+          left: 16,
+          zIndex: 9999,
+          padding: '8px 16px',
+          backgroundColor: renderMode === '3d' ? '#CC9933' : '#333',
+          color: '#E8E0D4',
+          border: '1px solid #555',
+          borderRadius: 6,
+          fontSize: 12,
+          fontFamily: '"Rajdhani", sans-serif',
+          fontWeight: 600,
+          cursor: 'pointer',
+          opacity: 0.8,
+          transition: 'all 0.2s',
+        }}
+      >
+        {renderMode === '2d' ? '3D MODE' : '2D MODE'}
+      </button>
 
       {/* ─── MatrixHUD: v37 Tactical War Room Layout ─── */}
       {gameState.gameState.isPlaying && !gameState.gameState.isGameOver && (
@@ -1349,6 +1401,11 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         <MatrixLevelUp
           options={levelUpOptions}
           onSelect={isOnline ? handleOnlineLevelUpSelect : handleSelectUpgrade}
+          isAutoHunt={isAutoHunt}
+          timeScale={1.0}
+          currentGold={economySnapshot.gold.current}
+          playerKills={sessionKills}
+          matchTime={gameState.gameTime}
         />
       )}
 
@@ -1445,6 +1502,9 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         <DebugSkillPanel
           weapons={gameState.weapons}
           onUpgrade={handleDebugUpgrade}
+          onAddBot={arena.addBot}
+          onRemoveAllBots={arena.removeAllBots}
+          botCount={arena.agents.filter(a => !a.isLocalPlayer && a.isAlive).length}
         />
       )}
     </div>

@@ -1,0 +1,8 @@
+{
+  "project_name": "AI World War",
+  "vault_folder": "AI World War",
+  "sync_enabled": true,
+  "auto_sync_phases": ["plan", "system", "dev", "verify", "report"],
+  "last_sync": "2026-03-10T18:23:00+09:00",
+  "created": "2026-03-10T18:23:00+09:00"
+}

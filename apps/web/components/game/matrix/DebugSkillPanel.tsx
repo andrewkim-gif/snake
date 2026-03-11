@@ -22,18 +22,30 @@ import {
 import { SkillIcon } from './SkillIcon';
 import {
   Settings, X, ChevronDown, ChevronUp, Crown, Sparkles,
-  ArrowRight, Zap, RotateCcw,
+  ArrowRight, Zap, RotateCcw, Bot, Trash2, Plus,
 } from 'lucide-react';
+import type { AIPersonality } from '@/lib/matrix/types';
 import { SK, headingFont, bodyFont } from '@/lib/sketch-ui';
 
 // ── 카테고리 컬러 / 이름 (중앙 config에서 import) ──
 const CATEGORY_COLORS: Record<string, string> = CATEGORY_DISPLAY_COLORS;
 const CATEGORY_NAMES: Record<string, string> = CATEGORY_DISPLAY_NAMES;
 
+// ── 봇 전략 정보 ──
+const BOT_STRATEGIES: { key: AIPersonality; label: string; color: string; desc: string }[] = [
+  { key: 'aggressive', label: 'AGG', color: '#EF4444', desc: '강적 회피 → 약적 사냥' },
+  { key: 'defensive', label: 'DEF', color: '#3B82F6', desc: '전체 회피 → 플레이어 근처 공전' },
+  { key: 'balanced', label: 'BAL', color: '#10B981', desc: 'HP 기반 적응형 전투' },
+  { key: 'collector', label: 'COL', color: '#F59E0B', desc: '경험치 수집 우선' },
+];
+
 // ── Props ──
 interface DebugSkillPanelProps {
   weapons: Record<string, number>;
   onUpgrade: (weaponType: string) => void;
+  onAddBot?: (personality?: AIPersonality) => void;
+  onRemoveAllBots?: () => void;
+  botCount?: number;
 }
 
 // ── 스킬 정보 타입 ──
@@ -256,7 +268,7 @@ const SkillCard = memo(function SkillCard({
 });
 
 // ── 메인 컴포넌트 ──
-function DebugSkillPanelInner({ weapons, onUpgrade }: DebugSkillPanelProps) {
+function DebugSkillPanelInner({ weapons, onUpgrade, onAddBot, onRemoveAllBots, botCount = 0 }: DebugSkillPanelProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -474,6 +486,92 @@ function DebugSkillPanelInner({ weapons, onUpgrade }: DebugSkillPanelProps) {
               {totalCount} skills available
             </span>
           </div>
+
+          {/* ── 봇 컨트롤 섹션 ── */}
+          {onAddBot && (
+            <div style={{
+              padding: '8px 12px',
+              borderBottom: `1px solid ${SK.border}`,
+              background: 'rgba(16,185,129,0.05)',
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                marginBottom: 6,
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <Bot size={12} style={{ color: SK.green }} />
+                  <span style={{
+                    fontFamily: headingFont, fontSize: 11, fontWeight: 700,
+                    color: SK.green, letterSpacing: '0.08em',
+                  }}>
+                    AI BOTS
+                  </span>
+                  {botCount > 0 && (
+                    <span style={{
+                      background: SK.green, color: '#000',
+                      padding: '0 5px', fontSize: 9, fontWeight: 700,
+                    }}>
+                      {botCount}
+                    </span>
+                  )}
+                </div>
+                {botCount > 0 && onRemoveAllBots && (
+                  <button
+                    onClick={onRemoveAllBots}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 3,
+                      padding: '2px 8px', background: 'rgba(239,68,68,0.15)',
+                      border: `1px solid ${SK.accent}40`, borderRadius: 0,
+                      cursor: 'pointer', color: SK.accent,
+                      fontFamily: headingFont, fontSize: 9, letterSpacing: '0.05em',
+                    }}
+                  >
+                    <Trash2 size={8} />
+                    CLEAR
+                  </button>
+                )}
+              </div>
+              <div style={{
+                display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4,
+              }}>
+                {BOT_STRATEGIES.map(strat => (
+                  <button
+                    key={strat.key}
+                    onClick={() => onAddBot(strat.key)}
+                    title={strat.desc}
+                    style={{
+                      display: 'flex', flexDirection: 'column', alignItems: 'center',
+                      gap: 2, padding: '6px 4px',
+                      background: 'rgba(255,255,255,0.04)',
+                      border: `1px solid ${strat.color}40`,
+                      borderTop: `2px solid ${strat.color}`,
+                      borderRadius: 0, cursor: 'pointer',
+                      transition: 'all 0.15s',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = `${strat.color}20`;
+                      e.currentTarget.style.transform = 'scale(1.05)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                      e.currentTarget.style.transform = 'scale(1)';
+                    }}
+                  >
+                    <Plus size={14} style={{ color: strat.color }} />
+                    <span style={{
+                      fontFamily: headingFont, fontSize: 9, fontWeight: 700,
+                      color: strat.color, letterSpacing: '0.08em',
+                    }}>
+                      {strat.label}
+                    </span>
+                    <span style={{ fontSize: 7, color: SK.textMuted, lineHeight: 1.2 }}>
+                      {strat.desc.split('→')[0].trim()}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* 카테고리 + 카드 그리드 */}
           <div style={{ padding: 8 }}>
