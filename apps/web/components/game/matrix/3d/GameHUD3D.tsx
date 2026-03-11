@@ -10,7 +10,7 @@
  * SK 팔레트 + Apex 스타일 적용.
  */
 
-import { memo, useState, useEffect, useRef, useCallback } from 'react';
+import { memo, useState, useEffect, useRef } from 'react';
 import type { Player } from '@/lib/matrix/types';
 import { SK, headingFont, bodyFont, apexClip } from '@/lib/sketch-ui';
 

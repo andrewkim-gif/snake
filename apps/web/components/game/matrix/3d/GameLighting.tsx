@@ -12,7 +12,7 @@
  * 다크 전술 테마에 맞는 따뜻한 톤의 조명 설정.
  */
 
-import React, { useRef } from 'react';
+import { useRef } from 'react';
 import * as THREE from 'three';
 
 // 그림자 커버 범위 (월드 단위)

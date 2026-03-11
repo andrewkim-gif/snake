@@ -13,7 +13,7 @@
  * useFrame priority=0 필수
  */
 
-import { useRef, useMemo } from 'react';
+import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Player } from '@/lib/matrix/types';
@@ -114,6 +114,13 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
     }
     arcsRef.current = arcs;
   }, []);
+
+  // geometry cleanup (언마운트 시 메모리 누수 방지)
+  useEffect(() => {
+    return () => {
+      geometry.dispose();
+    };
+  }, [geometry]);
 
   // useFrame: 공격 이벤트 소비 + arc 업데이트
   useFrame((_state, delta) => {

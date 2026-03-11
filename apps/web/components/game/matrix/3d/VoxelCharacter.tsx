@@ -15,7 +15,7 @@
  * useFrame priority=0 필수
  */
 
-import { useRef, useMemo, useCallback } from 'react';
+import { useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Player, PlayerClass } from '@/lib/matrix/types';
