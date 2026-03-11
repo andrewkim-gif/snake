@@ -1,7 +1,7 @@
 'use client';
 
 /**
- * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1+2+5+6)
+ * MatrixScene.tsx — R3F 기반 3D 렌더링 엔진 (Phase 0+1+2+3+5+6)
  *
  * Canvas 2D MatrixCanvas.tsx의 3D 대체 컴포넌트.
  * 게임 로직(useGameLoop)은 동일하게 재사용하고,
@@ -21,6 +21,12 @@
  *
  * Phase 2 통합 항목 (Character):
  * - VoxelCharacter (3-head chibi BoxGeometry 캐릭터, S16+S18)
+ *
+ * Phase 3 통합 항목 (Combat):
+ * - SwingArc (근접 공격 이펙트)
+ * - DeathParticles (적 사망 파편 폭발)
+ * - Enemy hit flash (피격 시 흰색 플래시)
+ * - Enemy 리스폰 시스템
  *
  * Phase 5 통합 항목 (Effects):
  * - PostProcessingEffects (Bloom + Vignette, S33)
@@ -46,8 +52,10 @@ import { VoxelTerrain } from './3d/VoxelTerrain';
 import { TerrainObjects } from './3d/TerrainObjects';
 import { PickupRenderer } from './3d/PickupRenderer';
 import { VoxelCharacter } from './3d/VoxelCharacter';
-// Phase 3: Enemies
+// Phase 3: Enemies + Combat
 import { EnemyRenderer } from './3d/EnemyRenderer';
+import { SwingArc, type AttackEvent } from './3d/SwingArc';
+import { DeathParticles, type DeathEvent } from './3d/DeathParticles';
 // Phase 5: Effects
 import { PostProcessingEffects, ScreenFlashOverlay, useScreenFlash } from './3d/PostProcessing';
 import { ParticleSystem } from './3d/ParticleSystem';
@@ -96,9 +104,15 @@ function GroundPlane() {
 function SceneContent({
   refs,
   warningIntensityRef,
+  attackEventsRef,
+  deathEventsRef,
+  hitFlashMapRef,
 }: {
   refs: GameRefs;
   warningIntensityRef: React.MutableRefObject<number>;
+  attackEventsRef: React.MutableRefObject<AttackEvent[]>;
+  deathEventsRef: React.MutableRefObject<DeathEvent[]>;
+  hitFlashMapRef: React.MutableRefObject<Map<string, number>>;
 }) {
   return (
     <>
@@ -150,11 +164,22 @@ function SceneContent({
         playerClass={refs.player.current.playerClass ?? 'neo'}
       />
 
-      {/* Phase 3: 적 렌더러 (InstancedMesh) */}
+      {/* Phase 3: 적 렌더러 (InstancedMesh) + hit flash */}
       <EnemyRenderer
         enemiesRef={refs.enemies}
         playerRef={refs.player}
+        hitFlashMapRef={hitFlashMapRef}
       />
+
+      {/* Phase 3: 근접 공격 Swing Arc 이펙트 */}
+      <SwingArc
+        playerRef={refs.player}
+        attackEventsRef={attackEventsRef}
+        facingRef={refs.lastFacing}
+      />
+
+      {/* Phase 3: 적 사망 파편 폭발 */}
+      <DeathParticles deathEventsRef={deathEventsRef} />
 
       {/* Phase 5: 파티클 시스템 (S34) */}
       <ParticleSystem qualityTier="HIGH" />
@@ -187,6 +212,31 @@ function SceneContent({
   );
 }
 
+// ============================================
+// 전투 상수
+// ============================================
+
+const PLAYER_SPEED = 150;
+const PLAYER_ATTACK_RANGE = 60;       // 자동 공격 사거리
+const PLAYER_ATTACK_COOLDOWN = 0.5;   // 자동 공격 쿨다운 (초)
+const PLAYER_ATTACK_DAMAGE = 25;      // 기본 공격 데미지
+const PLAYER_KNOCKBACK = 60;          // 적 넉백 강도
+const ENEMY_ATTACK_RANGE = 25;
+const ENEMY_ATTACK_COOLDOWN = 1.0;
+const ENEMY_KNOCKBACK_FORCE = 80;
+const GEM_COLLECT_RANGE = 50;
+const GEM_MAGNET_RANGE = 100;
+const ENEMY_HIT_FLASH_DURATION = 0.12;
+
+// 리스폰 설정
+const MIN_ENEMY_COUNT = 8;            // 이 수 이하로 떨어지면 리스폰
+const TARGET_ENEMY_COUNT = 20;        // 리스폰 목표 적 수
+const RESPAWN_CHECK_INTERVAL = 2.0;   // 리스폰 체크 주기 (초)
+const RESPAWN_BATCH_SIZE = 4;         // 한 번에 리스폰할 적 수
+
+/** 적 ID 카운터 */
+let _enemyIdCounter = 100;
+
 /**
  * MatrixScene — R3F Canvas 래퍼 + useGameLoop 통합
  *
@@ -206,6 +256,13 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
 
   // Phase 6: 위험 경고 강도 ref (SafeZone3D → PostProcessing 연동)
   const warningIntensityRef = useRef(0);
+
+  // === Phase 3: 전투 시스템 refs ===
+  const attackEventsRef = useRef<AttackEvent[]>([]);
+  const deathEventsRef = useRef<DeathEvent[]>([]);
+  const hitFlashMapRef = useRef<Map<string, number>>(new Map());
+  const playerAttackTimerRef = useRef(0);
+  const respawnTimerRef = useRef(0);
 
   // === WASD 키보드 입력 ===
   useEffect(() => {
@@ -302,13 +359,7 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
     refs.pickups.current = testPickups as any;
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // === 게임 루프 (WASD 이동 + 적 AI + 플레이어 자동공격 + 잼 자석) ===
-  const PLAYER_SPEED = 150;
-  const PLAYER_ATTACK_RANGE = 60;    // 자동 공격 사거리
-  const PLAYER_ATTACK_COOLDOWN = 0.5; // 자동 공격 쿨다운 (초)
-  const PLAYER_ATTACK_DAMAGE = 25;   // 기본 공격 데미지
-  const PLAYER_KNOCKBACK = 60;       // 적 넉백 강도
-  const playerAttackTimerRef = useRef(0); // 공격 쿨다운 타이머
+  // === 게임 루프 (WASD 이동 + 적 AI + 플레이어 자동공격 + 잼 자석 + 전투 시스템) ===
   const updateRef = useRef((_dt: number) => {});
   useMemo(() => {
     updateRef.current = (dt: number) => {
@@ -375,6 +426,18 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
             closestEnemy.position.y += (edy / eDist) * PLAYER_KNOCKBACK * dt * 10;
           }
 
+          // v39 Phase 3: 적 hit flash 트리거
+          hitFlashMapRef.current.set(closestEnemy.id, ENEMY_HIT_FLASH_DURATION);
+
+          // v39 Phase 3: 공격 이벤트 → SwingArc에 전달
+          const facing = refs.lastFacing.current;
+          attackEventsRef.current.push({
+            position: { x: player.position.x, y: player.position.y },
+            direction: { x: facing.x, y: facing.y },
+            isCritical,
+            timestamp: Date.now(),
+          });
+
           // 데미지 넘버 (적 위치에 표시)
           refs.damageNumbers.current.push({
             id: `pdmg-${Date.now()}-${Math.random()}`,
@@ -390,12 +453,25 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
           // 화면 쉐이크 (작게)
           refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.08);
           refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, 0.1);
+
+          // 크리티컬: 화면 플래시
+          if (isCritical) {
+            refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.15);
+            refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, 0.25);
+          }
         }
       }
 
-      // === 적 사망 처리 + gem 드롭 ===
+      // === 적 사망 처리 + gem 드롭 + 사망 파티클 ===
       refs.enemies.current = refs.enemies.current.filter(enemy => {
         if (enemy.health <= 0) {
+          // v39 Phase 3: 사망 이벤트 → DeathParticles에 전달
+          deathEventsRef.current.push({
+            position: { x: enemy.position.x, y: enemy.position.y },
+            color: enemy.color || (enemy.isBoss ? '#ff4444' : '#44aaff'),
+            isBoss: enemy.isBoss,
+          });
+
           // gem 드롭
           const gemValue = enemy.isBoss ? 50 : (Number(enemy.enemyType) >= 2 ? 20 : 10);
           refs.gems.current.push({
@@ -405,18 +481,79 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
             color: enemy.isBoss ? '#ffdd00' : '#44ff88',
             isCollected: false,
           });
+
           // 점수 추가
           player.score += gemValue;
+
+          // hit flash map 정리
+          hitFlashMapRef.current.delete(enemy.id);
+
+          // 화면 쉐이크 (적 사망 시)
+          refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.1);
+          refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isBoss ? 0.4 : 0.15);
+
           return false; // 제거
         }
         return true;
       });
 
-      // 적 AI: 플레이어 추적 + 공격
-      const ENEMY_ATTACK_RANGE = 25;
-      const ENEMY_ATTACK_COOLDOWN = 1.0;
-      const ENEMY_KNOCKBACK_FORCE = 80;
+      // === v39 Phase 3: 적 hit flash 타이머 감소 ===
+      for (const [id, timer] of hitFlashMapRef.current.entries()) {
+        const newTimer = timer - dt;
+        if (newTimer <= 0) {
+          hitFlashMapRef.current.delete(id);
+        } else {
+          hitFlashMapRef.current.set(id, newTimer);
+        }
+      }
 
+      // === v39 Phase 3: 적 리스폰 시스템 ===
+      respawnTimerRef.current -= dt;
+      if (respawnTimerRef.current <= 0) {
+        respawnTimerRef.current = RESPAWN_CHECK_INTERVAL;
+
+        if (refs.enemies.current.length < MIN_ENEMY_COUNT) {
+          const spawnCount = Math.min(
+            RESPAWN_BATCH_SIZE,
+            TARGET_ENEMY_COUNT - refs.enemies.current.length
+          );
+
+          for (let i = 0; i < spawnCount; i++) {
+            // 플레이어 주변 120~250 거리에 스폰
+            const angle = Math.random() * Math.PI * 2;
+            const dist = 120 + Math.random() * 130;
+            const isBig = Math.random() < 0.2;
+            const isBoss = Math.random() < 0.05;
+            _enemyIdCounter++;
+
+            refs.enemies.current.push({
+              id: `respawn-enemy-${_enemyIdCounter}`,
+              position: {
+                x: player.position.x + Math.cos(angle) * dist,
+                y: player.position.y + Math.sin(angle) * dist,
+              },
+              velocity: { x: 0, y: 0 },
+              radius: 12,
+              color: isBoss ? '#ff4444' : isBig ? '#ff6644' : '#44aaff',
+              health: isBoss ? 250 : isBig ? 150 : 100,
+              maxHealth: isBoss ? 250 : isBig ? 150 : 100,
+              damage: isBoss ? 20 : isBig ? 15 : 10,
+              speed: isBoss ? 20 : isBig ? 25 : 30,
+              enemyType: isBoss ? 3 : isBig ? 2 : 1,
+              state: 'chasing' as const,
+              stunTimer: 0,
+              mass: 1,
+              hitBy: new Set<string>(),
+              isBoss,
+              isFrozen: false,
+              skillCooldown: 0,
+              name: isBoss ? 'BOSS' : undefined,
+            } as any);
+          }
+        }
+      }
+
+      // 적 AI: 플레이어 추적 + 공격
       for (const enemy of refs.enemies.current) {
         const ex = enemy.position.x - player.position.x;
         const ey = enemy.position.y - player.position.y;
@@ -495,8 +632,7 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
         refs.screenShakeIntensity.current *= 0.92;
       }
 
-      // 잼 자석 수집 (50px 이내)
-      const GEM_COLLECT_RANGE = 50;
+      // 잼 자석 수집
       refs.gems.current = refs.gems.current.filter(gem => {
         if (gem.isCollected) return false;
         const gdx = gem.position.x - player.position.x;
@@ -508,8 +644,8 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
           player.score += gem.value;
           return false; // 제거
         }
-        // 자석 범위 (100px): 플레이어 방향으로 끌어당기기
-        if (gd < 100 && gd > 1) {
+        // 자석 범위: 플레이어 방향으로 끌어당기기
+        if (gd < GEM_MAGNET_RANGE && gd > 1) {
           gem.position.x -= (gdx / gd) * 200 * dt;
           gem.position.y -= (gdy / gd) * 200 * dt;
         }
@@ -552,7 +688,13 @@ export function MatrixScene({ gameActive, gameRefs }: MatrixSceneProps) {
           background: '#87CEAA',
         }}
       >
-        <SceneContent refs={refs} warningIntensityRef={warningIntensityRef} />
+        <SceneContent
+          refs={refs}
+          warningIntensityRef={warningIntensityRef}
+          attackEventsRef={attackEventsRef}
+          deathEventsRef={deathEventsRef}
+          hitFlashMapRef={hitFlashMapRef}
+        />
       </Canvas>
 
       {/* Phase 5: Screen Flash Overlay (S33) — DOM 기반 */}

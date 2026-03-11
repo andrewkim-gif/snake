@@ -116,6 +116,9 @@ import type { SkillCategory } from '@/lib/matrix/types';
 // ─── 디버그 패널 ───
 import DebugSkillPanel from './DebugSkillPanel';
 
+// ─── v39 Phase 3: GameRefs (3D 모드 전달용) ───
+import { useGameRefs } from '@/lib/matrix/hooks/useGameRefs';
+
 // Agent 컬러 팔레트 (module scope — 렌더 때마다 재생성 방지)
 const AGENT_COLORS = ['#10B981', '#FF4444', '#44AAFF', '#FFAA00', '#AA44FF', '#FF44AA', '#44FFAA', '#FFFF44', '#FF8844', '#8844FF'] as const;
 
@@ -210,6 +213,9 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
   const arena = useArena();
   const singularity = useSingularity();
   const skillBuild = useSkillBuild();
+
+  // v39 Phase 3: 3D 모드에서 MatrixScene과 공유할 gameRefs
+  const gameRefs = useGameRefs();
 
   // ─────────────────────────────────────────
   // 로컬 상태
@@ -1208,6 +1214,7 @@ export function MatrixApp({ onExitToLobby, initialClass = 'neo', countryIso3, co
         /* v38 Phase 0: 3D 모드 (R3F) — 테스트 큐브 + 카메라 + 조명 */
         <MatrixScene
           gameActive={gameActive}
+          gameRefs={gameRefs}
         />
       ) : (
         /* 기존 2D 모드 (Canvas 2D) — 68개 props 바인딩 */

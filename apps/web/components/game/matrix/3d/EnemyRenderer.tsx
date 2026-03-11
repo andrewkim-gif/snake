@@ -93,6 +93,7 @@ const _tempQuaternion = new THREE.Quaternion();
 const _tempScale = new THREE.Vector3();
 const _tempColor = new THREE.Color();
 const _Y_AXIS = new THREE.Vector3(0, 1, 0);
+const _WHITE_COLOR = new THREE.Color(0xffffff); // v39: hit flash 블렌드 대상
 
 // ============================================
 // Template Pool
@@ -305,13 +306,18 @@ export interface EnemyRendererProps {
   enemiesRef: React.MutableRefObject<Enemy[]>;
   /** 플레이어 위치 ref (LOD 거리 계산용) */
   playerRef: React.MutableRefObject<{ position: { x: number; y: number } }>;
+  /** v39 Phase 3: 적별 hit flash 타이머 (enemyId → 남은 시간, 0이면 정상) */
+  hitFlashMapRef?: React.MutableRefObject<Map<string, number>>;
 }
 
 // ============================================
 // EnemyRenderer Component
 // ============================================
 
-export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
+/** Hit flash 지속 시간 (초) */
+const ENEMY_HIT_FLASH_DURATION = 0.12;
+
+export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRendererProps) {
   const groupRef = useRef<THREE.Group>(null);
 
   // Template별 pool 생성 (한 번만)
@@ -483,6 +489,15 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
 
       const colors = getEnemyColors(enemy.enemyType);
 
+      // v39 Phase 3: hit flash 강도 계산
+      let hitFlashIntensity = 0;
+      if (hitFlashMapRef) {
+        const flashTimer = hitFlashMapRef.current.get(enemy.id);
+        if (flashTimer !== undefined && flashTimer > 0) {
+          hitFlashIntensity = flashTimer / ENEMY_HIT_FLASH_DURATION;
+        }
+      }
+
       if (lod === 'LOW') {
         // LOW LOD: 단일 큐브
         if (lowLodCount >= MAX_INSTANCES_PER_TEMPLATE * 2) continue;
@@ -493,6 +508,10 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
 
         lowLodPool.mesh.setMatrixAt(lowLodCount, _tempMatrix);
         _tempColor.copy(colors.primary);
+        // v39: hit flash — 흰색으로 블렌드
+        if (hitFlashIntensity > 0) {
+          _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity);
+        }
         lowLodPool.mesh.setColorAt(lowLodCount, _tempColor);
 
         lowLodCount++;
@@ -524,6 +543,10 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
 
         pool.mesh.setMatrixAt(idx, _tempMatrix);
         _tempColor.copy(colors.primary);
+        // v39: hit flash — 흰색으로 블렌드
+        if (hitFlashIntensity > 0) {
+          _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity);
+        }
         pool.mesh.setColorAt(idx, _tempColor);
 
         templateCounters.set(templateId, idx + 1);
