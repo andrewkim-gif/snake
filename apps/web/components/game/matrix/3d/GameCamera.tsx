@@ -24,8 +24,8 @@ import { ZOOM_CONFIG } from '@/lib/matrix/constants';
 
 // Isometric 카메라 오프셋 (45° 각도에서 Y 높이)
 const ISO_DISTANCE = 800;
-// 카메라 위치 LERP 계수 (0.08 = 부드러운 추적)
-const POSITION_LERP = 0.08;
+// 카메라 위치 LERP 속도 (delta-time 기반, 원래 POSITION_LERP=0.08 at 60fps ≈ 4.8/s)
+const CAMERA_LERP_SPEED = 5;
 
 export interface GameCameraProps {
   /** 플레이어 상태 ref (position.x, position.y) */
@@ -60,7 +60,7 @@ export function GameCamera({
   const smoothTargetRef = useRef({ x: 0, z: 0 });
 
   // useFrame priority=0 (기본값) — R3F auto-render 유지 필수
-  useFrame(() => {
+  useFrame((_state, delta) => {
     const camera = cameraRef.current;
     if (!camera) return;
 
@@ -70,9 +70,10 @@ export function GameCamera({
     const targetX = player.position.x;
     const targetZ = -player.position.y; // y 부호 반전
 
-    // LERP 카메라 타겟 위치 (부드러운 추적)
-    smoothTargetRef.current.x += (targetX - smoothTargetRef.current.x) * POSITION_LERP;
-    smoothTargetRef.current.z += (targetZ - smoothTargetRef.current.z) * POSITION_LERP;
+    // delta-time 기반 LERP 카메라 타겟 위치 (프레임 독립적 부드러운 추적)
+    const camFactor = 1 - Math.exp(-CAMERA_LERP_SPEED * delta);
+    smoothTargetRef.current.x += (targetX - smoothTargetRef.current.x) * camFactor;
+    smoothTargetRef.current.z += (targetZ - smoothTargetRef.current.z) * camFactor;
 
     const smoothX = smoothTargetRef.current.x;
     const smoothZ = smoothTargetRef.current.z;

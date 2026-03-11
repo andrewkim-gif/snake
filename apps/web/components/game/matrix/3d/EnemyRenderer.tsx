@@ -76,6 +76,13 @@ const LOW_LOD_CUBE_SIZE = 1.0;
 /** 적응형 LOD: 적 수 임계값 */
 const ADAPTIVE_LOD_THRESHOLD = 150;
 
+/** 적 position LERP 속도 (delta-time 기반) */
+const ENEMY_LERP_SPEED = 18;
+
+/** 적별 보간된 3D 위치를 캐시 (id → {x, z}) */
+interface SmoothedPos { x: number; z: number; }
+const _smoothedPositions = new Map<string, SmoothedPos>();
+
 // ============================================
 // 재사용 임시 객체 (GC 방지)
 // ============================================
@@ -400,7 +407,7 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
   // useFrame: 매 프레임 InstancedMesh 업데이트
   // ============================================
 
-  useFrame(() => {
+  useFrame((_state, delta) => {
     const enemies = enemiesRef.current;
     if (!enemies || enemies.length === 0) {
       // 모든 pool count를 0으로
@@ -412,6 +419,7 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
       if (lowLodPool.mesh.count !== 0) {
         lowLodPool.mesh.count = 0;
       }
+      _smoothedPositions.clear();
       return;
     }
 
@@ -419,6 +427,12 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
     const playerX = player.position.x;
     const playerY = player.position.y;
     const totalCount = enemies.length;
+
+    // delta-time 기반 lerp factor
+    const posFactor = 1 - Math.exp(-ENEMY_LERP_SPEED * delta);
+
+    // 이번 프레임에 살아있는 적 ID 수집 (stale 엔트리 정리용)
+    const aliveIds = new Set<string>();
 
     // template별 index 카운터 리셋
     const templateCounters = new Map<EnemyTemplateId, number>();
@@ -432,14 +446,32 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
       const enemy = enemies[e];
       if (!enemy || enemy.state === 'dying') continue;
 
+      aliveIds.add(enemy.id);
+
       const templateId = getTemplateIdForEnemy(enemy.enemyType);
       const lod = determineLOD(enemy.position.x, enemy.position.y, playerX, playerY, totalCount);
 
       if (lod === 'CULL') continue;
 
-      // 2D → 3D 좌표 매핑: (x, 0, -y)
-      const x3d = enemy.position.x;
-      const z3d = -enemy.position.y;
+      // 2D → 3D 좌표 매핑 + velocity extrapolation
+      const extraDt = Math.min(delta, 0.033);
+      const rawX = enemy.position.x + enemy.velocity.x * extraDt * 0.5;
+      const rawZ = -(enemy.position.y + enemy.velocity.y * extraDt * 0.5);
+
+      // 보간된 위치 계산
+      let smoothed = _smoothedPositions.get(enemy.id);
+      if (!smoothed) {
+        // 처음 보이는 적 — 즉시 위치 설정
+        smoothed = { x: rawX, z: rawZ };
+        _smoothedPositions.set(enemy.id, smoothed);
+      } else {
+        // lerp로 부드럽게 이동
+        smoothed.x += (rawX - smoothed.x) * posFactor;
+        smoothed.z += (rawZ - smoothed.z) * posFactor;
+      }
+
+      const x3d = smoothed.x;
+      const z3d = smoothed.z;
 
       // 크기 스케일 (elite 보정)
       let scale = 1.0;
@@ -517,6 +549,13 @@ export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
     if (lowLodCount > 0) {
       lowLodPool.mesh.instanceMatrix.needsUpdate = true;
       markColorNeedsUpdate(lowLodPool.mesh);
+    }
+
+    // stale 보간 위치 정리 (죽거나 사라진 적)
+    if (_smoothedPositions.size > aliveIds.size + 20) {
+      for (const id of _smoothedPositions.keys()) {
+        if (!aliveIds.has(id)) _smoothedPositions.delete(id);
+      }
     }
   });
 
