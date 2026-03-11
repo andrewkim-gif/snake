@@ -56,9 +56,9 @@ const MatrixApp = dynamic(
   () => import('@/components/game/matrix/MatrixApp').then(m => ({ default: m.MatrixApp })),
   { ssr: false },
 );
-// v39: 지역 선택 패널
-const RegionSelector = dynamic(
-  () => import('@/components/game/matrix/RegionSelector'),
+// v40: 와이드 국가 패널 (지역 지도 통합)
+const CountryWidePanel = dynamic(
+  () => import('@/components/world/CountryWidePanel'),
   { ssr: false },
 );
 
@@ -1172,13 +1172,16 @@ export default function Home() {
         </div>
       )}
 
-      {/* === 오버레이: v39 지역 선택 (Globe 위에 표시) === */}
+      {/* === 오버레이: v40 와이드 국가 패널 (지역 지도 통합) === */}
       {mode === 'region-select' && matrixCountry && (
-        <RegionSelector
+        <CountryWidePanel
+          country={uiState.countryStates.get(matrixCountry.iso3) ?? null}
+          open={true}
+          onClose={handleRegionBack}
+          onRegionSelect={handleRegionSelected}
+          onBack={handleRegionBack}
           countryCode={matrixCountry.iso3}
           countryName={matrixCountry.name}
-          onSelectRegion={handleRegionSelected}
-          onBack={handleRegionBack}
         />
       )}
 
