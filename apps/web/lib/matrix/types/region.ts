@@ -528,3 +528,227 @@ export function calcDamageMultiplier(
   // 그 외: 100%
   return 1.0;
 }
+
+// ── v39 Phase 6: 에어드롭 시스템 타입 ──
+
+/** 에어드롭 파워업 종류 */
+export type AirdropPowerupType = 'weapon_boost' | 'shield' | 'speed';
+
+/** 에어드롭 상태 */
+export type AirdropState = 'falling' | 'landed' | 'picked_up' | 'expired';
+
+/** 에어드롭 인스턴스 (서버 → 클라이언트 전송) */
+export interface IAirdrop {
+  /** 에어드롭 고유 ID */
+  id: string;
+  /** 맵 상 위치 */
+  position: { x: number; y: number };
+  /** 파워업 종류 */
+  powerupType: AirdropPowerupType;
+  /** 에어드롭 상태 */
+  state: AirdropState;
+  /** BR 경과 기준 스폰 시각 (초) */
+  spawnedAt: number;
+  /** 남은 수명 (초) */
+  lifetime: number;
+  /** 낙하 타이머 (초, falling 중에만 유효) */
+  fallTimer: number;
+  /** 획득한 플레이어 ID */
+  pickedUpBy?: string;
+}
+
+/** 파워업 설정 */
+export interface IPowerupConfig {
+  /** 파워업 종류 */
+  type: AirdropPowerupType;
+  /** 효과 지속 시간 (초) */
+  duration: number;
+  /** 보정 배율 (0.3 = +30%) */
+  value: number;
+}
+
+/** 활성 파워업 (플레이어에게 적용 중) */
+export interface IActivePowerup {
+  /** 파워업 종류 */
+  type: AirdropPowerupType;
+  /** 보정 배율 */
+  value: number;
+  /** 남은 시간 (초) */
+  remaining: number;
+  /** 총 지속 시간 (초) */
+  duration: number;
+}
+
+/** 에어드롭 이벤트 종류 */
+export type AirdropEventType = 'airdrop_spawned' | 'airdrop_landed' | 'airdrop_picked_up' | 'airdrop_expired';
+
+/** 에어드롭 이벤트 */
+export interface IAirdropEvent {
+  /** 이벤트 종류 */
+  type: AirdropEventType;
+  /** 에어드롭 정보 */
+  airdrop: IAirdrop;
+  /** 획득 플레이어 ID (picked_up에서만) */
+  playerId?: string;
+}
+
+/** 에어드롭 상수 (서버 airdrop.go와 동기화) */
+export const AIRDROP_CONSTANTS = {
+  /** 스폰 간격 (초) */
+  SPAWN_INTERVAL: 120,
+  /** 획득 거리 (px) */
+  PICKUP_RADIUS: 60,
+  /** 낙하 시간 (초) */
+  FALL_DURATION: 3,
+  /** 존재 시간 (초) */
+  LIFETIME: 90,
+  /** 동시 최대 수 */
+  MAX_ACTIVE: 5,
+} as const;
+
+/** 파워업별 기본 설정 (서버 동기화) */
+export const POWERUP_CONFIGS: Record<AirdropPowerupType, IPowerupConfig> = {
+  weapon_boost: { type: 'weapon_boost', duration: 60, value: 0.30 },
+  shield: { type: 'shield', duration: 5, value: 1.0 },
+  speed: { type: 'speed', duration: 30, value: 0.50 },
+} as const;
+
+/** 파워업 표시 정보 (UI용) */
+export const POWERUP_DISPLAY: Record<AirdropPowerupType, {
+  name: string;
+  icon: string;
+  color: string;
+  description: string;
+}> = {
+  weapon_boost: {
+    name: 'WEAPON BOOST',
+    icon: '⚔️',
+    color: '#EF4444',
+    description: 'DMG +30% for 60s',
+  },
+  shield: {
+    name: 'SHIELD',
+    icon: '🛡️',
+    color: '#3B82F6',
+    description: 'Invincible for 5s',
+  },
+  speed: {
+    name: 'SPEED BOOST',
+    icon: '⚡',
+    color: '#22C55E',
+    description: 'Speed +50% for 30s',
+  },
+} as const;
+
+// ── v39 Phase 6: 팩션 전멸/승리 타입 ──
+
+/** 팩션 전멸 기록 */
+export interface IFactionEliminationRecord {
+  /** 팩션 ID */
+  factionId: string;
+  /** 팩션명 */
+  factionName: string;
+  /** 팩션 컬러 */
+  color: string;
+  /** 전멸 시각 (ISO 8601) */
+  eliminatedAt: string;
+  /** 최종 순위 (1 = 우승) */
+  rank: number;
+  /** 참가 인원 */
+  memberCount: number;
+  /** BR 시작 이후 생존 시간 (초) */
+  survivalTimeSec: number;
+}
+
+/** 개인 기여 점수 */
+export interface IPlayerContribution {
+  /** 플레이어 ID */
+  playerId: string;
+  /** 플레이어명 */
+  playerName: string;
+  /** 팩션 ID */
+  factionId: string;
+  /** PvP 킬 수 */
+  kills: number;
+  /** 어시스트 수 */
+  assists: number;
+  /** 자원 채취량 */
+  resourceGathered: number;
+  /** 개인 생존 시간 (초) */
+  survivalTimeSec: number;
+  /** 종합 기여 점수 */
+  score: number;
+}
+
+/** 팩션 보상 정보 */
+export interface IFactionReward {
+  /** 팩션 ID */
+  factionId: string;
+  /** 팩션명 */
+  factionName: string;
+  /** 순위 */
+  rank: number;
+  /** Region Point 보상 */
+  rp: number;
+  /** 보상 비율 (1.0 = 100%) */
+  rewardRatio: number;
+  /** Gold 보상 */
+  gold: number;
+}
+
+/** BR 최종 승리 결과 */
+export interface IBRVictoryResult {
+  /** 우승 팩션 ID */
+  winnerFactionId: string;
+  /** 우승 팩션명 */
+  winnerFactionName: string;
+  /** 우승 팩션 컬러 */
+  winnerColor: string;
+  /** 팩션별 순위 */
+  rankings: IFactionEliminationRecord[];
+  /** 순위별 보상 */
+  rewards: IFactionReward[];
+  /** 상위 기여자 목록 */
+  topContributors: IPlayerContribution[];
+  /** 라운드 번호 */
+  roundNumber: number;
+  /** 지역 ID */
+  regionId: string;
+  /** BR 소요 시간 (초) */
+  brDurationSec: number;
+  /** 완료 시각 (ISO 8601) */
+  completedAt: string;
+  /** 시간 만료 전 종료 여부 */
+  earlyFinish: boolean;
+}
+
+/** 전멸 이벤트 종류 */
+export type EliminationEventType =
+  | 'faction_eliminated'
+  | 'round_end_early'
+  | 'br_victory'
+  | 'spectate_switch';
+
+/** 전멸 이벤트 */
+export interface IEliminationEvent {
+  /** 이벤트 종류 */
+  type: EliminationEventType;
+  /** 이벤트 데이터 */
+  data: IFactionEliminationRecord | IBRVictoryResult | Record<string, unknown>;
+}
+
+/** 승리 보상 상수 (서버 br_elimination.go와 동기화) */
+export const VICTORY_REWARDS = {
+  /** 1위 RP */
+  RP_1ST: 10,
+  /** 2위 RP */
+  RP_2ND: 5,
+  /** 3위 RP */
+  RP_3RD: 3,
+  /** 1위 보상 비율 */
+  RATIO_1ST: 1.0,
+  /** 2위 보상 비율 */
+  RATIO_2ND: 0.6,
+  /** 3위 보상 비율 */
+  RATIO_3RD: 0.3,
+} as const;
