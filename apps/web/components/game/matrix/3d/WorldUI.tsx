@@ -12,8 +12,8 @@
  * useFrame priority=0 필수
  */
 
-import React, { useRef, useMemo, useCallback } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import React, { useRef, useMemo } from 'react';
+import { useFrame } from '@react-three/fiber';
 import { Html } from '@react-three/drei';
 import * as THREE from 'three';
 import type { Player, Enemy, Agent, DamageNumber } from '@/lib/matrix/types';

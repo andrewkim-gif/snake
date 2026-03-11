@@ -51,43 +51,6 @@ export interface ChatBubble3DProps {
 }
 
 // ============================================
-// 말풍선 스타일
-// ============================================
-
-const bubbleStyle: React.CSSProperties = {
-  maxWidth: BUBBLE_MAX_WIDTH,
-  padding: '6px 10px',
-  backgroundColor: 'rgba(17, 17, 17, 0.92)',
-  border: '1px solid rgba(204, 153, 51, 0.4)',
-  borderRadius: 8,
-  color: '#E8E0D4',
-  fontSize: 11,
-  fontFamily: "'Rajdhani', sans-serif",
-  fontWeight: 500,
-  lineHeight: 1.3,
-  textAlign: 'center' as const,
-  pointerEvents: 'none' as const,
-  userSelect: 'none' as const,
-  whiteSpace: 'normal' as const,
-  wordBreak: 'break-word' as const,
-  transition: `opacity ${FADE_IN_DURATION}ms ease-in, transform ${FADE_IN_DURATION}ms ease-out`,
-  // 말풍선 꼬리 (CSS triangle) — 아래쪽
-  position: 'relative' as const,
-};
-
-const tailStyle: React.CSSProperties = {
-  position: 'absolute',
-  bottom: -6,
-  left: '50%',
-  transform: 'translateX(-50%)',
-  width: 0,
-  height: 0,
-  borderLeft: '5px solid transparent',
-  borderRight: '5px solid transparent',
-  borderTop: '6px solid rgba(17, 17, 17, 0.92)',
-};
-
-// ============================================
 // ChatBubble3D 컴포넌트
 // ============================================
 

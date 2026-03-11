@@ -12,7 +12,7 @@
  * 기존 PvpEffectsManager 상태 관리 로직 데이터를 그대로 소비
  */
 
-import React, { useRef, useEffect, useCallback } from 'react';
+import React, { useRef, useEffect } from 'react';
 
 // ============================================
 // Constants (기존 multiplayer/constants 재사용)

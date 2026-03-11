@@ -15,7 +15,7 @@
  */
 
 import React, { useRef, useMemo, useEffect } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Enemy } from '@/lib/matrix/types';
 import {
@@ -304,7 +304,6 @@ export interface EnemyRendererProps {
 
 export function EnemyRenderer({ enemiesRef, playerRef }: EnemyRendererProps) {
   const groupRef = useRef<THREE.Group>(null);
-  const { scene } = useThree();
 
   // Template별 pool 생성 (한 번만)
   const templatePools = useMemo<TemplatePool[]>(() => {
