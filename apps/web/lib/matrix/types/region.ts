@@ -752,3 +752,158 @@ export const VICTORY_REWARDS = {
   /** 3위 보상 비율 */
   RATIO_3RD: 0.3,
 } as const;
+
+// ── v39 Phase 7: 영토 주권 설정 ──
+
+/** 주권 에스컬레이션 래더 설정 (서버 territory_engine.go와 동기화) */
+export const SOVEREIGNTY_CONFIG = {
+  /** 지배 확정에 필요한 최소 RP */
+  MIN_RP: 100,
+  /** 지배 확정에 필요한 최소 격차 비율 (10%) */
+  DOMINANCE_GAP_PCT: 0.10,
+  /** 연속 3일+ 지배 시 교체에 필요한 격차 (20%) */
+  INERTIA_GAP_PCT: 0.20,
+  /** 지배 관성 발동 일수 */
+  INERTIA_THRESHOLD_DAYS: 3,
+  /** Active Domination 필요 연속 일수 */
+  ACTIVE_DOMINATION_DAYS: 1,
+  /** Sovereignty 필요 연속 일수 */
+  SOVEREIGNTY_DAYS: 3,
+  /** Hegemony 필요 연속 일수 */
+  HEGEMONY_DAYS: 14,
+  /** 소규모 팩션 RP 보너스 인원 기준 */
+  UNDERDOG_THRESHOLD: 3,
+  /** 소규모 팩션 RP 배율 (1.5 = +50%) */
+  UNDERDOG_BONUS: 1.5,
+} as const;
+
+/** 주권 레벨별 표시 정보 */
+export const SOVEREIGNTY_DISPLAY: Record<SovereigntyLevel, {
+  label: string;
+  labelKo: string;
+  color: string;
+  glowIntensity: number;
+  pulseSpeed: number;
+  icon: string;
+}> = {
+  none: {
+    label: 'Neutral',
+    labelKo: '중립',
+    color: '#666666',
+    glowIntensity: 0,
+    pulseSpeed: 0,
+    icon: '',
+  },
+  active_domination: {
+    label: 'Active Domination',
+    labelKo: '지배 중',
+    color: '#FBBF24',
+    glowIntensity: 0.1,
+    pulseSpeed: 0,
+    icon: '⚑',
+  },
+  sovereignty: {
+    label: 'Sovereignty',
+    labelKo: '주권 확보',
+    color: '#F59E0B',
+    glowIntensity: 0.2,
+    pulseSpeed: 1.5,
+    icon: '👑',
+  },
+  hegemony: {
+    label: 'Hegemony',
+    labelKo: '패권',
+    color: '#DC2626',
+    glowIntensity: 0.4,
+    pulseSpeed: 2.0,
+    icon: '🏛️',
+  },
+} as const;
+
+/** 영토 스냅샷 (서버 → 클라이언트 브로드캐스트) */
+export interface ITerritorySnapshot {
+  /** 지역별 영토 상태 */
+  regions: ITerritoryRegionSnapshot[];
+  /** 국가별 주권 상태 */
+  countries: ITerritorySovereigntySnapshot[];
+  /** 다음 정산까지 남은 시간 (초) */
+  settlementCountdown: number;
+  /** 마지막 정산 시각 (ISO 8601) */
+  lastSettledAt?: string;
+}
+
+/** 지역 영토 스냅샷 */
+export interface ITerritoryRegionSnapshot {
+  /** 지역 ID */
+  regionId: string;
+  /** 소속 국가 코드 */
+  countryCode: string;
+  /** 지배 팩션 ID */
+  controllerFaction?: string;
+  /** 지배 팩션 컬러 */
+  controllerColor?: string;
+  /** 연속 지배 일수 */
+  controlStreak: number;
+  /** 주권 레벨 */
+  sovereigntyLevel: SovereigntyLevel;
+  /** 팩션별 일일 RP (현재 진행 중) */
+  dailyRP?: Record<string, number>;
+}
+
+/** 국가 주권 스냅샷 */
+export interface ITerritorySovereigntySnapshot {
+  /** ISO3 국가 코드 */
+  countryCode: string;
+  /** 주권 팩션 ID */
+  sovereignFaction?: string;
+  /** 주권 레벨 */
+  sovereigntyLevel: SovereigntyLevel;
+  /** 연속 주권 일수 */
+  streakDays: number;
+  /** 전체 지역 통일 여부 */
+  allControlled: boolean;
+}
+
+/** 일일 정산 결과 (서버 → 클라이언트 이벤트) */
+export interface IDailySettlementResult {
+  /** 정산 시각 (ISO 8601) */
+  settledAt: string;
+  /** 지역별 정산 결과 */
+  regionResults: IRegionSettlementResult[];
+  /** 국가 주권 변동 */
+  sovereigntyChanges: ISovereigntyChange[];
+}
+
+/** 지역 정산 결과 */
+export interface IRegionSettlementResult {
+  /** 지역 ID */
+  regionId: string;
+  /** 소속 국가 코드 */
+  countryCode: string;
+  /** 이번 정산 승자 팩션 ID */
+  winnerFactionId?: string;
+  /** 이전 지배 팩션 ID */
+  previousController?: string;
+  /** 경합 중 여부 */
+  isContested: boolean;
+  /** 연속 지배 일수 */
+  controlStreak: number;
+  /** 주권 레벨 */
+  sovereigntyLevel: SovereigntyLevel;
+  /** 최종 점수 (factionId → RP) */
+  finalScores: Record<string, number>;
+}
+
+/** 주권 변동 이벤트 */
+export interface ISovereigntyChange {
+  /** 국가 코드 */
+  countryCode: string;
+  /** 이전 주권 팩션 */
+  oldFaction?: string;
+  /** 새 주권 팩션 */
+  newFaction?: string;
+  /** 이전 주권 레벨 */
+  oldLevel: SovereigntyLevel;
+  /** 새 주권 레벨 */
+  newLevel: SovereigntyLevel;
+}

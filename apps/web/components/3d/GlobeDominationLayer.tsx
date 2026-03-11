@@ -921,4 +921,205 @@ export function buildDominationStates(
   return states;
 }
 
+// ─── v39 Phase 7: Territory → Domination 브릿지 ───
+
+/**
+ * v39 TerritorySnapshot에서 GlobeDominationLayer용 dominationStates를 생성한다.
+ *
+ * v39의 영토 지배 데이터는 "지역(Region)" 단위이지만, GlobeDominationLayer는
+ * "국가(Country)" 단위로 동작한다. 따라서 국가 내 모든 지역의 지배 상태를
+ * 집계하여 국가 단위 domination state로 변환한다.
+ *
+ * 집계 규칙:
+ * - 모든 지역을 한 팩션이 지배 → 해당 팩션의 색상으로 표시 (sovereigntyLevel 적용)
+ * - 일부 지역만 지배 → 가장 많은 지역을 지배한 팩션의 색상 (contested 표시)
+ * - 지배 팩션 없음 → none (회색)
+ */
+export interface V39TerritoryRegion {
+  regionId: string;
+  countryCode: string;
+  controllerFaction?: string;
+  controllerColor?: string;
+  controlStreak: number;
+  sovereigntyLevel: string;
+}
+
+export interface V39TerritorySovereignty {
+  countryCode: string;
+  sovereignFaction?: string;
+  sovereigntyLevel: string;
+  streakDays: number;
+  allControlled: boolean;
+}
+
+export interface V39TerritoryData {
+  regions: V39TerritoryRegion[];
+  countries: V39TerritorySovereignty[];
+}
+
+/**
+ * v39 영토 데이터를 GlobeDominationLayer의 dominationStates로 변환.
+ *
+ * @param territoryData - 서버에서 수신한 v39 territory snapshot
+ * @param factionColors - 팩션 ID → hex color 매핑
+ * @param previousStates - 이전 domination states (애니메이션 전환용)
+ */
+export function buildDominationStatesFromTerritory(
+  territoryData: V39TerritoryData,
+  factionColors: Record<string, string>,
+  previousStates?: Map<string, CountryDominationState>,
+): Map<string, CountryDominationState> {
+  const states = new Map<string, CountryDominationState>();
+
+  // 국가별 지역 그룹핑
+  const countryRegions = new Map<string, V39TerritoryRegion[]>();
+  for (const region of territoryData.regions) {
+    const existing = countryRegions.get(region.countryCode) || [];
+    existing.push(region);
+    countryRegions.set(region.countryCode, existing);
+  }
+
+  // 국가 주권 맵
+  const sovereigntyMap = new Map<string, V39TerritorySovereignty>();
+  for (const cs of territoryData.countries) {
+    sovereigntyMap.set(cs.countryCode, cs);
+  }
+
+  // 국가별 domination state 생성
+  for (const [countryCode, regions] of countryRegions) {
+    const sovereignty = sovereigntyMap.get(countryCode);
+    const prevState = previousStates?.get(countryCode);
+
+    // 국가 주권 정보가 있으면 우선 사용
+    if (sovereignty && sovereignty.sovereignFaction && sovereignty.allControlled) {
+      const factionId = sovereignty.sovereignFaction;
+      const color = factionColors[factionId]
+        || sovereignty.sovereignFaction
+        || '#888888';
+      const prevColor = prevState?.color || UNDOMINATED_COLOR;
+      const isTransition = prevColor !== color;
+
+      // sovereigntyLevel을 DominationLevel로 매핑
+      const level = mapSovereigntyToLevel(sovereignty.sovereigntyLevel);
+
+      states.set(countryCode, {
+        iso3: countryCode,
+        dominantNation: factionId,
+        level,
+        color,
+        transitionProgress: isTransition ? 0.0 : 1.0,
+        previousColor: prevColor,
+        contested: false,
+        previousLevel: prevState?.level ?? 'none',
+      });
+      continue;
+    }
+
+    // 지역별 지배 팩션 집계
+    const factionControlCount = new Map<string, number>();
+    let totalControlled = 0;
+
+    for (const region of regions) {
+      if (region.controllerFaction) {
+        totalControlled++;
+        const count = factionControlCount.get(region.controllerFaction) || 0;
+        factionControlCount.set(region.controllerFaction, count + 1);
+      }
+    }
+
+    if (totalControlled === 0) {
+      // 지배 팩션 없음
+      const prevColor = prevState?.color || UNDOMINATED_COLOR;
+      states.set(countryCode, {
+        iso3: countryCode,
+        dominantNation: '',
+        level: 'none',
+        color: UNDOMINATED_COLOR,
+        transitionProgress: prevColor !== UNDOMINATED_COLOR ? 0.0 : 1.0,
+        previousColor: prevColor,
+        contested: false,
+        previousLevel: prevState?.level ?? 'none',
+      });
+      continue;
+    }
+
+    // 가장 많은 지역을 지배한 팩션 찾기
+    let dominantFaction = '';
+    let maxCount = 0;
+    let secondCount = 0;
+    for (const [fid, count] of factionControlCount) {
+      if (count > maxCount) {
+        secondCount = maxCount;
+        dominantFaction = fid;
+        maxCount = count;
+      } else if (count > secondCount) {
+        secondCount = count;
+      }
+    }
+
+    const isContested = factionControlCount.size > 1;
+    const color = factionColors[dominantFaction] || '#888888';
+    const prevColor = prevState?.color || UNDOMINATED_COLOR;
+    const isTransition = prevColor !== color;
+
+    // 부분 지배 → active 레벨
+    const level: DominationLevel = totalControlled === regions.length
+      ? mapSovereigntyToLevel(sovereignty?.sovereigntyLevel || 'active_domination')
+      : totalControlled > 0
+        ? 'active'
+        : 'none';
+
+    states.set(countryCode, {
+      iso3: countryCode,
+      dominantNation: dominantFaction,
+      level,
+      color,
+      transitionProgress: isTransition ? 0.0 : 1.0,
+      previousColor: prevColor,
+      contested: isContested,
+      previousLevel: prevState?.level ?? 'none',
+    });
+  }
+
+  return states;
+}
+
+/**
+ * v39 SovereigntyLevel → v14 DominationLevel 매핑.
+ */
+function mapSovereigntyToLevel(sovereigntyLevel: string): DominationLevel {
+  switch (sovereigntyLevel) {
+    case 'hegemony':
+      return 'hegemony';
+    case 'sovereignty':
+      return 'sovereignty';
+    case 'active_domination':
+      return 'active';
+    default:
+      return 'none';
+  }
+}
+
+/**
+ * 팩션 컬러를 GlobeDominationLayer의 NATION_COLORS 형식으로 변환.
+ * 팩션 ID 기반 컬러를 국가 코드 기반으로 리매핑한다.
+ *
+ * @param territories - 국가별 주권 팩션 매핑
+ * @param factionColors - 팩션 ID → hex color
+ */
+export function buildFactionNationColors(
+  territories: V39TerritorySovereignty[],
+  factionColors: Record<string, string>,
+): Record<string, string> {
+  const colors: Record<string, string> = {};
+
+  for (const t of territories) {
+    if (t.sovereignFaction && factionColors[t.sovereignFaction]) {
+      colors[t.countryCode] = factionColors[t.sovereignFaction];
+    }
+  }
+
+  return colors;
+}
+
 export default GlobeDominationLayer;
