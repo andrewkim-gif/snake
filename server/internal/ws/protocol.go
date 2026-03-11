@@ -117,6 +117,16 @@ const (
 	EventMatrixResult        = "matrix_result"          // epoch end result + rewards
 	EventMatrixLevelUpChoices = "matrix_level_up_choices" // server-generated level-up options
 	EventMatrixBuff          = "matrix_buff"            // active token buffs
+
+	// v39 Phase 4: Region events (client → server)
+	EventRegionJoin    = "region_join"       // join a region arena
+	EventRegionLeave   = "region_leave"      // leave a region arena
+	EventCountryRegions = "country_regions"  // request region list for a country
+
+	// v39 Phase 4: Region events (server → client)
+	EventRegionJoined       = "region_joined"        // region join result
+	EventRegionList         = "region_list"           // region list response
+	EventRegionState        = "region_state"          // region state broadcast (2Hz)
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -378,6 +388,24 @@ type MatrixCapturePayload struct {
 // MatrixLevelUpPayload is sent when a player selects a level-up choice.
 type MatrixLevelUpPayload struct {
 	ChoiceID string `json:"choiceId"`
+}
+
+// --- v39 Phase 4: Region payload types (client → server) ---
+
+// RegionJoinPayload is sent by the client to join a specific region arena.
+type RegionJoinPayload struct {
+	CountryCode string `json:"countryCode"`
+	RegionId    string `json:"regionId"`
+	FactionId   string `json:"factionId,omitempty"`
+	FactionName string `json:"factionName,omitempty"`
+}
+
+// RegionLeavePayload is sent by the client to leave a region arena.
+type RegionLeavePayload struct{}
+
+// CountryRegionsPayload is sent to request the region list for a country.
+type CountryRegionsPayload struct {
+	CountryCode string `json:"countryCode"`
 }
 
 // --- v15: Globe effects message structs ---

@@ -36,6 +36,14 @@ export interface GlobeHoverData {
 
   // Active players
   activeAgents: number;
+
+  // v39 Phase 4: Region info
+  /** 지역 수 (국가 티어별: S=7, A=5, B=4, C/D=3) */
+  regionCount?: number;
+  /** 지배된 지역 수 */
+  controlledRegionCount?: number;
+  /** 국가 티어 */
+  countryTier?: string;
 }
 
 interface GlobeHoverPanelProps {
@@ -257,6 +265,44 @@ export function GlobeHoverPanel({
         <MiniStat label="Military" value={`${data.militaryPower.toFixed(0)}/100`} color="#EF4444" />
         <MiniStat label="Population" value={formatPopulation(data.population)} color="#FB923C" />
       </div>
+
+      {/* v39 Phase 4: Region Info */}
+      {data.regionCount != null && data.regionCount > 0 && (
+        <div style={{
+          padding: '6px 8px',
+          background: 'rgba(255,255,255,0.02)',
+          borderRadius: radius.md,
+          marginBottom: '10px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+        }}>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: '10px',
+            color: SK.textMuted,
+          }}>
+            Regions
+          </div>
+          <div style={{
+            fontFamily: bodyFont,
+            fontSize: SKFont.xs,
+            color: SK.textPrimary,
+            fontWeight: 700,
+          }}>
+            {data.controlledRegionCount != null && data.controlledRegionCount > 0 ? (
+              <span>
+                <span style={{ color: SK.accent }}>{data.controlledRegionCount}</span>
+                <span style={{ color: SK.textMuted }}>/</span>
+                {data.regionCount}
+                <span style={{ color: SK.textMuted, fontWeight: 400, marginLeft: '4px' }}>controlled</span>
+              </span>
+            ) : (
+              <span>{data.regionCount} zones</span>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Action Button — ENTER {COUNTRY} */}
       <button

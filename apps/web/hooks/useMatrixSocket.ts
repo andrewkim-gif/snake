@@ -198,6 +198,43 @@ export interface MatrixLevelUpChoicesPayload {
   }>;
 }
 
+// ─── v39 Phase 4: Region 타입 ───
+
+/** region_list 응답 — 국가별 지역 목록 */
+export interface RegionListResponse {
+  countryCode: string;
+  regions: RegionListEntry[];
+}
+
+/** 지역 목록 항목 */
+export interface RegionListEntry {
+  regionId: string;
+  name: string;
+  nameEn: string;
+  type: string;
+  arenaSize: number;
+  maxPlayers: number;
+  currentPlayers: number;
+  state: string;
+  controllingFactionId?: string;
+  controllingFactionColor?: string;
+  controlStreak: number;
+  primaryResource: string;
+  specialtyResource: string;
+  biome: string;
+  specialEffect: string;
+}
+
+/** region_joined 응답 */
+export interface RegionJoinedPayload {
+  success: boolean;
+  regionId: string;
+  countryCode: string;
+  phase: string;
+  arenaSize: number;
+  error?: string;
+}
+
 // ─── 클라이언트 → 서버 타입 ───
 
 /** matrix_input 페이로드 (10Hz) */
@@ -241,6 +278,10 @@ export interface MatrixSocketListeners {
   onCaptureState?: (data: { points: CapturePointState[] }) => void;
   onBuff?: (data: MatrixBuffPayload) => void;
   onLevelUpChoices?: (data: MatrixLevelUpChoicesPayload) => void;
+  /** v39 Phase 4: Region events */
+  onRegionList?: (data: RegionListResponse) => void;
+  onRegionJoined?: (data: RegionJoinedPayload) => void;
+  onRegionState?: (data: RegionListEntry[]) => void;
 }
 
 // ─── 훅 리턴 타입 ───
@@ -272,6 +313,14 @@ export interface UseMatrixSocketReturn {
   connect: (serverUrl: string) => void;
   /** 연결 해제 */
   disconnect: () => void;
+
+  // v39 Phase 4: Region 메서드
+  /** 국가 지역 목록 요청 */
+  requestRegionList: (countryCode: string) => void;
+  /** 지역 아레나 입장 */
+  joinRegion: (countryCode: string, regionId: string, factionId?: string, factionName?: string) => void;
+  /** 지역 아레나 퇴장 */
+  leaveRegion: () => void;
 }
 
 // ─── 상수 ───
@@ -362,6 +411,19 @@ export function useMatrixSocket(listeners: MatrixSocketListeners = {}): UseMatri
       listenersRef.current.onLevelUpChoices?.(data);
     });
 
+    // v39 Phase 4: Region events
+    socket.on('region_list', (data: RegionListResponse) => {
+      listenersRef.current.onRegionList?.(data);
+    });
+
+    socket.on('region_joined', (data: RegionJoinedPayload) => {
+      listenersRef.current.onRegionJoined?.(data);
+    });
+
+    socket.on('region_state', (data: RegionListEntry[]) => {
+      listenersRef.current.onRegionState?.(data);
+    });
+
     // 레이턴시 트래킹
     socket.on('pong', () => {
       setLatency(socket.latency);
@@ -447,6 +509,25 @@ export function useMatrixSocket(listeners: MatrixSocketListeners = {}): UseMatri
     socketRef.current?.emit('matrix_level_up', { choiceId });
   }, []);
 
+  // v39 Phase 4: Region uplink methods
+
+  const requestRegionList = useCallback((countryCode: string) => {
+    socketRef.current?.emit('country_regions', { countryCode });
+  }, []);
+
+  const joinRegion = useCallback((countryCode: string, regionId: string, factionId?: string, factionName?: string) => {
+    socketRef.current?.emit('region_join', {
+      countryCode,
+      regionId,
+      ...(factionId && { factionId }),
+      ...(factionName && { factionName }),
+    });
+  }, []);
+
+  const leaveRegion = useCallback(() => {
+    socketRef.current?.emit('region_leave', {});
+  }, []);
+
   return {
     connectionState,
     latency,
@@ -460,5 +541,9 @@ export function useMatrixSocket(listeners: MatrixSocketListeners = {}): UseMatri
     chooseLevelUp,
     connect,
     disconnect,
+    // v39 Phase 4: Region methods
+    requestRegionList,
+    joinRegion,
+    leaveRegion,
   };
 }

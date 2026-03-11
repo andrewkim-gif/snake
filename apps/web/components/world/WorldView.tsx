@@ -40,6 +40,10 @@ import type { ResourceData } from '@/components/3d/GlobeResourceGlow';
 import type { SpyOpData } from '@/components/3d/GlobeSpyTrail';
 import type { NukeData } from '@/components/3d/GlobeNukeEffect';
 
+// v39 Phase 4: Region data for hover panel
+import { getCountryTier } from '@/lib/matrix/data/country-tiers';
+import { TIER_CONFIG } from '@/lib/matrix/types/region';
+
 interface WorldViewProps {
   countryStates?: Map<string, CountryClientState>;
   onEnterArena?: (iso3: string) => void;
@@ -219,6 +223,10 @@ export function WorldView({
 
     const cs = statesRef.current.get(iso3);
     const domState = domStatesRef.current?.get(iso3);
+    // v39 Phase 4: 국가 티어 기반 지역 수 계산
+    const tier = getCountryTier(iso3);
+    const tierCfg = TIER_CONFIG[tier];
+
     setHoverData({
       countryCode: iso3,
       countryName: cs?.name ?? name,
@@ -231,6 +239,10 @@ export function WorldView({
       hasHegemony: domState?.level === 'hegemony',
       activeAgents: cs?.activeAgents ?? 0,
       dominantNation: domState?.dominantNation,
+      // v39 Phase 4: Region info
+      regionCount: tierCfg.regionCount,
+      controlledRegionCount: 0, // TODO: 실시간 지배 현황은 서버 연동 후 적용
+      countryTier: tier,
     });
     setHoverVisible(true);
   }, []);

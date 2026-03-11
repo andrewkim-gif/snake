@@ -768,6 +768,12 @@ func main() {
 	)
 
 	// ================================================================
+	// 9.6. v39 Phase 4: Region Manager + Event Handlers
+	// ================================================================
+	regionManager := game.NewCountryRegionManager()
+	registerRegionEventHandlers(eventRouter, hub, regionManager)
+
+	// ================================================================
 	// 10. HTTP Router (all routes)
 	// ================================================================
 	router := newRouter(cfg, hub, eventRouter, worldManager, &RouterDeps{
@@ -1066,6 +1072,24 @@ func main() {
 		"maxConcurrentArenas", worldCfg.MaxConcurrentArenas,
 		"addr", cfg.Addr(),
 	)
+
+	// --- v39 Phase 4: Region arena idle cleanup (every 30 seconds) ---
+	g.Go(func() error {
+		slog.Info("v39 Region arena cleanup starting")
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-gCtx.Done():
+				return nil
+			case <-ticker.C:
+				cleaned := regionManager.CleanupIdleRegions()
+				if cleaned > 0 {
+					slog.Info("cleaned idle region arenas", "count", cleaned)
+				}
+			}
+		}
+	})
 
 	// Record server start in metrics
 	metrics.RecordServerStart()
