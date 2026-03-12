@@ -55,6 +55,54 @@ const DECORATION_MAX_PER_TYPE = 3000;
 const CLOUD_COUNT = 30;
 const CLOUD_SPREAD = 150;
 
+// ─── 프로시저럴 구름 CanvasTexture 생성 (부드러운 흰색 원형 그라디언트, 가장자리 투명) ───
+let _cloudTextureCache: THREE.CanvasTexture | null = null;
+
+function createCloudTexture(): THREE.CanvasTexture {
+  if (_cloudTextureCache) return _cloudTextureCache;
+
+  const size = 64;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext('2d')!;
+  ctx.clearRect(0, 0, size, size);
+
+  const cx = size / 2;
+  const cy = size / 2;
+  const rx = size / 2;
+  const ry = size / 2;
+
+  // 메인 방사형 그라디언트: 중심 불투명 흰색 → 가장자리 투명
+  const grad = ctx.createRadialGradient(cx, cy, 0, cx, cy, rx);
+  grad.addColorStop(0, 'rgba(255, 255, 255, 0.85)');
+  grad.addColorStop(0.25, 'rgba(255, 255, 255, 0.7)');
+  grad.addColorStop(0.5, 'rgba(240, 245, 255, 0.45)');
+  grad.addColorStop(0.75, 'rgba(230, 240, 255, 0.15)');
+  grad.addColorStop(1.0, 'rgba(220, 235, 255, 0.0)');
+
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.ellipse(cx, cy, rx, ry, 0, 0, Math.PI * 2);
+  ctx.fill();
+
+  // 약간의 불규칙성 추가 — 오프셋된 2차 그라디언트
+  const grad2 = ctx.createRadialGradient(cx - 8, cy - 4, 0, cx, cy, rx * 0.65);
+  grad2.addColorStop(0, 'rgba(255, 255, 255, 0.3)');
+  grad2.addColorStop(1.0, 'rgba(255, 255, 255, 0.0)');
+  ctx.fillStyle = grad2;
+  ctx.fillRect(0, 0, size, size);
+
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.magFilter = THREE.LinearFilter;
+  tex.minFilter = THREE.LinearFilter;
+  tex.generateMipmaps = false;
+  tex.colorSpace = THREE.SRGBColorSpace;
+
+  _cloudTextureCache = tex;
+  return tex;
+}
+
 // MC 텍스처 경로
 const TEX_PATH = '/textures/blocks';
 
@@ -348,8 +396,10 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
   // ============================================
   const cloudMesh = useMemo(() => {
     const cloudGeo = new THREE.BoxGeometry(20, 4, 14);
+    const cloudTex = createCloudTexture();
     const cloudMat = new THREE.MeshBasicMaterial({
       color: '#ffffff', transparent: true, opacity: 0.4, depthWrite: false,
+      map: cloudTex,
     });
     const mesh = new THREE.InstancedMesh(cloudGeo, cloudMat, CLOUD_COUNT);
     mesh.count = CLOUD_COUNT;

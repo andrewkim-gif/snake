@@ -34,6 +34,7 @@ import { useCombo } from '@/lib/matrix/hooks/useCombo';
 import type { Enemy, WeaponType } from '@/lib/matrix/types';
 import type { WavePhaseName, EliteSpawnConfig } from '@/lib/matrix/config/wave-system.config';
 import { SKILL_BRANCHES, BRANCH_UNLOCK_LEVEL, ULTIMATE_UNLOCK_LEVEL } from '@/lib/matrix/config/skills/branches';
+import DebugSkillPanel from '@/components/game/matrix/3d/DebugSkillPanel';
 
 // 동적 임포트: SSR 비활성화 (R3F/Three.js는 클라이언트 전용)
 const MatrixScene = dynamic(
@@ -670,6 +671,13 @@ function Scene3DPage() {
   }, []);
 
   // ============================================
+  // 디버그: 스킬 즉시 업그레이드
+  // ============================================
+  const handleDebugUpgrade = useCallback((skill: WeaponType) => {
+    skillBuild.applyLevelUp(skill);
+  }, [skillBuild]);
+
+  // ============================================
   // v42 Phase 4: Wave 페이즈 전환 콜백
   // ============================================
   const handlePhaseChange = useCallback((phase: WavePhaseName) => {
@@ -729,6 +737,12 @@ function Scene3DPage() {
         <span>Engine: <b style={{ color: '#E8E0D4' }}>Three.js R3F</b></span>
         <span>Mode: <b style={{ color: '#10B981' }}>3D Enhanced</b></span>
       </div>
+
+      {/* 디버그 스킬 업그레이드 패널 (오른쪽 위) */}
+      <DebugSkillPanel
+        playerSkills={skillBuild.playerSkills}
+        onUpgrade={handleDebugUpgrade}
+      />
 
       {/* 3D Scene — 모든 ref/콜백 주입 (Phase 5: 분기/궁극기/이펙트 연동) */}
       <MatrixScene

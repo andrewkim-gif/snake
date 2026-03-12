@@ -1,229 +1,442 @@
 /**
- * country-silhouettes.ts — 주요 국가 간소화 SVG 윤곽 데이터
+ * country-silhouettes.ts — GeoJSON 기반 국가 실루엣 추출 + Voronoi 지역 분할
  *
- * 각 국가의 대략적인 실루엣을 SVG path로 저장.
- * viewBox 기준: 0 0 200 200 (정규화된 좌표)
- * 지역 seed 좌표: Voronoi subdivision의 시드 포인트
- *
- * 주요 20개국 수동 정의, 나머지는 자동 fallback (원형).
+ * /data/countries.geojson에서 해당 국가의 실제 폴리곤을 추출하고
+ * Mercator 투영으로 SVG 좌표로 변환한 뒤, Voronoi subdivision으로 지역 분할.
  */
 
-export interface CountrySilhouette {
-  /** SVG path d attribute — 국가 윤곽 */
-  path: string;
-  /** viewBox (default: 0 0 200 200) */
-  viewBox?: string;
-  /** 지역 시드 좌표 — regionId slug → [x, y] */
-  seeds?: Record<string, [number, number]>;
+import { loadGeoJSON, type GeoJSONData, type GeoJSONFeature } from './globe-data';
+import { getCountryISO } from './map-style';
+
+// ─── 타입 ───
+
+export interface CountryOutline {
+  /** SVG viewBox 내 국가 윤곽 폴리곤 (외곽선용) */
+  outlinePolygons: [number, number][][];
+  /** Voronoi 셀 폴리곤 (지역 수만큼) */
+  cells: [number, number][][];
+  /** 각 셀의 centroid */
+  centroids: [number, number][];
+  /** viewBox 크기 */
+  width: number;
+  height: number;
 }
 
-/**
- * 주요 국가 실루엣 데이터
- * path: 간소화된 SVG path (200x200 좌표계)
- * seeds: 지역별 대략적 중심점 (Voronoi seed)
- */
-export const COUNTRY_SILHOUETTES: Record<string, CountrySilhouette> = {
-  // ── S 티어 (8개국) ──
+// ─── 지역 시드 좌표 (주요 국가 — 실제 위도/경도) ───
 
-  USA: {
-    path: 'M10,80 L25,65 L40,60 L55,55 L70,50 L90,48 L110,50 L125,55 L140,52 L155,58 L170,65 L185,70 L190,80 L188,95 L180,105 L165,115 L150,118 L135,120 L120,118 L105,120 L90,125 L75,122 L60,118 L45,115 L30,110 L18,100 L12,90 Z',
-    seeds: {
-      ny: [160, 65], la: [30, 95], chicago: [120, 68], texas: [90, 110],
-      dc: [165, 80], florida: [155, 115], alaska: [20, 55], hawaii: [40, 120],
-    },
-  },
-
-  CHN: {
-    path: 'M40,30 L70,25 L100,20 L130,25 L155,35 L170,50 L180,70 L175,90 L165,110 L150,125 L130,135 L110,140 L90,138 L70,130 L50,120 L35,105 L25,85 L20,65 L25,45 Z',
-    seeds: {
-      beijing: [110, 45], shanghai: [150, 80], guangdong: [130, 120],
-      sichuan: [70, 90], xinjiang: [40, 50], dongbei: [140, 35],
-      yunnan: [75, 125], inner_mongolia: [100, 35],
-    },
-  },
-
-  RUS: {
-    path: 'M5,60 L30,40 L60,30 L90,25 L120,22 L150,25 L175,30 L195,40 L195,65 L190,80 L180,90 L160,95 L140,100 L120,98 L100,95 L80,100 L60,105 L40,100 L20,90 L8,75 Z',
-    seeds: {
-      moscow: [45, 65], spb: [35, 48], siberia: [120, 55],
-      ural: [80, 60], far_east: [170, 50], caucasus: [50, 90],
-      volga: [65, 70], arctic: [100, 30],
-    },
-  },
-
-  IND: {
-    path: 'M60,20 L90,15 L120,20 L145,35 L155,55 L150,80 L140,100 L125,120 L110,140 L100,155 L90,160 L80,155 L70,140 L60,120 L50,100 L45,80 L40,60 L45,40 Z',
-    seeds: {
-      delhi: [90, 35], mumbai: [60, 85], bengaluru: [90, 130],
-      kolkata: [125, 70], chennai: [110, 120], hyderabad: [95, 100],
-      kashmir: [75, 20], rajasthan: [60, 55],
-    },
-  },
-
-  JPN: {
-    path: 'M80,15 L95,20 L110,30 L120,50 L125,70 L128,90 L130,110 L125,130 L118,145 L108,155 L95,165 L85,170 L78,160 L72,145 L68,125 L65,105 L62,85 L60,65 L65,45 L72,28 Z',
-    seeds: {
-      tokyo: [105, 85], osaka: [95, 110], hokkaido: [90, 25],
-      kyushu: [82, 150], tohoku: [100, 50], chubu: [100, 75],
-      okinawa: [70, 170], chugoku: [88, 125],
-    },
-  },
-
-  DEU: {
-    path: 'M65,20 L100,15 L130,20 L150,35 L160,55 L158,80 L150,100 L140,115 L125,130 L105,140 L85,138 L65,130 L50,115 L40,95 L38,75 L42,55 L50,38 Z',
-    seeds: {
-      berlin: [120, 45], munich: [110, 115], hamburg: [90, 25],
-      frankfurt: [80, 75], cologne: [65, 65], dresden: [130, 60],
-      stuttgart: [90, 105],
-    },
-  },
-
-  GBR: {
-    path: 'M70,15 L95,12 L115,18 L128,30 L135,50 L132,70 L128,88 L122,105 L115,118 L105,130 L95,140 L85,145 L78,140 L72,128 L68,110 L65,90 L62,70 L60,50 L63,32 Z',
-    seeds: {
-      london: [110, 110], manchester: [90, 70], scotland: [85, 25],
-      wales: [72, 100], birmingham: [100, 85], newcastle: [95, 50],
-      cornwall: [78, 135],
-    },
-  },
-
-  FRA: {
-    path: 'M55,25 L85,15 L115,18 L140,30 L155,50 L160,75 L155,100 L145,120 L130,135 L110,145 L90,148 L70,142 L52,130 L40,112 L35,90 L38,68 L42,48 Z',
-    seeds: {
-      paris: [100, 50], lyon: [115, 95], marseille: [120, 130],
-      bordeaux: [60, 110], strasbourg: [140, 50], nantes: [55, 80],
-      toulouse: [80, 130],
-    },
-  },
-
-  // ── A 티어 (주요 12개국) ──
-
+/** 주요 국가의 지역별 실제 좌표 [lon, lat] */
+const REGION_SEEDS_LONLAT: Record<string, Record<string, [number, number]>> = {
   KOR: {
-    path: 'M65,10 L95,8 L120,15 L140,30 L152,50 L158,72 L155,95 L148,115 L135,132 L120,145 L105,155 L92,160 L80,155 L70,142 L60,125 L52,105 L48,82 L50,60 L55,38 Z',
-    seeds: {
-      seoul: [100, 35], gyeonggi: [85, 52], busan: [130, 135],
-      jeju: [85, 158], dmz: [100, 15],
-    },
+    seoul: [127.0, 37.55], gyeonggi: [127.1, 37.3],
+    busan: [129.05, 35.18], jeju: [126.55, 33.35], dmz: [127.0, 38.0],
   },
-
+  USA: {
+    ny: [-74.0, 40.7], la: [-118.2, 34.0], chicago: [-87.6, 41.9],
+    texas: [-97.7, 31.0], dc: [-77.0, 38.9], florida: [-81.5, 27.6],
+    alaska: [-149.9, 64.2], hawaii: [-155.5, 19.9],
+  },
+  CHN: {
+    beijing: [116.4, 39.9], shanghai: [121.5, 31.2], guangdong: [113.3, 23.1],
+    sichuan: [104.1, 30.6], xinjiang: [87.6, 43.8], dongbei: [126.6, 45.7],
+    yunnan: [102.7, 25.0], inner_mongolia: [111.7, 40.8],
+  },
+  JPN: {
+    tokyo: [139.7, 35.7], osaka: [135.5, 34.7], hokkaido: [143.2, 43.0],
+    kyushu: [131.0, 33.0], tohoku: [140.3, 39.7], chubu: [137.0, 36.0],
+    okinawa: [127.7, 26.3], chugoku: [132.5, 34.4],
+  },
+  DEU: {
+    berlin: [13.4, 52.5], munich: [11.6, 48.1], hamburg: [10.0, 53.5],
+    frankfurt: [8.7, 50.1], cologne: [6.9, 50.9], dresden: [13.7, 51.0],
+    stuttgart: [9.2, 48.8],
+  },
+  GBR: {
+    london: [-0.1, 51.5], manchester: [-2.2, 53.5], scotland: [-3.2, 56.5],
+    wales: [-3.5, 52.0], birmingham: [-1.9, 52.5], newcastle: [-1.6, 55.0],
+    cornwall: [-5.0, 50.3],
+  },
+  FRA: {
+    paris: [2.35, 48.85], lyon: [4.83, 45.75], marseille: [5.37, 43.3],
+    bordeaux: [-0.57, 44.84], strasbourg: [7.75, 48.58], nantes: [-1.55, 47.22],
+    toulouse: [1.44, 43.6],
+  },
+  RUS: {
+    moscow: [37.6, 55.75], spb: [30.3, 59.9], siberia: [82.9, 55.0],
+    ural: [60.6, 56.8], far_east: [135.1, 48.5], caucasus: [44.0, 43.4],
+    volga: [49.1, 53.2], arctic: [70.0, 68.0],
+  },
+  IND: {
+    delhi: [77.2, 28.6], mumbai: [72.9, 19.1], bengaluru: [77.6, 13.0],
+    kolkata: [88.4, 22.6], chennai: [80.3, 13.1], hyderabad: [78.5, 17.4],
+    kashmir: [74.8, 34.1], rajasthan: [73.0, 27.0],
+  },
   BRA: {
-    path: 'M50,20 L80,15 L110,18 L140,25 L160,40 L172,60 L178,85 L175,110 L168,130 L155,148 L138,160 L118,168 L95,170 L72,165 L52,155 L38,138 L28,118 L22,95 L25,70 L32,48 Z',
-    seeds: {
-      sao_paulo: [120, 125], rio: [140, 110], brasilia: [100, 80],
-      amazon: [65, 40], bahia: [140, 75],
-    },
+    sao_paulo: [-46.6, -23.5], rio: [-43.2, -22.9], brasilia: [-47.9, -15.8],
+    amazon: [-60.0, -3.0], bahia: [-38.5, -13.0],
   },
-
-  CAN: {
-    path: 'M5,70 L25,50 L50,35 L80,25 L110,20 L140,22 L165,30 L185,45 L195,65 L192,85 L185,100 L170,110 L150,115 L130,112 L110,115 L90,118 L70,115 L50,108 L30,100 L15,88 Z',
-    seeds: {
-      ontario: [130, 80], quebec: [155, 65], bc: [25, 65],
-      alberta: [55, 60], prairies: [85, 65],
-    },
-  },
-
-  AUS: {
-    path: 'M20,55 L50,35 L85,25 L120,22 L155,28 L180,40 L192,60 L195,82 L188,105 L175,125 L155,138 L130,145 L105,148 L80,145 L55,135 L35,120 L20,100 L12,78 Z',
-    seeds: {
-      sydney: [160, 100], melbourne: [140, 125], brisbane: [170, 70],
-      perth: [25, 85], adelaide: [115, 115],
-    },
-  },
-
   ITA: {
-    path: 'M60,10 L100,8 L130,15 L142,30 L140,50 L132,68 L128,85 L125,100 L118,115 L110,130 L100,145 L92,158 L85,165 L78,158 L72,145 L68,128 L65,110 L62,92 L58,72 L55,50 L55,30 Z',
-    seeds: {
-      rome: [100, 90], milan: [85, 25], naples: [110, 120],
-      sicily: [95, 158], venice: [108, 35],
-    },
+    rome: [12.5, 41.9], milan: [9.2, 45.5], naples: [14.3, 40.8],
+    sicily: [14.0, 37.5], venice: [12.3, 45.4],
   },
-
   TUR: {
-    path: 'M10,65 L35,45 L65,35 L95,30 L125,28 L155,32 L178,42 L192,58 L190,78 L182,95 L168,108 L148,115 L125,118 L100,120 L75,118 L50,112 L30,100 L15,85 Z',
-    seeds: {
-      istanbul: [35, 55], ankara: [105, 65], antalya: [110, 108],
-      izmir: [55, 85], eastern: [165, 60],
-    },
+    istanbul: [29.0, 41.0], ankara: [32.9, 39.9], antalya: [30.7, 36.9],
+    izmir: [27.1, 38.4], eastern: [43.0, 39.0],
   },
-
+  AUS: {
+    sydney: [151.2, -33.9], melbourne: [144.96, -37.8], brisbane: [153.0, -27.5],
+    perth: [115.9, -31.95], adelaide: [138.6, -34.9],
+  },
+  CAN: {
+    ontario: [-80.0, 44.0], quebec: [-71.2, 46.8], bc: [-123.1, 49.3],
+    alberta: [-114.1, 51.0], prairies: [-104.6, 50.4],
+  },
   SAU: {
-    path: 'M30,40 L65,25 L100,20 L135,25 L160,40 L175,60 L180,85 L170,108 L152,125 L130,135 L105,140 L80,138 L55,128 L38,112 L25,90 L22,65 Z',
-    seeds: {
-      riyadh: [100, 75], jeddah: [55, 95], eastern: [155, 65],
-      mecca: [60, 110], medina: [70, 60],
-    },
+    riyadh: [46.7, 24.7], jeddah: [39.2, 21.5], eastern: [49.0, 25.3],
+    mecca: [39.8, 21.4], medina: [39.6, 24.5],
   },
-
   MEX: {
-    path: 'M10,55 L30,35 L55,25 L85,20 L115,22 L140,30 L160,45 L170,65 L172,85 L165,105 L150,120 L130,130 L105,135 L80,132 L55,125 L35,112 L18,95 L10,75 Z',
-    seeds: {
-      mexico_city: [100, 75], guadalajara: [65, 70], monterrey: [110, 35],
-      cancun: [155, 65], tijuana: [20, 40],
-    },
+    mexico_city: [-99.1, 19.4], guadalajara: [-103.3, 20.7],
+    monterrey: [-100.3, 25.7], cancun: [-86.8, 21.2], tijuana: [-117.0, 32.5],
   },
-
   IDN: {
-    path: 'M5,80 L30,65 L60,55 L90,50 L120,48 L150,52 L175,60 L195,72 L195,90 L188,105 L170,115 L145,120 L120,122 L95,120 L70,118 L45,115 L25,108 L10,95 Z',
-    seeds: {
-      java: [90, 95], sumatra: [35, 75], kalimantan: [120, 70],
-      sulawesi: [150, 75], papua: [185, 80],
-    },
+    java: [110.4, -7.6], sumatra: [101.4, 0.5], kalimantan: [116.0, -1.0],
+    sulawesi: [121.4, -1.5], papua: [138.5, -4.0],
   },
-
   ESP: {
-    path: 'M25,45 L55,30 L90,22 L125,25 L155,35 L172,52 L178,72 L172,95 L158,112 L138,125 L112,132 L85,130 L60,122 L40,108 L28,90 L22,68 Z',
-    seeds: {
-      madrid: [100, 70], barcelona: [148, 45], seville: [60, 110],
-      valencia: [135, 85], bilbao: [85, 35],
-    },
+    madrid: [-3.7, 40.4], barcelona: [2.2, 41.4], seville: [-5.98, 37.4],
+    valencia: [-0.38, 39.47], bilbao: [-2.93, 43.26],
   },
-
   NLD: {
-    path: 'M55,25 L85,15 L115,18 L140,30 L155,50 L158,75 L150,98 L138,115 L118,128 L95,135 L75,130 L58,118 L45,100 L38,78 L40,55 Z',
-    seeds: {
-      amsterdam: [90, 40], rotterdam: [85, 75], hague: [70, 58],
-      utrecht: [100, 60], eindhoven: [105, 100],
-    },
+    amsterdam: [4.9, 52.37], rotterdam: [4.47, 51.92], hague: [4.3, 52.07],
+    utrecht: [5.12, 52.09], eindhoven: [5.47, 51.44],
   },
-
   POL: {
-    path: 'M40,25 L75,15 L110,18 L140,28 L160,45 L168,68 L162,92 L148,112 L128,125 L105,132 L80,130 L58,120 L42,105 L32,85 L30,62 L33,42 Z',
-    seeds: {
-      warsaw: [110, 55], krakow: [115, 105], gdansk: [105, 22],
-      wroclaw: [72, 82], poznan: [70, 50],
-    },
+    warsaw: [21.0, 52.23], krakow: [19.94, 50.06], gdansk: [18.65, 54.35],
+    wroclaw: [17.04, 51.1], poznan: [16.92, 52.41],
   },
 };
 
-/**
- * fallback 원형 실루엣 — 미정의 국가용
- * 지역 수에 따라 원 내부를 균등 분할
- */
-export function generateCircleSilhouette(regionCount: number): CountrySilhouette {
-  const cx = 100, cy = 100, r = 85;
-  // 원형 path
-  const path = `M${cx},${cy - r} A${r},${r} 0 1,1 ${cx - 0.01},${cy - r} Z`;
+// ─── Mercator 투영 ───
 
-  // 원 내부에 seed 배치 — 원의 중심 주위로 균등 분배
-  const seeds: Record<string, [number, number]> = {};
-  for (let i = 0; i < regionCount; i++) {
-    const angle = (2 * Math.PI * i) / regionCount - Math.PI / 2;
-    const seedR = regionCount <= 3 ? 40 : 50;
-    seeds[`r${i}`] = [
-      cx + Math.cos(angle) * seedR,
-      cy + Math.sin(angle) * seedR,
-    ];
+function mercatorProject(lon: number, lat: number): [number, number] {
+  const x = lon;
+  const y = -Math.log(Math.tan(Math.PI / 4 + (lat * Math.PI) / 360)) * (180 / Math.PI);
+  return [x, y];
+}
+
+// ─── GeoJSON → SVG 좌표 변환 ───
+
+function extractCountryPolygons(
+  geojson: GeoJSONData,
+  iso3: string,
+): number[][][][] {
+  for (const feature of geojson.features) {
+    const props = feature.properties || {};
+    const featureIso = getCountryISO(props);
+    if (featureIso !== iso3) continue;
+
+    const { type, coordinates } = feature.geometry;
+    if (type === 'Polygon') return [coordinates as number[][][]];
+    if (type === 'MultiPolygon') return coordinates as number[][][][];
   }
-  return { path, seeds };
+  return [];
 }
 
 /**
- * 국가 코드로 실루엣 조회.
- * 수동 정의 없으면 자동 원형 fallback.
+ * 폴리곤 면적 (Shoelace formula) — 면적이 큰 메인 폴리곤 선택용
  */
-export function getCountrySilhouette(
+function polygonArea(pts: [number, number][]): number {
+  let area = 0;
+  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
+    area += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
+  }
+  return Math.abs(area / 2);
+}
+
+/**
+ * GeoJSON 좌표를 SVG viewBox 좌표로 변환.
+ * 모든 폴리곤을 Mercator 투영 후 viewBox에 fit.
+ */
+function projectToSVG(
+  polygonSets: number[][][][],
+  svgW: number,
+  svgH: number,
+  padding: number,
+): {
+  projected: [number, number][][];
+  transform: (lon: number, lat: number) => [number, number];
+} {
+  // 모든 좌표를 Mercator 투영
+  const allProjected: [number, number][][] = [];
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+
+  for (const polygonSet of polygonSets) {
+    const ring = polygonSet[0]; // 외곽링만 (hole 무시)
+    const projected: [number, number][] = [];
+    for (const coord of ring) {
+      const [mx, my] = mercatorProject(coord[0], coord[1]);
+      projected.push([mx, my]);
+      if (mx < minX) minX = mx;
+      if (my < minY) minY = my;
+      if (mx > maxX) maxX = mx;
+      if (my > maxY) maxY = my;
+    }
+    allProjected.push(projected);
+  }
+
+  // viewBox에 맞게 스케일링
+  const geoW = maxX - minX || 1;
+  const geoH = maxY - minY || 1;
+  const usableW = svgW - padding * 2;
+  const usableH = svgH - padding * 2;
+  const scale = Math.min(usableW / geoW, usableH / geoH);
+  const offsetX = padding + (usableW - geoW * scale) / 2;
+  const offsetY = padding + (usableH - geoH * scale) / 2;
+
+  const scaled: [number, number][][] = allProjected.map(ring =>
+    ring.map(([x, y]) => [
+      (x - minX) * scale + offsetX,
+      (y - minY) * scale + offsetY,
+    ]),
+  );
+
+  // lon/lat → SVG 좌표 변환 함수
+  const transform = (lon: number, lat: number): [number, number] => {
+    const [mx, my] = mercatorProject(lon, lat);
+    return [
+      (mx - minX) * scale + offsetX,
+      (my - minY) * scale + offsetY,
+    ];
+  };
+
+  return { projected: scaled, transform };
+}
+
+// ─── Voronoi 셀 계산 ───
+
+function clipPolygonByLine(
+  polygon: [number, number][],
+  lx1: number, ly1: number,
+  lx2: number, ly2: number,
+): [number, number][] {
+  const out: [number, number][] = [];
+  const n = polygon.length;
+  if (n === 0) return out;
+
+  for (let i = 0; i < n; i++) {
+    const [cx, cy] = polygon[i];
+    const [nx, ny] = polygon[(i + 1) % n];
+    const cSide = (lx2 - lx1) * (cy - ly1) - (ly2 - ly1) * (cx - lx1);
+    const nSide = (lx2 - lx1) * (ny - ly1) - (ly2 - ly1) * (nx - lx1);
+
+    if (cSide >= 0) {
+      out.push([cx, cy]);
+      if (nSide < 0) {
+        const inter = segmentIntersect(cx, cy, nx, ny, lx1, ly1, lx2, ly2);
+        if (inter) out.push(inter);
+      }
+    } else if (nSide >= 0) {
+      const inter = segmentIntersect(cx, cy, nx, ny, lx1, ly1, lx2, ly2);
+      if (inter) out.push(inter);
+    }
+  }
+  return out;
+}
+
+function segmentIntersect(
+  x1: number, y1: number, x2: number, y2: number,
+  x3: number, y3: number, x4: number, y4: number,
+): [number, number] | null {
+  const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
+  if (Math.abs(denom) < 1e-10) return null;
+  const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
+  const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+    return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
+  }
+  return null;
+}
+
+function computeVoronoiCells(
+  seeds: [number, number][],
+  boundaryPolygon: [number, number][],
+  svgW: number,
+  svgH: number,
+): [number, number][][] {
+  const pad = 30;
+  const boundingRect: [number, number][] = [
+    [-pad, -pad], [svgW + pad, -pad], [svgW + pad, svgH + pad], [-pad, svgH + pad],
+  ];
+
+  const cells: [number, number][][] = [];
+
+  for (let i = 0; i < seeds.length; i++) {
+    let cell = [...boundingRect];
+
+    for (let j = 0; j < seeds.length; j++) {
+      if (i === j || cell.length < 3) continue;
+
+      const [sx, sy] = seeds[i];
+      const [ox, oy] = seeds[j];
+      const mx = (sx + ox) / 2;
+      const my = (sy + oy) / 2;
+      const dx = ox - sx;
+      const dy = oy - sy;
+      cell = clipPolygonByLine(cell,
+        mx - dy * 1000, my + dx * 1000,
+        mx + dy * 1000, my - dx * 1000,
+      );
+    }
+
+    // 국가 윤곽으로 클리핑
+    for (let e = 0; e < boundaryPolygon.length && cell.length >= 3; e++) {
+      const [ex1, ey1] = boundaryPolygon[e];
+      const [ex2, ey2] = boundaryPolygon[(e + 1) % boundaryPolygon.length];
+      cell = clipPolygonByLine(cell, ex1, ey1, ex2, ey2);
+    }
+
+    cells.push(cell);
+  }
+
+  return cells;
+}
+
+function polygonCentroid(polygon: [number, number][]): [number, number] {
+  if (polygon.length === 0) return [0, 0];
+  let cx = 0, cy = 0;
+  for (const [x, y] of polygon) { cx += x; cy += y; }
+  return [cx / polygon.length, cy / polygon.length];
+}
+
+// ─── 메인 API ───
+
+const SVG_SIZE = 400;
+const SVG_PAD = 25;
+
+/**
+ * GeoJSON에서 국가 윤곽을 추출하고 Voronoi 분할한 결과를 반환한다.
+ * regionIds는 지역 slug 매칭에 사용.
+ */
+export async function buildCountryOutline(
   iso3: string,
   regionCount: number,
-): CountrySilhouette {
-  return COUNTRY_SILHOUETTES[iso3] ?? generateCircleSilhouette(regionCount);
+  regionIds: string[],
+): Promise<CountryOutline> {
+  const geojson = await loadGeoJSON();
+  const polygonSets = extractCountryPolygons(geojson, iso3);
+
+  // 폴리곤 없으면 원형 fallback
+  if (polygonSets.length === 0) {
+    return buildCircleFallback(regionCount);
+  }
+
+  // 면적 상위 3개 폴리곤만 사용 (작은 섬 제외)
+  const withArea = polygonSets.map((ps, i) => ({
+    ps,
+    area: polygonArea(ps[0].map(c => mercatorProject(c[0], c[1])) as [number, number][]),
+    index: i,
+  }));
+  withArea.sort((a, b) => b.area - a.area);
+  const mainPolygons = withArea.slice(0, 3).map(w => w.ps);
+
+  // SVG 좌표로 투영
+  const { projected, transform } = projectToSVG(mainPolygons, SVG_SIZE, SVG_SIZE, SVG_PAD);
+
+  // 가장 큰 폴리곤을 Voronoi 경계로 사용
+  const mainOutline = projected[0];
+  if (!mainOutline || mainOutline.length < 3) {
+    return buildCircleFallback(regionCount);
+  }
+
+  // seed 좌표 결정
+  const seedDefs = REGION_SEEDS_LONLAT[iso3];
+  const seeds: [number, number][] = [];
+
+  for (let i = 0; i < regionCount; i++) {
+    const regionId = regionIds[i] ?? '';
+    const slug = regionId.split(/[-_]/).slice(1).join('_').toLowerCase();
+
+    let placed = false;
+    if (seedDefs) {
+      // slug → seed 매핑 시도
+      for (const [key, [lon, lat]] of Object.entries(seedDefs)) {
+        if (slug.includes(key) || key.includes(slug.split('_')[0])) {
+          seeds.push(transform(lon, lat));
+          placed = true;
+          break;
+        }
+      }
+      // 매칭 실패 시 인덱스 순서로 할당
+      if (!placed) {
+        const entries = Object.entries(seedDefs);
+        if (i < entries.length) {
+          const [, [lon, lat]] = entries[i];
+          seeds.push(transform(lon, lat));
+          placed = true;
+        }
+      }
+    }
+
+    // seed 정의 없으면 국가 중심 주위로 자동 분배
+    if (!placed) {
+      const c = polygonCentroid(mainOutline);
+      const angle = (2 * Math.PI * i) / regionCount - Math.PI / 2;
+      const r = 50;
+      seeds.push([c[0] + Math.cos(angle) * r, c[1] + Math.sin(angle) * r]);
+    }
+  }
+
+  // Voronoi 셀 계산
+  const cells = computeVoronoiCells(seeds, mainOutline, SVG_SIZE, SVG_SIZE);
+  const centroids = cells.map(c => polygonCentroid(c));
+
+  return {
+    outlinePolygons: projected,
+    cells,
+    centroids,
+    width: SVG_SIZE,
+    height: SVG_SIZE,
+  };
+}
+
+/**
+ * 원형 fallback — GeoJSON에 국가 데이터가 없을 때
+ */
+function buildCircleFallback(regionCount: number): CountryOutline {
+  const cx = SVG_SIZE / 2, cy = SVG_SIZE / 2, r = SVG_SIZE / 2 - SVG_PAD;
+  const circlePoints: [number, number][] = [];
+  const segments = 48;
+  for (let i = 0; i < segments; i++) {
+    const angle = (2 * Math.PI * i) / segments;
+    circlePoints.push([cx + Math.cos(angle) * r, cy + Math.sin(angle) * r]);
+  }
+
+  // seed 배치
+  const seeds: [number, number][] = [];
+  for (let i = 0; i < regionCount; i++) {
+    const angle = (2 * Math.PI * i) / regionCount - Math.PI / 2;
+    const seedR = regionCount <= 3 ? r * 0.4 : r * 0.5;
+    seeds.push([cx + Math.cos(angle) * seedR, cy + Math.sin(angle) * seedR]);
+  }
+
+  const cells = computeVoronoiCells(seeds, circlePoints, SVG_SIZE, SVG_SIZE);
+  const centroids = cells.map(c => polygonCentroid(c));
+
+  return {
+    outlinePolygons: [circlePoints],
+    cells,
+    centroids,
+    width: SVG_SIZE,
+    height: SVG_SIZE,
+  };
+}
+
+/**
+ * 폴리곤을 SVG path d 문자열로 변환.
+ */
+export function polygonToPath(polygon: [number, number][]): string {
+  if (polygon.length < 3) return '';
+  return polygon.map((p, i) =>
+    `${i === 0 ? 'M' : 'L'}${p[0].toFixed(1)},${p[1].toFixed(1)}`
+  ).join(' ') + ' Z';
 }

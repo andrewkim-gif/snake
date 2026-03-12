@@ -170,6 +170,11 @@ self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
     return (rx * WORLD_HEIGHT * rangeZ) + (wy * rangeZ) + rz
   }
 
+  // 아레나 모드: MCNoise에 아레나 중심 설정 (거리 기반 amp 활성화)
+  if (arenaMode) {
+    noise.arenaCenter = { x: arenaMode.centerX, z: arenaMode.centerZ }
+  }
+
   for (let x = startX; x < endX; x++) {
     for (let z = startZ; z < endZ; z++) {
       // 아레나 모드: 원형 경계 밖 블록 스킵
@@ -179,14 +184,16 @@ self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
         if (dx * dx + dz * dz > arenaMode.radius * arenaMode.radius) continue
       }
 
-      let yOffset = noise.getSurfaceOffset(x, z)
-
-      // 아레나 모드: 높이 편차를 +/-flattenVariance로 클램프
+      // getHeight()는 내부적으로 거리 기반 amp를 적용 (중심=평탄, 외곽=산)
+      let y: number
+      let yOffset: number
       if (arenaMode) {
-        yOffset = Math.max(-arenaMode.flattenVariance, Math.min(arenaMode.flattenVariance, yOffset))
+        y = noise.getHeight(x, z)
+        yOffset = y - MC_BASE_Y
+      } else {
+        yOffset = noise.getSurfaceOffset(x, z)
+        y = MC_BASE_Y + yOffset
       }
-
-      const y = MC_BASE_Y + yOffset
 
       const key = blockKey(x, y, z)
       if (removedSet.has(key)) continue
@@ -214,12 +221,13 @@ self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
         dense[denseRangeIndex(x, y, z)] = type
       }
 
-      // 나무 생성
+      // 나무 생성 (전투 구역 내 억제)
       const treeOffset = noise.getTreeOffset(x, z)
       if (
         treeOffset > noise.treeThreshold &&
         yOffset >= -3 &&
-        stoneOffset <= noise.stoneThreshold
+        stoneOffset <= noise.stoneThreshold &&
+        !noise.isInFlatZone(x, z)
       ) {
         // 줄기
         for (let ty = 1; ty <= MC_TREE_HEIGHT; ty++) {

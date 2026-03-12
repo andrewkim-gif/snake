@@ -56,6 +56,12 @@ export function setMCTerrainSeed(seed: number): void {
   }
 }
 
+/** 아레나 중심 좌표 설정 (거리 기반 amp 활성화) */
+export function setMCArenaCenter(x: number, z: number): void {
+  const noise = getNoise();
+  noise.arenaCenter = { x, z };
+}
+
 function getNoise(): MCNoise {
   let noise = _noiseCache.get(_activeSeed);
   if (!noise) {
