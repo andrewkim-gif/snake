@@ -26,7 +26,7 @@ import {
   disposeAllTemplates,
   TEMPLATE_SIZES,
 } from '@/lib/matrix/rendering3d/enemy-templates';
-import { getTerrainHeight } from '@/lib/matrix/rendering3d/terrain';
+import { getMCTerrainHeight } from '@/lib/matrix/rendering3d/mc-terrain-height';
 import {
   getEnemyColors,
   markColorNeedsUpdate,
@@ -60,11 +60,11 @@ export interface IEnemyRenderStrategy {
 /** template별 최대 instance 수 */
 const MAX_INSTANCES_PER_TEMPLATE = 120;
 
-/** LOD 거리 임계값 (2D 좌표 기준 px) */
+/** LOD 거리 임계값 (MC 블록 스케일) */
 const LOD_THRESHOLDS = {
-  HIGH: 800,
-  MID: 1400,
-  CULL: 2200,
+  HIGH: 30,
+  MID: 60,
+  CULL: 100,
 } as const;
 
 /** LOD 레벨 */
@@ -76,8 +76,14 @@ const LOW_LOD_CUBE_SIZE = 1.0;
 /** 적응형 LOD: 적 수 임계값 */
 const ADAPTIVE_LOD_THRESHOLD = 150;
 
-/** 적 position LERP 속도 (delta-time 기반) */
-const ENEMY_LERP_SPEED = 18;
+/** 적 position LERP 속도 (delta-time 기반, 높으면 즉시 추적) */
+const ENEMY_LERP_SPEED = 25;
+
+/** 적 기본 스케일 (MC 블록 스케일: 1 block = 1 unit) */
+const ENEMY_BASE_SCALE = 1.0;
+
+/** 보스 추가 스케일 */
+const BOSS_EXTRA_SCALE = 1.5;
 
 /** 적별 보간된 3D 위치를 캐시 (id → {x, z}) */
 interface SmoothedPos { x: number; z: number; }
@@ -328,10 +334,12 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
       const geometry = createMergedGeometry(templateId);
       const material = new THREE.MeshStandardMaterial({
         color: '#ffffff', // per-instance color로 덮어씀
-        roughness: 0.7,
-        metalness: 0.1,
+        roughness: 0.5,
+        metalness: 0.08,
         flatShading: true,
         vertexColors: false,
+        emissive: new THREE.Color('#ffffff'),
+        emissiveIntensity: 0.05,
       });
 
       const mesh = new THREE.InstancedMesh(geometry, material, MAX_INSTANCES_PER_TEMPLATE);
@@ -459,10 +467,9 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
 
       if (lod === 'CULL') continue;
 
-      // 2D → 3D 좌표 매핑 + velocity extrapolation
-      const extraDt = Math.min(delta, 0.033);
-      const rawX = enemy.position.x + enemy.velocity.x * extraDt * 0.5;
-      const rawZ = -(enemy.position.y + enemy.velocity.y * extraDt * 0.5);
+      // 2D → 3D 좌표 매핑 (MC FPS: x→x, y→z 직접, 부호 반전 없음)
+      const rawX = enemy.position.x;
+      const rawZ = enemy.position.y;
 
       // 보간된 위치 계산
       let smoothed = _smoothedPositions.get(enemy.id);
@@ -479,12 +486,14 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
       const x3d = smoothed.x;
       const z3d = smoothed.z;
 
-      // 크기 스케일 (elite 보정)
-      let scale = 1.0;
+      // 크기 스케일: 기본 3x + elite/boss 추가
+      let scale = ENEMY_BASE_SCALE;
+      if (enemy.isBoss) {
+        scale *= BOSS_EXTRA_SCALE;
+      }
       if (enemy.isElite && enemy.eliteTier) {
-        // ELITE_TIER_CONFIGS 참조 (직접 계산)
         const eliteScales: Record<string, number> = { silver: 1.3, gold: 1.4, diamond: 1.5 };
-        scale = eliteScales[enemy.eliteTier] ?? 1.0;
+        scale *= eliteScales[enemy.eliteTier] ?? 1.0;
       }
 
       const colors = getEnemyColors(enemy.enemyType);
@@ -502,7 +511,7 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
         // LOW LOD: 단일 큐브
         if (lowLodCount >= MAX_INSTANCES_PER_TEMPLATE * 2) continue;
 
-        _tempPosition.set(x3d, getTerrainHeight(x3d, z3d) + LOW_LOD_CUBE_SIZE / 2, z3d);
+        _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1 + LOW_LOD_CUBE_SIZE / 2, z3d);
         _tempScale.set(scale, scale, scale);
         _tempMatrix.compose(_tempPosition, _tempQuaternion.identity(), _tempScale);
 
@@ -526,15 +535,15 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
         // MID LOD: 절반 스케일 Y (약간 납작하게)
         const scaleY = lod === 'MID' ? scale * 0.7 : scale;
 
-        _tempPosition.set(x3d, getTerrainHeight(x3d, z3d), z3d);
+        _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1, z3d);
         _tempScale.set(scale, scaleY, scale);
 
         // 8방향 facing (velocity 기반)
         const vx = enemy.velocity.x;
         const vy = enemy.velocity.y;
         if (vx !== 0 || vy !== 0) {
-          const angle = Math.atan2(-vy, vx); // 2D → 3D Y-axis rotation
-          _tempQuaternion.setFromAxisAngle(_Y_AXIS, -angle + Math.PI / 2);
+          const angle = Math.atan2(vx, vy); // MC FPS: velocity → Y-axis rotation
+          _tempQuaternion.setFromAxisAngle(_Y_AXIS, angle);
         } else {
           _tempQuaternion.identity();
         }

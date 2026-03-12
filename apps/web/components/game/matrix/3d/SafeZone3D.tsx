@@ -262,7 +262,7 @@ export function SafeZone3D({
 
         // 플레이어 머리 위에 화살표 배치
         const arrowX = player.position.x + Math.cos(angle) * ARROW_DISTANCE;
-        const arrowZ = -(player.position.y + Math.sin(angle) * ARROW_DISTANCE);
+        const arrowZ = player.position.y + Math.sin(angle) * ARROW_DISTANCE;
         arrowGroupRef.current.position.set(arrowX, 6, arrowZ);
         arrowGroupRef.current.rotation.y = -angle + Math.PI / 2;
       } else {

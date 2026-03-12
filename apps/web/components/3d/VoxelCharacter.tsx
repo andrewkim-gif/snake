@@ -103,7 +103,7 @@ function lightenHex(hex: string, amount: number): string {
  * BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
  * +Z = front (face), -Z = back (hair), +Y = top (hair), -Y = chin, ±X = sides
  */
-function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambertMaterial[] {
+function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshStandardMaterial[] {
   const skinTone = SKIN_TONES[a.skinTone] ?? '#D4A574';
   const hairColor = HAIR_COLORS[a.hairColor] ?? '#4A3728';
   const darkHair = darkenHex(hairColor, 0.2);
@@ -172,12 +172,12 @@ function createAppearanceHeadMaterials(a: CubelingAppearance): THREE.MeshLambert
   // BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
   // index 4 = +Z = 정면(얼굴), index 5 = -Z = 후면(뒷머리)
   return [
-    new THREE.MeshLambertMaterial({ map: sideTex }),            // [0] +X right side
-    new THREE.MeshLambertMaterial({ map: sideTex }),            // [1] -X left side
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(tC) }),    // [2] +Y top (hair)
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(btC) }),   // [3] -Y bottom (chin)
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(fC) }),    // [4] +Z front (face) ← 정면
-    new THREE.MeshLambertMaterial({ map: toCanvasTex(bC) }),    // [5] -Z back (hair)
+    new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.6, metalness: 0.05 }),            // [0] +X right side
+    new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.6, metalness: 0.05 }),            // [1] -X left side
+    new THREE.MeshStandardMaterial({ map: toCanvasTex(tC), roughness: 0.6, metalness: 0.05 }),    // [2] +Y top (hair)
+    new THREE.MeshStandardMaterial({ map: toCanvasTex(btC), roughness: 0.6, metalness: 0.05 }),   // [3] -Y bottom (chin)
+    new THREE.MeshStandardMaterial({ map: toCanvasTex(fC), roughness: 0.6, metalness: 0.05 }),    // [4] +Z front (face) ← 정면
+    new THREE.MeshStandardMaterial({ map: toCanvasTex(bC), roughness: 0.6, metalness: 0.05 }),    // [5] -Z back (hair)
   ];
 }
 
@@ -299,7 +299,7 @@ function EquipmentGroup({ appearance: a }: { appearance: CubelingAppearance }) {
         return (
           <mesh position={[0, headTopY + geo[1] / 2, 0]}>
             <boxGeometry args={geo} />
-            <meshLambertMaterial color={hatDef.baseColor} />
+            <meshStandardMaterial color={hatDef.baseColor} roughness={0.6} metalness={0.05} />
           </mesh>
         );
       })()}
@@ -311,7 +311,7 @@ function EquipmentGroup({ appearance: a }: { appearance: CubelingAppearance }) {
         return (
           <mesh position={[BODY.w / 2 + ARM.w / 2, handY - geo[1] * 0.3, ARM.d / 2 + 0.05]}>
             <boxGeometry args={geo} />
-            <meshLambertMaterial color={weaponDef.baseColor} />
+            <meshStandardMaterial color={weaponDef.baseColor} roughness={0.6} metalness={0.05} />
           </mesh>
         );
       })()}
@@ -323,7 +323,7 @@ function EquipmentGroup({ appearance: a }: { appearance: CubelingAppearance }) {
         return (
           <mesh position={[0, BODY_CENTER, -(BODY.d / 2 + geo[2] / 2)]}>
             <boxGeometry args={geo} />
-            <meshLambertMaterial color={backDef.baseColor} />
+            <meshStandardMaterial color={backDef.baseColor} roughness={0.6} metalness={0.05} />
           </mesh>
         );
       })()}
@@ -384,10 +384,16 @@ export function VoxelCharacter({ skinId, appearance, position, rotation = 0, pha
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [texKey]);
 
-  // 재질
-  const bodyMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.body }), [textures]);
-  const armMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.arm }), [textures]);
-  const legMat = useMemo(() => new THREE.MeshLambertMaterial({ map: textures.leg }), [textures]);
+  // 재질 — MeshStandardMaterial (PBR, 조명 반응 향상)
+  const bodyMat = useMemo(() => new THREE.MeshStandardMaterial({
+    map: textures.body, roughness: 0.6, metalness: 0.05,
+  }), [textures]);
+  const armMat = useMemo(() => new THREE.MeshStandardMaterial({
+    map: textures.arm, roughness: 0.6, metalness: 0.05,
+  }), [textures]);
+  const legMat = useMemo(() => new THREE.MeshStandardMaterial({
+    map: textures.leg, roughness: 0.6, metalness: 0.05,
+  }), [textures]);
 
   // 애니메이션 (priority=0)
   useFrame((state, delta) => {

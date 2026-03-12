@@ -361,9 +361,13 @@ export interface MCWorldData {
 // 유틸리티
 // ---------------------------------------------------------------------------
 
-/** 블록 위치 키 생성 */
-export function blockKey(x: number, y: number, z: number): string {
-  return `${x}_${y}_${z}`
+/**
+ * 블록 위치 키 생성 (숫자 키 — GC 부담 제거)
+ * x,z: -2048~2047 범위, y: 0~255 범위 안전
+ * 인코딩: (x+2048) + y*4096 + (z+2048)*4096*256
+ */
+export function blockKey(x: number, y: number, z: number): number {
+  return (x + 2048) + (y << 12) + ((z + 2048) << 20)
 }
 
 /** BlockType이 실체(AIR 아닌)인지 확인 */

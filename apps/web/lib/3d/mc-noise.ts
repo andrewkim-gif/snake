@@ -224,7 +224,7 @@ export class MCNoise {
   // ---------------------------------------------------------------------------
   generateChunkBlocks(chunkX: number, chunkZ: number): ChunkBlockData[] {
     const blocks: ChunkBlockData[] = []
-    const idMap = new Map<string, number>()
+    const idMap = new Map<number, number>()
 
     const startX = chunkX * CHUNK_SIZE
     const startZ = chunkZ * CHUNK_SIZE
@@ -236,6 +236,10 @@ export class MCNoise {
 
         const surfaceY = this.getHeight(x, z)
         const biome = this.getBiome(x, z)
+
+        // 광석 오프셋 (x,z만 의존 — Y 루프 밖에서 1회 계산)
+        const stoneOffset = this.getStoneOffset(x, z)
+        const coalOffset = this.getCoalOffset(x, z)
 
         // --- 바닥: bedrock (y=0) ---
         {
@@ -252,8 +256,6 @@ export class MCNoise {
           let type: BlockType
 
           // 광석 확률 체크
-          const stoneOffset = this.getStoneOffset(x, z)
-          const coalOffset = this.getCoalOffset(x, z)
           const diamondVal = this.get(x / this.diamondGap, y / this.diamondGap, this.diamondSeed) * this.diamondAmp
 
           if (y < 16 && diamondVal > this.diamondThreshold) {

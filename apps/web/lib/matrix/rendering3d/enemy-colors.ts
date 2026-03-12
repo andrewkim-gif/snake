@@ -109,19 +109,29 @@ const colorCache = new Map<string, EnemyColorPair>();
  * enemies.config.ts의 color 필드에서 primary 파생,
  * secondary는 자동 생성 (어두운 변형)
  */
-export function getEnemyColors(enemyType: string): EnemyColorPair {
-  let pair = colorCache.get(enemyType);
+/** 레거시 숫자 enemyType → 기본 색상 (하위 호환) */
+const NUMERIC_TYPE_COLORS: Record<string, string> = {
+  '1': '#44aaff', // 일반: 파랑
+  '2': '#ff6644', // 큰 적: 주황
+  '3': '#ff4444', // 보스: 빨강
+  '4': '#44ff88', // 특수: 초록
+  '5': '#aa44ff', // 크롤러: 보라
+};
+
+export function getEnemyColors(enemyType: string | number): EnemyColorPair {
+  const key = String(enemyType);
+  let pair = colorCache.get(key);
   if (pair) return pair;
 
   // enemies.config.ts에서 원본 hex 색상 가져오기
-  const config = ENEMY_TYPES[enemyType as EnemyType];
-  const hex = config?.color ?? '#6b7280'; // fallback: metalLight
+  const config = ENEMY_TYPES[key as EnemyType];
+  const hex = config?.color ?? NUMERIC_TYPE_COLORS[key] ?? '#6b7280'; // fallback: metalLight
 
   const primary = new THREE.Color(hex);
   const secondary = deriveSecondaryColor(hex);
 
   pair = { primary, secondary };
-  colorCache.set(enemyType, pair);
+  colorCache.set(key, pair);
   return pair;
 }
 

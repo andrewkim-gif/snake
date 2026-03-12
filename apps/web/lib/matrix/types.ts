@@ -332,6 +332,9 @@ export interface Player {
   // 레벨업 애니메이션 (Phase 3)
   levelUpAnim?: number;             // 레벨업 애니메이션 진행도 (0-1)
 
+  // 3D 높이 (점프/비행 시 실제 Y — MCGameCamera가 동기화)
+  height3d?: number;                // 3D 월드 Y 좌표 (undefined면 지형 높이 사용)
+
   // 넉백/피격 (combat, movement, projectile에서 사용)
   knockback: Vector2;               // 현재 넉백 벡터
   hitFlashTimer: number;            // 피격 플래시 타이머

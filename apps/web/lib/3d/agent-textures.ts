@@ -397,14 +397,14 @@ export function getAgentTextures(skinId: number): AgentTextures {
 
 // ─── Head 면별 Material 캐시 ───
 
-const headMaterialCache = new Map<number, THREE.MeshLambertMaterial[]>();
+const headMaterialCache = new Map<number, THREE.MeshStandardMaterial[]>();
 
 /**
  * Head용 6-material 배열 생성 (BoxGeometry face order)
  * [0]+X=right side, [1]-X=left side, [2]+Y=top, [3]-Y=bottom, [4]+Z=front(얼굴), [5]-Z=back
  * index 4 = +Z = 정면(얼굴)
  */
-export function getHeadMaterials(skinId: number): THREE.MeshLambertMaterial[] {
+export function getHeadMaterials(skinId: number): THREE.MeshStandardMaterial[] {
   const cached = headMaterialCache.get(skinId);
   if (cached) return cached;
 
@@ -417,12 +417,12 @@ export function getHeadMaterials(skinId: number): THREE.MeshLambertMaterial[] {
   // BoxGeometry face order: [+X(right), -X(left), +Y(top), -Y(bottom), +Z(front), -Z(back)]
   // index 4 = +Z = 정면(얼굴), index 5 = -Z = 후면(뒷머리)
   const mats = [
-    new THREE.MeshLambertMaterial({ map: sideTex }),    // [0] +X right side
-    new THREE.MeshLambertMaterial({ map: sideTex }),    // [1] -X left side
-    new THREE.MeshLambertMaterial({ map: topTex }),     // [2] +Y top (hair)
-    new THREE.MeshLambertMaterial({ map: bottomTex }),  // [3] -Y bottom (chin)
-    new THREE.MeshLambertMaterial({ map: frontTex }),   // [4] +Z front (face) ← 정면
-    new THREE.MeshLambertMaterial({ map: backTex }),    // [5] -Z back (hair)
+    new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.6, metalness: 0.05 }),    // [0] +X right side
+    new THREE.MeshStandardMaterial({ map: sideTex, roughness: 0.6, metalness: 0.05 }),    // [1] -X left side
+    new THREE.MeshStandardMaterial({ map: topTex, roughness: 0.6, metalness: 0.05 }),     // [2] +Y top (hair)
+    new THREE.MeshStandardMaterial({ map: bottomTex, roughness: 0.6, metalness: 0.05 }),  // [3] -Y bottom (chin)
+    new THREE.MeshStandardMaterial({ map: frontTex, roughness: 0.6, metalness: 0.05 }),   // [4] +Z front (face) ← 정면
+    new THREE.MeshStandardMaterial({ map: backTex, roughness: 0.6, metalness: 0.05 }),    // [5] -Z back (hair)
   ];
 
   headMaterialCache.set(skinId, mats);

@@ -10,7 +10,7 @@
  * 4. Vacuum effect: lerp toward player + scale-down on collect
  * 5. LOD: 거리 >1200px 시 point sprite로 대체
  *
- * 좌표 매핑: 2D(x,y) → 3D(x, 0, -y)
+ * 좌표 매핑: 2D(x,y) → 3D(x, terrainHeight, y)
  * useFrame priority=0 필수
  */
 
@@ -18,6 +18,7 @@ import React, { useRef, useMemo } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Gem, Pickup, Player } from '@/lib/matrix/types';
+import { getMCTerrainHeight } from '@/lib/matrix/rendering3d/mc-terrain-height';
 
 // ============================================
 // Constants
@@ -147,7 +148,7 @@ function XpOrbRenderer({ gemsRef, playerRef }: XpOrbRendererProps) {
     const gems = gemsRef.current;
     const player = playerRef.current;
     const playerX = player.position.x;
-    const playerZ = -player.position.y;
+    const playerZ = player.position.y;
     const time = clock.getElapsedTime();
 
     let nearCount = 0;
@@ -160,7 +161,7 @@ function XpOrbRenderer({ gemsRef, playerRef }: XpOrbRendererProps) {
 
       // 2D → 3D 좌표
       const gx = gem.position.x;
-      const gz = -gem.position.y;
+      const gz = gem.position.y;
 
       // 거리 계산
       const dx = gx - playerX;
@@ -169,15 +170,12 @@ function XpOrbRenderer({ gemsRef, playerRef }: XpOrbRendererProps) {
 
       // LOD: 먼 거리는 point sprite
       if (distSq > LOD_DISTANCE * LOD_DISTANCE) {
-        farPositions.push(gx, 1, gz);
+        const farTerrainY = getMCTerrainHeight(gx, gz) + 1.5;
+        farPositions.push(gx, farTerrainY, gz);
         const color = getGemColor(gem.value);
         farColors.push(color.r, color.g, color.b);
         continue;
       }
-
-      // 부유 애니메이션 (sine wave)
-      const floatY = Math.sin(time * FLOAT_FREQUENCY + i * 0.7) * FLOAT_AMPLITUDE;
-      const baseY = ORB_RADIUS + 0.5;
 
       // Vacuum 효과 (가까우면 플레이어 쪽으로 이동)
       let finalX = gx;
@@ -188,6 +186,11 @@ function XpOrbRenderer({ gemsRef, playerRef }: XpOrbRendererProps) {
         finalX = THREE.MathUtils.lerp(gx, playerX, vacuumStrength * VACUUM_LERP);
         finalZ = THREE.MathUtils.lerp(gz, playerZ, vacuumStrength * VACUUM_LERP);
       }
+
+      // 부유 애니메이션 (sine wave) — 지형 높이 기반
+      const floatY = Math.sin(time * FLOAT_FREQUENCY + i * 0.7) * FLOAT_AMPLITUDE;
+      const terrainY = getMCTerrainHeight(finalX, finalZ);
+      const baseY = terrainY + 1 + ORB_RADIUS;
 
       // 크기 (가치에 따라)
       const scale = 0.6 + Math.min(gem.value / 20, 1) * 0.6;
@@ -287,7 +290,7 @@ function PickupItemRenderer({ pickupsRef, playerRef }: PickupItemRendererProps) 
     const pickups = pickupsRef.current;
     const player = playerRef.current;
     const playerX = player.position.x;
-    const playerZ = -player.position.y;
+    const playerZ = player.position.y;
     const time = clock.getElapsedTime();
 
     let count = 0;
@@ -297,7 +300,7 @@ function PickupItemRenderer({ pickupsRef, playerRef }: PickupItemRendererProps) 
 
       // 2D → 3D
       const px = pickup.position.x;
-      const pz = -pickup.position.y;
+      const pz = pickup.position.y;
 
       // 거리 체크
       const dx = px - playerX;
@@ -305,10 +308,11 @@ function PickupItemRenderer({ pickupsRef, playerRef }: PickupItemRendererProps) 
       const distSq = dx * dx + dz * dz;
       if (distSq > LOD_DISTANCE * LOD_DISTANCE) continue;
 
-      // 부유 + 회전 애니메이션
+      // 부유 + 회전 애니메이션 — 지형 높이 기반
       const floatY = Math.sin(time * FLOAT_FREQUENCY * 0.8 + i * 1.3) * FLOAT_AMPLITUDE * 0.8;
       const rotY = time * 1.5 + i * 0.5;
-      const baseY = PICKUP_SIZE * 0.5 + 0.8;
+      const terrainY = getMCTerrainHeight(px, pz);
+      const baseY = terrainY + 1 + PICKUP_SIZE * 0.5;
 
       // 스케일
       const typeScale = PICKUP_SCALES[pickup.type] || 1.0;

@@ -46,7 +46,7 @@ interface MCCameraProps {
   mode: PlayerMode
   onModeChange: (mode: PlayerMode) => void
   terrainBlocks: BlockInstance[]
-  terrainIdMap: Record<string, number>
+  terrainIdMap: Record<number, number>
 }
 
 export default function MCCamera({

@@ -177,7 +177,7 @@ export function DeathParticles({ deathEventsRef }: DeathParticlesProps) {
         p.active = true;
         p.x = event.position.x + (Math.random() - 0.5) * 2;
         p.y = 1 + Math.random() * 2; // 지면 약간 위에서 시작
-        p.z = -event.position.y + (Math.random() - 0.5) * 2; // 2D→3D
+        p.z = event.position.y + (Math.random() - 0.5) * 2; // MC FPS: y→z 직접
         p.vx = Math.cos(angle) * speed;
         p.vy = 5 + Math.random() * 10; // 위로 발사
         p.vz = Math.sin(angle) * speed;

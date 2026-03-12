@@ -50,7 +50,7 @@ export interface BlockInstance {
 
 export interface TerrainWorkerOutput {
   blocks: BlockInstance[]
-  idMap: Record<string, number> // "x_y_z" -> block index
+  idMap: Record<number, number> // blockKey(x,y,z) -> block index
   chunkX: number
   chunkZ: number
   /** 밀집 Uint8Array: 각 청크의 CHUNK_SIZE x WORLD_HEIGHT x CHUNK_SIZE 블록 데이터
@@ -122,10 +122,10 @@ self.onmessage = (e: MessageEvent<TerrainWorkerInput>) => {
   const { chunkX, chunkZ, chunkSize, distance, seed, customBlocks, arenaMode } = e.data
   const noise = new MCNoise(seed)
   const blocks: BlockInstance[] = []
-  const idMap: Record<string, number> = {}
+  const idMap: Record<number, number> = {}
 
   // 제거된 블록 셋
-  const removedSet = new Set<string>()
+  const removedSet = new Set<number>()
   const placedBlocks: BlockInstance[] = []
 
   for (const cb of customBlocks) {

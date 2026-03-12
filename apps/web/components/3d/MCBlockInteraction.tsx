@@ -20,7 +20,7 @@ interface MCBlockInteractionProps {
   locked: boolean
   heldBlock: BlockType
   terrainBlocks: BlockInstance[]
-  terrainIdMap: Record<string, number>
+  terrainIdMap: Record<number, number>
   onBlockPlace: (block: CustomBlock) => void
   onBlockRemove: (x: number, y: number, z: number) => void
 }

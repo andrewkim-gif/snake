@@ -24,8 +24,9 @@ import { ZOOM_CONFIG } from '@/lib/matrix/constants';
 
 // Isometric 카메라 오프셋 (45° 각도에서 Y 높이)
 const ISO_DISTANCE = 800;
-// 카메라 위치 LERP 속도 (delta-time 기반, 원래 POSITION_LERP=0.08 at 60fps ≈ 4.8/s)
-const CAMERA_LERP_SPEED = 5;
+// 카메라 위치 LERP 속도 (delta-time 기반, 높으면 즉시 추적)
+// useFrame 직접 실행 환경에서 프레임 동기화 → 빠른 추적
+const CAMERA_LERP_SPEED = 12;
 
 export interface GameCameraProps {
   /** 플레이어 상태 ref (position.x, position.y) */
@@ -96,8 +97,9 @@ export function GameCamera({
     // 3D 카메라의 zoom은 2D zoom과 스케일이 다르므로 변환 적용
     // 기존 2D zoom (0.6-1.1)을 3D orthographic zoom으로 매핑
     const zoom2D = currentZoomRef.current;
-    // OrthographicCamera zoom: 50 기준, 2D zoom 0.85 = 3D zoom 50
-    const baseZoom = 50;
+    // OrthographicCamera zoom: 캐릭터 5x 스케일 대비 넓은 시야 확보
+    // 기존 50 → 18 (뷰포트 ~100wu 확보, 캐릭터 7.5wu = 화면의 ~7.5%)
+    const baseZoom = 18;
     camera.zoom = baseZoom * (zoom2D / ZOOM_CONFIG.DEFAULT_ZOOM);
 
     // lookAt + projection 업데이트
@@ -110,7 +112,7 @@ export function GameCamera({
       ref={cameraRef}
       makeDefault
       position={[ISO_DISTANCE, ISO_DISTANCE, ISO_DISTANCE]}
-      zoom={50}
+      zoom={18}
       near={0.1}
       far={5000}
     />

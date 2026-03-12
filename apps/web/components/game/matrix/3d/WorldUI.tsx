@@ -139,7 +139,7 @@ export function WorldUI({
         position: new THREE.Vector3(
           enemy.position.x,
           HEAD_OFFSET_ENEMY,
-          -enemy.position.y
+          enemy.position.y
         ),
         worldX: enemy.position.x,
         worldY: enemy.position.y,
@@ -162,7 +162,7 @@ export function WorldUI({
         position: new THREE.Vector3(
           agent.position.x,
           HEAD_OFFSET_AGENT,
-          -agent.position.y
+          agent.position.y
         ),
         worldX: agent.position.x,
         worldY: agent.position.y,

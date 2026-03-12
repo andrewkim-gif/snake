@@ -156,9 +156,9 @@ export default function MCTerrain({
     (cx: number, cz: number) => {
       const noise = new MCNoise(seed)
       const blocks: BlockInstance[] = []
-      const idMap: Record<string, number> = {}
+      const idMap: Record<number, number> = {}
 
-      const removedSet = new Set<string>()
+      const removedSet = new Set<number>()
       const placedBlocks: BlockInstance[] = []
       for (const cb of customBlocks) {
         if (!cb.placed) removedSet.add(blockKey(cb.x, cb.y, cb.z))

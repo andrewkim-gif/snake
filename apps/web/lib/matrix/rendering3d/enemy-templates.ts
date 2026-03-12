@@ -678,11 +678,22 @@ export const ENEMY_TYPE_TO_TEMPLATE: Record<string, EnemyTemplateId> = {
 // 헬퍼 함수
 // ============================================
 
+/** 레거시 숫자 enemyType → 기본 template 매핑 (하위 호환) */
+const NUMERIC_TYPE_FALLBACK: Record<string, EnemyTemplateId> = {
+  '1': 'humanoid_small',
+  '2': 'humanoid_medium',
+  '3': 'humanoid_large',
+  '4': 'sphere',
+  '5': 'crawler',
+};
+
 /**
  * enemyType → templateId 조회 (미매핑 시 humanoid_small fallback)
+ * 숫자 타입도 문자열 변환 후 매핑 지원
  */
-export function getTemplateIdForEnemy(enemyType: string): EnemyTemplateId {
-  return ENEMY_TYPE_TO_TEMPLATE[enemyType] ?? 'humanoid_small';
+export function getTemplateIdForEnemy(enemyType: string | number): EnemyTemplateId {
+  const key = String(enemyType);
+  return ENEMY_TYPE_TO_TEMPLATE[key] ?? NUMERIC_TYPE_FALLBACK[key] ?? 'humanoid_small';
 }
 
 /**

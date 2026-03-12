@@ -9,7 +9,7 @@
  * - MeshBasicMaterial 반투명 (depth test off, 항상 표시)
  * - 플레이어 위치 + facing 방향 기반 회전
  *
- * 좌표 매핑: 2D(x,y) → 3D(x, 0, -y)
+ * 좌표 매핑: 2D(x,y) → 3D(x, h, y) — MC FPS 직접 매핑
  * useFrame priority=0 필수
  */
 
@@ -17,7 +17,7 @@ import { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Player } from '@/lib/matrix/types';
-import { getTerrainHeight } from '@/lib/matrix/rendering3d/terrain';
+import { getMCTerrainHeight } from '@/lib/matrix/rendering3d/mc-terrain-height';
 
 // ============================================
 // 상수
@@ -26,11 +26,11 @@ import { getTerrainHeight } from '@/lib/matrix/rendering3d/terrain';
 /** Swing arc 지속 시간 (초) */
 const SWING_DURATION = 0.25;
 
-/** Swing arc 반지름 */
-const SWING_RADIUS = 6;
+/** Swing arc 반지름 (MC 블록 스케일: 2~3 블록) */
+const SWING_RADIUS = 2.5;
 
 /** Swing arc 두께 */
-const SWING_THICKNESS = 1.5;
+const SWING_THICKNESS = 0.6;
 
 // ============================================
 // 공격 이벤트 구조
@@ -155,18 +155,17 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
       arc.active = true;
       arc.timer = SWING_DURATION;
       arc.posX = event.position.x;
-      arc.posZ = -event.position.y; // 2D→3D
+      arc.posZ = event.position.y; // MC FPS: y→z 직접 매핑
       arc.isCritical = event.isCritical;
 
-      // facing 방향 → Y축 회전 각도 (2D→3D)
+      // facing 방향 → Y축 회전 각도 (MC FPS: x,y → x,z 직접)
       const fx = event.direction.x;
       const fy = event.direction.y;
       if (Math.abs(fx) > 0.01 || Math.abs(fy) > 0.01) {
-        arc.rotation = Math.atan2(fx, -fy); // 2D direction → 3D Y rotation
+        arc.rotation = Math.atan2(fx, fy);
       } else {
-        // facing이 0이면 현재 facingRef 사용
         const f = facingRef.current;
-        arc.rotation = Math.atan2(f.x, -f.y);
+        arc.rotation = Math.atan2(f.x, f.y);
       }
     }
 
@@ -194,8 +193,10 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
       // 위치 (플레이어 현재 위치 기반 — 실시간 추적)
       const player = playerRef.current;
       const px = player.position.x;
-      const pz = -player.position.y;
-      const h = getTerrainHeight(px, pz) + 2; // 약간 위에 표시
+      const pz = player.position.y; // MC FPS: y→z 직접 매핑
+      // height3d가 있으면 점프 높이 반영, 없으면 지형 기반
+      const baseH = player.height3d != null ? player.height3d : getMCTerrainHeight(px, pz) + 1;
+      const h = baseH + 0.9; // 눈 높이
 
       mesh.position.set(px, h, pz);
 
@@ -211,11 +212,11 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
       const alpha = arc.timer / SWING_DURATION;
       mat.opacity = alpha * 0.6;
 
-      // 색상: 크리티컬이면 황금색, 아니면 흰색
+      // 색상: 크리티컬이면 황금색, 아니면 시안
       if (arc.isCritical) {
         mat.color.setHex(0xffdd00);
       } else {
-        mat.color.setHex(0xffffff);
+        mat.color.setHex(0x00ffcc);
       }
     }
   });
@@ -236,11 +237,12 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
             ref={(el: THREE.MeshBasicMaterial | null) => {
               if (el) matRefs.current[i] = el;
             }}
-            color="#ffffff"
+            color="#00ffcc"
             transparent
             opacity={0}
             side={THREE.DoubleSide}
             depthWrite={false}
+            depthTest={false}
             blending={THREE.AdditiveBlending}
           />
         </mesh>
