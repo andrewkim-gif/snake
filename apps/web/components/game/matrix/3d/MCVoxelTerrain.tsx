@@ -6,7 +6,7 @@
  * 성능 최적화:
  * - 청크별 pre-computed exposed 블록 캐시 → 리빌드 시 전체 순회 제거
  * - 프레임당 최대 1개 청크 생성 (점진적 로딩)
- * - InstancedMesh per block type (6종), BoxGeometry(1,1,1)
+ * - InstancedMesh per block type (10종+grassTop), BoxGeometry(1,1,1)
  * - 구름: InstancedMesh 반투명 화이트 박스 at Y=80
  */
 
@@ -16,22 +16,26 @@ import * as THREE from 'three';
 import { MCNoise, type ChunkBlockData } from '@/lib/3d/mc-noise';
 import { BlockType, MC_CLOUD_HEIGHT, CHUNK_SIZE, blockKey } from '@/lib/3d/mc-types';
 
-// 렌더 거리 (청크 단위) — 5이면 11x11=121 청크, 120블록 반경 (fog far=80보다 큼)
-const RENDER_DISTANCE = 5;
+// 렌더 거리 (청크 단위) — 6이면 13x13=169 청크, 96블록 반경 (산봉우리 75블록 포함)
+const RENDER_DISTANCE = 6;
 
 // 프레임당 최대 청크 생성 수 (생성만 — rebuild는 별도 타이밍)
 const MAX_CHUNKS_PER_FRAME = 4;
 // 리빌드 최소 간격 (프레임 수) — 초기 로딩 시 매 프레임 rebuild 방지
 const REBUILD_INTERVAL = 3;
 
-// 블록 타입별 최대 InstancedMesh 할당 (RENDER_DISTANCE=5, 121 청크)
+// 블록 타입별 최대 InstancedMesh 할당 (RENDER_DISTANCE=6, 169 청크, 산악 지형 포함)
 const MAX_INSTANCES: Record<string, number> = {
-  grass: 80000,
-  dirt: 20000,
-  stone: 40000,
-  sand: 16000,
-  tree: 8000,
-  leaf: 30000,
+  grass: 120000,
+  dirt: 30000,
+  stone: 80000,
+  coal: 5000,
+  bedrock: 3000,
+  cobblestone: 5000,
+  gravel: 3000,
+  sand: 20000,
+  tree: 10000,
+  leaf: 40000,
 };
 
 // 구름 설정
@@ -73,10 +77,10 @@ const BLOCK_TO_MESH: Record<number, string> = {
   [BlockType.grass]: 'grass',
   [BlockType.dirt]: 'dirt',
   [BlockType.stone]: 'stone',
-  [BlockType.coal]: 'stone',
-  [BlockType.bedrock]: 'stone',
-  [BlockType.cobblestone]: 'stone',
-  [BlockType.gravel]: 'stone',
+  [BlockType.coal]: 'coal',
+  [BlockType.bedrock]: 'bedrock',
+  [BlockType.cobblestone]: 'cobblestone',
+  [BlockType.gravel]: 'gravel',
   [BlockType.sand]: 'sand',
   [BlockType.tree]: 'tree',
   [BlockType.wood]: 'tree',
@@ -152,7 +156,12 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       side: THREE.DoubleSide,
       color: new THREE.Color('#5aaa3a'),
     });
-    return { dirtMat, stoneMat, sandMat, leafMat };
+    // 신규 블록 텍스처 머티리얼 (Phase 4: 지형 텍스처 다양화)
+    const coalMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/coal_ore.png`) });
+    const bedrockMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/bedrock.png`) });
+    const cobblestoneMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/cobblestone.png`) });
+    const gravelMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/gravel.png`) });
+    return { dirtMat, stoneMat, sandMat, leafMat, coalMat, bedrockMat, cobblestoneMat, gravelMat };
   }, []);
 
   // ============================================
@@ -187,7 +196,37 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     leafMesh.count = 0;
     leafMesh.frustumCulled = false;
 
-    return { grassMesh, dirtMesh, stoneMesh, sandMesh, treeMesh, leafMesh };
+    // 신규 블록 타입별 InstancedMesh (Phase 4: 지형 텍스처 다양화)
+    const coalMesh = new THREE.InstancedMesh(geo, materials.coalMat, MAX_INSTANCES.coal);
+    coalMesh.count = 0;
+    coalMesh.frustumCulled = false;
+
+    const bedrockMesh = new THREE.InstancedMesh(geo, materials.bedrockMat, MAX_INSTANCES.bedrock);
+    bedrockMesh.count = 0;
+    bedrockMesh.frustumCulled = false;
+
+    const cobblestoneMesh = new THREE.InstancedMesh(geo, materials.cobblestoneMat, MAX_INSTANCES.cobblestone);
+    cobblestoneMesh.count = 0;
+    cobblestoneMesh.frustumCulled = false;
+
+    const gravelMesh = new THREE.InstancedMesh(geo, materials.gravelMat, MAX_INSTANCES.gravel);
+    gravelMesh.count = 0;
+    gravelMesh.frustumCulled = false;
+
+    // 잔디 상단 오버레이 — PlaneGeometry로 잔디 블록 위에 초록 텍스처 (Phase 4: 멀티페이스)
+    const grassTopGeo = new THREE.PlaneGeometry(1, 1);
+    grassTopGeo.rotateX(-Math.PI / 2); // XZ 평면으로 회전 (상단 면)
+    const grassTopMat = new THREE.MeshLambertMaterial({
+      map: loadBlockTexture(`${TEX_PATH}/grass_top_green.png`),
+    });
+    const grassTopMesh = new THREE.InstancedMesh(grassTopGeo, grassTopMat, MAX_INSTANCES.grass);
+    grassTopMesh.count = 0;
+    grassTopMesh.frustumCulled = false;
+
+    return {
+      grassMesh, dirtMesh, stoneMesh, sandMesh, treeMesh, leafMesh,
+      coalMesh, bedrockMesh, cobblestoneMesh, gravelMesh, grassTopMesh,
+    };
   }, [materials]);
 
   // meshKey → InstancedMesh
@@ -195,6 +234,10 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     grass: meshes.grassMesh,
     dirt: meshes.dirtMesh,
     stone: meshes.stoneMesh,
+    coal: meshes.coalMesh,
+    bedrock: meshes.bedrockMesh,
+    cobblestone: meshes.cobblestoneMesh,
+    gravel: meshes.gravelMesh,
     sand: meshes.sandMesh,
     tree: meshes.treeMesh,
     leaf: meshes.leafMesh,
@@ -235,16 +278,18 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     const group = groupRef.current;
     if (!group) return;
 
+    // meshes에는 grassTopMesh도 포함되어 있으므로 모든 InstancedMesh가 추가됨
     const allMeshes = [...Object.values(meshes), cloudMesh];
-    for (const m of allMeshes) group.add(m);
+    for (const m of allMeshes) group.add(m as THREE.Object3D);
 
     return () => {
-      for (const m of allMeshes) group.remove(m);
+      for (const m of allMeshes) group.remove(m as THREE.Object3D);
       Object.values(meshes).forEach((m) => {
-        m.geometry.dispose();
-        if (Array.isArray(m.material)) m.material.forEach((mt: THREE.Material) => mt.dispose());
-        else (m.material as THREE.Material).dispose();
-        m.dispose();
+        (m as THREE.InstancedMesh).geometry.dispose();
+        const mat = (m as THREE.InstancedMesh).material;
+        if (Array.isArray(mat)) mat.forEach((mt: THREE.Material) => mt.dispose());
+        else (mat as THREE.Material).dispose();
+        (m as THREE.InstancedMesh).dispose();
       });
       cloudMesh.geometry.dispose();
       (cloudMesh.material as THREE.Material).dispose();
@@ -299,9 +344,13 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     dirtyRef.current = false;
 
     const counters: Record<string, number> = {
-      grass: 0, dirt: 0, stone: 0, sand: 0, tree: 0, leaf: 0,
+      grass: 0, dirt: 0, stone: 0,
+      coal: 0, bedrock: 0, cobblestone: 0, gravel: 0,
+      sand: 0, tree: 0, leaf: 0,
     };
     const matrix = new THREE.Matrix4();
+    // 잔디 상단 오버레이 카운터
+    let grassTopCount = 0;
 
     for (const exposed of chunkExposedRef.current.values()) {
       for (const eb of exposed) {
@@ -311,15 +360,26 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
         matrix.makeTranslation(eb.x + 0.5, eb.y + 0.5, eb.z + 0.5);
         meshMap[eb.meshKey].setMatrixAt(idx, matrix);
         counters[eb.meshKey] = idx + 1;
+
+        // 잔디 블록인 경우 상단 오버레이 추가 (Y+1.001 — 약간 위에 배치하여 Z-fighting 방지)
+        if (eb.meshKey === 'grass' && grassTopCount < MAX_INSTANCES.grass) {
+          matrix.makeTranslation(eb.x + 0.5, eb.y + 1.001, eb.z + 0.5);
+          meshes.grassTopMesh.setMatrixAt(grassTopCount, matrix);
+          grassTopCount++;
+        }
       }
     }
 
-    // count + needsUpdate
+    // count + needsUpdate (블록 메쉬)
     for (const [key, mesh] of Object.entries(meshMap)) {
       mesh.count = counters[key];
       if (counters[key] > 0) mesh.instanceMatrix.needsUpdate = true;
     }
-  }, [meshMap]);
+
+    // 잔디 상단 오버레이 업데이트
+    meshes.grassTopMesh.count = grassTopCount;
+    if (grassTopCount > 0) meshes.grassTopMesh.instanceMatrix.needsUpdate = true;
+  }, [meshMap, meshes]);
 
   // ============================================
   // useFrame — 점진적 청크 로딩
