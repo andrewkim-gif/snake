@@ -64,6 +64,8 @@ export interface UseBlockWeaponsProps {
     isCritical: boolean;
     timestamp: number;
   }>>;
+  /** v42 Phase 4: 콤보 데미지 배율 ref (1.0 = 기본, combo.getMultipliers().damage) */
+  comboDamageMultiplierRef?: React.MutableRefObject<number>;
 }
 
 export interface UseBlockWeaponsReturn {
@@ -127,6 +129,7 @@ export function useBlockWeapons({
   damageNumbersRef,
   hitFlashMapRef,
   attackEventsRef,
+  comboDamageMultiplierRef,
 }: UseBlockWeaponsProps): UseBlockWeaponsReturn {
   /** 무기별 쿨다운 타이머 */
   const cooldownsRef = useRef<Partial<Record<WeaponType, number>>>({});
@@ -181,14 +184,17 @@ export function useBlockWeapons({
 
     // ============================================
     // 2. 투사체 업데이트 + 충돌 검사
+    // v42 Phase 4: 콤보 데미지 배율 적용
     // ============================================
+    const comboDmgMult = comboDamageMultiplierRef?.current ?? 1.0;
     updateProjectiles(
       dt,
       player,
       enemies,
       projectiles,
       damageNumbersRef.current,
-      hitFlashMapRef.current
+      hitFlashMapRef.current,
+      comboDmgMult
     );
 
     // ============================================
@@ -196,7 +202,7 @@ export function useBlockWeapons({
     // ============================================
     enforceProjectileLimit(projectiles);
 
-  }, [playerRef, enemiesRef, projectilesRef, damageNumbersRef, hitFlashMapRef, attackEventsRef]);
+  }, [playerRef, enemiesRef, projectilesRef, damageNumbersRef, hitFlashMapRef, attackEventsRef, comboDamageMultiplierRef]);
 
   return { tick, cooldownsRef };
 }
@@ -498,7 +504,8 @@ function updateProjectiles(
   enemies: Enemy[],
   projectiles: Projectile[],
   damageNumbers: DamageNumber[],
-  hitFlashMap: Map<string, number>
+  hitFlashMap: Map<string, number>,
+  comboDamageMultiplier: number = 1.0
 ): void {
   let writeIdx = 0;
 
@@ -559,10 +566,10 @@ function updateProjectiles(
           proj.hitEnemies.add(enemy.id);
         }
 
-        // 데미지 계산
+        // 데미지 계산 (v42 Phase 4: 콤보 배율 적용)
         const isCrit = Math.random() < (player.criticalChance ?? 0.05);
         const dmg = Math.round(
-          proj.damage * (isCrit ? (player.criticalMultiplier ?? 2.0) : 1.0)
+          proj.damage * (isCrit ? (player.criticalMultiplier ?? 2.0) : 1.0) * comboDamageMultiplier
         );
 
         // 데미지 적용

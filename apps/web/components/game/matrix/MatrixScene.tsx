@@ -49,6 +49,15 @@ import { useBlockWeapons } from '@/lib/matrix/hooks/useBlockWeapons';
 import { getBlockWeaponStats } from '@/lib/matrix/config/block-weapon-stats';
 import { XP_THRESHOLDS } from '@/lib/matrix/config/index';
 import { setMCTerrainSeed, invalidateHeightCache } from '@/lib/matrix/rendering3d/mc-terrain-height';
+import {
+  getCurrentWaveStage,
+  getCurrentPhaseName,
+  getScaledEnemyStats,
+  checkEliteSpawn,
+  ELITE_CONFIGS,
+  type WavePhaseName,
+  type EliteSpawnConfig,
+} from '@/lib/matrix/config/wave-system.config';
 import { GameLighting } from './3d/GameLighting';
 import MCGameCamera from './3d/MCGameCamera';
 import MCVoxelTerrain from './3d/MCVoxelTerrain';
@@ -95,6 +104,18 @@ export interface MatrixSceneProps {
   onLevelUp?: (level: number) => void;
   /** v42 Phase 3: useSkillBuild의 playerSkills (weapon→level 맵) — 변경 시 player.weapons 동기화 */
   playerSkillsMap?: Map<string, number>;
+  /** v42 Phase 4: 콤보 데미지 배율 ref (useCombo.getMultipliers().damage) */
+  comboDamageMultiplierRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: 콤보 XP 배율 ref (useCombo.getMultipliers().xp) */
+  comboXpMultiplierRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: 킬 카운트 ref (엘리트 스폰 트리거용) */
+  killCountRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: Wave 페이즈 전환 콜백 */
+  onPhaseChange?: (phase: WavePhaseName) => void;
+  /** v42 Phase 4: 엘리트 스폰 콜백 (HUD 알림용) */
+  onEliteSpawn?: (config: EliteSpawnConfig) => void;
+  /** v42 Phase 4: 콤보 타이머 업데이트 (매 프레임 호출 — 콤보 decay 처리) */
+  comboUpdate?: (dt: number) => void;
 }
 
 /** MC seed (MCGameCamera + MCVoxelTerrain 공유) */
@@ -118,6 +139,11 @@ function SceneContent({
   pausedRef,
   onEnemyKill,
   onLevelUp,
+  comboXpMultiplierRef,
+  killCountRef,
+  onPhaseChange,
+  onEliteSpawn,
+  comboUpdate,
 }: {
   refs: GameRefs;
   warningIntensityRef: React.MutableRefObject<number>;
@@ -135,6 +161,16 @@ function SceneContent({
   onEnemyKill?: (enemy: Enemy) => void;
   /** v42 Phase 3: XP 임계값 도달 시 레벨업 콜백 */
   onLevelUp?: (level: number) => void;
+  /** v42 Phase 4: 콤보 XP 배율 ref */
+  comboXpMultiplierRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: 킬 카운트 ref */
+  killCountRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: Wave 페이즈 전환 콜백 */
+  onPhaseChange?: (phase: WavePhaseName) => void;
+  /** v42 Phase 4: 엘리트 스폰 콜백 */
+  onEliteSpawn?: (config: EliteSpawnConfig) => void;
+  /** v42 Phase 4: 콤보 타이머 업데이트 함수 */
+  comboUpdate?: (dt: number) => void;
 }) {
   return (
     <>
@@ -152,6 +188,11 @@ function SceneContent({
         pausedRef={pausedRef}
         onEnemyKill={onEnemyKill}
         onLevelUp={onLevelUp}
+        comboXpMultiplierRef={comboXpMultiplierRef}
+        killCountRef={killCountRef}
+        onPhaseChange={onPhaseChange}
+        onEliteSpawn={onEliteSpawn}
+        comboUpdate={comboUpdate}
       />
 
       {/* 배경색 — MC 하늘색 */}
@@ -286,6 +327,16 @@ interface GameLogicProps {
   onEnemyKill?: (enemy: Enemy) => void;
   /** v42 Phase 3: XP 임계값 도달 시 레벨업 콜백 */
   onLevelUp?: (level: number) => void;
+  /** v42 Phase 4: 콤보 XP 배율 ref */
+  comboXpMultiplierRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: 킬 카운트 ref (엘리트 스폰 트리거) */
+  killCountRef?: React.MutableRefObject<number>;
+  /** v42 Phase 4: Wave 페이즈 전환 콜백 */
+  onPhaseChange?: (phase: WavePhaseName) => void;
+  /** v42 Phase 4: 엘리트 스폰 콜백 */
+  onEliteSpawn?: (config: EliteSpawnConfig) => void;
+  /** v42 Phase 4: 콤보 타이머 업데이트 함수 (매 프레임 호출) */
+  comboUpdate?: (dt: number) => void;
 }
 
 /**
@@ -305,8 +356,17 @@ function GameLogic({
   pausedRef,
   onEnemyKill,
   onLevelUp,
+  comboXpMultiplierRef,
+  killCountRef,
+  onPhaseChange,
+  onEliteSpawn,
+  comboUpdate,
 }: GameLogicProps) {
   const prevTimeRef = useRef(performance.now());
+  /** v42 Phase 4: 현재 Wave 페이즈 추적 (전환 감지용) */
+  const currentPhaseRef = useRef<WavePhaseName>('SKIRMISH');
+  /** v42 Phase 4: 마지막 엘리트 스폰 킬 카운트 */
+  const lastEliteSpawnKillRef = useRef(0);
 
   useFrame(() => {
     // 프레임 시작: 지형 높이 캐시 갱신 (모든 컴포넌트가 공유)
@@ -360,8 +420,22 @@ function GameLogic({
       refs.lastFacing.current = { x: vx / len, y: vy / len };
     }
 
+    // === v42 Phase 4: 게임 시간 업데이트 (Wave 시스템용) ===
+    refs.gameTime.current += dt;
+
+    // === v42 Phase 4: Wave 페이즈 전환 감지 ===
+    const currentGameTime = refs.gameTime.current;
+    const newPhase = getCurrentPhaseName(currentGameTime);
+    if (newPhase !== currentPhaseRef.current) {
+      currentPhaseRef.current = newPhase;
+      onPhaseChange?.(newPhase);
+    }
+
     // === v42: 블록 좌표 무기 시스템 (기존 25dmg auto-attack 교체) ===
     blockWeaponsTick(dt);
+
+    // === v42 Phase 4: 콤보 타이머 업데이트 (타임아웃 시 콤보 리셋) ===
+    comboUpdate?.(dt);
 
     // === 적 사망 처리 + gem 드롭 ===
     refs.enemies.current = refs.enemies.current.filter(enemy => {
@@ -372,19 +446,41 @@ function GameLogic({
           isBoss: enemy.isBoss,
         });
 
-        const gemValue = enemy.isBoss ? 50 : (enemy.enemyType === 'whale' || enemy.enemyType === 'bot' ? 20 : 10);
+        // v42 Phase 4: 엘리트 적은 더 높은 XP 젬 드롭
+        const gemValue = enemy.isElite
+          ? (enemy.eliteTier === 'diamond' ? 300 : enemy.eliteTier === 'gold' ? 150 : 80)
+          : enemy.isBoss ? 50 : (enemy.enemyType === 'whale' || enemy.enemyType === 'bot' ? 20 : 10);
         refs.gems.current.push({
           id: `gem-drop-${Date.now()}-${Math.random()}`,
           position: { x: enemy.position.x, y: enemy.position.y },
           value: gemValue,
-          color: enemy.isBoss ? '#ffdd00' : '#44ff88',
+          color: enemy.isElite ? '#00FFFF' : enemy.isBoss ? '#ffdd00' : '#44ff88',
           isCollected: false,
         });
 
         player.score += gemValue;
         hitFlashMapRef.current.delete(enemy.id);
-        refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.1);
-        refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isBoss ? 0.4 : 0.15);
+        refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, enemy.isElite ? 0.5 : 0.1);
+        refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isElite ? 0.7 : enemy.isBoss ? 0.4 : 0.15);
+
+        // v42 Phase 4: 엘리트 처치 시 특수 드롭 (pickup)
+        if (enemy.isElite && enemy.eliteTier) {
+          const eliteCfg = ELITE_CONFIGS.find(c => c.tier === enemy.eliteTier);
+          if (eliteCfg) {
+            for (const dropType of eliteCfg.drops) {
+              refs.pickups.current.push({
+                id: `elite-drop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                type: dropType,
+                position: {
+                  x: enemy.position.x + (Math.random() - 0.5) * 3,
+                  y: enemy.position.y + (Math.random() - 0.5) * 3,
+                },
+                life: 15,
+                radius: 1,
+              } as any);
+            }
+          }
+        }
 
         // v42 Phase 3: 적 처치 콜백 (콤보/XP 처리)
         onEnemyKill?.(enemy);
@@ -404,22 +500,30 @@ function GameLogic({
       }
     }
 
-    // === 적 리스폰 시스템 ===
+    // === 적 리스폰 시스템 (v42 Phase 4: Wave 난이도 연동) ===
+    const waveStage = getCurrentWaveStage(currentGameTime);
+    const waveMaxEnemies = Math.round(TARGET_ENEMY_COUNT * waveStage.maxEnemyMultiplier);
+    const waveSpawnInterval = RESPAWN_CHECK_INTERVAL * waveStage.spawnRateMultiplier;
+
     respawnTimerRef.current -= dt;
     if (respawnTimerRef.current <= 0) {
-      respawnTimerRef.current = RESPAWN_CHECK_INTERVAL;
+      respawnTimerRef.current = waveSpawnInterval;
 
-      if (refs.enemies.current.length < MIN_ENEMY_COUNT) {
+      if (refs.enemies.current.length < Math.round(MIN_ENEMY_COUNT * waveStage.maxEnemyMultiplier)) {
         const spawnCount = Math.min(
           RESPAWN_BATCH_SIZE,
-          TARGET_ENEMY_COUNT - refs.enemies.current.length
+          waveMaxEnemies - refs.enemies.current.length
         );
+
+        // Wave 단계에 맞는 적 타입 풀에서 랜덤 선택
+        const enemyTypePool = waveStage.enemyTypes;
 
         for (let i = 0; i < spawnCount; i++) {
           const angle = Math.random() * Math.PI * 2;
           const dist = 15 + Math.random() * 25; // MC 블록 스케일 (15~40 블록)
-          const isBig = Math.random() < 0.2;
-          const isBoss = Math.random() < 0.05;
+          const selectedType = enemyTypePool[Math.floor(Math.random() * enemyTypePool.length)];
+          const scaledStats = getScaledEnemyStats(selectedType, waveStage);
+          const isBoss = selectedType === 'whale';
           _enemyIdCounter++;
 
           refs.enemies.current.push({
@@ -430,12 +534,12 @@ function GameLogic({
             },
             velocity: { x: 0, y: 0 },
             radius: 1,
-            color: isBoss ? '#ff4444' : isBig ? '#ff6644' : '#44aaff',
-            health: isBoss ? 250 : isBig ? 150 : 100,
-            maxHealth: isBoss ? 250 : isBig ? 150 : 100,
-            damage: isBoss ? 20 : isBig ? 15 : 10,
-            speed: isBoss ? 3 : isBig ? 4 : 5, // MC 블록/초
-            enemyType: isBoss ? 'whale' : isBig ? 'bot' : 'glitch',
+            color: scaledStats.color,
+            health: scaledStats.hp,
+            maxHealth: scaledStats.hp,
+            damage: scaledStats.damage,
+            speed: scaledStats.speed,
+            enemyType: selectedType,
             state: 'chasing' as const,
             stunTimer: 0,
             mass: 1,
@@ -445,6 +549,56 @@ function GameLogic({
             skillCooldown: 0,
             name: isBoss ? 'BOSS' : undefined,
           } as any);
+        }
+      }
+    }
+
+    // === v42 Phase 4: 엘리트 몬스터 스폰 체크 ===
+    if (killCountRef) {
+      const currentKills = killCountRef.current;
+      if (currentKills > lastEliteSpawnKillRef.current && currentKills % 100 === 0 && currentKills > 0) {
+        const eliteConfig = checkEliteSpawn(currentKills);
+        if (eliteConfig) {
+          lastEliteSpawnKillRef.current = currentKills;
+          // 엘리트 적 스폰 (플레이어 근처 10~20 블록)
+          const eAngle = Math.random() * Math.PI * 2;
+          const eDist = 10 + Math.random() * 10;
+          const baseStats = getScaledEnemyStats('whale', waveStage);
+          _enemyIdCounter++;
+
+          refs.enemies.current.push({
+            id: `elite-${eliteConfig.tier}-${_enemyIdCounter}`,
+            position: {
+              x: player.position.x + Math.cos(eAngle) * eDist,
+              y: player.position.y + Math.sin(eAngle) * eDist,
+            },
+            velocity: { x: 0, y: 0 },
+            radius: 1 * eliteConfig.sizeMultiplier,
+            color: eliteConfig.color,
+            health: baseStats.hp * eliteConfig.hpMultiplier,
+            maxHealth: baseStats.hp * eliteConfig.hpMultiplier,
+            damage: baseStats.damage * eliteConfig.damageMultiplier,
+            speed: baseStats.speed * 0.8, // 엘리트는 느리지만 강함
+            enemyType: 'whale',
+            state: 'chasing' as const,
+            stunTimer: 0,
+            mass: eliteConfig.sizeMultiplier,
+            hitBy: new Set<string>(),
+            isBoss: true,
+            isFrozen: false,
+            skillCooldown: 0,
+            name: eliteConfig.name,
+            isElite: true,
+            eliteTier: eliteConfig.tier,
+            dropCount: eliteConfig.drops.length,
+          } as any);
+
+          // 엘리트 스폰 콜백 (HUD 알림)
+          onEliteSpawn?.(eliteConfig);
+
+          // 화면 쉐이크 (엘리트 등장 연출)
+          refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.5);
+          refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, 0.6);
         }
       }
     }
@@ -547,14 +701,16 @@ function GameLogic({
       refs.screenShakeIntensity.current *= 0.92;
     }
 
-    // 잼 자석 수집
+    // 잼 자석 수집 (v42 Phase 4: 콤보 XP 배율 적용)
+    const xpMultiplier = comboXpMultiplierRef?.current ?? 1.0;
     refs.gems.current = refs.gems.current.filter(gem => {
       if (gem.isCollected) return false;
       const gdx = gem.position.x - player.position.x;
       const gdy = gem.position.y - player.position.y;
       const gd = Math.sqrt(gdx * gdx + gdy * gdy);
       if (gd < GEM_COLLECT_RANGE) {
-        player.xp += gem.value;
+        const xpGain = Math.floor(gem.value * xpMultiplier);
+        player.xp += xpGain;
         player.score += gem.value;
         return false;
       }
@@ -595,7 +751,7 @@ function GameLogic({
  *
  * useFrame priority=0 필수 — non-zero priority는 R3F auto-render 비활성화
  */
-export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap }: MatrixSceneProps) {
+export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap, comboDamageMultiplierRef, comboXpMultiplierRef, killCountRef, onPhaseChange, onEliteSpawn, comboUpdate }: MatrixSceneProps) {
   // 내부 refs (외부에서 주입되지 않은 경우 자체 refs 생성)
   const internalRefs = useGameRefs();
   const refs = gameRefs ?? internalRefs;
@@ -620,7 +776,7 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
   // 3인칭 모드: WASD는 MCGameCamera가 직접 관리
   const containerRef = useRef<HTMLDivElement>(null);
 
-  // === v42: 블록 좌표 무기 시스템 ===
+  // === v42: 블록 좌표 무기 시스템 (Phase 4: 콤보 데미지 배율 연동) ===
   const internalBlockWeapons = useBlockWeapons({
     playerRef: refs.player,
     enemiesRef: refs.enemies,
@@ -628,6 +784,7 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
     damageNumbersRef: refs.damageNumbers,
     hitFlashMapRef,
     attackEventsRef,
+    comboDamageMultiplierRef,
   });
   const weaponTick = externalTick ?? internalBlockWeapons.tick;
 
@@ -783,6 +940,11 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
           pausedRef={pausedRef}
           onEnemyKill={onEnemyKill}
           onLevelUp={onLevelUp}
+          comboXpMultiplierRef={comboXpMultiplierRef}
+          killCountRef={killCountRef}
+          onPhaseChange={onPhaseChange}
+          onEliteSpawn={onEliteSpawn}
+          comboUpdate={comboUpdate}
         />
       </Canvas>
 
