@@ -339,6 +339,11 @@ const MAX_ENEMY_PROJECTILES = 50;     // 적 투사체 최대 수
 
 const GEM_COLLECT_RANGE = 3;          // 잼 수집 범위 (MC 블록 3개)
 const GEM_MAGNET_RANGE = 8;           // 잼 자석 범위
+const PICKUP_COLLECT_RANGE = 3;       // 아이템 수집 범위 (MC 블록 3개)
+const PICKUP_HEAL_AMOUNT = 30;        // chicken 회복량
+const PICKUP_BOMB_DAMAGE = 50;        // bomb 범위 데미지
+const PICKUP_BOMB_RANGE = 15;         // bomb 폭발 반경
+const PICKUP_MAGNET_DURATION = 5;     // magnet 지속 시간 (초)
 
 // HP 회복/사망 설정
 const HP_REGEN_PER_SEC = 5;           // 자동 HP 회복 (초당)
@@ -482,7 +487,7 @@ function GameLogic({
       // 사망 중에는 쉐이크/플래시만 감쇠시키고 나머지 로직 스킵
       if (refs.screenShakeTimer.current > 0) {
         refs.screenShakeTimer.current -= realDt;
-        refs.screenShakeIntensity.current *= 0.92;
+        refs.screenShakeIntensity.current *= 0.82;
       }
       updateFlash(realDt);
       return;
@@ -785,8 +790,8 @@ function GameLogic({
             player.knockback.y = (pdy / pdist) * ENEMY_KNOCKBACK_FORCE * 0.5;
           }
 
-          refs.screenShakeTimer.current = 0.15;
-          refs.screenShakeIntensity.current = 0.2;
+          refs.screenShakeTimer.current = 0.1;
+          refs.screenShakeIntensity.current = 0.1;
 
           refs.damageNumbers.current.push({
             id: `eproj-dmg-${Date.now()}-${Math.random()}`,
@@ -918,8 +923,8 @@ function GameLogic({
                       player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
                       player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
                     }
-                    refs.screenShakeTimer.current = 0.2;
-                    refs.screenShakeIntensity.current = 0.3;
+                    refs.screenShakeTimer.current = 0.1;
+                    refs.screenShakeIntensity.current = 0.15;
                     refs.damageNumbers.current.push({
                       id: `dmg-${Date.now()}-${Math.random()}`,
                       position: { x: player.position.x, y: player.position.y },
@@ -969,8 +974,8 @@ function GameLogic({
                   player.knockback.x = dir.x * ENEMY_KNOCKBACK_FORCE * 2;
                   player.knockback.y = dir.y * ENEMY_KNOCKBACK_FORCE * 2;
                 }
-                refs.screenShakeTimer.current = 0.4;
-                refs.screenShakeIntensity.current = 0.5;
+                refs.screenShakeTimer.current = 0.2;
+                refs.screenShakeIntensity.current = 0.25;
                 refs.damageNumbers.current.push({
                   id: `charge-dmg-${Date.now()}-${Math.random()}`,
                   position: { x: player.position.x, y: player.position.y },
@@ -1060,8 +1065,8 @@ function GameLogic({
                   player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
                 }
 
-                refs.screenShakeTimer.current = 0.2;
-                refs.screenShakeIntensity.current = 0.3;
+                refs.screenShakeTimer.current = 0.1;
+                refs.screenShakeIntensity.current = 0.15;
 
                 refs.damageNumbers.current.push({
                   id: `dmg-${Date.now()}-${Math.random()}`,
@@ -1102,7 +1107,7 @@ function GameLogic({
     // 화면 쉐이크 감쇠 (realDt — 슬로모에 영향 받지 않음)
     if (refs.screenShakeTimer.current > 0) {
       refs.screenShakeTimer.current -= realDt;
-      refs.screenShakeIntensity.current *= 0.92;
+      refs.screenShakeIntensity.current *= 0.82;
     }
 
     // 잼 자석 수집 (v42 Phase 4: 콤보 XP 배율 적용)
@@ -1121,6 +1126,56 @@ function GameLogic({
       if (gd < GEM_MAGNET_RANGE && gd > 0.5) {
         gem.position.x -= (gdx / gd) * 12 * dt; // MC 스케일 자석 속도
         gem.position.y -= (gdy / gd) * 12 * dt;
+      }
+      return true;
+    });
+
+    // === v46: Pickup 아이템 수집 + 수명 감소 ===
+    refs.pickups.current = refs.pickups.current.filter(pickup => {
+      // 수명 감소
+      pickup.life -= dt;
+      if (pickup.life <= 0) return false;
+
+      // 거리 체크
+      const pdx = pickup.position.x - player.position.x;
+      const pdy = pickup.position.y - player.position.y;
+      const pd = Math.sqrt(pdx * pdx + pdy * pdy);
+
+      if (pd < PICKUP_COLLECT_RANGE) {
+        // 타입별 효과 적용
+        switch (pickup.type) {
+          case 'chicken':
+            player.health = Math.min(player.health + PICKUP_HEAL_AMOUNT, player.maxHealth);
+            break;
+          case 'bomb':
+            // 범위 내 모든 적에게 데미지
+            for (const enemy of refs.enemies.current) {
+              const edx = enemy.position.x - pickup.position.x;
+              const edy = enemy.position.y - pickup.position.y;
+              const eDist = Math.sqrt(edx * edx + edy * edy);
+              if (eDist < PICKUP_BOMB_RANGE && enemy.hp !== undefined) {
+                enemy.hp -= PICKUP_BOMB_DAMAGE;
+              }
+            }
+            break;
+          case 'magnet':
+            // 모든 젬을 플레이어에게 끌어당기기 (즉시)
+            for (const gem of refs.gems.current) {
+              gem.position.x = player.position.x + (Math.random() - 0.5) * 2;
+              gem.position.y = player.position.y + (Math.random() - 0.5) * 2;
+            }
+            break;
+          case 'chest':
+            // 보물 상자: 보너스 XP
+            player.xp += 50;
+            player.score += 100;
+            break;
+          case 'upgrade_material':
+            // 업그레이드 재료: 보너스 스코어
+            player.score += 200;
+            break;
+        }
+        return false; // 수집됨 → 제거
       }
       return true;
     });

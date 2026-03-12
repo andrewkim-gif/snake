@@ -217,6 +217,7 @@ function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeomet
 
   const positions = new Float32Array(totalVertices * 3);
   const normals = new Float32Array(totalVertices * 3);
+  const uvs = new Float32Array(totalVertices * 2); // UV 좌표 (텍스처 매핑용)
   const indices = new Uint16Array(totalIndices);
 
   let vertexOffset = 0;
@@ -225,6 +226,7 @@ function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeomet
   for (const geo of geometries) {
     const posAttr = geo.getAttribute('position') as THREE.BufferAttribute;
     const normAttr = geo.getAttribute('normal') as THREE.BufferAttribute;
+    const uvAttr = geo.getAttribute('uv') as THREE.BufferAttribute | null;
 
     if (!posAttr) continue;
 
@@ -241,6 +243,14 @@ function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeomet
         normals[(vertexOffset + i) * 3] = normAttr.getX(i);
         normals[(vertexOffset + i) * 3 + 1] = normAttr.getY(i);
         normals[(vertexOffset + i) * 3 + 2] = normAttr.getZ(i);
+      }
+    }
+
+    // UVs (텍스처 좌표 — 없으면 0으로 채움)
+    if (uvAttr) {
+      for (let i = 0; i < uvAttr.count; i++) {
+        uvs[(vertexOffset + i) * 2] = uvAttr.getX(i);
+        uvs[(vertexOffset + i) * 2 + 1] = uvAttr.getY(i);
       }
     }
 
@@ -264,6 +274,7 @@ function mergeGeometries(geometries: THREE.BufferGeometry[]): THREE.BufferGeomet
   const merged = new THREE.BufferGeometry();
   merged.setAttribute('position', new THREE.BufferAttribute(positions, 3));
   merged.setAttribute('normal', new THREE.BufferAttribute(normals, 3));
+  merged.setAttribute('uv', new THREE.BufferAttribute(uvs, 2));
   merged.setIndex(new THREE.BufferAttribute(indices, 1));
 
   return merged;

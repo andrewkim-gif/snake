@@ -46,8 +46,8 @@ const ORB_RADIUS = 0.35;
 /** v44: 아이템 기본 크기 (1.5→0.6) */
 const PICKUP_BASE_SIZE = 0.6;
 
-/** 부유 애니메이션 진폭 */
-const FLOAT_AMPLITUDE = 0.5;
+/** 부유 애니메이션 진폭 (0=바닥 고정, 빛나기만) */
+const FLOAT_AMPLITUDE = 0;
 
 /** 부유 애니메이션 주기 */
 const FLOAT_FREQUENCY = 2;
@@ -509,9 +509,9 @@ function PickupItemRenderer({ pickupsRef, playerRef }: PickupItemRendererProps) 
       const distSq = dx * dx + dz * dz;
       if (distSq > LOD_DISTANCE * LOD_DISTANCE) continue;
 
-      // 부유 + 회전 애니메이션 — 지형 높이 기반
-      const floatY = Math.sin(time * FLOAT_FREQUENCY * 0.8 + i * 1.3) * FLOAT_AMPLITUDE * 0.8;
-      const rotY = time * 1.5 + i * 0.5;
+      // 바닥 고정 + 고정 방향 (움직임 제거, 발광만)
+      const floatY = 0;
+      const rotY = i * 0.5; // 각 아이템 고유 방향만 (회전 없음)
       const terrainY = getMCTerrainHeight(px, pz);
       const typeSize = PICKUP_TYPE_SIZES[meshType] || PICKUP_BASE_SIZE;
       const baseY = terrainY + 1 + typeSize * 0.5;

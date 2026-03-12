@@ -294,8 +294,8 @@ export default function MCGameCamera({ playerRef, screenShakeTimerRef, screenSha
       const shakeTimer = screenShakeTimerRef.current;
       const shakeIntensity = screenShakeIntensityRef.current;
       if (shakeTimer > 0 && shakeIntensity > 0.01) {
-        // 랜덤 오프셋 (강도에 비례, 최대 ±1.5 블록)
-        const maxOffset = shakeIntensity * 1.5;
+        // 랜덤 오프셋 (강도에 비례, 최대 ±0.4 블록 — 과도한 쉐이크 방지)
+        const maxOffset = shakeIntensity * 0.4;
         const shakeX = (Math.random() - 0.5) * 2 * maxOffset;
         const shakeY = (Math.random() - 0.5) * 2 * maxOffset * 0.6; // 수직은 약하게
         const shakeZ = (Math.random() - 0.5) * 2 * maxOffset;
