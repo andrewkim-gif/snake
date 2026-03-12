@@ -64,6 +64,10 @@ import { WorldUI } from './3d/WorldUI';
 import { DamageNumbers } from './3d/DamageNumbers';
 import { EntityUI } from './3d/EntityUI';
 import { SafeZone3D } from './3d/SafeZone3D';
+// Phase 2 (v42): 블록 좌표 무기 3D 렌더러
+import BlockSkillWeapons from './3d/weapons/BlockSkillWeapons';
+import BlockRangedWeapons from './3d/weapons/BlockRangedWeapons';
+import BlockMeleeWeapons from './3d/weapons/BlockMeleeWeapons';
 // Phase 4 (HUD Integration): DOM Overlay HUD 컴포넌트
 import { GameHUD3D } from './3d/GameHUD3D';
 import { Minimap3D } from './3d/Minimap3D';
@@ -177,6 +181,11 @@ function SceneContent({
 
       {/* 적 사망 파편 폭발 */}
       <DeathParticles deathEventsRef={deathEventsRef} />
+
+      {/* v42 Phase 2: 블록 좌표 무기 3D 렌더러 (투사체 시각화) */}
+      <BlockRangedWeapons projectilesRef={refs.projectiles} />
+      <BlockMeleeWeapons projectilesRef={refs.projectiles} />
+      <BlockSkillWeapons projectilesRef={refs.projectiles} />
 
       {/* 파티클 시스템 */}
       <ParticleSystem qualityTier="HIGH" />
