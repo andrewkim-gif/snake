@@ -116,6 +116,10 @@ export interface MatrixSceneProps {
   onEliteSpawn?: (config: EliteSpawnConfig) => void;
   /** v42 Phase 4: 콤보 타이머 업데이트 (매 프레임 호출 — 콤보 decay 처리) */
   comboUpdate?: (dt: number) => void;
+  /** v42 Phase 5: 궁극기 해금 여부 ref */
+  ultimateUnlockedRef?: React.MutableRefObject<boolean>;
+  /** v42 Phase 5: 궁극기 쿨다운 ref (초 단위, 0이면 발동 가능) */
+  ultimateCooldownRef?: React.MutableRefObject<number>;
 }
 
 /** MC seed (MCGameCamera + MCVoxelTerrain 공유) */
@@ -144,6 +148,8 @@ function SceneContent({
   onPhaseChange,
   onEliteSpawn,
   comboUpdate,
+  ultimateUnlockedRef,
+  ultimateCooldownRef,
 }: {
   refs: GameRefs;
   warningIntensityRef: React.MutableRefObject<number>;
@@ -171,6 +177,10 @@ function SceneContent({
   onEliteSpawn?: (config: EliteSpawnConfig) => void;
   /** v42 Phase 4: 콤보 타이머 업데이트 함수 */
   comboUpdate?: (dt: number) => void;
+  /** v42 Phase 5: 궁극기 해금 ref */
+  ultimateUnlockedRef?: React.MutableRefObject<boolean>;
+  /** v42 Phase 5: 궁극기 쿨다운 ref */
+  ultimateCooldownRef?: React.MutableRefObject<number>;
 }) {
   return (
     <>
@@ -193,6 +203,8 @@ function SceneContent({
         onPhaseChange={onPhaseChange}
         onEliteSpawn={onEliteSpawn}
         comboUpdate={comboUpdate}
+        ultimateUnlockedRef={ultimateUnlockedRef}
+        ultimateCooldownRef={ultimateCooldownRef}
       />
 
       {/* 배경색 — MC 하늘색 */}
@@ -272,8 +284,8 @@ function SceneContent({
         />
       </WorldUI>
 
-      {/* 후처리 이펙트 — LOW 품질이면 모든 이펙트 비활성 → 마운트 제거 (불필요한 풀스크린 패스 제거) */}
-      {/* <PostProcessingEffects qualityTier="LOW" warningIntensityRef={warningIntensityRef} /> */}
+      {/* v42 Phase 5: 후처리 이펙트 활성화 — Bloom + Vignette (HIGH 품질) */}
+      <PostProcessingEffects qualityTier="HIGH" warningIntensityRef={warningIntensityRef} />
     </>
   );
 }
@@ -337,6 +349,10 @@ interface GameLogicProps {
   onEliteSpawn?: (config: EliteSpawnConfig) => void;
   /** v42 Phase 4: 콤보 타이머 업데이트 함수 (매 프레임 호출) */
   comboUpdate?: (dt: number) => void;
+  /** v42 Phase 5: 궁극기 해금 ref */
+  ultimateUnlockedRef?: React.MutableRefObject<boolean>;
+  /** v42 Phase 5: 궁극기 쿨다운 ref */
+  ultimateCooldownRef?: React.MutableRefObject<number>;
 }
 
 /**
@@ -361,6 +377,8 @@ function GameLogic({
   onPhaseChange,
   onEliteSpawn,
   comboUpdate,
+  ultimateUnlockedRef,
+  ultimateCooldownRef,
 }: GameLogicProps) {
   const prevTimeRef = useRef(performance.now());
   /** v42 Phase 4: 현재 Wave 페이즈 추적 (전환 감지용) */
@@ -433,6 +451,37 @@ function GameLogic({
 
     // === v42: 블록 좌표 무기 시스템 (기존 25dmg auto-attack 교체) ===
     blockWeaponsTick(dt);
+
+    // === v42 Phase 5: 궁극기 자동 발동 (Lv.20+, 30초 쿨다운) ===
+    if (ultimateUnlockedRef?.current && ultimateCooldownRef) {
+      if (ultimateCooldownRef.current > 0) {
+        ultimateCooldownRef.current -= dt;
+      } else {
+        // 궁극기 발동! 모든 적에 999 데미지
+        ultimateCooldownRef.current = 30; // 30초 쿨다운 리셋
+        const enemies = refs.enemies.current;
+        for (const enemy of enemies) {
+          if (enemy.health <= 0) continue;
+          enemy.health -= 999;
+          // 궁극기 데미지 넘버 (gold 색상, 크리티컬 사이즈)
+          refs.damageNumbers.current.push({
+            id: `ult-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+            position: { x: enemy.position.x, y: enemy.position.y },
+            value: 999,
+            color: '#FFD700',
+            life: 1.5,
+            maxLife: 1.5,
+            isCritical: true,
+            velocity: { x: (Math.random() - 0.5) * 3, y: -4 },
+          });
+          // 히트 플래시
+          hitFlashMapRef.current.set(enemy.id, 0.3);
+        }
+        // 대규모 화면 쉐이크 (궁극기 연출)
+        refs.screenShakeTimer.current = 0.8;
+        refs.screenShakeIntensity.current = 1.0;
+      }
+    }
 
     // === v42 Phase 4: 콤보 타이머 업데이트 (타임아웃 시 콤보 리셋) ===
     comboUpdate?.(dt);
@@ -751,7 +800,7 @@ function GameLogic({
  *
  * useFrame priority=0 필수 — non-zero priority는 R3F auto-render 비활성화
  */
-export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap, comboDamageMultiplierRef, comboXpMultiplierRef, killCountRef, onPhaseChange, onEliteSpawn, comboUpdate }: MatrixSceneProps) {
+export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap, comboDamageMultiplierRef, comboXpMultiplierRef, killCountRef, onPhaseChange, onEliteSpawn, comboUpdate, ultimateUnlockedRef, ultimateCooldownRef }: MatrixSceneProps) {
   // 내부 refs (외부에서 주입되지 않은 경우 자체 refs 생성)
   const internalRefs = useGameRefs();
   const refs = gameRefs ?? internalRefs;
@@ -945,6 +994,8 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
           onPhaseChange={onPhaseChange}
           onEliteSpawn={onEliteSpawn}
           comboUpdate={comboUpdate}
+          ultimateUnlockedRef={ultimateUnlockedRef}
+          ultimateCooldownRef={ultimateCooldownRef}
         />
       </Canvas>
 

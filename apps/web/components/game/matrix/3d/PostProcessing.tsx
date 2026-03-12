@@ -32,14 +32,15 @@ interface PostProcessingConfig {
   vignette: { enabled: boolean; darkness: number; offset: number };
 }
 
+/** v42 Phase 5: 투사체/이펙트 Bloom + 분위기 Vignette */
 const POST_PROCESSING_CONFIGS: Record<QualityTier, PostProcessingConfig> = {
   HIGH: {
-    bloom: { enabled: true, intensity: 0.5, radius: 0.4, threshold: 0.85 },
-    vignette: { enabled: true, darkness: 0.6, offset: 0.3 },
+    bloom: { enabled: true, intensity: 0.5, radius: 0.4, threshold: 0.7 },
+    vignette: { enabled: true, darkness: 0.7, offset: 0.1 },
   },
   MEDIUM: {
-    bloom: { enabled: true, intensity: 0.3, radius: 0.3, threshold: 0.9 },
-    vignette: { enabled: true, darkness: 0.4, offset: 0.4 },
+    bloom: { enabled: true, intensity: 0.3, radius: 0.3, threshold: 0.8 },
+    vignette: { enabled: true, darkness: 0.5, offset: 0.2 },
   },
   LOW: {
     bloom: { enabled: false, intensity: 0, radius: 0, threshold: 1 },

@@ -34,12 +34,13 @@ const FLOAT_SPEED = 8.0;
 /** 초기 높이 오프셋 (머리 위) */
 const INITIAL_HEIGHT = 3.5;
 
-/** 데미지 타입별 색상 */
+/** 데미지 타입별 색상 (Phase 5: 궁극기 + 크리티컬 강화) */
 const DAMAGE_COLORS = {
   normal: '#ffffff',
   enemy: '#ff4444',
   heal: '#44ff44',
   critical: '#ffd700',
+  ultimate: '#FFD700',
 } as const;
 
 type DamageType = keyof typeof DAMAGE_COLORS;
@@ -157,9 +158,11 @@ export function DamageNumbers({ damageNumbersRef, playerRef }: DamageNumbersProp
   }, []);
 
   /**
-   * 데미지 타입 판정
+   * 데미지 타입 판정 (Phase 5: 궁극기 999 감지)
    */
   const getDamageType = useCallback((dn: DamageNumber): DamageType => {
+    // Phase 5: 궁극기 데미지 (999) — 특별 표시
+    if (dn.value === 999 && dn.color === '#FFD700') return 'ultimate';
     if (dn.isCritical) return 'critical';
     if (dn.color === '#44ff44' || dn.color === 'green' || dn.color?.includes('green')) return 'heal';
     if (dn.color === '#ff4444' || dn.color === 'red' || dn.color?.includes('red')) return 'enemy';
@@ -186,12 +189,28 @@ export function DamageNumbers({ damageNumbersRef, playerRef }: DamageNumbersProp
         slot.worldX = dn.position.x;
         slot.worldY = dn.position.y;
         slot.height = INITIAL_HEIGHT;
-        slot.text = type === 'heal' ? `+${Math.abs(dn.value)}` : String(Math.abs(dn.value));
-        slot.color = DAMAGE_COLORS[type];
-        slot.fontSize = dn.isCritical ? 20 : 14;
-        slot.remaining = DAMAGE_NUMBER_DURATION;
-        slot.duration = DAMAGE_NUMBER_DURATION;
-        slot.isCritical = dn.isCritical ?? false;
+        // Phase 5: 궁극기 텍스트 강화
+        if (type === 'ultimate') {
+          slot.text = '999';
+          slot.fontSize = 24;
+          slot.color = DAMAGE_COLORS.ultimate;
+        } else if (type === 'heal') {
+          slot.text = `+${Math.abs(dn.value)}`;
+          slot.fontSize = 14;
+          slot.color = DAMAGE_COLORS.heal;
+        } else if (type === 'critical') {
+          // Phase 5: 크리티컬 강화 — 더 크게, "CRIT!" 접두사
+          slot.text = dn.value >= 100 ? `CRIT! ${dn.value}` : String(dn.value);
+          slot.fontSize = dn.value >= 100 ? 22 : 20;
+          slot.color = DAMAGE_COLORS.critical;
+        } else {
+          slot.text = String(Math.abs(dn.value));
+          slot.fontSize = 14;
+          slot.color = DAMAGE_COLORS[type];
+        }
+        slot.remaining = type === 'ultimate' ? 1.5 : DAMAGE_NUMBER_DURATION;
+        slot.duration = type === 'ultimate' ? 1.5 : DAMAGE_NUMBER_DURATION;
+        slot.isCritical = dn.isCritical ?? type === 'ultimate';
       }
     }
 
