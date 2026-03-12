@@ -44,8 +44,10 @@
 import React, { useRef, useMemo, useEffect, useCallback } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGameRefs, type GameRefs } from '@/lib/matrix/hooks/useGameRefs';
+import type { Enemy } from '@/lib/matrix/types';
 import { useBlockWeapons } from '@/lib/matrix/hooks/useBlockWeapons';
 import { getBlockWeaponStats } from '@/lib/matrix/config/block-weapon-stats';
+import { XP_THRESHOLDS } from '@/lib/matrix/config/index';
 import { setMCTerrainSeed, invalidateHeightCache } from '@/lib/matrix/rendering3d/mc-terrain-height';
 import { GameLighting } from './3d/GameLighting';
 import MCGameCamera from './3d/MCGameCamera';
@@ -85,6 +87,14 @@ export interface MatrixSceneProps {
   gameRefs?: GameRefs;
   /** 블록 좌표 무기 시스템 tick (GameLogic useFrame에서 호출) — 외부 주입 시 사용 */
   blockWeaponsTick?: (dt: number) => void;
+  /** v42 Phase 3: 레벨업 중 게임 일시정지 */
+  pausedRef?: React.MutableRefObject<boolean>;
+  /** v42 Phase 3: 적 처치 콜백 (콤보/XP 처리) */
+  onEnemyKill?: (enemy: Enemy) => void;
+  /** v42 Phase 3: XP 임계값 도달 시 레벨업 콜백 (player.level, player.xp 전달) */
+  onLevelUp?: (level: number) => void;
+  /** v42 Phase 3: useSkillBuild의 playerSkills (weapon→level 맵) — 변경 시 player.weapons 동기화 */
+  playerSkillsMap?: Map<string, number>;
 }
 
 /** MC seed (MCGameCamera + MCVoxelTerrain 공유) */
@@ -105,6 +115,9 @@ function SceneContent({
   deathRespawnTimerRef,
   updateFlash,
   blockWeaponsTick,
+  pausedRef,
+  onEnemyKill,
+  onLevelUp,
 }: {
   refs: GameRefs;
   warningIntensityRef: React.MutableRefObject<number>;
@@ -116,6 +129,12 @@ function SceneContent({
   deathRespawnTimerRef: React.MutableRefObject<number>;
   updateFlash: (dt: number) => void;
   blockWeaponsTick: (dt: number) => void;
+  /** v42 Phase 3: 일시정지 ref */
+  pausedRef?: React.MutableRefObject<boolean>;
+  /** v42 Phase 3: 적 처치 콜백 */
+  onEnemyKill?: (enemy: Enemy) => void;
+  /** v42 Phase 3: XP 임계값 도달 시 레벨업 콜백 */
+  onLevelUp?: (level: number) => void;
 }) {
   return (
     <>
@@ -130,6 +149,9 @@ function SceneContent({
         deathRespawnTimerRef={deathRespawnTimerRef}
         updateFlash={updateFlash}
         blockWeaponsTick={blockWeaponsTick}
+        pausedRef={pausedRef}
+        onEnemyKill={onEnemyKill}
+        onLevelUp={onLevelUp}
       />
 
       {/* 배경색 — MC 하늘색 */}
@@ -258,6 +280,12 @@ interface GameLogicProps {
   updateFlash: (dt: number) => void;
   /** v42: 블록 좌표 무기 시스템 tick */
   blockWeaponsTick: (dt: number) => void;
+  /** v42 Phase 3: 일시정지 ref */
+  pausedRef?: React.MutableRefObject<boolean>;
+  /** v42 Phase 3: 적 처치 콜백 */
+  onEnemyKill?: (enemy: Enemy) => void;
+  /** v42 Phase 3: XP 임계값 도달 시 레벨업 콜백 */
+  onLevelUp?: (level: number) => void;
 }
 
 /**
@@ -274,6 +302,9 @@ function GameLogic({
   deathRespawnTimerRef,
   updateFlash,
   blockWeaponsTick,
+  pausedRef,
+  onEnemyKill,
+  onLevelUp,
 }: GameLogicProps) {
   const prevTimeRef = useRef(performance.now());
 
@@ -286,6 +317,9 @@ function GameLogic({
     prevTimeRef.current = now;
 
     if (dt <= 0) return;
+
+    // v42 Phase 3: 일시정지 중에는 전체 게임 로직 스킵 (레벨업 UI 표시 중)
+    if (pausedRef?.current) return;
 
     const player = refs.player.current;
 
@@ -351,6 +385,9 @@ function GameLogic({
         hitFlashMapRef.current.delete(enemy.id);
         refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, 0.1);
         refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isBoss ? 0.4 : 0.15);
+
+        // v42 Phase 3: 적 처치 콜백 (콤보/XP 처리)
+        onEnemyKill?.(enemy);
 
         return false;
       }
@@ -528,6 +565,20 @@ function GameLogic({
       return true;
     });
 
+    // === v42 Phase 3: XP 임계값 체크 → 레벨업 ===
+    if (onLevelUp && player.xp >= player.nextLevelXp) {
+      player.level++;
+      // 초과 XP는 유지 (이월)
+      player.xp -= player.nextLevelXp;
+      // 다음 레벨 XP 임계값 설정
+      player.nextLevelXp = player.level < XP_THRESHOLDS.length
+        ? XP_THRESHOLDS[player.level]
+        : Math.floor(player.nextLevelXp * 1.1);
+      // 일시정지 + 레벨업 콜백
+      if (pausedRef) pausedRef.current = true;
+      onLevelUp(player.level);
+    }
+
     // Screen Flash 업데이트
     updateFlash(dt);
   });
@@ -544,7 +595,7 @@ function GameLogic({
  *
  * useFrame priority=0 필수 — non-zero priority는 R3F auto-render 비활성화
  */
-export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick }: MatrixSceneProps) {
+export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap }: MatrixSceneProps) {
   // 내부 refs (외부에서 주입되지 않은 경우 자체 refs 생성)
   const internalRefs = useGameRefs();
   const refs = gameRefs ?? internalRefs;
@@ -665,6 +716,30 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // v42 Phase 3: playerSkillsMap 변경 시 player.weapons 동기화
+  useEffect(() => {
+    if (!playerSkillsMap || playerSkillsMap.size === 0) return;
+    const newWeapons: Record<string, any> = {};
+    playerSkillsMap.forEach((level, weaponType) => {
+      if (level <= 0) return;
+      const stats = getBlockWeaponStats(weaponType as import('@/lib/matrix/types').WeaponType, level);
+      if (stats) {
+        newWeapons[weaponType] = {
+          level,
+          damage: stats.damage,
+          area: stats.area,
+          speed: stats.speed,
+          duration: stats.duration,
+          cooldown: stats.cooldown,
+          amount: stats.amount,
+          pierce: stats.pierce,
+          knockback: stats.knockback,
+        };
+      }
+    });
+    refs.player.current.weapons = newWeapons;
+  }, [playerSkillsMap, refs.player]);
+
   // 게임 루프 → Canvas 내부 GameLogic 컴포넌트로 이동 (useFrame 직접 실행)
 
   return (
@@ -705,6 +780,9 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
           deathRespawnTimerRef={deathRespawnTimerRef}
           updateFlash={updateFlash}
           blockWeaponsTick={weaponTick}
+          pausedRef={pausedRef}
+          onEnemyKill={onEnemyKill}
+          onLevelUp={onLevelUp}
         />
       </Canvas>
 
