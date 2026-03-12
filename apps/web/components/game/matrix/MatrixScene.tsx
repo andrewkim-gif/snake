@@ -41,7 +41,7 @@
  * - ScreenFlashOverlay (DOM 기반 화면 플래시, S33)
  */
 
-import React, { useRef, useMemo, useEffect, useCallback } from 'react';
+import React, { useRef, useMemo, useEffect } from 'react';
 import { Canvas, useFrame } from '@react-three/fiber';
 import { useGameRefs, type GameRefs } from '@/lib/matrix/hooks/useGameRefs';
 import type { Enemy } from '@/lib/matrix/types';
@@ -339,7 +339,6 @@ const MAX_ENEMY_PROJECTILES = 50;     // 적 투사체 최대 수
 
 const GEM_COLLECT_RANGE = 3;          // 잼 수집 범위 (MC 블록 3개)
 const GEM_MAGNET_RANGE = 8;           // 잼 자석 범위
-const ENEMY_HIT_FLASH_DURATION = 0.12;
 
 // HP 회복/사망 설정
 const HP_REGEN_PER_SEC = 5;           // 자동 HP 회복 (초당)
@@ -404,10 +403,8 @@ interface GameLogicProps {
  */
 function GameLogic({
   refs,
-  attackEventsRef,
   deathEventsRef,
   hitFlashMapRef,
-  playerAttackTimerRef,
   respawnTimerRef,
   deathRespawnTimerRef,
   updateFlash,
@@ -1158,7 +1155,7 @@ function GameLogic({
  *
  * useFrame priority=0 필수 — non-zero priority는 R3F auto-render 비활성화
  */
-export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap, comboDamageMultiplierRef, comboXpMultiplierRef, killCountRef, onPhaseChange, onEliteSpawn, comboUpdate, ultimateUnlockedRef, ultimateCooldownRef }: MatrixSceneProps) {
+export function MatrixScene({ gameRefs, blockWeaponsTick: externalTick, pausedRef, onEnemyKill, onLevelUp, playerSkillsMap, comboDamageMultiplierRef, comboXpMultiplierRef, killCountRef, onPhaseChange, onEliteSpawn, comboUpdate, ultimateUnlockedRef, ultimateCooldownRef }: MatrixSceneProps) {
   // 내부 refs (외부에서 주입되지 않은 경우 자체 refs 생성)
   const internalRefs = useGameRefs();
   const refs = gameRefs ?? internalRefs;

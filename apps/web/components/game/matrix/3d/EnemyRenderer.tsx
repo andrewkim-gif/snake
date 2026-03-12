@@ -24,7 +24,6 @@ import {
   getTemplateIdForEnemy,
   getTemplateParts,
   disposeAllTemplates,
-  TEMPLATE_SIZES,
 } from '@/lib/matrix/rendering3d/enemy-templates';
 import { getMCTerrainHeight } from '@/lib/matrix/rendering3d/mc-terrain-height';
 import {

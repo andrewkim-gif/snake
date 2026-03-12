@@ -11,7 +11,7 @@
  */
 
 import { useRef, useMemo, useEffect, useCallback } from 'react';
-import { useFrame, useThree } from '@react-three/fiber';
+import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MCNoise, type ChunkBlockData } from '@/lib/3d/mc-noise';
 import { BlockType, MC_CLOUD_HEIGHT, CHUNK_SIZE, blockKey } from '@/lib/3d/mc-types';
@@ -112,7 +112,6 @@ interface ExposedBlock {
 }
 
 export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
-  const { camera } = useThree();
   const groupRef = useRef<THREE.Group>(null);
   const noiseRef = useRef(new MCNoise(seed));
 
