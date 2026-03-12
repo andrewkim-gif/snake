@@ -60,13 +60,17 @@ export interface MCGameCameraProps {
     velocity: { x: number; y: number };
     height3d?: number;
   }>;
+  /** v44: 화면 쉐이크 타이머 ref (>0이면 쉐이크 활성) */
+  screenShakeTimerRef?: React.MutableRefObject<number>;
+  /** v44: 화면 쉐이크 강도 ref (0~1) */
+  screenShakeIntensityRef?: React.MutableRefObject<number>;
 }
 
 // ============================================
 // Component
 // ============================================
 
-export default function MCGameCamera({ playerRef }: MCGameCameraProps) {
+export default function MCGameCamera({ playerRef, screenShakeTimerRef, screenShakeIntensityRef }: MCGameCameraProps) {
   const { camera } = useThree();
   const controlsRef = useRef<any>(null);
   const keysRef = useRef<Set<string>>(new Set());
@@ -284,6 +288,22 @@ export default function MCGameCamera({ playerRef }: MCGameCameraProps) {
     playerRef.current.height3d = pos.y; // 3D Y 좌표 (점프 포함)
     playerRef.current.velocity.x = cur.x;
     playerRef.current.velocity.y = cur.z;
+
+    // --- 6. v44: 카메라 쉐이크 오프셋 적용 ---
+    if (screenShakeTimerRef && screenShakeIntensityRef) {
+      const shakeTimer = screenShakeTimerRef.current;
+      const shakeIntensity = screenShakeIntensityRef.current;
+      if (shakeTimer > 0 && shakeIntensity > 0.01) {
+        // 랜덤 오프셋 (강도에 비례, 최대 ±1.5 블록)
+        const maxOffset = shakeIntensity * 1.5;
+        const shakeX = (Math.random() - 0.5) * 2 * maxOffset;
+        const shakeY = (Math.random() - 0.5) * 2 * maxOffset * 0.6; // 수직은 약하게
+        const shakeZ = (Math.random() - 0.5) * 2 * maxOffset;
+        camera.position.x += shakeX;
+        camera.position.y += shakeY;
+        camera.position.z += shakeZ;
+      }
+    }
   });
 
   return (

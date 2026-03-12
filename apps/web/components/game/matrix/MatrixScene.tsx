@@ -150,6 +150,9 @@ function SceneContent({
   comboUpdate,
   ultimateUnlockedRef,
   ultimateCooldownRef,
+  triggerFlash,
+  gameSpeedRef,
+  slowmoTimerRef,
 }: {
   refs: GameRefs;
   warningIntensityRef: React.MutableRefObject<number>;
@@ -181,6 +184,12 @@ function SceneContent({
   ultimateUnlockedRef?: React.MutableRefObject<boolean>;
   /** v42 Phase 5: 궁극기 쿨다운 ref */
   ultimateCooldownRef?: React.MutableRefObject<number>;
+  /** v44: 화면 플래시 트리거 */
+  triggerFlash?: (options?: { color?: string; intensity?: number; decayRate?: number }) => void;
+  /** v44: 게임 속도 ref (슬로모) */
+  gameSpeedRef?: React.MutableRefObject<number>;
+  /** v44: 슬로모 타이머 ref */
+  slowmoTimerRef?: React.MutableRefObject<number>;
 }) {
   return (
     <>
@@ -205,17 +214,22 @@ function SceneContent({
         comboUpdate={comboUpdate}
         ultimateUnlockedRef={ultimateUnlockedRef}
         ultimateCooldownRef={ultimateCooldownRef}
+        triggerFlash={triggerFlash}
+        gameSpeedRef={gameSpeedRef}
+        slowmoTimerRef={slowmoTimerRef}
       />
 
       {/* 배경색 — MC 하늘색 */}
       <color attach="background" args={['#87ceeb']} />
 
-      {/* 안개 — 지형 범위(120블록)보다 안쪽에서 완전 페이드아웃 */}
-      <fog attach="fog" args={['#87ceeb', 60, 110]} />
+      {/* 안개 — 산봉우리(75블록)가 보이도록 far 확장, 가장자리 자연 페이드 */}
+      <fog attach="fog" args={['#87ceeb', 70, 130]} />
 
-      {/* 3인칭 팔로우 카메라 — 마우스 드래그 회전 + WASD 이동 + MC 지형 추적 */}
+      {/* 3인칭 팔로우 카메라 — 마우스 드래그 회전 + WASD 이동 + MC 지형 추적 + v44 쉐이크 */}
       <MCGameCamera
         playerRef={refs.player}
+        screenShakeTimerRef={refs.screenShakeTimer}
+        screenShakeIntensityRef={refs.screenShakeIntensity}
       />
 
       {/* 조명 — MC 스타일 */}
@@ -254,8 +268,8 @@ function SceneContent({
         facingRef={refs.lastFacing}
       />
 
-      {/* 적 사망 파편 폭발 */}
-      <DeathParticles deathEventsRef={deathEventsRef} />
+      {/* 적 사망 파편 폭발 (v44: 스파크 레이어 + 슬로모 연동) */}
+      <DeathParticles deathEventsRef={deathEventsRef} gameSpeedRef={gameSpeedRef} />
 
       {/* v42 Phase 2: 블록 좌표 무기 3D 렌더러 (투사체 시각화) */}
       <BlockRangedWeapons projectilesRef={refs.projectiles} />
@@ -353,6 +367,12 @@ interface GameLogicProps {
   ultimateUnlockedRef?: React.MutableRefObject<boolean>;
   /** v42 Phase 5: 궁극기 쿨다운 ref */
   ultimateCooldownRef?: React.MutableRefObject<number>;
+  /** v44: 화면 플래시 트리거 함수 */
+  triggerFlash?: (options?: { color?: string; intensity?: number; decayRate?: number }) => void;
+  /** v44: 게임 속도 ref (슬로모 시스템) */
+  gameSpeedRef?: React.MutableRefObject<number>;
+  /** v44: 슬로모 타이머 ref */
+  slowmoTimerRef?: React.MutableRefObject<number>;
 }
 
 /**
@@ -379,6 +399,9 @@ function GameLogic({
   comboUpdate,
   ultimateUnlockedRef,
   ultimateCooldownRef,
+  triggerFlash,
+  gameSpeedRef,
+  slowmoTimerRef,
 }: GameLogicProps) {
   const prevTimeRef = useRef(performance.now());
   /** v42 Phase 4: 현재 Wave 페이즈 추적 (전환 감지용) */
@@ -391,10 +414,33 @@ function GameLogic({
     invalidateHeightCache();
 
     const now = performance.now();
-    const dt = Math.min((now - prevTimeRef.current) / 1000, 0.1);
+    const realDt = Math.min((now - prevTimeRef.current) / 1000, 0.1);
     prevTimeRef.current = now;
 
-    if (dt <= 0) return;
+    if (realDt <= 0) return;
+
+    // === v44: 슬로모 시스템 업데이트 (실시간 dt 사용) ===
+    if (gameSpeedRef && slowmoTimerRef) {
+      if (slowmoTimerRef.current > 0) {
+        slowmoTimerRef.current -= realDt;
+        if (slowmoTimerRef.current <= 0) {
+          slowmoTimerRef.current = 0;
+          // smoothstep 복귀 시작 — 이미 타이머 만료, 즉시 1.0으로 복구
+          gameSpeedRef.current = 1.0;
+        }
+      } else if (gameSpeedRef.current < 1.0) {
+        // smoothstep 복귀: 0.2 → 1.0 over ~0.15초 (빠른 복귀)
+        const t = Math.min(1, realDt / 0.15);
+        // smoothstep: 3t^2 - 2t^3
+        const smooth = t * t * (3 - 2 * t);
+        gameSpeedRef.current = Math.min(1.0, gameSpeedRef.current + smooth * (1.0 - gameSpeedRef.current) + 0.05);
+        if (gameSpeedRef.current > 0.98) gameSpeedRef.current = 1.0;
+      }
+    }
+
+    // 게임 속도 적용된 dt (슬로모 영향)
+    const gameSpeed = gameSpeedRef?.current ?? 1.0;
+    const dt = realDt * gameSpeed;
 
     // v42 Phase 3: 일시정지 중에는 전체 게임 로직 스킵 (레벨업 UI 표시 중)
     if (pausedRef?.current) return;
@@ -403,7 +449,7 @@ function GameLogic({
 
     // === 사망 중: 적 공격 무시 + 부활 타이머 ===
     if (player.health <= 0) {
-      deathRespawnTimerRef.current += dt;
+      deathRespawnTimerRef.current += realDt; // 부활 타이머는 realDt (슬로모 영향 X)
       if (deathRespawnTimerRef.current >= DEATH_RESPAWN_DELAY) {
         // 자동 부활: HP 100% + 위치 리셋 (현재 위치 유지, 무적 부여)
         player.health = player.maxHealth;
@@ -415,10 +461,10 @@ function GameLogic({
       }
       // 사망 중에는 쉐이크/플래시만 감쇠시키고 나머지 로직 스킵
       if (refs.screenShakeTimer.current > 0) {
-        refs.screenShakeTimer.current -= dt;
+        refs.screenShakeTimer.current -= realDt;
         refs.screenShakeIntensity.current *= 0.92;
       }
-      updateFlash(dt);
+      updateFlash(realDt);
       return;
     }
 
@@ -493,6 +539,8 @@ function GameLogic({
           position: { x: enemy.position.x, y: enemy.position.y },
           color: enemy.color || (enemy.isBoss ? '#ff4444' : '#44aaff'),
           isBoss: enemy.isBoss,
+          isElite: enemy.isElite,
+          eliteTier: enemy.eliteTier,
         });
 
         // v42 Phase 4: 엘리트 적은 더 높은 XP 젬 드롭
@@ -509,8 +557,33 @@ function GameLogic({
 
         player.score += gemValue;
         hitFlashMapRef.current.delete(enemy.id);
-        refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, enemy.isElite ? 0.5 : 0.1);
+        refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, enemy.isElite ? 0.5 : enemy.isBoss ? 0.3 : 0.1);
         refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isElite ? 0.7 : enemy.isBoss ? 0.4 : 0.15);
+
+        // v44: 보스/엘리트 사망 시 화면 플래시 + 슬로모 트리거
+        if (enemy.isElite && triggerFlash) {
+          // 엘리트: 티어별 색상 플래시
+          const tierFlashColors: Record<string, string> = {
+            silver: '#C0C0C0',
+            gold: '#FFD700',
+            diamond: '#00FFFF',
+          };
+          const flashColor = enemy.eliteTier ? tierFlashColors[enemy.eliteTier] ?? '#ffffff' : '#ffffff';
+          triggerFlash({ color: flashColor, intensity: 0.8, decayRate: 4.0 });
+          // 엘리트 슬로모
+          if (gameSpeedRef && slowmoTimerRef) {
+            gameSpeedRef.current = 0.2;
+            slowmoTimerRef.current = 0.3;
+          }
+        } else if (enemy.isBoss && triggerFlash) {
+          // 보스: 흰색 플래시 (강하게)
+          triggerFlash({ color: '#ffffff', intensity: 0.8, decayRate: 3.0 });
+          // 보스 슬로모
+          if (gameSpeedRef && slowmoTimerRef) {
+            gameSpeedRef.current = 0.2;
+            slowmoTimerRef.current = 0.3;
+          }
+        }
 
         // v42 Phase 4: 엘리트 처치 시 특수 드롭 (pickup)
         if (enemy.isElite && enemy.eliteTier) {
@@ -744,9 +817,9 @@ function GameLogic({
       player.hitFlashTimer -= dt;
     }
 
-    // 화면 쉐이크 감쇠
+    // 화면 쉐이크 감쇠 (realDt — 슬로모에 영향 받지 않음)
     if (refs.screenShakeTimer.current > 0) {
-      refs.screenShakeTimer.current -= dt;
+      refs.screenShakeTimer.current -= realDt;
       refs.screenShakeIntensity.current *= 0.92;
     }
 
@@ -784,8 +857,8 @@ function GameLogic({
       onLevelUp(player.level);
     }
 
-    // Screen Flash 업데이트
-    updateFlash(dt);
+    // Screen Flash 업데이트 (realDt — 슬로모에 영향 받지 않음)
+    updateFlash(realDt);
   });
 
   return null;
@@ -821,6 +894,10 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
   const playerAttackTimerRef = useRef(0);
   const respawnTimerRef = useRef(0);
   const deathRespawnTimerRef = useRef(0);
+
+  // === v44: 슬로모 시스템 refs ===
+  const gameSpeedRef = useRef(1.0);
+  const slowmoTimerRef = useRef(0);
 
   // 3인칭 모드: WASD는 MCGameCamera가 직접 관리
   const containerRef = useRef<HTMLDivElement>(null);
@@ -996,6 +1073,9 @@ export function MatrixScene({ gameActive, gameRefs, blockWeaponsTick: externalTi
           comboUpdate={comboUpdate}
           ultimateUnlockedRef={ultimateUnlockedRef}
           ultimateCooldownRef={ultimateCooldownRef}
+          triggerFlash={triggerFlash}
+          gameSpeedRef={gameSpeedRef}
+          slowmoTimerRef={slowmoTimerRef}
         />
       </Canvas>
 
