@@ -15,6 +15,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { MCNoise, type ChunkBlockData } from '@/lib/3d/mc-noise';
 import { BlockType, MC_CLOUD_HEIGHT, CHUNK_SIZE, blockKey } from '@/lib/3d/mc-types';
+import { getGrassVariantIndex, GRASS_VARIANT_TEXTURES } from '@/lib/3d/block-textures';
 
 // 렌더 거리 (청크 단위) — 6이면 13x13=169 청크, 96블록 반경 (산봉우리 75블록 포함)
 const RENDER_DISTANCE = 6;
@@ -37,6 +38,9 @@ const MAX_INSTANCES: Record<string, number> = {
   tree: 10000,
   leaf: 40000,
 };
+
+// 잔디 변형 상단 오버레이 최대 인스턴스 (variant 1=dark, 2=dry, 3=lush, 각 ~20000)
+const GRASS_VARIANT_MAX = 20000;
 
 // 구름 설정
 const CLOUD_COUNT = 30;
@@ -216,15 +220,30 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     const grassTopGeo = new THREE.PlaneGeometry(1, 1);
     grassTopGeo.rotateX(-Math.PI / 2); // XZ 평면으로 회전 (상단 면)
     const grassTopMat = new THREE.MeshLambertMaterial({
-      map: loadBlockTexture(`${TEX_PATH}/grass_top_green.png`),
+      map: loadBlockTexture(GRASS_VARIANT_TEXTURES[0]),
     });
     const grassTopMesh = new THREE.InstancedMesh(grassTopGeo, grassTopMat, MAX_INSTANCES.grass);
     grassTopMesh.count = 0;
     grassTopMesh.frustumCulled = false;
 
+    // 잔디 변형 상단 오버레이 (dark, dry, lush) — V45 텍스처 다양화
+    const grassTopVariants: THREE.InstancedMesh[] = [];
+    for (let v = 1; v <= 3; v++) {
+      const varGeo = new THREE.PlaneGeometry(1, 1);
+      varGeo.rotateX(-Math.PI / 2);
+      const varMat = new THREE.MeshLambertMaterial({
+        map: loadBlockTexture(GRASS_VARIANT_TEXTURES[v]),
+      });
+      const varMesh = new THREE.InstancedMesh(varGeo, varMat, GRASS_VARIANT_MAX);
+      varMesh.count = 0;
+      varMesh.frustumCulled = false;
+      grassTopVariants.push(varMesh);
+    }
+
     return {
       grassMesh, dirtMesh, stoneMesh, sandMesh, treeMesh, leafMesh,
       coalMesh, bedrockMesh, cobblestoneMesh, gravelMesh, grassTopMesh,
+      grassTopVariants,
     };
   }, [materials]);
 
@@ -348,8 +367,9 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       sand: 0, tree: 0, leaf: 0,
     };
     const matrix = new THREE.Matrix4();
-    // 잔디 상단 오버레이 카운터
+    // 잔디 상단 오버레이 카운터 (variant 0=기본, 1=dark, 2=dry, 3=lush)
     let grassTopCount = 0;
+    const variantCounts = [0, 0, 0]; // variant 1,2,3 카운터
 
     for (const exposed of chunkExposedRef.current.values()) {
       for (const eb of exposed) {
@@ -360,11 +380,25 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
         meshMap[eb.meshKey].setMatrixAt(idx, matrix);
         counters[eb.meshKey] = idx + 1;
 
-        // 잔디 블록인 경우 상단 오버레이 추가 (Y+1.001 — 약간 위에 배치하여 Z-fighting 방지)
-        if (eb.meshKey === 'grass' && grassTopCount < MAX_INSTANCES.grass) {
+        // 잔디 블록인 경우 상단 오버레이 추가 — 해시 기반 변형 선택
+        if (eb.meshKey === 'grass') {
+          const vi = getGrassVariantIndex(eb.x, eb.z);
           matrix.makeTranslation(eb.x + 0.5, eb.y + 1.001, eb.z + 0.5);
-          meshes.grassTopMesh.setMatrixAt(grassTopCount, matrix);
-          grassTopCount++;
+
+          if (vi === 0) {
+            // 기본 잔디 상단
+            if (grassTopCount < MAX_INSTANCES.grass) {
+              meshes.grassTopMesh.setMatrixAt(grassTopCount, matrix);
+              grassTopCount++;
+            }
+          } else {
+            // 변형 잔디 상단 (vi=1→dark, 2→dry, 3→lush)
+            const vIdx = vi - 1;
+            if (variantCounts[vIdx] < GRASS_VARIANT_MAX) {
+              meshes.grassTopVariants[vIdx].setMatrixAt(variantCounts[vIdx], matrix);
+              variantCounts[vIdx]++;
+            }
+          }
         }
       }
     }
@@ -375,9 +409,14 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       if (counters[key] > 0) mesh.instanceMatrix.needsUpdate = true;
     }
 
-    // 잔디 상단 오버레이 업데이트
+    // 잔디 상단 오버레이 업데이트 (기본 + 3 변형)
     meshes.grassTopMesh.count = grassTopCount;
     if (grassTopCount > 0) meshes.grassTopMesh.instanceMatrix.needsUpdate = true;
+
+    for (let v = 0; v < 3; v++) {
+      meshes.grassTopVariants[v].count = variantCounts[v];
+      if (variantCounts[v] > 0) meshes.grassTopVariants[v].instanceMatrix.needsUpdate = true;
+    }
   }, [meshMap, meshes]);
 
   // ============================================
