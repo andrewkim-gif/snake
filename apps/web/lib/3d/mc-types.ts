@@ -20,6 +20,10 @@ export enum BlockType {
   bedrock = 11,
   cobblestone = 12,
   gravel = 13,
+  birch_tree = 14,
+  birch_leaf = 15,
+  spruce_tree = 16,
+  spruce_leaf = 17,
 }
 
 // ---------------------------------------------------------------------------
@@ -93,6 +97,10 @@ export const BLOCK_NAMES: Record<BlockType, string> = {
   [BlockType.bedrock]: 'Bedrock',
   [BlockType.cobblestone]: 'Cobblestone',
   [BlockType.gravel]: 'Gravel',
+  [BlockType.birch_tree]: 'Birch Log',
+  [BlockType.birch_leaf]: 'Birch Leaves',
+  [BlockType.spruce_tree]: 'Spruce Log',
+  [BlockType.spruce_leaf]: 'Spruce Leaves',
 }
 
 // ---------------------------------------------------------------------------
@@ -229,6 +237,30 @@ export const BLOCK_PROPERTIES: Record<BlockType, BlockProperties> = {
     hardness: 0.6,
     isLightPassthrough: false,
   },
+  [BlockType.birch_tree]: {
+    isTransparent: false,
+    isSolid: true,
+    hardness: 2.0,
+    isLightPassthrough: false,
+  },
+  [BlockType.birch_leaf]: {
+    isTransparent: true,
+    isSolid: true,
+    hardness: 0.2,
+    isLightPassthrough: true,
+  },
+  [BlockType.spruce_tree]: {
+    isTransparent: false,
+    isSolid: true,
+    hardness: 2.0,
+    isLightPassthrough: false,
+  },
+  [BlockType.spruce_leaf]: {
+    isTransparent: true,
+    isSolid: true,
+    hardness: 0.2,
+    isLightPassthrough: true,
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -313,6 +345,26 @@ export const BLOCK_TEXTURE_MAP: Record<Exclude<BlockType, BlockType.AIR>, BlockT
     side: `${TEX}/gravel.png`,
     bottom: `${TEX}/gravel.png`,
   },
+  [BlockType.birch_tree]: {
+    top: `${TEX}/birch_log.png`,
+    side: `${TEX}/birch_log.png`,
+    bottom: `${TEX}/birch_log.png`,
+  },
+  [BlockType.birch_leaf]: {
+    top: `${TEX}/birch_leaves.png`,
+    side: `${TEX}/birch_leaves.png`,
+    bottom: `${TEX}/birch_leaves.png`,
+  },
+  [BlockType.spruce_tree]: {
+    top: `${TEX}/spruce_log.png`,
+    side: `${TEX}/spruce_log.png`,
+    bottom: `${TEX}/spruce_log.png`,
+  },
+  [BlockType.spruce_leaf]: {
+    top: `${TEX}/spruce_leaves.png`,
+    side: `${TEX}/spruce_leaves.png`,
+    bottom: `${TEX}/spruce_leaves.png`,
+  },
 }
 
 // ---------------------------------------------------------------------------
@@ -334,6 +386,10 @@ export const BLOCK_ALLOC_FACTORS: Record<BlockType, number> = {
   [BlockType.bedrock]: 0.1,
   [BlockType.cobblestone]: 0.15,
   [BlockType.gravel]: 0.1,
+  [BlockType.birch_tree]: 0.05,
+  [BlockType.birch_leaf]: 0.3,
+  [BlockType.spruce_tree]: 0.05,
+  [BlockType.spruce_leaf]: 0.3,
 }
 
 // ---------------------------------------------------------------------------

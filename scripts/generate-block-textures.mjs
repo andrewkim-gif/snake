@@ -416,6 +416,101 @@ function generateDirtPath() {
 }
 
 // ============================================
+// 나무 종류 (birch, spruce) — 4종
+// ============================================
+
+function generateBirchLog() {
+  const buf = createBuffer();
+  // 흰색 기반 자작나무 줄기
+  fill(buf, 230, 225, 215);
+  addColorNoise(buf, 17001, 8, 6, 5);
+
+  // 검은 줄무늬 (자작나무 특유)
+  const rng = mulberry32(17002);
+  for (let i = 0; i < 7; i++) {
+    const y = 2 + Math.floor(rng() * (SIZE - 4));
+    const x0 = Math.floor(rng() * 4);
+    const w = 6 + Math.floor(rng() * 14);
+    const h = 1 + (rng() > 0.6 ? 1 : 0);
+    for (let dy = 0; dy < h; dy++) {
+      for (let dx = 0; dx < w; dx++) {
+        const px = x0 + dx;
+        if (px >= 0 && px < SIZE && y + dy < SIZE) {
+          const shade = 40 + Math.floor(rng() * 30);
+          setPixel(buf, px, y + dy, shade, shade - 5, shade - 10);
+        }
+      }
+    }
+  }
+
+  // 세로 결 (미세한)
+  for (let x = 0; x < SIZE; x += 3) {
+    for (let y = 0; y < SIZE; y++) {
+      const idx = (y * SIZE + x) * 4;
+      buf[idx] = Math.max(0, buf[idx] - 8);
+      buf[idx + 1] = Math.max(0, buf[idx + 1] - 8);
+      buf[idx + 2] = Math.max(0, buf[idx + 2] - 8);
+    }
+  }
+  return buf;
+}
+
+function generateBirchLeaves() {
+  const buf = createBuffer();
+  // 밝은 노란+초록 (자작나무 잎)
+  fill(buf, 130, 185, 70);
+  addColorNoise(buf, 18001, 15, 20, 12);
+  // 노란빛 점
+  addDots(buf, 18002, 30, 165, 200, 60, 1);
+  // 밝은 하이라이트 점
+  addDots(buf, 18003, 20, 155, 210, 80, 1);
+  // 어두운 점 (그림자)
+  addDots(buf, 18004, 15, 100, 150, 50, 1);
+  return buf;
+}
+
+function generateSpruceLog() {
+  const buf = createBuffer();
+  // 어두운 갈색 기반
+  fill(buf, 75, 50, 30);
+  addColorNoise(buf, 19001, 12, 10, 8);
+
+  // 거친 질감 — 세로 결 + 불규칙
+  const rng = mulberry32(19002);
+  for (let y = 0; y < SIZE; y++) {
+    for (let x = 0; x < SIZE; x++) {
+      if (x % 2 === 0 && rng() > 0.4) {
+        const idx = (y * SIZE + x) * 4;
+        const v = Math.floor(rng() * 15);
+        buf[idx] = Math.max(30, buf[idx] - v);
+        buf[idx + 1] = Math.max(20, buf[idx + 1] - v);
+        buf[idx + 2] = Math.max(10, buf[idx + 2] - v);
+      }
+    }
+  }
+
+  // 밝은 나무 결
+  addDots(buf, 19003, 15, 95, 70, 45, 1);
+  // 어두운 부분
+  addDots(buf, 19004, 12, 55, 35, 20, 2);
+  return buf;
+}
+
+function generateSpruceLeaves() {
+  const buf = createBuffer();
+  // 짙은 녹색/청녹색 (가문비나무 잎)
+  fill(buf, 40, 90, 50);
+  addColorNoise(buf, 20001, 10, 18, 12);
+  // 청녹색 점
+  addDots(buf, 20002, 25, 35, 110, 65, 1);
+  // 어두운 점
+  addDots(buf, 20003, 20, 25, 70, 35, 1);
+  // 매우 밝은 점 (빛 반사)
+  addDots(buf, 20004, 8, 65, 130, 75, 1);
+  return buf;
+}
+
+// ============================================
 // PNG 저장 함수
 // ============================================
 
@@ -464,7 +559,14 @@ async function main() {
   await saveTexture('dirt_mossy', generateDirtMossy());
   await saveTexture('dirt_path', generateDirtPath());
 
-  console.log('\n✅ Done! 16 textures generated in', OUT_DIR);
+  // 나무 종류 4종 (birch, spruce)
+  console.log('\n--- Tree variants (4) ---');
+  await saveTexture('birch_log', generateBirchLog());
+  await saveTexture('birch_leaves', generateBirchLeaves());
+  await saveTexture('spruce_log', generateSpruceLog());
+  await saveTexture('spruce_leaves', generateSpruceLeaves());
+
+  console.log('\n✅ Done! 20 textures generated in', OUT_DIR);
 }
 
 main().catch(console.error);

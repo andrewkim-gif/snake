@@ -25,6 +25,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Gem, Pickup, Player } from '@/lib/matrix/types';
 import { getMCTerrainHeight } from '@/lib/matrix/rendering3d/mc-terrain-height';
+import { getItemTexture } from '@/lib/3d/item-textures';
 
 // ============================================
 // Constants
@@ -205,18 +206,21 @@ function XpOrbRenderer({ gemsRef, playerRef }: XpOrbRendererProps) {
   // v44: 수집 팝 이펙트 상태 배열
   const popEffectsRef = useRef<PopEffect[]>([]);
 
-  // 공유 geometry/material (v44: 축소된 ORB_RADIUS 0.35)
+  // 공유 geometry/material (v44: 축소된 ORB_RADIUS 0.35, v45: CanvasTexture 추가)
   const geometry = useMemo(() => new THREE.SphereGeometry(ORB_RADIUS, 8, 6), []);
   const material = useMemo(
-    () =>
-      new THREE.MeshStandardMaterial({
+    () => {
+      const xpTex = getItemTexture('xp_orb');
+      return new THREE.MeshStandardMaterial({
+        map: xpTex,
         emissive: new THREE.Color('#44ff88'),
         emissiveIntensity: 0.8,
         transparent: true,
         opacity: 0.85,
         roughness: 0.2,
         metalness: 0.3,
-      }),
+      });
+    },
     []
   );
 
@@ -450,13 +454,15 @@ function PickupItemRenderer({ pickupsRef, playerRef }: PickupItemRendererProps) 
     return geos;
   }, []);
 
-  // 타입별 재질 (emissive 색상 = 타입 색상)
+  // 타입별 재질 (v45: CanvasTexture map + emissive 블렌딩)
   const materials = useMemo(() => {
     const mats: Record<string, THREE.MeshStandardMaterial> = {};
     for (const type of PICKUP_TYPES) {
       const color = PICKUP_COLORS[type] || _tempFallbackColor;
+      const tex = getItemTexture(type);
       mats[type] = new THREE.MeshStandardMaterial({
-        color: color.clone().multiplyScalar(0.6),
+        map: tex,
+        color: tex ? new THREE.Color('#ffffff') : color.clone().multiplyScalar(0.6),
         emissive: color,
         emissiveIntensity: 0.5,
         roughness: 0.3,

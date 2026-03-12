@@ -16,6 +16,8 @@ import * as THREE from 'three';
 import { MCNoise, type ChunkBlockData } from '@/lib/3d/mc-noise';
 import { BlockType, MC_CLOUD_HEIGHT, CHUNK_SIZE, blockKey } from '@/lib/3d/mc-types';
 import { getGrassVariantIndex, GRASS_VARIANT_TEXTURES } from '@/lib/3d/block-textures';
+import { Biome } from '@/lib/3d/mc-noise';
+import { DECORATION_TYPES, getDecorationTexture, type DecorationType } from '@/lib/3d/decoration-textures';
 
 // 렌더 거리 (청크 단위) — 6이면 13x13=169 청크, 96블록 반경 (산봉우리 75블록 포함)
 const RENDER_DISTANCE = 6;
@@ -37,10 +39,17 @@ const MAX_INSTANCES: Record<string, number> = {
   sand: 20000,
   tree: 10000,
   leaf: 40000,
+  birch_tree: 5000,
+  birch_leaf: 20000,
+  spruce_tree: 5000,
+  spruce_leaf: 20000,
 };
 
 // 잔디 변형 상단 오버레이 최대 인스턴스 (variant 1=dark, 2=dry, 3=lush, 각 ~20000)
 const GRASS_VARIANT_MAX = 20000;
+
+// v45: 바닥 장식 오브젝트 최대 인스턴스
+const DECORATION_MAX_PER_TYPE = 3000;
 
 // 구름 설정
 const CLOUD_COUNT = 30;
@@ -89,6 +98,10 @@ const BLOCK_TO_MESH: Record<number, string> = {
   [BlockType.tree]: 'tree',
   [BlockType.wood]: 'tree',
   [BlockType.leaf]: 'leaf',
+  [BlockType.birch_tree]: 'birch_tree',
+  [BlockType.birch_leaf]: 'birch_leaf',
+  [BlockType.spruce_tree]: 'spruce_tree',
+  [BlockType.spruce_leaf]: 'spruce_leaf',
 };
 
 // 노출 체크용 이웃 오프셋
@@ -102,7 +115,8 @@ const NEIGHBOR_OFFSETS = [
 function isExposed(blockMap: Map<number, BlockType>, x: number, y: number, z: number): boolean {
   for (const [dx, dy, dz] of NEIGHBOR_OFFSETS) {
     const t = blockMap.get(blockKey(x + dx, y + dy, z + dz));
-    if (t === undefined || t === BlockType.AIR || t === BlockType.leaf) return true;
+    if (t === undefined || t === BlockType.AIR ||
+        t === BlockType.leaf || t === BlockType.birch_leaf || t === BlockType.spruce_leaf) return true;
   }
   return false;
 }
@@ -110,6 +124,14 @@ function isExposed(blockMap: Map<number, BlockType>, x: number, y: number, z: nu
 /** 청크별 pre-computed exposed 블록 (meshKey + position) */
 interface ExposedBlock {
   meshKey: string;
+  x: number;
+  y: number;
+  z: number;
+}
+
+/** v45: 청크별 장식 오브젝트 데이터 */
+interface DecorationData {
+  type: DecorationType;
   x: number;
   y: number;
   z: number;
@@ -130,6 +152,9 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
 
   // 청크별 exposed 블록 캐시 (리빌드 시 사용)
   const chunkExposedRef = useRef<Map<string, ExposedBlock[]>>(new Map());
+
+  // v45: 청크별 장식 오브젝트 데이터
+  const chunkDecorationsRef = useRef<Map<string, DecorationData[]>>(new Map());
 
   // 마지막 카메라 청크 위치
   const lastChunkRef = useRef<[number, number]>([NaN, NaN]);
@@ -164,7 +189,23 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     const bedrockMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/bedrock.png`) });
     const cobblestoneMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/cobblestone.png`) });
     const gravelMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/gravel.png`) });
-    return { dirtMat, stoneMat, sandMat, leafMat, coalMat, bedrockMat, cobblestoneMat, gravelMat };
+    // v45: 자작나무/가문비나무 머티리얼
+    const birchLeafMat = new THREE.MeshLambertMaterial({
+      map: loadBlockTexture(`${TEX_PATH}/birch_leaves.png`),
+      transparent: true,
+      alphaTest: 0.1,
+      side: THREE.DoubleSide,
+      color: new THREE.Color('#8abf50'),
+    });
+    const spruceLeafMat = new THREE.MeshLambertMaterial({
+      map: loadBlockTexture(`${TEX_PATH}/spruce_leaves.png`),
+      transparent: true,
+      alphaTest: 0.1,
+      side: THREE.DoubleSide,
+      color: new THREE.Color('#3a7a3a'),
+    });
+
+    return { dirtMat, stoneMat, sandMat, leafMat, coalMat, bedrockMat, cobblestoneMat, gravelMat, birchLeafMat, spruceLeafMat };
   }, []);
 
   // ============================================
@@ -216,6 +257,25 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     gravelMesh.count = 0;
     gravelMesh.frustumCulled = false;
 
+    // v45: 자작나무/가문비나무 InstancedMesh
+    const birchTreeMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/birch_log.png`) });
+    const birchTreeMesh = new THREE.InstancedMesh(geo, birchTreeMat, MAX_INSTANCES.birch_tree);
+    birchTreeMesh.count = 0;
+    birchTreeMesh.frustumCulled = false;
+
+    const birchLeafMesh = new THREE.InstancedMesh(geo, materials.birchLeafMat, MAX_INSTANCES.birch_leaf);
+    birchLeafMesh.count = 0;
+    birchLeafMesh.frustumCulled = false;
+
+    const spruceTreeMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/spruce_log.png`) });
+    const spruceTreeMesh = new THREE.InstancedMesh(geo, spruceTreeMat, MAX_INSTANCES.spruce_tree);
+    spruceTreeMesh.count = 0;
+    spruceTreeMesh.frustumCulled = false;
+
+    const spruceLeafMesh = new THREE.InstancedMesh(geo, materials.spruceLeafMat, MAX_INSTANCES.spruce_leaf);
+    spruceLeafMesh.count = 0;
+    spruceLeafMesh.frustumCulled = false;
+
     // 잔디 상단 오버레이 — PlaneGeometry로 잔디 블록 위에 초록 텍스처 (Phase 4: 멀티페이스)
     const grassTopGeo = new THREE.PlaneGeometry(1, 1);
     grassTopGeo.rotateX(-Math.PI / 2); // XZ 평면으로 회전 (상단 면)
@@ -240,10 +300,28 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       grassTopVariants.push(varMesh);
     }
 
+    // v45: 바닥 장식 오브젝트 (빌보드 PlaneGeometry)
+    const decorationMeshes: Record<string, THREE.InstancedMesh> = {};
+    for (const dtype of DECORATION_TYPES) {
+      const decoGeo = new THREE.PlaneGeometry(0.8, 0.8);
+      const decoTex = getDecorationTexture(dtype);
+      const decoMat = new THREE.MeshLambertMaterial({
+        map: decoTex,
+        transparent: true,
+        alphaTest: 0.1,
+        side: THREE.DoubleSide,
+      });
+      const decoMesh = new THREE.InstancedMesh(decoGeo, decoMat, DECORATION_MAX_PER_TYPE);
+      decoMesh.count = 0;
+      decoMesh.frustumCulled = false;
+      decorationMeshes[dtype] = decoMesh;
+    }
+
     return {
       grassMesh, dirtMesh, stoneMesh, sandMesh, treeMesh, leafMesh,
-      coalMesh, bedrockMesh, cobblestoneMesh, gravelMesh, grassTopMesh,
-      grassTopVariants,
+      coalMesh, bedrockMesh, cobblestoneMesh, gravelMesh,
+      birchTreeMesh, birchLeafMesh, spruceTreeMesh, spruceLeafMesh,
+      grassTopMesh, grassTopVariants, decorationMeshes,
     };
   }, [materials]);
 
@@ -259,6 +337,10 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     sand: meshes.sandMesh,
     tree: meshes.treeMesh,
     leaf: meshes.leafMesh,
+    birch_tree: meshes.birchTreeMesh,
+    birch_leaf: meshes.birchLeafMesh,
+    spruce_tree: meshes.spruceTreeMesh,
+    spruce_leaf: meshes.spruceLeafMesh,
   }), [meshes]);
 
   // ============================================
@@ -296,18 +378,27 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     const group = groupRef.current;
     if (!group) return;
 
-    // meshes에는 grassTopMesh도 포함되어 있으므로 모든 InstancedMesh가 추가됨
-    const allMeshes = [...Object.values(meshes), cloudMesh];
+    // InstancedMesh 목록 수집 (단일 + 배열 + record 포함)
+    const allInstancedMeshes: THREE.InstancedMesh[] = [
+      meshes.grassMesh, meshes.dirtMesh, meshes.stoneMesh, meshes.sandMesh,
+      meshes.treeMesh, meshes.leafMesh, meshes.coalMesh, meshes.bedrockMesh,
+      meshes.cobblestoneMesh, meshes.gravelMesh,
+      meshes.birchTreeMesh, meshes.birchLeafMesh,
+      meshes.spruceTreeMesh, meshes.spruceLeafMesh,
+      meshes.grassTopMesh, ...meshes.grassTopVariants,
+      ...Object.values(meshes.decorationMeshes),
+    ];
+    const allMeshes = [...allInstancedMeshes, cloudMesh];
     for (const m of allMeshes) group.add(m as THREE.Object3D);
 
     return () => {
       for (const m of allMeshes) group.remove(m as THREE.Object3D);
-      Object.values(meshes).forEach((m) => {
-        (m as THREE.InstancedMesh).geometry.dispose();
-        const mat = (m as THREE.InstancedMesh).material;
+      allInstancedMeshes.forEach((m) => {
+        m.geometry.dispose();
+        const mat = m.material;
         if (Array.isArray(mat)) mat.forEach((mt: THREE.Material) => mt.dispose());
         else (mat as THREE.Material).dispose();
-        (m as THREE.InstancedMesh).dispose();
+        m.dispose();
       });
       cloudMesh.geometry.dispose();
       (cloudMesh.material as THREE.Material).dispose();
@@ -334,6 +425,9 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
 
     // exposed 블록 사전 계산
     computeExposed(key);
+
+    // v45: 장식 오브젝트 생성 (전투 구역 밖, 잔디 블록 위)
+    generateDecorations(key, noise, cx, cz);
   }, []);
 
   // 단일 청크의 exposed 블록 계산
@@ -346,12 +440,68 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     for (const b of raw) {
       const mk = BLOCK_TO_MESH[b.type];
       if (!mk) continue;
-      // leaf는 항상 노출, 나머지는 체크
-      if (b.type !== BlockType.leaf && !isExposed(bm, b.x, b.y, b.z)) continue;
+      // leaf 타입은 항상 노출, 나머지는 체크
+      const isLeafType = b.type === BlockType.leaf || b.type === BlockType.birch_leaf || b.type === BlockType.spruce_leaf;
+      if (!isLeafType && !isExposed(bm, b.x, b.y, b.z)) continue;
       exposed.push({ meshKey: mk, x: b.x, y: b.y, z: b.z });
     }
 
     chunkExposedRef.current.set(key, exposed);
+  }, []);
+
+  // v45: 청크 내 장식 오브젝트 생성
+  const generateDecorations = useCallback((key: string, noise: MCNoise, cx: number, cz: number) => {
+    const decorations: DecorationData[] = [];
+    const startX = cx * CHUNK_SIZE;
+    const startZ = cz * CHUNK_SIZE;
+
+    for (let lx = 0; lx < CHUNK_SIZE; lx += 2) {
+      for (let lz = 0; lz < CHUNK_SIZE; lz += 2) {
+        const x = startX + lx;
+        const z = startZ + lz;
+
+        // 전투 구역 내 억제
+        if (noise.isInFlatZone(x, z)) continue;
+
+        // 좌표 해시 기반 배치 확률 (약 15% 확률)
+        const hash = ((x * 73856093) ^ (z * 19349663)) >>> 0;
+        if ((hash % 100) >= 15) continue;
+
+        const surfaceY = noise.getHeight(x, z);
+        const biome = noise.getBiome(x, z);
+
+        // 나무가 있는 위치 스킵 (tree offset 체크)
+        const treeOffset = noise.getTreeOffset(x, z);
+        if (treeOffset > noise.treeThreshold) continue;
+
+        // 바이옴별 장식 타입 결정
+        let decoType: DecorationType;
+        const typeRoll = (hash >> 8) % 100;
+
+        if (biome === Biome.PLAINS) {
+          // PLAINS: 꽃 50%, 풀 50%
+          if (typeRoll < 25) decoType = 'flower_red';
+          else if (typeRoll < 50) decoType = 'flower_yellow';
+          else decoType = 'tall_grass';
+        } else if (biome === Biome.FOREST) {
+          // FOREST: 버섯 30%, 풀 70%
+          if (typeRoll < 30) decoType = 'mushroom_red';
+          else decoType = 'tall_grass';
+        } else {
+          // DESERT: 장식 없음
+          continue;
+        }
+
+        decorations.push({
+          type: decoType,
+          x,
+          y: surfaceY + 1,
+          z,
+        });
+      }
+    }
+
+    chunkDecorationsRef.current.set(key, decorations);
   }, []);
 
   // ============================================
@@ -365,6 +515,7 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       grass: 0, dirt: 0, stone: 0,
       coal: 0, bedrock: 0, cobblestone: 0, gravel: 0,
       sand: 0, tree: 0, leaf: 0,
+      birch_tree: 0, birch_leaf: 0, spruce_tree: 0, spruce_leaf: 0,
     };
     const matrix = new THREE.Matrix4();
     // 잔디 상단 오버레이 카운터 (variant 0=기본, 1=dark, 2=dry, 3=lush)
@@ -417,6 +568,36 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       meshes.grassTopVariants[v].count = variantCounts[v];
       if (variantCounts[v] > 0) meshes.grassTopVariants[v].instanceMatrix.needsUpdate = true;
     }
+
+    // v45: 장식 오브젝트 InstancedMesh 업데이트
+    const decoCounts: Record<string, number> = {};
+    for (const dtype of DECORATION_TYPES) decoCounts[dtype] = 0;
+
+    for (const decos of chunkDecorationsRef.current.values()) {
+      for (const d of decos) {
+        const count = decoCounts[d.type] ?? 0;
+        if (count >= DECORATION_MAX_PER_TYPE) continue;
+
+        const decoMesh = meshes.decorationMeshes[d.type];
+        if (!decoMesh) continue;
+
+        // 빌보드: 약간 위로 올리고 수직 배치 (카메라가 위에서 보므로 45도 기울임)
+        matrix.makeTranslation(d.x + 0.5, d.y + 0.3, d.z + 0.5);
+        // PlaneGeometry는 XY 평면이므로 약간 기울여 위에서도 보이게
+        const tiltMatrix = new THREE.Matrix4().makeRotationX(-Math.PI * 0.35);
+        matrix.multiply(tiltMatrix);
+
+        decoMesh.setMatrixAt(count, matrix);
+        decoCounts[d.type] = count + 1;
+      }
+    }
+
+    for (const dtype of DECORATION_TYPES) {
+      const decoMesh = meshes.decorationMeshes[dtype];
+      if (!decoMesh) continue;
+      decoMesh.count = decoCounts[dtype] ?? 0;
+      if (decoCounts[dtype] > 0) decoMesh.instanceMatrix.needsUpdate = true;
+    }
   }, [meshMap, meshes]);
 
   // ============================================
@@ -464,6 +645,7 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
           }
           chunkRawRef.current.delete(k);
           chunkExposedRef.current.delete(k);
+          chunkDecorationsRef.current.delete(k);
           loadedChunksRef.current.delete(k);
           dirtyRef.current = true;
         }

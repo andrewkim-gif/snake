@@ -133,6 +133,20 @@ export class MCNoise {
   gap = 22
   amp = 8
 
+  // 전투 구역 평탄화 + 원경 산맥 (거리 기반 amp 변조)
+  // 아레나 중심 좌표 (플레이어 스폰 위치)
+  arenaCenter = { x: 0, z: 0 }
+  // 거리 구간별 amp: 0~flatRadius=±flatAmp, outerStart+=산봉우리
+  // RENDER_DISTANCE=5 × CHUNK_SIZE=16 = 80블록 가시 범위
+  flatRadius = 30       // 전투 구역 반경 (블록)
+  flatAmp = 1           // 전투 구역 최대 편차 (±1블록)
+  hillStart = 30        // 언덕 시작 거리
+  hillEnd = 50          // 산 시작 거리
+  hillAmp = 6           // 언덕 amp
+  mountainStart = 50    // 산봉우리 시작
+  mountainEnd = 75      // 최대 amp 도달 거리 (가시 범위 80 이내)
+  mountainAmp = 25      // 산봉우리 최대 amp
+
   // 돌 파라미터
   stoneSeed: number
   stoneGap = 12
@@ -185,7 +199,44 @@ export class MCNoise {
   }
 
   // ---------------------------------------------------------------------------
-  // getHeight(x, z) — 높이맵 생성 (octave 기반)
+  // getDistanceAmp(x, z) — 거리 기반 amplitude 계산
+  // 중심 근처: 평탄 (±1), 중간: 언덕 (±6), 외곽: 산봉우리 (±30)
+  // ---------------------------------------------------------------------------
+  getDistanceAmp(x: number, z: number): number {
+    const dx = x - this.arenaCenter.x
+    const dz = z - this.arenaCenter.z
+    const dist = Math.sqrt(dx * dx + dz * dz)
+
+    if (dist <= this.flatRadius) {
+      // 전투 구역: 거의 평탄
+      return this.flatAmp
+    } else if (dist <= this.hillEnd) {
+      // 언덕 전환 구간: smoothstep 보간
+      const t = (dist - this.hillStart) / (this.hillEnd - this.hillStart)
+      const s = t * t * (3 - 2 * t) // smoothstep
+      return this.flatAmp + (this.hillAmp - this.flatAmp) * s
+    } else if (dist <= this.mountainEnd) {
+      // 산봉우리 구간: smoothstep 보간
+      const t = (dist - this.mountainStart) / (this.mountainEnd - this.mountainStart)
+      const s = t * t * (3 - 2 * t) // smoothstep
+      return this.hillAmp + (this.mountainAmp - this.hillAmp) * s
+    } else {
+      // 최대 산 높이 유지
+      return this.mountainAmp
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // isInFlatZone(x, z) — 전투 구역 내 여부 (나무 억제용)
+  // ---------------------------------------------------------------------------
+  isInFlatZone(x: number, z: number): boolean {
+    const dx = x - this.arenaCenter.x
+    const dz = z - this.arenaCenter.z
+    return (dx * dx + dz * dz) <= this.flatRadius * this.flatRadius
+  }
+
+  // ---------------------------------------------------------------------------
+  // getHeight(x, z) — 높이맵 생성 (octave 기반 + 거리 기반 amp)
   // ---------------------------------------------------------------------------
   getHeight(x: number, z: number): number {
     const octaves = 4
@@ -204,8 +255,9 @@ export class MCNoise {
       frequency *= lacunarity
     }
 
-    // 정규화 후 amp로 스케일
-    return MC_BASE_Y + Math.floor((total / maxAmplitude) * this.amp)
+    // 거리 기반 amp 적용 (중심=평탄, 외곽=산)
+    const distAmp = this.getDistanceAmp(x, z)
+    return MC_BASE_Y + Math.floor((total / maxAmplitude) * distAmp)
   }
 
   // ---------------------------------------------------------------------------
@@ -290,8 +342,9 @@ export class MCNoise {
           }
         }
 
-        // --- 나무 (forest biome에서 확률적 생성) ---
-        if (biome === Biome.FOREST || biome === Biome.PLAINS) {
+        // --- 나무 (forest/plains biome에서 확률적 생성, 전투 구역 내 억제) ---
+        // v45: 바이옴별 나무 종류 분기 (oak/birch/spruce)
+        if ((biome === Biome.FOREST || biome === Biome.PLAINS) && !this.isInFlatZone(x, z)) {
           const treeOffset = this.getTreeOffset(x, z)
           const stoneOffset = this.getStoneOffset(x, z)
           const surfaceOffset = this.getSurfaceOffset(x, z)
@@ -301,13 +354,40 @@ export class MCNoise {
             surfaceOffset >= -3 &&
             stoneOffset <= this.stoneThreshold
           ) {
+            // v45: 좌표 해시 기반 나무 종류 결정 (결정적)
+            const treeHash = ((x * 73856093) ^ (z * 19349663)) >>> 0
+            const treeRoll = treeHash % 100
+
+            let trunkType: BlockType
+            let leafType: BlockType
+
+            if (biome === Biome.FOREST) {
+              // FOREST: oak 60% + birch 40%
+              if (treeRoll < 60) {
+                trunkType = BlockType.tree
+                leafType = BlockType.leaf
+              } else {
+                trunkType = BlockType.birch_tree
+                leafType = BlockType.birch_leaf
+              }
+            } else {
+              // PLAINS: birch 70% + oak 30%
+              if (treeRoll < 70) {
+                trunkType = BlockType.birch_tree
+                leafType = BlockType.birch_leaf
+              } else {
+                trunkType = BlockType.tree
+                leafType = BlockType.leaf
+              }
+            }
+
             // 줄기
             for (let ty = 1; ty <= this.treeHeight; ty++) {
               const treeY = surfaceY + ty
               const tKey = blockKey(x, treeY, z)
               if (idMap.has(tKey)) continue
               idMap.set(tKey, blocks.length)
-              blocks.push({ x, y: treeY, z, type: BlockType.tree })
+              blocks.push({ x, y: treeY, z, type: trunkType })
             }
 
             // 잎 (나무 꼭대기 주변)
@@ -326,7 +406,7 @@ export class MCNoise {
                     const lKey = blockKey(lx, ly, lz)
                     if (idMap.has(lKey)) continue
                     idMap.set(lKey, blocks.length)
-                    blocks.push({ x: lx, y: ly, z: lz, type: BlockType.leaf })
+                    blocks.push({ x: lx, y: ly, z: lz, type: leafType })
                   }
                 }
               }
@@ -371,26 +451,25 @@ export class MCNoise {
 
 // ---------------------------------------------------------------------------
 // getArenaTerrainHeight — 아레나 지형 높이 쿼리 (캐시된 MCNoise 인스턴스)
-// MCTerrain worker와 동일한 공식: MC_BASE_Y + clamp(getSurfaceOffset, -fv, +fv)
+// getHeight()가 거리 기반 amp를 내부 처리 (중심=평탄, 외곽=산)
 // ---------------------------------------------------------------------------
 const _noiseCache = new Map<number, MCNoise>()
 
 /**
  * 아레나 모드에서 (x, z) 좌표의 지형 Y를 반환한다.
- * MCTerrain이 생성한 블록 높이와 동일한 공식을 사용.
+ * MCNoise.getHeight()가 거리 기반 amplitude를 자동 적용.
  * O(1) per query, 시드당 MCNoise 인스턴스 캐시.
  */
 export function getArenaTerrainHeight(
   x: number,
   z: number,
   seed: number,
-  flattenVariance: number,
+  _flattenVariance?: number,
 ): number {
   let noise = _noiseCache.get(seed)
   if (!noise) {
     noise = new MCNoise(seed)
     _noiseCache.set(seed, noise)
   }
-  const offset = noise.getSurfaceOffset(Math.floor(x), Math.floor(z))
-  return MC_BASE_Y + Math.max(-flattenVariance, Math.min(flattenVariance, offset))
+  return noise.getHeight(Math.floor(x), Math.floor(z))
 }
