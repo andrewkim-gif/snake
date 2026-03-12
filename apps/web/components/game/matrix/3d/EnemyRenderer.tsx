@@ -30,6 +30,7 @@ import {
   getEnemyColors,
   markColorNeedsUpdate,
 } from '@/lib/matrix/rendering3d/enemy-colors';
+import { getMobTexture, disposeMobTextureCache } from '@/lib/3d/mob-textures';
 
 // ============================================
 // S23: EnemyRenderStrategy 인터페이스
@@ -338,8 +339,11 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
 
     for (const templateId of getAllTemplateIds()) {
       const geometry = createMergedGeometry(templateId);
+      // v45: 몬스터 프로시저럴 텍스처 적용 — 흰색 베이스 텍스처 × instance color 블렌딩
+      const mobTexture = getMobTexture(templateId);
       const material = new THREE.MeshStandardMaterial({
         color: '#ffffff', // per-instance color로 덮어씀
+        map: mobTexture,  // v45: 프로시저럴 CanvasTexture (16x16 디테일)
         roughness: 0.5,
         metalness: 0.08,
         flatShading: true,
@@ -452,6 +456,8 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
       projectilePool.mesh.dispose();
 
       disposeAllTemplates();
+      // v45: 몬스터 텍스처 캐시 정리
+      disposeMobTextureCache();
     };
   }, [templatePools, lowLodPool, projectilePool]);
 
