@@ -17,6 +17,7 @@ import React, { useRef, useMemo, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { EliteTier } from '@/lib/matrix/types';
+import { getEffectTexture } from '@/lib/3d/effect-textures';
 
 // ============================================
 // 상수
@@ -167,6 +168,8 @@ export function DeathParticles({ deathEventsRef, gameSpeedRef }: DeathParticlesP
       blending: THREE.AdditiveBlending,
       depthWrite: false,
       sizeAttenuation: true,
+      map: getEffectTexture('spark'),
+      alphaTest: 0.01,
     });
   }, []);
 

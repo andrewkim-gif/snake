@@ -18,6 +18,7 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import type { Player } from '@/lib/matrix/types';
 import { getMCTerrainHeight } from '@/lib/matrix/rendering3d/mc-terrain-height';
+import { getEffectTexture } from '@/lib/3d/effect-textures';
 
 // ============================================
 // 상수
@@ -84,6 +85,9 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
   // mesh + material refs
   const meshRefs = useRef<THREE.Mesh[]>([]);
   const matRefs = useRef<THREE.MeshBasicMaterial[]>([]);
+
+  // slash_trail 텍스처 (이펙트 오버레이용)
+  const slashTexture = useMemo(() => getEffectTexture('slash_trail'), []);
 
   // geometry (재사용) — 반원 형태 (RingGeometry)
   const geometry = useMemo(() => {
@@ -238,6 +242,7 @@ export function SwingArc({ playerRef, attackEventsRef, facingRef }: SwingArcProp
               if (el) matRefs.current[i] = el;
             }}
             color="#00ffcc"
+            map={slashTexture}
             transparent
             opacity={0}
             side={THREE.DoubleSide}
