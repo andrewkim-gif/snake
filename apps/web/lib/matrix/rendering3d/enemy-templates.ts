@@ -672,6 +672,10 @@ export const ENEMY_TYPE_TO_TEMPLATE: Record<string, EnemyTemplateId> = {
   sniper: 'humanoid_medium',
   caster: 'humanoid_small',
   artillery: 'boss_small',
+
+  // === v44: 행동 다양화 적 ===
+  ranged_drone: 'flying',
+  charge_crawler: 'crawler',
 };
 
 // ============================================

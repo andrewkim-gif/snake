@@ -254,11 +254,12 @@ function SceneContent({
         playerClass={refs.player.current.playerClass ?? 'neo'}
       />
 
-      {/* 적 렌더러 (InstancedMesh) + hit flash */}
+      {/* 적 렌더러 (InstancedMesh) + hit flash + v44 투사체 */}
       <EnemyRenderer
         enemiesRef={refs.enemies}
         playerRef={refs.player}
         hitFlashMapRef={hitFlashMapRef}
+        enemyProjectilesRef={refs.enemyProjectiles}
       />
 
       {/* 근접 공격 Swing Arc 이펙트 */}
@@ -314,6 +315,28 @@ const ENEMY_ATTACK_RANGE = 3;         // 적 공격 사거리 (MC 블록 3개)
 const ENEMY_ATTACK_COOLDOWN = 0.8;    // 적 공격 쿨다운 (초)
 const ENEMY_KNOCKBACK_FORCE = 3;      // 적→플레이어 넉백
 const ENEMY_ORBIT_SPEED = 1.2;        // 적 공격 중 공전 속도 (rad/s)
+
+// v44: 원거리 적 AI 상수
+const RANGED_MIN_DIST = 6;            // 원거리 적 최소 유지 거리 (블록)
+const RANGED_MAX_DIST = 8;            // 원거리 적 최대 유지 거리 (블록)
+const RANGED_IDEAL_DIST = 7;          // 원거리 적 이상적 거리
+const RANGED_RETREAT_DIST = 4;        // 이 거리 이하면 후퇴
+const RANGED_PROJECTILE_SPEED = 5;    // 투사체 속도 (blocks/s, 기본값)
+const RANGED_PROJECTILE_COOLDOWN = 2; // 투사체 발사 쿨다운 (초, 기본값)
+const RANGED_PROJECTILE_LIFE = 5;     // 투사체 수명 (초)
+const RANGED_PROJECTILE_RADIUS = 0.3; // 투사체 반경
+
+// v44: 돌진 적 AI 상수
+const CHARGE_TRIGGER_DIST = 10;       // 돌진 시작 거리 (블록)
+const CHARGE_PREP_TIME = 1.0;         // 돌진 준비 시간 (초)
+const CHARGE_SPEED_MULT = 3.0;        // 돌진 속도 배율
+const CHARGE_MAX_DIST = 15;           // 돌진 최대 거리 (블록)
+const CHARGE_COOLDOWN = 2.0;          // 돌진 후 쿨다운 (초)
+
+// v44: 적 투사체 상수
+const ENEMY_PROJ_HIT_RANGE = 1.5;     // 적 투사체 플레이어 히트 범위
+const MAX_ENEMY_PROJECTILES = 50;     // 적 투사체 최대 수
+
 const GEM_COLLECT_RANGE = 3;          // 잼 수집 범위 (MC 블록 3개)
 const GEM_MAGNET_RANGE = 8;           // 잼 자석 범위
 const ENEMY_HIT_FLASH_DURATION = 0.12;
@@ -670,6 +693,16 @@ function GameLogic({
             isFrozen: false,
             skillCooldown: 0,
             name: isBoss ? 'BOSS' : undefined,
+            // v44: 행동 패턴 및 관련 필드
+            behaviorType: scaledStats.behaviorType ?? 'chase',
+            attackType: scaledStats.behaviorType === 'ranged' ? 'ranged' as const : 'melee' as const,
+            projectileSpeed: scaledStats.projectileSpeed,
+            projectileColor: scaledStats.projectileColor ?? '#ff4400',
+            currentAttackCooldown: scaledStats.projectileCooldown ?? RANGED_PROJECTILE_COOLDOWN,
+            // v44: 돌진 적 초기화
+            chargeState: scaledStats.behaviorType === 'charge' ? 'idle' as const : undefined,
+            chargeTimer: 0,
+            chargeCooldown: 0,
           } as any);
         }
       }
@@ -725,76 +758,328 @@ function GameLogic({
       }
     }
 
-    // 적 AI: 플레이어 추적 + 공전하면서 공격 (자연스러운 이동)
+    // === v44: 적 투사체 업데이트 (이동 + 충돌 + 수명) ===
+    const enemyProjs = refs.enemyProjectiles.current;
+    for (let pi = enemyProjs.length - 1; pi >= 0; pi--) {
+      const proj = enemyProjs[pi];
+      proj.position.x += proj.velocity.x * dt;
+      proj.position.y += proj.velocity.y * dt;
+      proj.life -= dt;
+
+      // 수명 만료
+      if (proj.life <= 0) {
+        enemyProjs.splice(pi, 1);
+        continue;
+      }
+
+      // 플레이어 히트 판정
+      if (player.health > 0 && player.invulnerabilityTimer <= 0) {
+        const pdx = proj.position.x - player.position.x;
+        const pdy = proj.position.y - player.position.y;
+        const pdist = Math.sqrt(pdx * pdx + pdy * pdy);
+        if (pdist < ENEMY_PROJ_HIT_RANGE) {
+          player.health = Math.max(0, player.health - proj.damage);
+          player.hitFlashTimer = 0.15;
+          player.invulnerabilityTimer = INVULNERABILITY_DURATION;
+
+          // 넉백 (투사체 방향)
+          if (pdist > 0.1) {
+            player.knockback.x = (pdx / pdist) * ENEMY_KNOCKBACK_FORCE * 0.5;
+            player.knockback.y = (pdy / pdist) * ENEMY_KNOCKBACK_FORCE * 0.5;
+          }
+
+          refs.screenShakeTimer.current = 0.15;
+          refs.screenShakeIntensity.current = 0.2;
+
+          refs.damageNumbers.current.push({
+            id: `eproj-dmg-${Date.now()}-${Math.random()}`,
+            position: { x: player.position.x, y: player.position.y },
+            value: proj.damage,
+            color: '#ff6600',
+            life: 1.0,
+            maxLife: 1.0,
+            isCritical: false,
+            velocity: { x: (Math.random() - 0.5) * 40, y: -60 },
+          });
+
+          enemyProjs.splice(pi, 1);
+        }
+      }
+    }
+
+    // 적 AI: behaviorType 분기 (v44: chase/ranged/charge)
     for (const enemy of refs.enemies.current) {
       const ex = enemy.position.x - player.position.x;
       const ey = enemy.position.y - player.position.y;
       const dist = Math.sqrt(ex * ex + ey * ey);
+      const behavior = enemy.behaviorType ?? 'chase';
 
-      if (dist > ENEMY_ATTACK_RANGE) {
-        // 사거리 밖: 플레이어를 향해 직선 추적
-        const nx = -ex / dist;
-        const ny = -ey / dist;
-        enemy.position.x += nx * enemy.speed * dt;
-        enemy.position.y += ny * enemy.speed * dt;
-        enemy.velocity.x = nx * enemy.speed;
-        enemy.velocity.y = ny * enemy.speed;
-      } else {
-        // 사거리 안: 공전하면서 계속 이동 (dead-stop 제거)
-        // 플레이어 주위를 원형으로 공전 (tangent 방향)
-        const invDist = dist > 0.1 ? 1 / dist : 0;
-        const nrmX = ex * invDist; // 플레이어→적 정규화 방향
-        const nrmY = ey * invDist;
-        // tangent 방향 (시계 방향 공전)
-        const tangentX = -nrmY;
-        const tangentY = nrmX;
-        // 공전 속도 (원래 speed의 60%)
-        const orbitSpeed = enemy.speed * 0.6;
-        const moveX = tangentX * orbitSpeed * ENEMY_ORBIT_SPEED;
-        const moveY = tangentY * orbitSpeed * ENEMY_ORBIT_SPEED;
-        enemy.position.x += moveX * dt;
-        enemy.position.y += moveY * dt;
-        enemy.velocity.x = moveX;
-        enemy.velocity.y = moveY;
+      switch (behavior) {
+        // ===== 원거리 AI: 거리 유지 + 투사체 발사 =====
+        case 'ranged': {
+          const invDist = dist > 0.1 ? 1 / dist : 0;
+          const nrmX = ex * invDist;
+          const nrmY = ey * invDist;
 
-        // 사거리 경계 유지: 너무 가까우면 살짝 밀어내고, 너무 멀면 당기기
-        const idealDist = ENEMY_ATTACK_RANGE * 0.7;
-        const distCorrection = (dist - idealDist) * 0.5;
-        if (Math.abs(distCorrection) > 0.5) {
-          enemy.position.x += (-nrmX) * distCorrection * dt * 3;
-          enemy.position.y += (-nrmY) * distCorrection * dt * 3;
+          if (dist < RANGED_RETREAT_DIST) {
+            // 플레이어가 너무 가까움 → 후퇴
+            enemy.position.x += nrmX * enemy.speed * 1.2 * dt;
+            enemy.position.y += nrmY * enemy.speed * 1.2 * dt;
+            enemy.velocity.x = nrmX * enemy.speed * 1.2;
+            enemy.velocity.y = nrmY * enemy.speed * 1.2;
+          } else if (dist < RANGED_MIN_DIST) {
+            // 너무 가까움 → 느리게 후퇴
+            enemy.position.x += nrmX * enemy.speed * 0.5 * dt;
+            enemy.position.y += nrmY * enemy.speed * 0.5 * dt;
+            enemy.velocity.x = nrmX * enemy.speed * 0.5;
+            enemy.velocity.y = nrmY * enemy.speed * 0.5;
+          } else if (dist > RANGED_MAX_DIST) {
+            // 너무 멀음 → 접근
+            enemy.position.x += -nrmX * enemy.speed * dt;
+            enemy.position.y += -nrmY * enemy.speed * dt;
+            enemy.velocity.x = -nrmX * enemy.speed;
+            enemy.velocity.y = -nrmY * enemy.speed;
+          } else {
+            // 이상적 거리 → 횡이동 (strafing)
+            const tangentX = -nrmY;
+            const tangentY = nrmX;
+            const strafeSpeed = enemy.speed * 0.4;
+            enemy.position.x += tangentX * strafeSpeed * dt;
+            enemy.position.y += tangentY * strafeSpeed * dt;
+            enemy.velocity.x = tangentX * strafeSpeed;
+            enemy.velocity.y = tangentY * strafeSpeed;
+
+            // 거리 미세 보정
+            const correction = (dist - RANGED_IDEAL_DIST) * 0.3;
+            enemy.position.x += -nrmX * correction * dt;
+            enemy.position.y += -nrmY * correction * dt;
+          }
+
+          // 투사체 발사 쿨다운
+          const projCooldown = enemy.currentAttackCooldown ?? RANGED_PROJECTILE_COOLDOWN;
+          enemy.skillCooldown -= dt;
+          if (enemy.skillCooldown <= 0 && dist <= RANGED_MAX_DIST + 2) {
+            enemy.skillCooldown = projCooldown;
+
+            // 투사체 생성 (플레이어 방향)
+            if (enemyProjs.length < MAX_ENEMY_PROJECTILES) {
+              const projSpeed = enemy.projectileSpeed ?? RANGED_PROJECTILE_SPEED;
+              const dirX = -ex * invDist;
+              const dirY = -ey * invDist;
+              enemyProjs.push({
+                id: `eproj-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                position: { x: enemy.position.x, y: enemy.position.y },
+                velocity: { x: dirX * projSpeed, y: dirY * projSpeed },
+                radius: RANGED_PROJECTILE_RADIUS,
+                color: enemy.projectileColor ?? '#ff4400',
+                damage: Math.round(enemy.damage * 0.5), // 일반 데미지의 50%
+                life: RANGED_PROJECTILE_LIFE,
+                skillType: 'ranged',
+              });
+            }
+          }
+          break;
         }
 
-        // 공격 쿨다운 (이동 중에도 공격)
-        enemy.skillCooldown -= dt;
-        if (enemy.skillCooldown <= 0) {
-          enemy.skillCooldown = ENEMY_ATTACK_COOLDOWN;
+        // ===== 돌진 AI: 준비 → 돌진 → 쿨다운 =====
+        case 'charge': {
+          const chargeState = enemy.chargeState ?? 'idle';
 
-          // 사망 중인 플레이어에게는 공격 안 함
-          if (player.health > 0 && player.invulnerabilityTimer <= 0) {
-            player.health = Math.max(0, player.health - enemy.damage);
-            player.hitFlashTimer = 0.15;
-            player.invulnerabilityTimer = INVULNERABILITY_DURATION;
+          switch (chargeState) {
+            case 'idle': {
+              // 일반 추적 (chase와 동일)
+              if (dist > ENEMY_ATTACK_RANGE) {
+                const nx = -ex / (dist || 1);
+                const ny = -ey / (dist || 1);
+                enemy.position.x += nx * enemy.speed * dt;
+                enemy.position.y += ny * enemy.speed * dt;
+                enemy.velocity.x = nx * enemy.speed;
+                enemy.velocity.y = ny * enemy.speed;
+              }
 
-            if (dist > 0.1) {
-              player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
-              player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
+              // 돌진 거리 이내 진입 → 준비 시작
+              if (dist <= CHARGE_TRIGGER_DIST && dist > ENEMY_ATTACK_RANGE) {
+                enemy.chargeState = 'preparing';
+                enemy.chargeTimer = CHARGE_PREP_TIME;
+                // 돌진 방향 고정 (현재 플레이어 방향)
+                const invD = dist > 0.1 ? 1 / dist : 0;
+                enemy.chargeDirection = { x: -ex * invD, y: -ey * invD };
+                enemy.velocity.x = 0;
+                enemy.velocity.y = 0;
+              }
+
+              // 근접 공격 (chase fallback)
+              if (dist <= ENEMY_ATTACK_RANGE) {
+                enemy.skillCooldown -= dt;
+                if (enemy.skillCooldown <= 0) {
+                  enemy.skillCooldown = ENEMY_ATTACK_COOLDOWN;
+                  if (player.health > 0 && player.invulnerabilityTimer <= 0) {
+                    player.health = Math.max(0, player.health - enemy.damage);
+                    player.hitFlashTimer = 0.15;
+                    player.invulnerabilityTimer = INVULNERABILITY_DURATION;
+                    if (dist > 0.1) {
+                      player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
+                      player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
+                    }
+                    refs.screenShakeTimer.current = 0.2;
+                    refs.screenShakeIntensity.current = 0.3;
+                    refs.damageNumbers.current.push({
+                      id: `dmg-${Date.now()}-${Math.random()}`,
+                      position: { x: player.position.x, y: player.position.y },
+                      value: enemy.damage,
+                      color: '#ff4444',
+                      life: 1.0, maxLife: 1.0, isCritical: false,
+                      velocity: { x: (Math.random() - 0.5) * 40, y: -60 },
+                    });
+                  }
+                }
+              }
+              break;
             }
 
-            refs.screenShakeTimer.current = 0.2;
-            refs.screenShakeIntensity.current = 0.3;
+            case 'preparing': {
+              // 준비 중 (속도 0, 타이머 감소)
+              enemy.velocity.x = 0;
+              enemy.velocity.y = 0;
+              enemy.chargeTimer = (enemy.chargeTimer ?? 0) - dt;
 
-            refs.damageNumbers.current.push({
-              id: `dmg-${Date.now()}-${Math.random()}`,
-              position: { x: player.position.x, y: player.position.y },
-              value: enemy.damage,
-              color: '#ff4444',
-              life: 1.0,
-              maxLife: 1.0,
-              isCritical: false,
-              velocity: { x: (Math.random() - 0.5) * 40, y: -60 },
-            });
+              if ((enemy.chargeTimer ?? 0) <= 0) {
+                // 돌진 시작!
+                enemy.chargeState = 'charging';
+                enemy.chargeTimer = CHARGE_MAX_DIST / (enemy.speed * CHARGE_SPEED_MULT); // 돌진 지속 시간
+              }
+              break;
+            }
+
+            case 'charging': {
+              // 돌진 중 (3배속 직선 이동)
+              const dir = enemy.chargeDirection ?? { x: 1, y: 0 };
+              const chargeSpeed = enemy.speed * CHARGE_SPEED_MULT;
+              enemy.position.x += dir.x * chargeSpeed * dt;
+              enemy.position.y += dir.y * chargeSpeed * dt;
+              enemy.velocity.x = dir.x * chargeSpeed;
+              enemy.velocity.y = dir.y * chargeSpeed;
+
+              // 돌진 타이머 감소
+              enemy.chargeTimer = (enemy.chargeTimer ?? 0) - dt;
+
+              // 돌진 중 플레이어 히트
+              if (dist < 2.0 && player.health > 0 && player.invulnerabilityTimer <= 0) {
+                player.health = Math.max(0, player.health - enemy.damage * 1.5);
+                player.hitFlashTimer = 0.2;
+                player.invulnerabilityTimer = INVULNERABILITY_DURATION;
+                if (dist > 0.1) {
+                  player.knockback.x = dir.x * ENEMY_KNOCKBACK_FORCE * 2;
+                  player.knockback.y = dir.y * ENEMY_KNOCKBACK_FORCE * 2;
+                }
+                refs.screenShakeTimer.current = 0.4;
+                refs.screenShakeIntensity.current = 0.5;
+                refs.damageNumbers.current.push({
+                  id: `charge-dmg-${Date.now()}-${Math.random()}`,
+                  position: { x: player.position.x, y: player.position.y },
+                  value: Math.round(enemy.damage * 1.5),
+                  color: '#ff0000',
+                  life: 1.2, maxLife: 1.2, isCritical: true,
+                  velocity: { x: (Math.random() - 0.5) * 50, y: -70 },
+                });
+                // 돌진 종료 → 쿨다운
+                enemy.chargeState = 'cooldown';
+                enemy.chargeCooldown = CHARGE_COOLDOWN;
+                enemy.velocity.x = 0;
+                enemy.velocity.y = 0;
+              }
+
+              // 타이머 만료 또는 최대 거리 → 쿨다운
+              if ((enemy.chargeTimer ?? 0) <= 0) {
+                enemy.chargeState = 'cooldown';
+                enemy.chargeCooldown = CHARGE_COOLDOWN;
+                enemy.velocity.x = 0;
+                enemy.velocity.y = 0;
+              }
+              break;
+            }
+
+            case 'cooldown': {
+              // 돌진 후 무방비 (속도 0, 쿨다운 감소)
+              enemy.velocity.x = 0;
+              enemy.velocity.y = 0;
+              enemy.chargeCooldown = (enemy.chargeCooldown ?? 0) - dt;
+
+              if ((enemy.chargeCooldown ?? 0) <= 0) {
+                enemy.chargeState = 'idle';
+              }
+              break;
+            }
           }
+          break;
+        }
+
+        // ===== 기존 chase AI (디폴트) =====
+        case 'chase':
+        default: {
+          if (dist > ENEMY_ATTACK_RANGE) {
+            // 사거리 밖: 플레이어를 향해 직선 추적
+            const nx = -ex / dist;
+            const ny = -ey / dist;
+            enemy.position.x += nx * enemy.speed * dt;
+            enemy.position.y += ny * enemy.speed * dt;
+            enemy.velocity.x = nx * enemy.speed;
+            enemy.velocity.y = ny * enemy.speed;
+          } else {
+            // 사거리 안: 공전하면서 계속 이동 (dead-stop 제거)
+            const invDist = dist > 0.1 ? 1 / dist : 0;
+            const nrmX = ex * invDist;
+            const nrmY = ey * invDist;
+            const tangentX = -nrmY;
+            const tangentY = nrmX;
+            const orbitSpeed = enemy.speed * 0.6;
+            const moveX = tangentX * orbitSpeed * ENEMY_ORBIT_SPEED;
+            const moveY = tangentY * orbitSpeed * ENEMY_ORBIT_SPEED;
+            enemy.position.x += moveX * dt;
+            enemy.position.y += moveY * dt;
+            enemy.velocity.x = moveX;
+            enemy.velocity.y = moveY;
+
+            // 사거리 경계 유지
+            const idealDist = ENEMY_ATTACK_RANGE * 0.7;
+            const distCorrection = (dist - idealDist) * 0.5;
+            if (Math.abs(distCorrection) > 0.5) {
+              enemy.position.x += (-nrmX) * distCorrection * dt * 3;
+              enemy.position.y += (-nrmY) * distCorrection * dt * 3;
+            }
+
+            // 공격 쿨다운
+            enemy.skillCooldown -= dt;
+            if (enemy.skillCooldown <= 0) {
+              enemy.skillCooldown = ENEMY_ATTACK_COOLDOWN;
+
+              if (player.health > 0 && player.invulnerabilityTimer <= 0) {
+                player.health = Math.max(0, player.health - enemy.damage);
+                player.hitFlashTimer = 0.15;
+                player.invulnerabilityTimer = INVULNERABILITY_DURATION;
+
+                if (dist > 0.1) {
+                  player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
+                  player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
+                }
+
+                refs.screenShakeTimer.current = 0.2;
+                refs.screenShakeIntensity.current = 0.3;
+
+                refs.damageNumbers.current.push({
+                  id: `dmg-${Date.now()}-${Math.random()}`,
+                  position: { x: player.position.x, y: player.position.y },
+                  value: enemy.damage,
+                  color: '#ff4444',
+                  life: 1.0,
+                  maxLife: 1.0,
+                  isCritical: false,
+                  velocity: { x: (Math.random() - 0.5) * 40, y: -60 },
+                });
+              }
+            }
+          }
+          break;
         }
       }
     }

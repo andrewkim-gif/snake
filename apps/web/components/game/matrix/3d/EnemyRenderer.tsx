@@ -314,6 +314,8 @@ export interface EnemyRendererProps {
   playerRef: React.MutableRefObject<{ position: { x: number; y: number } }>;
   /** v39 Phase 3: 적별 hit flash 타이머 (enemyId → 남은 시간, 0이면 정상) */
   hitFlashMapRef?: React.MutableRefObject<Map<string, number>>;
+  /** v44: 적 투사체 배열 ref (InstancedMesh로 렌더링) */
+  enemyProjectilesRef?: React.MutableRefObject<import('@/lib/matrix/types').EnemyProjectile[]>;
 }
 
 // ============================================
@@ -323,7 +325,12 @@ export interface EnemyRendererProps {
 /** Hit flash 지속 시간 (초) */
 const ENEMY_HIT_FLASH_DURATION = 0.12;
 
-export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRendererProps) {
+/** v44: 적 투사체 InstancedMesh 최대 수 */
+const MAX_ENEMY_PROJECTILE_INSTANCES = 50;
+/** v44: 적 투사체 구체 반경 */
+const ENEMY_PROJECTILE_SPHERE_RADIUS = 0.25;
+
+export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProjectilesRef }: EnemyRendererProps) {
   const groupRef = useRef<THREE.Group>(null);
 
   // Template별 pool 생성 (한 번만)
@@ -388,6 +395,30 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
     return { mesh, material, geometry, activeCount: 0 };
   }, []);
 
+  // v44: 적 투사체 InstancedMesh pool (작은 빨간 구체)
+  const projectilePool = useMemo(() => {
+    const geometry = new THREE.SphereGeometry(ENEMY_PROJECTILE_SPHERE_RADIUS, 6, 4);
+    const material = new THREE.MeshStandardMaterial({
+      color: '#ff4400',
+      emissive: new THREE.Color('#ff2200'),
+      emissiveIntensity: 0.8,
+      roughness: 0.3,
+      metalness: 0.1,
+    });
+    const mesh = new THREE.InstancedMesh(geometry, material, MAX_ENEMY_PROJECTILE_INSTANCES);
+    mesh.name = 'enemy_projectiles';
+    mesh.castShadow = false;
+    mesh.receiveShadow = false;
+    mesh.frustumCulled = false;
+    mesh.count = 0;
+
+    // instanceColor 초기화
+    const colorArray = new Float32Array(MAX_ENEMY_PROJECTILE_INSTANCES * 3);
+    mesh.instanceColor = new THREE.InstancedBufferAttribute(colorArray, 3);
+
+    return { mesh, material, geometry, activeCount: 0 };
+  }, []);
+
   // Scene에 mesh 추가/제거
   useEffect(() => {
     const group = groupRef.current;
@@ -399,6 +430,8 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
     }
     // LOW LOD pool 추가
     group.add(lowLodPool.mesh);
+    // v44: 적 투사체 pool 추가
+    group.add(projectilePool.mesh);
 
     return () => {
       // cleanup: group에서 제거 + dispose
@@ -413,9 +446,15 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
       lowLodPool.material.dispose();
       lowLodPool.mesh.dispose();
 
+      // v44: 적 투사체 pool 정리
+      group.remove(projectilePool.mesh);
+      projectilePool.geometry.dispose();
+      projectilePool.material.dispose();
+      projectilePool.mesh.dispose();
+
       disposeAllTemplates();
     };
-  }, [templatePools, lowLodPool]);
+  }, [templatePools, lowLodPool, projectilePool]);
 
   // ============================================
   // useFrame: 매 프레임 InstancedMesh 업데이트
@@ -587,6 +626,40 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef }: EnemyRe
     if (_smoothedPositions.size > aliveIds.size + 20) {
       for (const id of _smoothedPositions.keys()) {
         if (!aliveIds.has(id)) _smoothedPositions.delete(id);
+      }
+    }
+
+    // === v44: 적 투사체 InstancedMesh 렌더링 ===
+    const eProjs = enemyProjectilesRef?.current;
+    if (eProjs && eProjs.length > 0) {
+      let projCount = 0;
+      for (let pi = 0; pi < eProjs.length && projCount < MAX_ENEMY_PROJECTILE_INSTANCES; pi++) {
+        const proj = eProjs[pi];
+        const px3d = proj.position.x;
+        const pz3d = proj.position.y;
+        const py3d = getMCTerrainHeight(px3d, pz3d) + 1.5; // 약간 위에 떠서 이동
+
+        _tempPosition.set(px3d, py3d, pz3d);
+        _tempScale.set(1, 1, 1);
+        _tempMatrix.compose(_tempPosition, _tempQuaternion.identity(), _tempScale);
+        projectilePool.mesh.setMatrixAt(projCount, _tempMatrix);
+
+        // 투사체 색상 (per-instance)
+        _tempColor.set(proj.color || '#ff4400');
+        projectilePool.mesh.setColorAt(projCount, _tempColor);
+
+        projCount++;
+      }
+      if (projectilePool.mesh.count !== projCount) {
+        projectilePool.mesh.count = projCount;
+      }
+      if (projCount > 0) {
+        projectilePool.mesh.instanceMatrix.needsUpdate = true;
+        markColorNeedsUpdate(projectilePool.mesh);
+      }
+    } else {
+      if (projectilePool.mesh.count !== 0) {
+        projectilePool.mesh.count = 0;
       }
     }
   });

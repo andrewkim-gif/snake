@@ -168,6 +168,9 @@ export type EnemyType =
   | 'rootkit' | 'apt'
   | 'zeroday' | 'skynet'
   | 'adware'
+  // v44: 행동 다양화 적
+  | 'ranged_drone'    // 원거리 드론 (투사체 발사)
+  | 'charge_crawler'  // 돌진 크롤러 (고속 돌진)
   // 확장용 catch-all
   | (string & {});
 
@@ -381,6 +384,9 @@ export interface Enemy {
   bossSkills?: BossSkillType[];          // 보스 스킬 목록
   currentSkillIndex: number;             // 현재 사용할 스킬 인덱스
 
+  // v44: 행동 패턴 분기 (chase=기존 추적, ranged=원거리 사격, charge=돌진)
+  behaviorType?: 'chase' | 'ranged' | 'charge';
+
   // 원거리 적 전용 필드
   attackType: 'melee' | 'ranged';        // 공격 타입
   attackRange?: number;                  // 원거리 공격 사거리
@@ -389,6 +395,12 @@ export interface Enemy {
   projectileSpeed?: number;              // 투사체 속도
   currentAttackCooldown?: number;        // 현재 공격 쿨다운 타이머 (남은 시간)
   lastAttackTime?: number;               // 마지막 공격 시간
+
+  // v44: 돌진 적 전용 필드
+  chargeTimer?: number;                  // 돌진 준비 타이머 (1초 카운트다운)
+  chargeCooldown?: number;               // 돌진 후 쿨다운 (2초)
+  chargeDirection?: Vector2;             // 돌진 방향 (고정)
+  chargeState?: 'idle' | 'preparing' | 'charging' | 'cooldown'; // 돌진 상태 머신
 
   // 상태이상 시스템
   statusEffects?: StatusEffect[];        // 적용 중인 상태이상 목록

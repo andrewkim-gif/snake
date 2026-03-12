@@ -65,7 +65,7 @@ export const WAVE_PROGRESSION: WaveStageConfig[] = [
     enemyTypes: ['glitch', 'bot'],
     phaseName: 'SKIRMISH',
   },
-  // ENGAGEMENT (60s): 본격 전투 시작
+  // ENGAGEMENT (60s): 본격 전투 시작 + v44 원거리 적 등장
   {
     startTime: 60,
     hpMultiplier: 1.5,
@@ -73,10 +73,10 @@ export const WAVE_PROGRESSION: WaveStageConfig[] = [
     speedMultiplier: 1.1,
     spawnRateMultiplier: 0.85,
     maxEnemyMultiplier: 1.2,
-    enemyTypes: ['glitch', 'bot', 'malware'],
+    enemyTypes: ['glitch', 'bot', 'malware', 'ranged_drone'],
     phaseName: 'ENGAGEMENT',
   },
-  // ENGAGEMENT (120s): whale 등장
+  // ENGAGEMENT (120s): whale + v44 돌진 적 등장
   {
     startTime: 120,
     hpMultiplier: 2.0,
@@ -84,10 +84,10 @@ export const WAVE_PROGRESSION: WaveStageConfig[] = [
     speedMultiplier: 1.15,
     spawnRateMultiplier: 0.75,
     maxEnemyMultiplier: 1.3,
-    enemyTypes: ['glitch', 'bot', 'malware', 'whale'],
+    enemyTypes: ['glitch', 'bot', 'malware', 'whale', 'ranged_drone', 'charge_crawler'],
     phaseName: 'ENGAGEMENT',
   },
-  // SHOWDOWN (180s): 최고 난이도
+  // SHOWDOWN (180s): 최고 난이도 — 모든 AI 타입 등장
   {
     startTime: 180,
     hpMultiplier: 3.0,
@@ -95,7 +95,7 @@ export const WAVE_PROGRESSION: WaveStageConfig[] = [
     speedMultiplier: 1.25,
     spawnRateMultiplier: 0.6,
     maxEnemyMultiplier: 1.5,
-    enemyTypes: ['bot', 'malware', 'whale'],
+    enemyTypes: ['bot', 'malware', 'whale', 'ranged_drone', 'charge_crawler'],
     phaseName: 'SHOWDOWN',
   },
   // SHOWDOWN (300s): 극한 난이도
@@ -106,7 +106,7 @@ export const WAVE_PROGRESSION: WaveStageConfig[] = [
     speedMultiplier: 1.4,
     spawnRateMultiplier: 0.5,
     maxEnemyMultiplier: 1.8,
-    enemyTypes: ['malware', 'whale', 'sniper'],
+    enemyTypes: ['malware', 'whale', 'sniper', 'ranged_drone', 'charge_crawler'],
     phaseName: 'SHOWDOWN',
   },
 ];
@@ -214,6 +214,9 @@ export function checkEliteSpawn(killCount: number): EliteSpawnConfig | null {
   return null;
 }
 
+/** v44: 적 행동 타입 → behaviorType 매핑 */
+export type EnemyBehaviorType = 'chase' | 'ranged' | 'charge';
+
 /** 적 타입별 기본 스탯 (MC 블록 스케일) */
 export const ENEMY_BASE_STATS: Record<string, {
   hp: number;
@@ -221,12 +224,33 @@ export const ENEMY_BASE_STATS: Record<string, {
   speed: number;
   color: string;
   xp: number;
+  /** v44: 행동 패턴 (기본 'chase') */
+  behaviorType?: EnemyBehaviorType;
+  /** v44: 원거리 적 투사체 속도 (blocks/s) */
+  projectileSpeed?: number;
+  /** v44: 원거리 적 투사체 쿨다운 (초) */
+  projectileCooldown?: number;
+  /** v44: 원거리 적 투사체 색상 */
+  projectileColor?: string;
 }> = {
   glitch: { hp: 100, damage: 10, speed: 5, color: '#44aaff', xp: 10 },
   bot: { hp: 150, damage: 15, speed: 4, color: '#ff6644', xp: 20 },
   malware: { hp: 200, damage: 20, speed: 4.5, color: '#cc44ff', xp: 30 },
   whale: { hp: 300, damage: 25, speed: 3, color: '#ff4444', xp: 50 },
   sniper: { hp: 120, damage: 30, speed: 3.5, color: '#ff8800', xp: 40 },
+  // v44: 원거리 적 — 투사체 속도 5 blocks/s, 데미지 일반의 50%, 쿨다운 2초
+  ranged_drone: {
+    hp: 80, damage: 8, speed: 3, color: '#ffaa00', xp: 25,
+    behaviorType: 'ranged',
+    projectileSpeed: 5,
+    projectileCooldown: 2.0,
+    projectileColor: '#ff4400',
+  },
+  // v44: 돌진 적 — 돌진 전 1초 예고, 3배속 돌진, 2초 쿨다운
+  charge_crawler: {
+    hp: 250, damage: 30, speed: 4, color: '#ff2222', xp: 35,
+    behaviorType: 'charge',
+  },
 };
 
 /**
@@ -235,7 +259,17 @@ export const ENEMY_BASE_STATS: Record<string, {
 export function getScaledEnemyStats(
   enemyType: string,
   waveStage: WaveStageConfig
-): { hp: number; damage: number; speed: number; color: string; xp: number } {
+): {
+  hp: number;
+  damage: number;
+  speed: number;
+  color: string;
+  xp: number;
+  behaviorType?: EnemyBehaviorType;
+  projectileSpeed?: number;
+  projectileCooldown?: number;
+  projectileColor?: string;
+} {
   const base = ENEMY_BASE_STATS[enemyType] ?? ENEMY_BASE_STATS.glitch;
   return {
     hp: Math.round(base.hp * waveStage.hpMultiplier),
@@ -243,5 +277,9 @@ export function getScaledEnemyStats(
     speed: base.speed * waveStage.speedMultiplier,
     color: base.color,
     xp: base.xp,
+    behaviorType: base.behaviorType,
+    projectileSpeed: base.projectileSpeed,
+    projectileCooldown: base.projectileCooldown,
+    projectileColor: base.projectileColor,
   };
 }

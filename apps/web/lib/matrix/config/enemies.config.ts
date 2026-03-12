@@ -388,6 +388,36 @@ export const ENEMY_TYPES = {
     splashRadius: 50
   },
 
+  // === v44: 행동 다양화 적 ===
+  // 원거리 드론: 거리 유지하며 투사체 발사
+  ranged_drone: {
+    hp: 8,
+    speed: 30,
+    radius: 10,
+    color: '#ffaa00',
+    damage: 5,
+    mass: 0.5,
+    score: 12,
+    xp: 2.5,
+    attackType: 'ranged' as const,
+    attackRange: 240,
+    attackCooldown: 2.0,
+    projectileSpeed: 150,
+    projectileColor: '#ff4400',
+  },
+  // 돌진 크롤러: 준비 후 고속 돌진
+  charge_crawler: {
+    hp: 25,
+    speed: 40,
+    radius: 14,
+    color: '#ff2222',
+    damage: 15,
+    mass: 1.5,
+    score: 18,
+    xp: 3.5,
+    attackType: 'melee' as const,
+  },
+
   // === 보스 (Arena mode에서 제거됨) ===
   // Boss stats removed for Arena mode - no boss spawning
 } as Record<EnemyType, {
