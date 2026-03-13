@@ -99,6 +99,9 @@ const _tempQuaternion = new THREE.Quaternion();
 const _tempScale = new THREE.Vector3();
 const _tempColor = new THREE.Color();
 const _Y_AXIS = new THREE.Vector3(0, 1, 0);
+const _X_AXIS = new THREE.Vector3(1, 0, 0); // v47: stun tilt
+const _Z_AXIS = new THREE.Vector3(0, 0, 1); // v47: stun tilt
+const _tempQuaternion2 = new THREE.Quaternion(); // v47: stun tilt 보조
 const _WHITE_COLOR = new THREE.Color(0xffffff); // v39: hit flash 블렌드 대상
 
 // ============================================
@@ -513,7 +516,10 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
     // 적 순회
     for (let e = 0; e < enemies.length; e++) {
       const enemy = enemies[e];
-      if (!enemy || enemy.state === 'dying') continue;
+      if (!enemy) continue;
+
+      // v47: dying 적도 렌더링 (축소 + 페이드 아웃)
+      const isDying = enemy.state === 'dying';
 
       aliveIds.add(enemy.id);
 
@@ -532,6 +538,10 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
         // 처음 보이는 적 — 즉시 위치 설정
         smoothed = { x: rawX, z: rawZ };
         _smoothedPositions.set(enemy.id, smoothed);
+      } else if (isDying) {
+        // v47: dying 적은 즉시 위치 추적 (death slide가 보이도록)
+        smoothed.x = rawX;
+        smoothed.z = rawZ;
       } else {
         // lerp로 부드럽게 이동
         smoothed.x += (rawX - smoothed.x) * posFactor;
@@ -566,8 +576,12 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
         // LOW LOD: 단일 큐브
         if (lowLodCount >= MAX_INSTANCES_PER_TEMPLATE * 2) continue;
 
-        _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1 + LOW_LOD_CUBE_SIZE / 2, z3d);
-        _tempScale.set(scale, scale, scale);
+        // v47: dying 축소 + 바닥 침하
+        const lowDeathScale = isDying ? (enemy.deathScale ?? 0.3) : 1.0;
+        const lowDeathSink = isDying ? (1 - lowDeathScale) * 0.8 : 0; // 죽으면서 바닥으로 침하
+
+        _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1 + LOW_LOD_CUBE_SIZE / 2 - lowDeathSink, z3d);
+        _tempScale.set(scale * lowDeathScale, scale * lowDeathScale, scale * lowDeathScale);
         _tempMatrix.compose(_tempPosition, _tempQuaternion.identity(), _tempScale);
 
         lowLodPool.mesh.setMatrixAt(lowLodCount, _tempMatrix);
@@ -575,6 +589,11 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
         // v39: hit flash — 흰색으로 블렌드
         if (hitFlashIntensity > 0) {
           _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity);
+        }
+        // v47: dying 적 색상 어둡게 (fade 대신 darkening)
+        if (isDying) {
+          const deathFade = enemy.deathScale ?? 0.3;
+          _tempColor.multiplyScalar(deathFade);
         }
         lowLodPool.mesh.setColorAt(lowLodCount, _tempColor);
 
@@ -590,8 +609,16 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
         // MID LOD: 절반 스케일 Y (약간 납작하게)
         const scaleY = lod === 'MID' ? scale * 0.7 : scale;
 
-        _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1, z3d);
-        _tempScale.set(scale, scaleY, scale);
+        // v47: dying 적 축소 + 바닥 침하 + 색상 어둡게
+        let deathScaleMult = 1.0;
+        let deathSinkY = 0;
+        if (isDying) {
+          deathScaleMult = enemy.deathScale ?? 0.3;
+          deathSinkY = (1 - deathScaleMult) * 0.8; // 죽으면서 바닥으로 침하
+        }
+
+        _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1 - deathSinkY, z3d);
+        _tempScale.set(scale * deathScaleMult, scaleY * deathScaleMult, scale * deathScaleMult);
 
         // 8방향 facing (velocity 기반)
         const vx = enemy.velocity.x;
@@ -603,6 +630,32 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
           _tempQuaternion.identity();
         }
 
+        // v47: stun tilt — 넉백 방향으로 기울어짐
+        if (enemy.state === 'stunned' && (vx !== 0 || vy !== 0)) {
+          const speed = Math.sqrt(vx * vx + vy * vy);
+          const tiltStrength = Math.min(speed / 30, 1) * 0.26; // max 15deg
+          const tiltAngle = Math.atan2(vy, vx);
+          _tempQuaternion2.setFromAxisAngle(_Z_AXIS, -tiltStrength * Math.cos(tiltAngle));
+          _tempQuaternion.multiply(_tempQuaternion2);
+          _tempQuaternion2.setFromAxisAngle(_X_AXIS, tiltStrength * Math.sin(tiltAngle));
+          _tempQuaternion.multiply(_tempQuaternion2);
+        }
+
+        // v47: dying tilt — 사망 시 넘어지는 효과 (deathVelocity 방향)
+        if (isDying && enemy.deathVelocity) {
+          const deathProgress = 1 - deathScaleMult; // 0→1
+          const toppleAngle = deathProgress * 1.2; // max ~70deg topple
+          const dvx = enemy.deathVelocity.x;
+          const dvy = enemy.deathVelocity.y;
+          if (dvx !== 0 || dvy !== 0) {
+            const dvAngle = Math.atan2(dvy, dvx);
+            _tempQuaternion2.setFromAxisAngle(_Z_AXIS, -toppleAngle * Math.cos(dvAngle));
+            _tempQuaternion.multiply(_tempQuaternion2);
+            _tempQuaternion2.setFromAxisAngle(_X_AXIS, toppleAngle * Math.sin(dvAngle));
+            _tempQuaternion.multiply(_tempQuaternion2);
+          }
+        }
+
         _tempMatrix.compose(_tempPosition, _tempQuaternion, _tempScale);
 
         pool.mesh.setMatrixAt(idx, _tempMatrix);
@@ -610,6 +663,11 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
         // v39: hit flash — 흰색으로 블렌드
         if (hitFlashIntensity > 0) {
           _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity);
+        }
+        // v47: dying 적 색상 어둡게
+        if (isDying) {
+          const deathFade = enemy.deathScale ?? 0.3;
+          _tempColor.multiplyScalar(deathFade);
         }
         pool.mesh.setColorAt(idx, _tempColor);
 
