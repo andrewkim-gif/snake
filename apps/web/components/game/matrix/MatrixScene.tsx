@@ -67,6 +67,7 @@ import { VoxelCharacter } from './3d/VoxelCharacter';
 import { EnemyRenderer } from './3d/EnemyRenderer';
 import { SwingArc, type AttackEvent } from './3d/SwingArc';
 import { DeathParticles, type DeathEvent } from './3d/DeathParticles';
+import { HitParticleSystem } from './3d/HitParticleSystem';
 // Phase 5: Effects
 import { PostProcessingEffects, ScreenFlashOverlay, useScreenFlash } from './3d/PostProcessing';
 import { ParticleSystem } from './3d/ParticleSystem';
@@ -153,6 +154,7 @@ function SceneContent({
   triggerFlash,
   gameSpeedRef,
   slowmoTimerRef,
+  hitStopTimerRef,
 }: {
   refs: GameRefs;
   warningIntensityRef: React.MutableRefObject<number>;
@@ -164,32 +166,20 @@ function SceneContent({
   deathRespawnTimerRef: React.MutableRefObject<number>;
   updateFlash: (dt: number) => void;
   blockWeaponsTick: (dt: number) => void;
-  /** v42 Phase 3: 일시정지 ref */
   pausedRef?: React.MutableRefObject<boolean>;
-  /** v42 Phase 3: 적 처치 콜백 */
   onEnemyKill?: (enemy: Enemy) => void;
-  /** v42 Phase 3: XP 임계값 도달 시 레벨업 콜백 */
   onLevelUp?: (level: number) => void;
-  /** v42 Phase 4: 콤보 XP 배율 ref */
   comboXpMultiplierRef?: React.MutableRefObject<number>;
-  /** v42 Phase 4: 킬 카운트 ref */
   killCountRef?: React.MutableRefObject<number>;
-  /** v42 Phase 4: Wave 페이즈 전환 콜백 */
   onPhaseChange?: (phase: WavePhaseName) => void;
-  /** v42 Phase 4: 엘리트 스폰 콜백 */
   onEliteSpawn?: (config: EliteSpawnConfig) => void;
-  /** v42 Phase 4: 콤보 타이머 업데이트 함수 */
   comboUpdate?: (dt: number) => void;
-  /** v42 Phase 5: 궁극기 해금 ref */
   ultimateUnlockedRef?: React.MutableRefObject<boolean>;
-  /** v42 Phase 5: 궁극기 쿨다운 ref */
   ultimateCooldownRef?: React.MutableRefObject<number>;
-  /** v44: 화면 플래시 트리거 */
   triggerFlash?: (options?: { color?: string; intensity?: number; decayRate?: number }) => void;
-  /** v44: 게임 속도 ref (슬로모) */
   gameSpeedRef?: React.MutableRefObject<number>;
-  /** v44: 슬로모 타이머 ref */
   slowmoTimerRef?: React.MutableRefObject<number>;
+  hitStopTimerRef?: React.MutableRefObject<number>;
 }) {
   return (
     <>
@@ -217,6 +207,7 @@ function SceneContent({
         triggerFlash={triggerFlash}
         gameSpeedRef={gameSpeedRef}
         slowmoTimerRef={slowmoTimerRef}
+        hitStopTimerRef={hitStopTimerRef}
       />
 
       {/* 배경색 — MC 하늘색 */}
@@ -271,6 +262,12 @@ function SceneContent({
 
       {/* 적 사망 파편 폭발 (v44: 스파크 레이어 + 슬로모 연동) */}
       <DeathParticles deathEventsRef={deathEventsRef} gameSpeedRef={gameSpeedRef} />
+      {/* v47 Phase 2: Hit/Death 파티클 시스템 — hitFlashMap + deathEvents 자동 감지 */}
+      <HitParticleSystem
+        enemiesRef={refs.enemies}
+        hitFlashMapRef={hitFlashMapRef}
+        deathEventsRef={deathEventsRef}
+      />
 
       {/* v42 Phase 2: 블록 좌표 무기 3D 렌더러 (투사체 시각화) */}
       <BlockRangedWeapons projectilesRef={refs.projectiles} />
@@ -400,6 +397,8 @@ interface GameLogicProps {
   gameSpeedRef?: React.MutableRefObject<number>;
   /** v44: 슬로모 타이머 ref */
   slowmoTimerRef?: React.MutableRefObject<number>;
+  /** v47: 히트스탑 타이머 ref */
+  hitStopTimerRef?: React.MutableRefObject<number>;
 }
 
 /**
@@ -427,6 +426,7 @@ function GameLogic({
   triggerFlash,
   gameSpeedRef,
   slowmoTimerRef,
+  hitStopTimerRef,
 }: GameLogicProps) {
   const prevTimeRef = useRef(performance.now());
   /** v42 Phase 4: 현재 Wave 페이즈 추적 (전환 감지용) */
@@ -463,8 +463,19 @@ function GameLogic({
       }
     }
 
-    // 게임 속도 적용된 dt (슬로모 영향)
-    const gameSpeed = gameSpeedRef?.current ?? 1.0;
+    // v47: 히트스탑 — realDt로 감쇠 (게임 시간이 아닌 실제 시간)
+    let hitStopMult = 1.0;
+    if (hitStopTimerRef && hitStopTimerRef.current > 0) {
+      hitStopTimerRef.current -= realDt;
+      if (hitStopTimerRef.current > 0) {
+        hitStopMult = 0.1;
+      } else {
+        hitStopTimerRef.current = 0;
+      }
+    }
+
+    // 게임 속도 적용된 dt (슬로모 + 히트스탑 영향)
+    const gameSpeed = (gameSpeedRef?.current ?? 1.0) * hitStopMult;
     const dt = realDt * gameSpeed;
 
     // v42 Phase 3: 일시정지 중에는 전체 게임 로직 스킵 (레벨업 UI 표시 중)
@@ -567,6 +578,8 @@ function GameLogic({
           isElite: enemy.isElite,
           eliteTier: enemy.eliteTier,
         });
+
+        // v47: Death burst 파티클은 HitParticleSystem이 deathEventsRef 자동 감지
 
         // v42 Phase 4: 엘리트 적은 더 높은 XP 젬 드롭
         const gemValue = enemy.isElite
@@ -1235,6 +1248,7 @@ export function MatrixScene({ gameRefs, blockWeaponsTick: externalTick, pausedRe
   // === v44: 슬로모 시스템 refs ===
   const gameSpeedRef = useRef(1.0);
   const slowmoTimerRef = useRef(0);
+  const hitStopTimerRef = useRef(0); // v47: 히트스탑
 
   // 3인칭 모드: WASD는 MCGameCamera가 직접 관리
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1248,6 +1262,9 @@ export function MatrixScene({ gameRefs, blockWeaponsTick: externalTick, pausedRe
     hitFlashMapRef,
     attackEventsRef,
     comboDamageMultiplierRef,
+    screenShakeTimerRef: refs.screenShakeTimer,
+    screenShakeIntensityRef: refs.screenShakeIntensity,
+    hitStopTimerRef,
   });
   const weaponTick = externalTick ?? internalBlockWeapons.tick;
 
@@ -1413,6 +1430,7 @@ export function MatrixScene({ gameRefs, blockWeaponsTick: externalTick, pausedRe
           triggerFlash={triggerFlash}
           gameSpeedRef={gameSpeedRef}
           slowmoTimerRef={slowmoTimerRef}
+          hitStopTimerRef={hitStopTimerRef}
         />
       </Canvas>
 
