@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[27,0],[-27,96],[62,-32],[38,5],[-73,-69]]],"transform":{"scale":[0.010229955730000597,0.005579892885417455],"translate":[76.77735074100008,35.110441997000024]},"objects":{"KAS_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

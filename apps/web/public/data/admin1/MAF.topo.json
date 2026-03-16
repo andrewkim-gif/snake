@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[75,0],[-75,34],[75,41],[0,-75]]],"transform":{"scale":[0.0016807582628208212,0.0011832838619839474],"translate":[-63.14362545499995,18.033391472351283]},"objects":{"MAF_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

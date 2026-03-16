@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[75,38],[-75,-38],[43,75],[32,-37]]],"transform":{"scale":[0.0009560510016792514,0.0005436702799998254],"translate":[7.365750207000076,43.72273028300004]},"objects":{"MCO_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

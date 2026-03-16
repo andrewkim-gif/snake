@@ -43,6 +43,15 @@ const MAX_INSTANCES: Record<string, number> = {
   birch_leaf: 20000,
   spruce_tree: 5000,
   spruce_leaf: 20000,
+  // v47: 6-Biome 신규 블록
+  snow: 20000,
+  stone_dark: 10000,
+  sand_dark: 10000,
+  dirt_with_snow: 5000,
+  dirt_with_grass: 5000,
+  sand_with_grass: 5000,
+  grass_with_snow: 5000,
+  gravel_with_grass: 5000,
 };
 
 // 잔디 변형 상단 오버레이 최대 인스턴스 (variant 1=dark, 2=dry, 3=lush, 각 ~20000)
@@ -150,6 +159,15 @@ const BLOCK_TO_MESH: Record<number, string> = {
   [BlockType.birch_leaf]: 'birch_leaf',
   [BlockType.spruce_tree]: 'spruce_tree',
   [BlockType.spruce_leaf]: 'spruce_leaf',
+  // v47: 6-Biome 신규 블록
+  [BlockType.snow]: 'snow',
+  [BlockType.stone_dark]: 'stone_dark',
+  [BlockType.sand_dark]: 'sand_dark',
+  [BlockType.dirt_with_snow]: 'dirt_with_snow',
+  [BlockType.dirt_with_grass]: 'dirt_with_grass',
+  [BlockType.sand_with_grass]: 'sand_with_grass',
+  [BlockType.grass_with_snow]: 'grass_with_snow',
+  [BlockType.gravel_with_grass]: 'gravel_with_grass',
 };
 
 // 노출 체크용 이웃 오프셋
@@ -253,7 +271,20 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       color: new THREE.Color('#3a7a3a'),
     });
 
-    return { dirtMat, stoneMat, sandMat, leafMat, coalMat, bedrockMat, cobblestoneMat, gravelMat, birchLeafMat, spruceLeafMat };
+    // v47: 6-Biome 신규 머티리얼
+    const snowMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/snow.png`), color: new THREE.Color('#f0f5ff') });
+    const stoneDarkMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/stone_dark.png`) });
+    const sandDarkMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/sand_dark.png`) });
+    const dirtWithSnowMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/dirt_with_snow.png`) });
+    const dirtWithGrassMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/dirt_with_grass_top.png`) });
+    const sandWithGrassMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/sand_with_grass.png`) });
+    const grassWithSnowMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/grass_with_snow.png`) });
+    const gravelWithGrassMat = new THREE.MeshLambertMaterial({ map: loadBlockTexture(`${TEX_PATH}/gravel_with_grass.png`) });
+
+    return {
+      dirtMat, stoneMat, sandMat, leafMat, coalMat, bedrockMat, cobblestoneMat, gravelMat, birchLeafMat, spruceLeafMat,
+      snowMat, stoneDarkMat, sandDarkMat, dirtWithSnowMat, dirtWithGrassMat, sandWithGrassMat, grassWithSnowMat, gravelWithGrassMat,
+    };
   }, []);
 
   // ============================================
@@ -324,6 +355,31 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     spruceLeafMesh.count = 0;
     spruceLeafMesh.frustumCulled = false;
 
+    // v47: 6-Biome 신규 InstancedMesh
+    const snowMesh = new THREE.InstancedMesh(geo, materials.snowMat, MAX_INSTANCES.snow);
+    snowMesh.count = 0; snowMesh.frustumCulled = false;
+
+    const stoneDarkMesh = new THREE.InstancedMesh(geo, materials.stoneDarkMat, MAX_INSTANCES.stone_dark);
+    stoneDarkMesh.count = 0; stoneDarkMesh.frustumCulled = false;
+
+    const sandDarkMesh = new THREE.InstancedMesh(geo, materials.sandDarkMat, MAX_INSTANCES.sand_dark);
+    sandDarkMesh.count = 0; sandDarkMesh.frustumCulled = false;
+
+    const dirtWithSnowMesh = new THREE.InstancedMesh(geo, materials.dirtWithSnowMat, MAX_INSTANCES.dirt_with_snow);
+    dirtWithSnowMesh.count = 0; dirtWithSnowMesh.frustumCulled = false;
+
+    const dirtWithGrassMesh = new THREE.InstancedMesh(geo, materials.dirtWithGrassMat, MAX_INSTANCES.dirt_with_grass);
+    dirtWithGrassMesh.count = 0; dirtWithGrassMesh.frustumCulled = false;
+
+    const sandWithGrassMesh = new THREE.InstancedMesh(geo, materials.sandWithGrassMat, MAX_INSTANCES.sand_with_grass);
+    sandWithGrassMesh.count = 0; sandWithGrassMesh.frustumCulled = false;
+
+    const grassWithSnowMesh = new THREE.InstancedMesh(geo, materials.grassWithSnowMat, MAX_INSTANCES.grass_with_snow);
+    grassWithSnowMesh.count = 0; grassWithSnowMesh.frustumCulled = false;
+
+    const gravelWithGrassMesh = new THREE.InstancedMesh(geo, materials.gravelWithGrassMat, MAX_INSTANCES.gravel_with_grass);
+    gravelWithGrassMesh.count = 0; gravelWithGrassMesh.frustumCulled = false;
+
     // 잔디 상단 오버레이 — PlaneGeometry로 잔디 블록 위에 초록 텍스처 (Phase 4: 멀티페이스)
     const grassTopGeo = new THREE.PlaneGeometry(1, 1);
     grassTopGeo.rotateX(-Math.PI / 2); // XZ 평면으로 회전 (상단 면)
@@ -348,6 +404,17 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       grassTopVariants.push(varMesh);
     }
 
+    // v47: snow 상단 오버레이 (grass top과 동일 패턴)
+    const snowTopGeo = new THREE.PlaneGeometry(1, 1);
+    snowTopGeo.rotateX(-Math.PI / 2);
+    const snowTopMat = new THREE.MeshLambertMaterial({
+      map: loadBlockTexture(`${TEX_PATH}/snow.png`),
+      color: new THREE.Color('#f0f5ff'),
+    });
+    const snowTopMesh = new THREE.InstancedMesh(snowTopGeo, snowTopMat, MAX_INSTANCES.snow);
+    snowTopMesh.count = 0;
+    snowTopMesh.frustumCulled = false;
+
     // v45: 바닥 장식 오브젝트 (빌보드 PlaneGeometry)
     const decorationMeshes: Record<string, THREE.InstancedMesh> = {};
     for (const dtype of DECORATION_TYPES) {
@@ -370,6 +437,10 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       coalMesh, bedrockMesh, cobblestoneMesh, gravelMesh,
       birchTreeMesh, birchLeafMesh, spruceTreeMesh, spruceLeafMesh,
       grassTopMesh, grassTopVariants, decorationMeshes,
+      // v47: 6-Biome
+      snowMesh, stoneDarkMesh, sandDarkMesh,
+      dirtWithSnowMesh, dirtWithGrassMesh, sandWithGrassMesh,
+      grassWithSnowMesh, gravelWithGrassMesh, snowTopMesh,
     };
   }, [materials]);
 
@@ -389,6 +460,15 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
     birch_leaf: meshes.birchLeafMesh,
     spruce_tree: meshes.spruceTreeMesh,
     spruce_leaf: meshes.spruceLeafMesh,
+    // v47: 6-Biome
+    snow: meshes.snowMesh,
+    stone_dark: meshes.stoneDarkMesh,
+    sand_dark: meshes.sandDarkMesh,
+    dirt_with_snow: meshes.dirtWithSnowMesh,
+    dirt_with_grass: meshes.dirtWithGrassMesh,
+    sand_with_grass: meshes.sandWithGrassMesh,
+    grass_with_snow: meshes.grassWithSnowMesh,
+    gravel_with_grass: meshes.gravelWithGrassMesh,
   }), [meshes]);
 
   // ============================================
@@ -437,6 +517,10 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       meshes.spruceTreeMesh, meshes.spruceLeafMesh,
       meshes.grassTopMesh, ...meshes.grassTopVariants,
       ...Object.values(meshes.decorationMeshes),
+      // v47: 6-Biome
+      meshes.snowMesh, meshes.stoneDarkMesh, meshes.sandDarkMesh,
+      meshes.dirtWithSnowMesh, meshes.dirtWithGrassMesh, meshes.sandWithGrassMesh,
+      meshes.grassWithSnowMesh, meshes.gravelWithGrassMesh, meshes.snowTopMesh,
     ];
     const allMeshes = [...allInstancedMeshes, cloudMesh];
     for (const m of allMeshes) group.add(m as THREE.Object3D);
@@ -513,12 +597,19 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
         // 전투 구역 내 억제
         if (noise.isInFlatZone(x, z)) continue;
 
-        // 좌표 해시 기반 배치 확률 (약 15% 확률)
+        // 좌표 해시 기반 배치 확률
         const hash = ((x * 73856093) ^ (z * 19349663)) >>> 0;
-        if ((hash % 100) >= 15) continue;
+        const biome = noise.getBiome(x, z);
+
+        // v47: 바이옴별 배치 확률 (DESERT/MOUNTAINS 없음, TUNDRA 희박, SWAMP 밀집)
+        let spawnChance = 15; // 기본 15%
+        if (biome === Biome.DESERT || biome === Biome.MOUNTAINS) continue; // 장식 없음
+        if (biome === Biome.TUNDRA) spawnChance = 5;
+        if (biome === Biome.SWAMP) spawnChance = 20;
+
+        if ((hash % 100) >= spawnChance) continue;
 
         const surfaceY = noise.getHeight(x, z);
-        const biome = noise.getBiome(x, z);
 
         // 나무가 있는 위치 스킵 (tree offset 체크)
         const treeOffset = noise.getTreeOffset(x, z);
@@ -537,8 +628,14 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
           // FOREST: 버섯 30%, 풀 70%
           if (typeRoll < 30) decoType = 'mushroom_red';
           else decoType = 'tall_grass';
+        } else if (biome === Biome.TUNDRA) {
+          // TUNDRA: 풀만 (희박)
+          decoType = 'tall_grass';
+        } else if (biome === Biome.SWAMP) {
+          // SWAMP: 버섯 50%, 풀 50%
+          if (typeRoll < 50) decoType = 'mushroom_red';
+          else decoType = 'tall_grass';
         } else {
-          // DESERT: 장식 없음
           continue;
         }
 
@@ -566,19 +663,27 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       coal: 0, bedrock: 0, cobblestone: 0, gravel: 0,
       sand: 0, tree: 0, leaf: 0,
       birch_tree: 0, birch_leaf: 0, spruce_tree: 0, spruce_leaf: 0,
+      // v47: 6-Biome
+      snow: 0, stone_dark: 0, sand_dark: 0,
+      dirt_with_snow: 0, dirt_with_grass: 0, sand_with_grass: 0,
+      grass_with_snow: 0, gravel_with_grass: 0,
     };
     const matrix = new THREE.Matrix4();
     // 잔디 상단 오버레이 카운터 (variant 0=기본, 1=dark, 2=dry, 3=lush)
     let grassTopCount = 0;
     const variantCounts = [0, 0, 0]; // variant 1,2,3 카운터
+    // v47: snow 상단 오버레이 카운터
+    let snowTopCount = 0;
 
     for (const exposed of chunkExposedRef.current.values()) {
       for (const eb of exposed) {
         const idx = counters[eb.meshKey];
-        if (idx >= MAX_INSTANCES[eb.meshKey]) continue;
+        if (idx === undefined || idx >= MAX_INSTANCES[eb.meshKey]) continue;
 
         matrix.makeTranslation(eb.x + 0.5, eb.y + 0.5, eb.z + 0.5);
-        meshMap[eb.meshKey].setMatrixAt(idx, matrix);
+        const mesh = meshMap[eb.meshKey];
+        if (!mesh) continue;
+        mesh.setMatrixAt(idx, matrix);
         counters[eb.meshKey] = idx + 1;
 
         // 잔디 블록인 경우 상단 오버레이 추가 — 해시 기반 변형 선택
@@ -601,6 +706,13 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
             }
           }
         }
+
+        // v47: snow 블록 상단 오버레이 (하얀 눈 표면)
+        if (eb.meshKey === 'snow' && snowTopCount < MAX_INSTANCES.snow) {
+          matrix.makeTranslation(eb.x + 0.5, eb.y + 1.001, eb.z + 0.5);
+          meshes.snowTopMesh.setMatrixAt(snowTopCount, matrix);
+          snowTopCount++;
+        }
       }
     }
 
@@ -618,6 +730,10 @@ export function MCVoxelTerrain({ seed, playerRef }: MCVoxelTerrainProps) {
       meshes.grassTopVariants[v].count = variantCounts[v];
       if (variantCounts[v] > 0) meshes.grassTopVariants[v].instanceMatrix.needsUpdate = true;
     }
+
+    // v47: snow 상단 오버레이 업데이트
+    meshes.snowTopMesh.count = snowTopCount;
+    if (snowTopCount > 0) meshes.snowTopMesh.instanceMatrix.needsUpdate = true;
 
     // v45: 장식 오브젝트 InstancedMesh 업데이트
     const decoCounts: Record<string, number> = {};

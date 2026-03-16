@@ -15,6 +15,7 @@ import type { RegionListEntry } from '@/hooks/useMatrixSocket';
 import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { OVERLAY } from '@/lib/overlay-tokens';
 import { buildCountryOutline, polygonToPath, type CountryOutline } from '@/lib/country-silhouettes';
+import { SOVEREIGNTY_DISPLAY, type SovereigntyLevel } from '@/lib/matrix/types/region';
 
 // ─── Props ───
 
@@ -56,6 +57,15 @@ const STATE_COLORS: Record<RegionEntryState, { color: string; label: string }> =
   locked: { color: '#55565E', label: 'LOCKED' },
 };
 
+/** controlStreak에서 주권 레벨 추론 */
+function getSovereigntyLevel(entry: RegionListEntry): SovereigntyLevel {
+  if (!entry.controllingFactionId) return 'none';
+  if (entry.controlStreak >= 14) return 'hegemony';
+  if (entry.controlStreak >= 3) return 'sovereignty';
+  if (entry.controlStreak >= 1) return 'active_domination';
+  return 'none';
+}
+
 // ─── 툴팁 ───
 
 function Tooltip({ entry, x, y, svgW }: {
@@ -65,7 +75,9 @@ function Tooltip({ entry, x, y, svgW }: {
   const stateStyle = STATE_COLORS[state];
   const typeIcon = REGION_TYPE_ICONS[entry.type] ?? '📍';
   const resourceIcon = RESOURCE_ICONS[entry.primaryResource] ?? '📦';
-  const w = 230, h = 145;
+  const sovLevel = getSovereigntyLevel(entry);
+  const sovDisplay = SOVEREIGNTY_DISPLAY[sovLevel];
+  const w = 230, h = entry.controllingFactionId ? 165 : 145;
   const tx = Math.min(Math.max(x - w / 2, 4), svgW - w - 4);
   const ty = y - h - 12;
 
@@ -84,6 +96,7 @@ function Tooltip({ entry, x, y, svgW }: {
         </div>
         <div style={{ display: 'flex', gap: '10px', marginBottom: '4px', color: SK.textSecondary, fontSize: '11px' }}>
           <span>{resourceIcon} {entry.primaryResource}</span>
+          {entry.specialEffect && <span style={{ color: SK.orange, fontSize: '10px' }}>{entry.specialEffect}</span>}
         </div>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <span style={{ color: entry.currentPlayers > 0 ? SK.green : SK.textMuted, fontSize: '12px' }}>
@@ -94,10 +107,12 @@ function Tooltip({ entry, x, y, svgW }: {
           </span>
         </div>
         {entry.controllingFactionId && (
-          <div style={{ marginTop: '4px', display: 'flex', alignItems: 'center', gap: '4px', color: SK.textSecondary, fontSize: '10px' }}>
-            <div style={{ width: '6px', height: '6px', borderRadius: '50%', background: entry.controllingFactionColor || SK.accent }} />
-            Controlled
-            {entry.controlStreak > 1 && <span style={{ color: SK.orange }}>{entry.controlStreak}d</span>}
+          <div style={{ marginTop: '5px', display: 'flex', alignItems: 'center', gap: '5px', fontSize: '10px' }}>
+            <div style={{ width: '8px', height: '8px', borderRadius: '50%', background: entry.controllingFactionColor || SK.accent }} />
+            <span style={{ color: sovDisplay.color, fontWeight: 700 }}>
+              {sovDisplay.icon} {sovDisplay.label}
+            </span>
+            {entry.controlStreak > 1 && <span style={{ color: SK.orange }}>({entry.controlStreak}d)</span>}
           </div>
         )}
       </div>
@@ -198,12 +213,17 @@ export default function CountryRegionMap({
 
   return (
     <svg width="100%" height="100%" viewBox={`0 0 ${width} ${height}`}
-      style={{ userSelect: 'none' }}>
-      {/* 배경 */}
+      preserveAspectRatio="xMidYMid meet"
+      style={{ userSelect: 'none', maxHeight: '100%' }}>
+      {/* 배경 + 글로우 필터 */}
       <defs>
         <pattern id="region-grid" width="20" height="20" patternUnits="userSpaceOnUse">
           <path d="M 20 0 L 0 0 0 20" fill="none" stroke="rgba(255,255,255,0.015)" strokeWidth="0.5" />
         </pattern>
+        <filter id="faction-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
+          <feComposite in="SourceGraphic" in2="blur" operator="over" />
+        </filter>
       </defs>
       <rect width={width} height={height} fill="url(#region-grid)" />
 
@@ -228,15 +248,20 @@ export default function CountryRegionMap({
         const isClickable = state === 'open' && !isJoining;
         const typeIcon = REGION_TYPE_ICONS[entry.type] ?? '📍';
         const centroid = centroids[idx] || [0, 0];
+        const sovLevel = getSovereigntyLevel(entry);
+        const sovDisplay = SOVEREIGNTY_DISPLAY[sovLevel];
+        const hasFaction = !!entry.controllingFactionColor;
 
-        const baseFill = entry.controllingFactionColor
-          ? `${entry.controllingFactionColor}25` : 'rgba(25,25,32,0.6)';
-        const hoverFill = entry.controllingFactionColor
-          ? `${entry.controllingFactionColor}50` : 'rgba(45,45,60,0.85)';
+        // 팩션 점령: 40% opacity fill / 중립: 어두운 회색
+        const baseFill = hasFaction
+          ? `${entry.controllingFactionColor}40` : 'rgba(30,30,40,0.55)';
+        const hoverFill = hasFaction
+          ? `${entry.controllingFactionColor}60` : 'rgba(50,50,70,0.85)';
         const cellFill = isHovered && isClickable ? hoverFill : baseFill;
+        // 셀 경계선: 2px, hover 시 2.5px
         const borderColor = isHovered && isClickable
           ? (entry.controllingFactionColor || SK.accent)
-          : isJoining ? SK.accent : 'rgba(255,255,255,0.12)';
+          : isJoining ? SK.accent : 'rgba(255,255,255,0.18)';
 
         return (
           <g key={entry.regionId}
@@ -249,60 +274,63 @@ export default function CountryRegionMap({
             onMouseEnter={() => handleMouseEnter(entry.regionId)}
             onMouseLeave={handleMouseLeave}
           >
-            {/* 셀 폴리곤 */}
+            {/* 셀 폴리곤 — 팩션 점령 시 글로우 */}
             <path d={polygonToPath(cell)} fill={cellFill}
-              stroke={borderColor} strokeWidth={isHovered ? 2.5 : 1}
+              stroke={borderColor} strokeWidth={isHovered ? 1.5 : 1}
+              filter={hasFaction && sovLevel !== 'none' ? 'url(#faction-glow)' : undefined}
               style={{ transition: `all ${OVERLAY.transition}` }}
             />
 
-            {/* 팩션 인디케이터 */}
-            {entry.controllingFactionId && (
-              <circle cx={centroid[0] - 20} cy={centroid[1] - 12} r={4}
-                fill={entry.controllingFactionColor || SK.accent}
-                style={{ pointerEvents: 'none' }} />
+            {/* 주권 아이콘 (점령 시) */}
+            {hasFaction && sovDisplay.icon && (
+              <text x={centroid[0] - 18} y={centroid[1] - 8}
+                textAnchor="middle" dominantBaseline="middle" fontSize="10"
+                style={{ pointerEvents: 'none' }}>
+                {sovDisplay.icon}
+              </text>
             )}
 
             {/* 유형 아이콘 */}
             <text x={centroid[0]} y={centroid[1] - 6}
-              textAnchor="middle" dominantBaseline="middle" fontSize="18"
+              textAnchor="middle" dominantBaseline="middle" fontSize="14"
               style={{ pointerEvents: 'none' }}>
               {typeIcon}
             </text>
 
             {/* 영문 지역명 */}
-            <text x={centroid[0]} y={centroid[1] + 10}
+            <text x={centroid[0]} y={centroid[1] + 9}
               textAnchor="middle" dominantBaseline="middle"
-              fill={SK.textPrimary} fontSize="10" fontFamily={headingFont}
-              fontWeight={700} style={{ pointerEvents: 'none' }}>
-              {entry.nameEn.length > 14 ? entry.nameEn.slice(0, 13) + '..' : entry.nameEn}
+              fill={SK.textPrimary} fontSize="9" fontFamily={bodyFont}
+              fontWeight={600} style={{ pointerEvents: 'none' }}>
+              {entry.nameEn.length > 16 ? entry.nameEn.slice(0, 15) + '..' : entry.nameEn}
             </text>
 
             {/* 접속 인원 */}
-            <text x={centroid[0]} y={centroid[1] + 22}
+            <text x={centroid[0]} y={centroid[1] + 20}
               textAnchor="middle" dominantBaseline="middle"
               fill={entry.currentPlayers > 0 ? SK.green : SK.textMuted}
-              fontSize="9" fontFamily={bodyFont} fontWeight={600}
+              fontSize="8" fontFamily={bodyFont} fontWeight={500}
               style={{ pointerEvents: 'none' }}>
-              {entry.currentPlayers}/{entry.maxPlayers}
+              👥 {entry.currentPlayers}/{entry.maxPlayers}
             </text>
 
             {/* 상태 라벨 */}
-            <text x={centroid[0] + 22} y={centroid[1] - 14}
+            <text x={centroid[0] + 20} y={centroid[1] - 12}
               textAnchor="middle" dominantBaseline="middle"
               fill={isJoining ? SK.accent : stateStyle.color}
-              fontSize="7" fontFamily={headingFont} fontWeight={600}
-              letterSpacing="0.5" style={{ pointerEvents: 'none' }}>
+              fontSize="7" fontFamily={bodyFont} fontWeight={500}
+              letterSpacing="0.3" style={{ pointerEvents: 'none' }}>
               {isJoining ? 'JOIN..' : stateStyle.label}
             </text>
           </g>
         );
       })}
 
-      {/* 국가 외곽선 (최상위) */}
+      {/* 국가 외곽선 (최상위) — 1.5px */}
       {outlinePolygons.map((poly, i) => (
         <path key={`outline-top-${i}`}
           d={polygonToPath(poly)}
-          fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="1.5"
+          fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth="1.5"
           style={{ pointerEvents: 'none' }}
         />
       ))}

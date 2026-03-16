@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[27,75],[48,-75],[-75,56],[27,19]]],"transform":{"scale":[0.0022667100666664435,0.002132161453333386],"translate":[-70.05809485599991,12.417669989000046]},"objects":{"ABW_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

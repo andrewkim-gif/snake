@@ -1,1 +1,22 @@
-{"pipeline":"da:work","execution_mode":"plan","pipeline_mode":"turbo","plan_file":"docs/designs/v45-texture-asset-plan.md","roadmap_file":"","ref_docs":[],"project_type":"GAME","complexity":"COMPLEX","current_stage":3,"current_phase":5,"current_step":null,"total_phases":5,"total_steps":0,"phases":[{"name":"Gemini 환경 설정 + 블록 텍스처 생성","design_needed":false,"status":"done","tasks":[],"verify":"done"},{"name":"이펙트 스프라이트 생성 + 적용","design_needed":false,"status":"done","tasks":[],"verify":"done"},{"name":"몬스터 프로시저럴 텍스처","design_needed":false,"status":"done","tasks":[],"verify":"done"},{"name":"아이템 텍스처 + 식물 다양화","design_needed":false,"status":"done","tasks":[],"verify":"done"},{"name":"구름 개선 + E2E 검증","design_needed":false,"status":"pending","tasks":["구름 텍스처 개선","TypeScript strict 검증","전체 시각 품질 검증","성능 프로파일링","draw call 검증"],"verify":"TS 0 errors, 전체 텍스처 렌더링, 60fps, draw call 합리적"}],"iterations":{"arch":0,"dev":0,"e2e":0},"last_skill":"turbo_phase4_done","last_update":"2026-03-12T00:04:00Z"}
+{
+  "pipeline": "da:work",
+  "execution_mode": "plan",
+  "pipeline_mode": "turbo",
+  "plan_file": "PLAN.md",
+  "project_type": "GAME",
+  "complexity": "COMPLEX",
+  "current_stage": 3,
+  "current_phase": 1,
+  "total_phases": 6,
+  "phases": [
+    {"name": "Phase 1: Enemy Knockback 물리 강화", "design_needed": false, "status": "in_progress", "tasks": ["combat.ts 파라미터 튜닝", "game.config.ts STUN_FRICTION", "MatrixCanvas.tsx stunned loop 수정", "combat.ts melee shake trigger", "combat.ts hit-stop trigger", "mass 기반 knockback cap"]},
+    {"name": "Phase 2: Hit/Death Particle System", "design_needed": false, "status": "pending", "tasks": ["HitParticleSystem.tsx 생성", "파티클 스폰 로직", "Death burst 로직", "무기별 파티클 색상", "MatrixScene.tsx 통합"]},
+    {"name": "Phase 3: Enemy Visual Knockback (3D Renderer)", "design_needed": false, "status": "pending", "tasks": ["EnemyRenderer tilt 추가", "Dying enemy 렌더링", "Death slide 시각화"]},
+    {"name": "Phase 4: KayKit 텍스처 추출 + Build Script", "design_needed": false, "status": "pending", "tasks": ["build-kaykit-textures.mjs 생성", "대상 텍스처 추출", "/textures/blocks/ 배치", "텍스처 품질 검수"]},
+    {"name": "Phase 5: 6-Biome System 확장", "design_needed": false, "status": "pending", "tasks": ["mc-noise.ts Biome enum 확장", "getBiome() 2D noise 재설계", "generateChunkBlocks() 확장", "generateDecorations() 확장", "flatZone PLAINS 고정"]},
+    {"name": "Phase 6: MCVoxelTerrain 신규 블록 통합", "design_needed": false, "status": "pending", "tasks": ["mc-types.ts BlockType 확장", "MCVoxelTerrain 신규 InstancedMesh", "BLOCK_TO_MESH 매핑 확장", "MAX_INSTANCES 조정", "Biome transition 렌더링", "Region consistency 보장"]}
+  ],
+  "iterations": {"arch": 0, "dev": 0, "e2e": 0},
+  "last_skill": "turbo3_phase1_start",
+  "last_update": "2026-03-13T00:00:00Z"
+}
