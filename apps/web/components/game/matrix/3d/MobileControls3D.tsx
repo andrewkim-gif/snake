@@ -221,7 +221,7 @@ function MobileControls3DInner({
           transform: 'translateX(-50%)',
           fontSize: 8,
           color: 'rgba(255,255,255,0.3)',
-          fontFamily: '"Black Ops One", sans-serif',
+          fontFamily: '"Chakra Petch", sans-serif',
           fontWeight: 700,
           letterSpacing: '0.1em',
           pointerEvents: 'none',

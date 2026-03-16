@@ -197,18 +197,11 @@ interface PopEffect {
 interface XpOrbRendererProps {
   gemsRef: React.MutableRefObject<Gem[]>;
   playerRef: React.MutableRefObject<Player>;
-  magnetTimerRef: React.MutableRefObject<number>;
 }
 
-/** v46: XP orb 광원 수 (가장 가까운 N개 orb에 PointLight) */
-const XP_GLOW_LIGHT_COUNT = 3;
-
-function XpOrbRenderer({ gemsRef, playerRef, magnetTimerRef }: XpOrbRendererProps) {
+function XpOrbRenderer({ gemsRef, playerRef }: XpOrbRendererProps) {
   const meshRef = useRef<THREE.InstancedMesh>(null);
   const pointsRef = useRef<THREE.Points>(null);
-
-  // v46: 실제 3D 광원 (가장 가까운 orb N개에 부착)
-  const glowLightsRef = useRef<THREE.PointLight[]>([]);
 
   // v44: 수집 팝 이펙트 상태 배열
   const popEffectsRef = useRef<PopEffect[]>([]);
@@ -287,9 +280,6 @@ function XpOrbRenderer({ gemsRef, playerRef, magnetTimerRef }: XpOrbRendererProp
     const farPositions: number[] = [];
     const farColors: number[] = [];
 
-    // v46: 가장 가까운 orb 위치 추적 (PointLight용)
-    const closestOrbs: { x: number; y: number; z: number; distSq: number }[] = [];
-
     for (let i = 0; i < gems.length && nearCount < XP_ORB_CAPACITY; i++) {
       const gem = gems[i];
       if (gem.isCollected) continue;
@@ -312,9 +302,27 @@ function XpOrbRenderer({ gemsRef, playerRef, magnetTimerRef }: XpOrbRendererProp
         continue;
       }
 
-      // 제자리 고정 (magnet 활성 시에만 vacuum 시각 효과)
-      const finalX = gx;
-      const finalZ = gz;
+      // v44: 곡선 vacuum 궤적 (사인파 + 가속)
+      let finalX = gx;
+      let finalZ = gz;
+      if (distSq < VACUUM_RANGE * VACUUM_RANGE && distSq > 1) {
+        const dist = Math.sqrt(distSq);
+        // 가속 곡선: 가까울수록 더 빠르게 빨려감
+        const vacuumStrength = 1 - dist / VACUUM_RANGE;
+        const acceleratedStrength = vacuumStrength * vacuumStrength; // 제곱 가속
+
+        // v44: 사인파 곡선 궤적 (직선 lerp 대신)
+        const sineOffset = Math.sin(time * 8 + i * 2.5) * dist * 0.08 * vacuumStrength;
+        // 플레이어 방향 단위 벡터
+        const dirX = (playerX - gx) / dist;
+        const dirZ = (playerZ - gz) / dist;
+        // 수직 방향 (곡선 오프셋용)
+        const perpX = -dirZ;
+        const perpZ = dirX;
+
+        finalX = THREE.MathUtils.lerp(gx, playerX, acceleratedStrength * 0.2) + perpX * sineOffset;
+        finalZ = THREE.MathUtils.lerp(gz, playerZ, acceleratedStrength * 0.2) + perpZ * sineOffset;
+      }
 
       // 부유 애니메이션 (sine wave) — 지형 높이 기반
       const floatY = Math.sin(time * FLOAT_FREQUENCY + i * 0.7) * FLOAT_AMPLITUDE;
@@ -332,20 +340,6 @@ function XpOrbRenderer({ gemsRef, playerRef, magnetTimerRef }: XpOrbRendererProp
       // 가치별 색상
       const gemColor = getGemColor(gem.value);
       mesh.setColorAt(nearCount, gemColor);
-
-      // v46: 가장 가까운 orb 추적 (PointLight 배치용)
-      if (closestOrbs.length < XP_GLOW_LIGHT_COUNT) {
-        closestOrbs.push({ x: finalX, y: baseY + floatY, z: finalZ, distSq });
-      } else {
-        // 가장 먼 것과 교체
-        let farthestIdx = 0;
-        for (let c = 1; c < closestOrbs.length; c++) {
-          if (closestOrbs[c].distSq > closestOrbs[farthestIdx].distSq) farthestIdx = c;
-        }
-        if (distSq < closestOrbs[farthestIdx].distSq) {
-          closestOrbs[farthestIdx] = { x: finalX, y: baseY + floatY, z: finalZ, distSq };
-        }
-      }
 
       nearCount++;
     }
@@ -402,20 +396,6 @@ function XpOrbRenderer({ gemsRef, playerRef, magnetTimerRef }: XpOrbRendererProp
     // v44: 글로우 펄스 강화 (emissive intensity 범위 확대)
     const pulse = 0.7 + Math.sin(time * 4) * 0.4;
     (mesh.material as THREE.MeshStandardMaterial).emissiveIntensity = pulse;
-
-    // v46: PointLight 위치 업데이트 (가장 가까운 orb에 실제 3D 광원)
-    const lights = glowLightsRef.current;
-    for (let li = 0; li < lights.length; li++) {
-      const light = lights[li];
-      if (li < closestOrbs.length) {
-        const orb = closestOrbs[li];
-        light.position.set(orb.x, orb.y + 0.3, orb.z);
-        light.intensity = pulse * 1.5;
-        light.visible = true;
-      } else {
-        light.visible = false;
-      }
-    }
   });
 
   return (
@@ -435,20 +415,6 @@ function XpOrbRenderer({ gemsRef, playerRef, magnetTimerRef }: XpOrbRendererProp
           sizeAttenuation
         />
       </points>
-      {/* v46: XP orb 실제 3D 광원 (가장 가까운 N개에 부착) */}
-      {Array.from({ length: XP_GLOW_LIGHT_COUNT }, (_, i) => (
-        <pointLight
-          key={`xp-glow-${i}`}
-          ref={(el: THREE.PointLight | null) => {
-            if (el) glowLightsRef.current[i] = el;
-          }}
-          color="#44ff88"
-          intensity={0}
-          distance={8}
-          decay={2}
-          visible={false}
-        />
-      ))}
     </>
   );
 }
@@ -603,8 +569,6 @@ export interface PickupRendererProps {
   pickupsRef: React.MutableRefObject<Pickup[]>;
   /** 플레이어 ref */
   playerRef: React.MutableRefObject<Player>;
-  /** magnet 활성 타이머 ref (0이면 비활성) */
-  magnetTimerRef: React.MutableRefObject<number>;
 }
 
 /**
@@ -620,12 +584,11 @@ export function PickupRenderer({
   gemsRef,
   pickupsRef,
   playerRef,
-  magnetTimerRef,
 }: PickupRendererProps) {
   return (
     <group>
-      {/* XP Orb — 제자리 고정 + 빛남, magnet 시에만 흡수 */}
-      <XpOrbRenderer gemsRef={gemsRef} playerRef={playerRef} magnetTimerRef={magnetTimerRef} />
+      {/* XP Orb — v44: 축소 + 팝 이펙트 + 곡선 궤적 */}
+      <XpOrbRenderer gemsRef={gemsRef} playerRef={playerRef} />
 
       {/* Item Drops — v44: 타입별 고유 형태 */}
       <PickupItemRenderer pickupsRef={pickupsRef} playerRef={playerRef} />

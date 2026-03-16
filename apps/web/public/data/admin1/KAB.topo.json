@@ -1,1 +1,0 @@
-{"type":"Topology","arcs":[[[95,0],[-80,39],[-15,69],[33,51],[91,16],[51,-35],[0,-101],[-80,-39]]],"transform":{"scale":[0.006028720239999399,0.004608208937142341],"translate":[62.81252730300013,45.56582448300013]},"objects":{"KAB_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

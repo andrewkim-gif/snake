@@ -200,23 +200,6 @@ export interface DamageEnemyContext {
   onEliteDeath?: (enemy: Enemy) => void;
   // v7.15: 일반 킬 카운트 콜백 (엘리트 스폰 체크용)
   onKillCount?: () => void;
-  // v47: 카메라 쉐이크 refs (근접 무기 타격감)
-  screenShakeTimerRef?: React.MutableRefObject<number>;
-  screenShakeIntensityRef?: React.MutableRefObject<number>;
-  // v47: 히트스탑 ref (근접 무기 프레임 정지)
-  hitStopTimerRef?: React.MutableRefObject<number>;
-  // v47: 파티클 시스템 API ref
-  particleSystemRef?: React.MutableRefObject<{
-    spawn: (event: {
-      position: { x: number; y: number; z: number };
-      count: number;
-      color: { r: number; g: number; b: number };
-      speed: number;
-      lifetime: number;
-      spread: number;
-      direction?: number;
-    }) => void;
-  } | null>;
 }
 
 /**
@@ -1747,7 +1730,7 @@ export const damageEnemy = (
 
   enemy.health -= finalDamage;
   enemy.state = 'stunned';
-  enemy.stunTimer = 0.25;
+  enemy.stunTimer = 0.15;
   (enemy as any).lastHitTime = Date.now();
 
   // v7.16: MP3 기반 hit 사운드 제거 - 무기별 Web Audio 합성음만 사용
@@ -1772,28 +1755,10 @@ export const damageEnemy = (
 
   // Apply knockback (hitAngle 재사용, 크리티컬은 더 강함)
   // v6.0: 아이소메트릭 넉백 - Y축 0.5배 압축
-  // v47: force 18x + 최소 밀림 보장 + 보스 cap
-  let force = (finalKnockback * 18) / enemy.mass;
-  force = Math.max(force, 3.0); // 최소 밀림 보장 (mass가 높아도)
-  if (enemy.isBoss || enemy.mass > 40) force *= 0.4; // 보스 밸런스 cap
+  const force = (finalKnockback * 10) / enemy.mass;
   const { x: knockX, y: knockY } = isoKnockback(hitAngle, force);
   enemy.velocity.x += knockX;
   enemy.velocity.y += knockY;
-
-  // v47: 근접 무기 카메라 쉐이크 + 히트스탑
-  if (ctx.screenShakeTimerRef && ctx.screenShakeIntensityRef) {
-    const isMelee = weaponType === 'whip' || weaponType === 'punch' || weaponType === 'sword' || weaponType === 'bible';
-    if (isMelee) {
-      ctx.screenShakeTimerRef.current = Math.max(ctx.screenShakeTimerRef.current, 0.08);
-      ctx.screenShakeIntensityRef.current = Math.max(ctx.screenShakeIntensityRef.current, 0.12);
-    }
-  }
-  if (ctx.hitStopTimerRef) {
-    const isMeleeHitstop = weaponType === 'whip' || weaponType === 'punch' || weaponType === 'sword';
-    if (isMeleeHitstop) {
-      ctx.hitStopTimerRef.current = Math.max(ctx.hitStopTimerRef.current, 0.04);
-    }
-  }
 
   // Handle death
   if (enemy.health <= 0) {
@@ -1804,23 +1769,14 @@ export const damageEnemy = (
     enemy.deathTimer = DEATH_DURATION;
     enemy.deathScale = 1.0;
 
-    // 타격 방향으로 세게 밀려남 (v47: knockback * 45)
+    // 타격 방향으로 세게 밀려남 (knockback * 3배!)
     // v6.0: 아이소메트릭 넉백 적용
-    const deathForce = (knockback * 45) / enemy.mass;
+    const deathForce = (knockback * 30) / enemy.mass;
     const { x: deathX, y: deathY } = isoKnockback(hitAngle, deathForce);
     enemy.deathVelocity = { x: deathX, y: deathY };
     // 기존 속도에 더함 (밀려나는 관성)
     enemy.velocity.x += enemy.deathVelocity.x * 0.5;
     enemy.velocity.y += enemy.deathVelocity.y * 0.5;
-
-    // v47: Kill 카메라 쉐이크 (근접 무기 한정)
-    if (ctx.screenShakeTimerRef && ctx.screenShakeIntensityRef) {
-      const isMelee = weaponType === 'whip' || weaponType === 'punch' || weaponType === 'sword' || weaponType === 'bible';
-      if (isMelee) {
-        ctx.screenShakeTimerRef.current = Math.max(ctx.screenShakeTimerRef.current, 0.12);
-        ctx.screenShakeIntensityRef.current = Math.max(ctx.screenShakeIntensityRef.current, 0.25);
-      }
-    }
 
     const typeConfig = ENEMY_TYPES[enemy.enemyType];
     // Arena mode: use base values (no stage multipliers)

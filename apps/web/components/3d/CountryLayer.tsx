@@ -11,7 +11,6 @@ import * as THREE from 'three';
 import { LineSegmentsGeometry } from 'three/examples/jsm/lines/LineSegmentsGeometry.js';
 import { LineSegments2 } from 'three/examples/jsm/lines/LineSegments2.js';
 import { LineMaterial } from 'three/examples/jsm/lines/LineMaterial.js';
-import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 
 import { loadGeoJSON } from '@/lib/globe-data';
 import {
@@ -27,7 +26,7 @@ import { getHoveredIso3 } from '@/components/3d/GlobeInteractionLayer';
 
 // ─── CountryBorders (단일 배치 LineSegments) ───
 
-function CountryBorders({ dottedMode }: { dottedMode?: boolean }) {
+function CountryBorders() {
   const { size } = useThree();
   const [line, setLine] = useState<LineSegments2 | null>(null);
 
@@ -67,21 +66,6 @@ function CountryBorders({ dottedMode }: { dottedMode?: boolean }) {
   useEffect(() => {
     if (line) (line.material as LineMaterial).resolution.set(size.width, size.height);
   }, [size, line]);
-
-  // v47: dotted 모드에서 경계선을 밝은 색으로 전환 (어두운 배경에서 가시성 확보)
-  useEffect(() => {
-    if (!line) return;
-    const mat = line.material as LineMaterial;
-    if (dottedMode) {
-      mat.color.set(0x3b82f6);   // 밝은 파란색 (어두운 배경 대비)
-      mat.opacity = 0.4;
-      mat.linewidth = 0.8;
-    } else {
-      mat.color.set(0x000000);   // 기본 검정
-      mat.opacity = 0.6;
-      mat.linewidth = 1.2;
-    }
-  }, [dottedMode, line]);
 
   if (!line) return null;
   return <primitive object={line} />;
@@ -249,60 +233,14 @@ function HoverBorderGlow() {
   );
 }
 
-// ─── CountryFillBase (dotted 모드 — 모든 국가 면 기본 표시) ───
-
-const _fillColor = new THREE.Color('#1e3a5f');
-
-function CountryFillBase({ countries, dottedMode }: { countries: CountryGeo[]; dottedMode?: boolean }) {
-  const meshRef = useRef<THREE.Mesh>(null);
-
-  // 모든 국가 geometry를 하나로 병합 (단일 draw call)
-  const mergedGeo = useMemo(() => {
-    if (countries.length === 0) return null;
-    const geos = countries.map((c) => c.geometry);
-    const merged = mergeGeometries(geos);
-    return merged;
-  }, [countries]);
-
-  // dotted 모드 전환 시 visibility 토글
-  useFrame(() => {
-    if (meshRef.current) {
-      meshRef.current.visible = !!dottedMode;
-    }
-  });
-
-  useEffect(() => {
-    return () => { mergedGeo?.dispose(); };
-  }, [mergedGeo]);
-
-  if (!mergedGeo) return null;
-
-  return (
-    <mesh ref={meshRef} geometry={mergedGeo} visible={false} renderOrder={0}>
-      <meshBasicMaterial
-        color={_fillColor}
-        transparent
-        opacity={0.15}
-        depthWrite={false}
-        side={THREE.DoubleSide}
-        polygonOffset
-        polygonOffsetFactor={-2}
-        polygonOffsetUnits={-2}
-      />
-    </mesh>
-  );
-}
-
 // ─── CountryPolygons (wrapper) ───
 
-function CountryPolygons({ countries, dottedMode }: { countries: CountryGeo[]; dottedMode?: boolean }) {
+function CountryPolygons({ countries }: { countries: CountryGeo[] }) {
+  // CountryLabels is now in GlobeCountryNameLabels.tsx — imported by GlobeScene directly
   return (
     <group>
       {countries.length > 0 && (
-        <>
-          <CountryFillBase countries={countries} dottedMode={dottedMode} />
-          <CountryHoverHighlight countries={countries} />
-        </>
+        <CountryHoverHighlight countries={countries} />
       )}
     </group>
   );
@@ -312,15 +250,13 @@ function CountryPolygons({ countries, dottedMode }: { countries: CountryGeo[]; d
 
 export interface CountryLayerProps {
   countries: CountryGeo[];
-  /** v47: dotted 모드에서 경계선 색상 밝게 전환 */
-  dottedMode?: boolean;
 }
 
-export function CountryLayer({ countries, dottedMode }: CountryLayerProps) {
+export function CountryLayer({ countries }: CountryLayerProps) {
   return (
     <>
-      <CountryBorders dottedMode={dottedMode} />
-      <CountryPolygons countries={countries} dottedMode={dottedMode} />
+      <CountryBorders />
+      <CountryPolygons countries={countries} />
       <HoverBorderGlow />
     </>
   );

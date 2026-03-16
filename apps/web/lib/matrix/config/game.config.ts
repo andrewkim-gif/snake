@@ -66,7 +66,6 @@ export const GAME_CONFIG = {
   DAMAGE_TEXT_LIFESPAN: 0.5,
   PARTICLE_LIFE: 0.5,
   FRICTION: 0.90,
-  STUN_FRICTION: 0.85,   // v47: stun 중 더 느린 감쇠 = 더 먼 미끄러짐
 };
 
 export const SPECIAL_SKILL = {

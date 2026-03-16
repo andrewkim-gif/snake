@@ -1,1 +1,0 @@
-{"type":"Topology","arcs":[[[93,0],[-83,4],[37,99],[53,35],[32,57],[84,30],[19,-80],[-37,-58],[-105,-87]]],"transform":{"scale":[0.002121079897872423,0.0015860098355554126],"translate":[-4.810373501999948,54.05695221600007]},"objects":{"IMN_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

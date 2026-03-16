@@ -1,13 +1,12 @@
 /**
- * country-silhouettes.ts — 실제 행정구역(admin1) 기반 국가 지도 + Voronoi fallback
+ * country-silhouettes.ts — GeoJSON 기반 국가 실루엣 추출 + Voronoi 지역 분할
  *
- * 1차: /data/admin1/{ISO3}.topo.json (Natural Earth admin1 기반, 빌드 타임 생성)
- * 2차: /data/countries.geojson + Voronoi subdivision (기존 fallback)
+ * /data/countries.geojson에서 해당 국가의 실제 폴리곤을 추출하고
+ * Mercator 투영으로 SVG 좌표로 변환한 뒤, Voronoi subdivision으로 지역 분할.
  */
 
 import { loadGeoJSON, type GeoJSONData, type GeoJSONFeature } from './globe-data';
 import { getCountryISO } from './map-style';
-import { decodeTopoJSON, type ITopoJSON, type IDecodedRegion } from './topo-decode';
 
 // ─── 타입 ───
 
@@ -215,10 +214,6 @@ function projectToSVG(
 
 // ─── Voronoi 셀 계산 ───
 
-/**
- * Sutherland-Hodgman: 폴리곤을 무한 직선(lx1,ly1→lx2,ly2)의 왼쪽(cSide>=0)으로 클리핑.
- * 클리핑 line은 무한 직선으로 취급 — 교차 계산 시 폴리곤 edge만 segment 제한.
- */
 function clipPolygonByLine(
   polygon: [number, number][],
   lx1: number, ly1: number,
@@ -237,55 +232,29 @@ function clipPolygonByLine(
     if (cSide >= 0) {
       out.push([cx, cy]);
       if (nSide < 0) {
-        const inter = lineSegmentIntersect(cx, cy, nx, ny, lx1, ly1, lx2, ly2);
+        const inter = segmentIntersect(cx, cy, nx, ny, lx1, ly1, lx2, ly2);
         if (inter) out.push(inter);
       }
     } else if (nSide >= 0) {
-      const inter = lineSegmentIntersect(cx, cy, nx, ny, lx1, ly1, lx2, ly2);
+      const inter = segmentIntersect(cx, cy, nx, ny, lx1, ly1, lx2, ly2);
       if (inter) out.push(inter);
     }
   }
   return out;
 }
 
-/**
- * 폴리곤 edge (segment: x1,y1→x2,y2)와 클리핑 line (무한 직선: x3,y3→x4,y4)의 교차점.
- * t는 [0,1]로 제한 (폴리곤 edge는 유한 선분),
- * u는 제한 없음 (클리핑 line은 무한 직선).
- */
-function lineSegmentIntersect(
+function segmentIntersect(
   x1: number, y1: number, x2: number, y2: number,
   x3: number, y3: number, x4: number, y4: number,
 ): [number, number] | null {
   const denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4);
   if (Math.abs(denom) < 1e-10) return null;
   const t = ((x1 - x3) * (y3 - y4) - (y1 - y3) * (x3 - x4)) / denom;
-  // u 제한 제거 — clip line은 무한 직선
-  if (t >= 0 && t <= 1) {
+  const u = -((x1 - x2) * (y1 - y3) - (y1 - y2) * (x1 - x3)) / denom;
+  if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
     return [x1 + t * (x2 - x1), y1 + t * (y2 - y1)];
   }
   return null;
-}
-
-/**
- * 폴리곤의 signed area 계산 (SVG 좌표계: 양수 = CW, 음수 = CCW)
- */
-function signedArea2D(pts: [number, number][]): number {
-  let area = 0;
-  for (let i = 0, j = pts.length - 1; i < pts.length; j = i++) {
-    area += (pts[j][0] + pts[i][0]) * (pts[j][1] - pts[i][1]);
-  }
-  return area / 2;
-}
-
-/**
- * 폴리곤을 CCW(반시계방향) 방향으로 보정.
- * clipPolygonByLine은 directed line의 왼쪽(cSide >= 0)을 유지.
- * CCW 경계의 각 edge에서 내부가 왼쪽에 위치하므로, CCW여야 올바르게 클리핑됨.
- */
-function ensureCCW(pts: [number, number][]): [number, number][] {
-  // signed area < 0 이면 CCW
-  return signedArea2D(pts) > 0 ? [...pts].reverse() : pts;
 }
 
 function computeVoronoiCells(
@@ -299,17 +268,13 @@ function computeVoronoiCells(
     [-pad, -pad], [svgW + pad, -pad], [svgW + pad, svgH + pad], [-pad, svgH + pad],
   ];
 
-  // 경계 폴리곤을 CCW로 보정
-  const boundary = ensureCCW(boundaryPolygon);
-
   const cells: [number, number][][] = [];
 
   for (let i = 0; i < seeds.length; i++) {
-    // Step 1: 반평면 클리핑으로 볼록(convex) Voronoi 셀 생성
-    let voronoiCell = [...boundingRect];
+    let cell = [...boundingRect];
 
     for (let j = 0; j < seeds.length; j++) {
-      if (i === j || voronoiCell.length < 3) continue;
+      if (i === j || cell.length < 3) continue;
 
       const [sx, sy] = seeds[i];
       const [ox, oy] = seeds[j];
@@ -317,29 +282,20 @@ function computeVoronoiCells(
       const my = (sy + oy) / 2;
       const dx = ox - sx;
       const dy = oy - sy;
-      voronoiCell = clipPolygonByLine(voronoiCell,
-        mx + dy * 1000, my - dx * 1000,
+      cell = clipPolygonByLine(cell,
         mx - dy * 1000, my + dx * 1000,
+        mx + dy * 1000, my - dx * 1000,
       );
     }
 
-    if (voronoiCell.length < 3) {
-      cells.push([]);
-      continue;
+    // 국가 윤곽으로 클리핑
+    for (let e = 0; e < boundaryPolygon.length && cell.length >= 3; e++) {
+      const [ex1, ey1] = boundaryPolygon[e];
+      const [ex2, ey2] = boundaryPolygon[(e + 1) % boundaryPolygon.length];
+      cell = clipPolygonByLine(cell, ex1, ey1, ex2, ey2);
     }
 
-    // Step 2: 국가 경계(오목 가능)와 Voronoi 셀(볼록)의 교집합 계산
-    // Sutherland-Hodgman: subject=경계(오목 OK), clip=Voronoi 셀(볼록 필수)
-    // Voronoi 셀의 각 edge로 경계 폴리곤을 클리핑
-    const vcCCW = ensureCCW(voronoiCell);
-    let result: [number, number][] = [...boundary];
-    for (let e = 0; e < vcCCW.length && result.length >= 3; e++) {
-      const [ex1, ey1] = vcCCW[e];
-      const [ex2, ey2] = vcCCW[(e + 1) % vcCCW.length];
-      result = clipPolygonByLine(result, ex1, ey1, ex2, ey2);
-    }
-
-    cells.push(result);
+    cells.push(cell);
   }
 
   return cells;
@@ -352,165 +308,16 @@ function polygonCentroid(polygon: [number, number][]): [number, number] {
   return [cx / polygon.length, cy / polygon.length];
 }
 
-// ─── Admin1 TopoJSON 로딩 ───
-
-/** admin1 TopoJSON 캐시 */
-const admin1Cache = new Map<string, IDecodedRegion[] | null>();
-
-/**
- * admin1 TopoJSON 로드 시도.
- * /data/admin1/{ISO3}.topo.json 파일이 없으면 null 반환.
- */
-async function loadAdmin1(iso3: string): Promise<IDecodedRegion[] | null> {
-  if (admin1Cache.has(iso3)) return admin1Cache.get(iso3) ?? null;
-
-  try {
-    const res = await fetch(`/data/admin1/${iso3}.topo.json`);
-    if (!res.ok) {
-      admin1Cache.set(iso3, null);
-      return null;
-    }
-    const topo: ITopoJSON = await res.json();
-    const regions = decodeTopoJSON(topo);
-    if (regions.length === 0) {
-      admin1Cache.set(iso3, null);
-      return null;
-    }
-    admin1Cache.set(iso3, regions);
-    return regions;
-  } catch {
-    admin1Cache.set(iso3, null);
-    return null;
-  }
-}
-
-/**
- * admin1 데이터에서 CountryOutline 생성.
- * 각 region의 폴리곤을 Mercator 투영 → SVG 좌표로 변환.
- */
-function buildFromAdmin1(regions: IDecodedRegion[]): CountryOutline {
-  // 모든 region의 폴리곤을 수집하여 Mercator 투영 범위 계산
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-
-  // 모든 좌표를 Mercator 투영
-  const regionProjected: { rings: [number, number][][]; idx: number }[] = [];
-
-  for (const region of regions) {
-    const rings: [number, number][][] = [];
-    for (const poly of region.polygons) {
-      const projected: [number, number][] = [];
-      for (const [lon, lat] of poly) {
-        const [mx, my] = mercatorProject(lon, lat);
-        projected.push([mx, my]);
-        if (mx < minX) minX = mx;
-        if (my < minY) minY = my;
-        if (mx > maxX) maxX = mx;
-        if (my > maxY) maxY = my;
-      }
-      rings.push(projected);
-    }
-    regionProjected.push({ rings, idx: region.regionIdx });
-  }
-
-  // SVG viewBox에 맞게 스케일링
-  const geoW = maxX - minX || 1;
-  const geoH = maxY - minY || 1;
-  const usableW = SVG_SIZE - SVG_PAD * 2;
-  const usableH = SVG_SIZE - SVG_PAD * 2;
-  const scale = Math.min(usableW / geoW, usableH / geoH);
-  const offsetX = SVG_PAD + (usableW - geoW * scale) / 2;
-  const offsetY = SVG_PAD + (usableH - geoH * scale) / 2;
-
-  const scaleCoord = ([x, y]: [number, number]): [number, number] => [
-    (x - minX) * scale + offsetX,
-    (y - minY) * scale + offsetY,
-  ];
-
-  // 각 region의 셀 폴리곤 (외곽링만 결합) + centroid 계산
-  const cells: [number, number][][] = [];
-  const centroids: [number, number][] = [];
-  const outlineRings: [number, number][][] = [];
-
-  for (const rp of regionProjected) {
-    // 모든 ring을 SVG 좌표로 변환
-    const scaledRings = rp.rings.map(ring => ring.map(scaleCoord));
-
-    // 외곽링 = 면적이 가장 큰 ring (holes 제외)
-    const outerRings = scaledRings.filter(ring => {
-      // 양수 면적 = 외곽 (shoelace 기준)
-      let area = 0;
-      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-        area += (ring[j][0] + ring[i][0]) * (ring[j][1] - ring[i][1]);
-      }
-      return Math.abs(area) > 10; // 최소 면적 필터
-    });
-
-    // 가장 큰 ring을 셀 대표로 사용 (MultiPolygon 대응)
-    if (outerRings.length === 0) {
-      cells.push([]);
-      centroids.push([SVG_SIZE / 2, SVG_SIZE / 2]);
-      continue;
-    }
-
-    // 모든 외곽 ring의 좌표를 합쳐서 하나의 셀로 사용
-    // (SVG path는 M...Z M...Z 로 여러 ring 표현 가능)
-    const allPoints: [number, number][] = [];
-    let bestRing = outerRings[0];
-    let bestArea = 0;
-
-    for (const ring of outerRings) {
-      outlineRings.push(ring);
-      for (const pt of ring) allPoints.push(pt);
-      const area = polygonArea(ring);
-      if (area > bestArea) {
-        bestArea = area;
-        bestRing = ring;
-      }
-    }
-
-    cells.push(bestRing);
-    centroids.push(polygonCentroid(bestRing));
-  }
-
-  // 외곽선: 모든 ring을 포함
-  return {
-    outlinePolygons: outlineRings,
-    cells,
-    centroids,
-    width: SVG_SIZE,
-    height: SVG_SIZE,
-  };
-}
-
 // ─── 메인 API ───
 
 const SVG_SIZE = 400;
 const SVG_PAD = 25;
 
 /**
- * 국가 지도를 빌드한다.
- * 1차: admin1 TopoJSON (실제 행정구역)
- * 2차: GeoJSON + Voronoi (기존 fallback)
+ * GeoJSON에서 국가 윤곽을 추출하고 Voronoi 분할한 결과를 반환한다.
+ * regionIds는 지역 slug 매칭에 사용.
  */
 export async function buildCountryOutline(
-  iso3: string,
-  regionCount: number,
-  regionIds: string[],
-): Promise<CountryOutline> {
-  // 1차: admin1 TopoJSON 로드 시도
-  const admin1Regions = await loadAdmin1(iso3);
-  if (admin1Regions && admin1Regions.length > 0) {
-    return buildFromAdmin1(admin1Regions);
-  }
-
-  // 2차: 기존 GeoJSON + Voronoi fallback
-  return buildFromGeoJSON(iso3, regionCount, regionIds);
-}
-
-/**
- * 기존 GeoJSON + Voronoi 기반 fallback
- */
-async function buildFromGeoJSON(
   iso3: string,
   regionCount: number,
   regionIds: string[],

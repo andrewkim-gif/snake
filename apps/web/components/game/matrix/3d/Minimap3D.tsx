@@ -170,7 +170,7 @@ function Minimap3DInner({
         top: -14,
         left: 0,
         fontSize: 8,
-        fontFamily: '"Black Ops One", sans-serif',
+        fontFamily: '"Chakra Petch", sans-serif',
         fontWeight: 700,
         color: SK.textMuted,
         letterSpacing: '0.1em',

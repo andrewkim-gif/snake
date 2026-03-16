@@ -271,7 +271,7 @@ export function EntityUI({
                     color:#e8e0d4;
                     text-align:center;
                     margin-bottom:2px;
-                    font-family:'Rajdhani',sans-serif;
+                    font-family:monospace;
                     text-shadow:0 0 3px rgba(0,0,0,0.8);
                     white-space:nowrap;
                   ">

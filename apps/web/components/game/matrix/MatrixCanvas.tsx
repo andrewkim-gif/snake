@@ -2662,13 +2662,12 @@ const MatrixCanvas: React.FC<MatrixCanvasProps> = ({
                     continue;
                 }
 
-                // 스턴 상태 처리 (v47: STUN_FRICTION 사용 — 더 먼 미끄러짐)
+                // 스턴 상태 처리
                 if (enemy.state === 'stunned') {
                     enemy.stunTimer -= scaledDelta;
                     if (enemy.stunTimer <= 0) { enemy.state = 'chasing'; enemy.isFrozen = false; }
-                    const stunFriction = GAME_CONFIG.STUN_FRICTION;
-                    enemy.velocity.x *= stunFriction;
-                    enemy.velocity.y *= stunFriction;
+                    enemy.velocity.x *= friction;
+                    enemy.velocity.y *= friction;
                     enemy.position.x += enemy.velocity.x * scaledDelta;
                     enemy.position.y += enemy.velocity.y * scaledDelta;
                 } else if (enemy.state !== 'dashing' && !isRanged) {

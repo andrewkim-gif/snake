@@ -24,15 +24,6 @@ export enum BlockType {
   birch_leaf = 15,
   spruce_tree = 16,
   spruce_leaf = 17,
-  // v47: 6-Biome 신규 블록
-  snow = 18,
-  stone_dark = 19,
-  sand_dark = 20,
-  dirt_with_snow = 21,
-  dirt_with_grass = 22,
-  sand_with_grass = 23,
-  grass_with_snow = 24,
-  gravel_with_grass = 25,
 }
 
 // ---------------------------------------------------------------------------
@@ -110,14 +101,6 @@ export const BLOCK_NAMES: Record<BlockType, string> = {
   [BlockType.birch_leaf]: 'Birch Leaves',
   [BlockType.spruce_tree]: 'Spruce Log',
   [BlockType.spruce_leaf]: 'Spruce Leaves',
-  [BlockType.snow]: 'Snow',
-  [BlockType.stone_dark]: 'Dark Stone',
-  [BlockType.sand_dark]: 'Dark Sand',
-  [BlockType.dirt_with_snow]: 'Dirt with Snow',
-  [BlockType.dirt_with_grass]: 'Dirt with Grass',
-  [BlockType.sand_with_grass]: 'Sand with Grass',
-  [BlockType.grass_with_snow]: 'Grass with Snow',
-  [BlockType.gravel_with_grass]: 'Gravel with Grass',
 }
 
 // ---------------------------------------------------------------------------
@@ -278,54 +261,6 @@ export const BLOCK_PROPERTIES: Record<BlockType, BlockProperties> = {
     hardness: 0.2,
     isLightPassthrough: true,
   },
-  [BlockType.snow]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.4,
-    isLightPassthrough: false,
-  },
-  [BlockType.stone_dark]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 2.0,
-    isLightPassthrough: false,
-  },
-  [BlockType.sand_dark]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.5,
-    isLightPassthrough: false,
-  },
-  [BlockType.dirt_with_snow]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.5,
-    isLightPassthrough: false,
-  },
-  [BlockType.dirt_with_grass]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.6,
-    isLightPassthrough: false,
-  },
-  [BlockType.sand_with_grass]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.5,
-    isLightPassthrough: false,
-  },
-  [BlockType.grass_with_snow]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.5,
-    isLightPassthrough: false,
-  },
-  [BlockType.gravel_with_grass]: {
-    isTransparent: false,
-    isSolid: true,
-    hardness: 0.6,
-    isLightPassthrough: false,
-  },
 }
 
 // ---------------------------------------------------------------------------
@@ -430,46 +365,6 @@ export const BLOCK_TEXTURE_MAP: Record<Exclude<BlockType, BlockType.AIR>, BlockT
     side: `${TEX}/spruce_leaves.png`,
     bottom: `${TEX}/spruce_leaves.png`,
   },
-  [BlockType.snow]: {
-    top: `${TEX}/snow.png`,
-    side: `${TEX}/snow.png`,
-    bottom: `${TEX}/snow.png`,
-  },
-  [BlockType.stone_dark]: {
-    top: `${TEX}/stone_dark.png`,
-    side: `${TEX}/stone_dark.png`,
-    bottom: `${TEX}/stone_dark.png`,
-  },
-  [BlockType.sand_dark]: {
-    top: `${TEX}/sand_dark.png`,
-    side: `${TEX}/sand_dark.png`,
-    bottom: `${TEX}/sand_dark.png`,
-  },
-  [BlockType.dirt_with_snow]: {
-    top: `${TEX}/dirt_with_snow.png`,
-    side: `${TEX}/dirt_with_snow.png`,
-    bottom: `${TEX}/dirt.png`,
-  },
-  [BlockType.dirt_with_grass]: {
-    top: `${TEX}/dirt_with_grass_top.png`,
-    side: `${TEX}/dirt_with_grass_top.png`,
-    bottom: `${TEX}/dirt.png`,
-  },
-  [BlockType.sand_with_grass]: {
-    top: `${TEX}/sand_with_grass.png`,
-    side: `${TEX}/sand_with_grass.png`,
-    bottom: `${TEX}/sand.png`,
-  },
-  [BlockType.grass_with_snow]: {
-    top: `${TEX}/grass_with_snow.png`,
-    side: `${TEX}/grass_with_snow.png`,
-    bottom: `${TEX}/dirt.png`,
-  },
-  [BlockType.gravel_with_grass]: {
-    top: `${TEX}/gravel_with_grass.png`,
-    side: `${TEX}/gravel_with_grass.png`,
-    bottom: `${TEX}/gravel.png`,
-  },
 }
 
 // ---------------------------------------------------------------------------
@@ -495,14 +390,6 @@ export const BLOCK_ALLOC_FACTORS: Record<BlockType, number> = {
   [BlockType.birch_leaf]: 0.3,
   [BlockType.spruce_tree]: 0.05,
   [BlockType.spruce_leaf]: 0.3,
-  [BlockType.snow]: 0.5,
-  [BlockType.stone_dark]: 0.3,
-  [BlockType.sand_dark]: 0.2,
-  [BlockType.dirt_with_snow]: 0.15,
-  [BlockType.dirt_with_grass]: 0.15,
-  [BlockType.sand_with_grass]: 0.1,
-  [BlockType.grass_with_snow]: 0.1,
-  [BlockType.gravel_with_grass]: 0.1,
 }
 
 // ---------------------------------------------------------------------------

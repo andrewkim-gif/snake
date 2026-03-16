@@ -223,10 +223,6 @@ function createXpOrbTexture(): THREE.CanvasTexture {
   const cy = 8;
   const maxR = 7;
 
-  // 전체 캔버스를 어두운 초록으로 채움 (SphereGeometry에서 투명 픽셀 방지)
-  ctx.fillStyle = 'rgb(30,180,40)';
-  ctx.fillRect(0, 0, 16, 16);
-
   // 방사형 그라디언트: 밝은 초록 중심 → 어두운 초록 외곽
   for (let y = 0; y < 16; y++) {
     for (let x = 0; x < 16; x++) {
@@ -240,8 +236,10 @@ function createXpOrbTexture(): THREE.CanvasTexture {
       const g = Math.round(255 + (180 - 255) * t);
       const b = Math.round(100 + (40 - 100) * t);
 
-      ctx.fillStyle = `rgb(${r},${g},${b})`;
-      ctx.fillRect(x, y, 1, 1);
+      if (dist < maxR + 0.5) {
+        ctx.fillStyle = `rgb(${r},${g},${b})`;
+        ctx.fillRect(x, y, 1, 1);
+      }
     }
   }
 

@@ -91,11 +91,11 @@ export const SKFont = {
   button: '16px',
 } as const;
 
-/** 타이틀 폰트 — Black Ops One (인게임 헤딩/타이틀 통일) */
-export const headingFont = '"Black Ops One", sans-serif';
+/** 타이틀 폰트 — Chakra Petch (사이버펑크/전술) */
+export const headingFont = '"Chakra Petch", -apple-system, BlinkMacSystemFont, sans-serif';
 
-/** UI 폰트 — Rajdhani (인게임 바디/게이지/숫자 통일) */
-export const bodyFont = '"Rajdhani", sans-serif';
+/** UI 폰트 — Space Grotesk (클린 테크) */
+export const bodyFont = '"Space Grotesk", -apple-system, BlinkMacSystemFont, sans-serif';
 
 /** Apex: 직각 (radius 전부 0) */
 export function handDrawnRadius(_base = 0) {

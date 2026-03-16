@@ -63,8 +63,6 @@ import MCGameCamera from './3d/MCGameCamera';
 import MCVoxelTerrain from './3d/MCVoxelTerrain';
 import { PickupRenderer } from './3d/PickupRenderer';
 import { VoxelCharacter } from './3d/VoxelCharacter';
-// Sound
-import { soundManager } from '@/lib/matrix/utils/audio';
 // Phase 3: Enemies + Combat
 import { EnemyRenderer } from './3d/EnemyRenderer';
 import { SwingArc, type AttackEvent } from './3d/SwingArc';
@@ -156,7 +154,6 @@ function SceneContent({
   triggerFlash,
   gameSpeedRef,
   slowmoTimerRef,
-  magnetTimerRef,
   hitStopTimerRef,
 }: {
   refs: GameRefs;
@@ -182,10 +179,7 @@ function SceneContent({
   triggerFlash?: (options?: { color?: string; intensity?: number; decayRate?: number }) => void;
   gameSpeedRef?: React.MutableRefObject<number>;
   slowmoTimerRef?: React.MutableRefObject<number>;
-  /** magnet 활성 타이머 ref */
-  magnetTimerRef: React.MutableRefObject<number>;
-  /** v47: 히트스탑 타이머 ref */
-  hitStopTimerRef: React.MutableRefObject<number>;
+  hitStopTimerRef?: React.MutableRefObject<number>;
 }) {
   return (
     <>
@@ -213,7 +207,6 @@ function SceneContent({
         triggerFlash={triggerFlash}
         gameSpeedRef={gameSpeedRef}
         slowmoTimerRef={slowmoTimerRef}
-        magnetTimerRef={magnetTimerRef}
         hitStopTimerRef={hitStopTimerRef}
       />
 
@@ -244,7 +237,6 @@ function SceneContent({
         gemsRef={refs.gems}
         pickupsRef={refs.pickups}
         playerRef={refs.player}
-        magnetTimerRef={magnetTimerRef}
       />
 
       {/* 플레이어 캐릭터 (3인칭 시점 — 스킬/전투 연출용) */}
@@ -304,7 +296,8 @@ function SceneContent({
         />
       </WorldUI>
 
-      {/* 후처리 이펙트 제거됨 (화면 빛남 이펙트 삭제) */}
+      {/* v42 Phase 5: 후처리 이펙트 활성화 — Bloom + Vignette (HIGH 품질) */}
+      <PostProcessingEffects qualityTier="HIGH" warningIntensityRef={warningIntensityRef} />
     </>
   );
 }
@@ -348,11 +341,6 @@ const PICKUP_HEAL_AMOUNT = 30;        // chicken 회복량
 const PICKUP_BOMB_DAMAGE = 50;        // bomb 범위 데미지
 const PICKUP_BOMB_RANGE = 15;         // bomb 폭발 반경
 const PICKUP_MAGNET_DURATION = 5;     // magnet 지속 시간 (초)
-const DEATH_ANIM_DURATION = 0.3;      // 죽음 애니메이션 길이 (초)
-const AUTO_ABSORB_SPEED = 18;         // 자동 흡수 이동 속도 (블록/초)
-const GEM_COLLECT_RANGE_SQ = GEM_COLLECT_RANGE * GEM_COLLECT_RANGE;
-const PICKUP_COLLECT_RANGE_SQ = PICKUP_COLLECT_RANGE * PICKUP_COLLECT_RANGE;
-const PICKUP_BOMB_RANGE_SQ = PICKUP_BOMB_RANGE * PICKUP_BOMB_RANGE;
 
 // HP 회복/사망 설정
 const HP_REGEN_PER_SEC = 5;           // 자동 HP 회복 (초당)
@@ -409,10 +397,8 @@ interface GameLogicProps {
   gameSpeedRef?: React.MutableRefObject<number>;
   /** v44: 슬로모 타이머 ref */
   slowmoTimerRef?: React.MutableRefObject<number>;
-  /** magnet 아이템 활성 타이머 ref */
-  magnetTimerRef: React.MutableRefObject<number>;
   /** v47: 히트스탑 타이머 ref */
-  hitStopTimerRef: React.MutableRefObject<number>;
+  hitStopTimerRef?: React.MutableRefObject<number>;
 }
 
 /**
@@ -440,7 +426,6 @@ function GameLogic({
   triggerFlash,
   gameSpeedRef,
   slowmoTimerRef,
-  magnetTimerRef,
   hitStopTimerRef,
 }: GameLogicProps) {
   const prevTimeRef = useRef(performance.now());
@@ -480,10 +465,10 @@ function GameLogic({
 
     // v47: 히트스탑 — realDt로 감쇠 (게임 시간이 아닌 실제 시간)
     let hitStopMult = 1.0;
-    if (hitStopTimerRef.current > 0) {
+    if (hitStopTimerRef && hitStopTimerRef.current > 0) {
       hitStopTimerRef.current -= realDt;
       if (hitStopTimerRef.current > 0) {
-        hitStopMult = 0.1; // 10배 슬로우
+        hitStopMult = 0.1;
       } else {
         hitStopTimerRef.current = 0;
       }
@@ -583,129 +568,87 @@ function GameLogic({
     // === v42 Phase 4: 콤보 타이머 업데이트 (타임아웃 시 콤보 리셋) ===
     comboUpdate?.(dt);
 
-    // === 적 사망 처리 + dying 애니메이션 + gem 드롭 (in-place, GC 최소화) ===
-    {
-      const enemies = refs.enemies.current;
-      let writeIdx = 0;
-      for (let ei = 0; ei < enemies.length; ei++) {
-        const enemy = enemies[ei];
-        let keep = true;
+    // === 적 사망 처리 + gem 드롭 ===
+    refs.enemies.current = refs.enemies.current.filter(enemy => {
+      if (enemy.health <= 0) {
+        deathEventsRef.current.push({
+          position: { x: enemy.position.x, y: enemy.position.y },
+          color: enemy.color || (enemy.isBoss ? '#ff4444' : '#44aaff'),
+          isBoss: enemy.isBoss,
+          isElite: enemy.isElite,
+          eliteTier: enemy.eliteTier,
+        });
 
-        // --- dying 상태: 애니메이션 진행 후 제거 ---
-        if (enemy.state === 'dying') {
-          if (enemy.deathTimer !== undefined) {
-            enemy.deathTimer -= dt;
-            if (enemy.deathVelocity) {
-              enemy.position.x += enemy.deathVelocity.x * dt;
-              enemy.position.y += enemy.deathVelocity.y * dt;
-              enemy.deathVelocity.x *= 0.85;
-              enemy.deathVelocity.y *= 0.85;
-            }
-            const progress = 1 - Math.max(0, enemy.deathTimer / DEATH_ANIM_DURATION);
-            enemy.deathScale = Math.max(0, 1 - progress);
-            if (enemy.deathTimer <= 0) keep = false;
-          } else {
-            keep = false;
+        // v47: Death burst 파티클은 HitParticleSystem이 deathEventsRef 자동 감지
+
+        // v42 Phase 4: 엘리트 적은 더 높은 XP 젬 드롭
+        const gemValue = enemy.isElite
+          ? (enemy.eliteTier === 'diamond' ? 300 : enemy.eliteTier === 'gold' ? 150 : 80)
+          : enemy.isBoss ? 50 : (enemy.enemyType === 'whale' || enemy.enemyType === 'bot' ? 20 : 10);
+        refs.gems.current.push({
+          id: `gem-drop-${Date.now()}-${Math.random()}`,
+          position: { x: enemy.position.x, y: enemy.position.y },
+          value: gemValue,
+          color: enemy.isElite ? '#00FFFF' : enemy.isBoss ? '#ffdd00' : '#44ff88',
+          isCollected: false,
+        });
+
+        player.score += gemValue;
+        hitFlashMapRef.current.delete(enemy.id);
+        refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, enemy.isElite ? 0.5 : enemy.isBoss ? 0.3 : 0.1);
+        refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isElite ? 0.7 : enemy.isBoss ? 0.4 : 0.15);
+
+        // v44: 보스/엘리트 사망 시 화면 플래시 + 슬로모 트리거
+        if (enemy.isElite && triggerFlash) {
+          // 엘리트: 티어별 색상 플래시
+          const tierFlashColors: Record<string, string> = {
+            silver: '#C0C0C0',
+            gold: '#FFD700',
+            diamond: '#00FFFF',
+          };
+          const flashColor = enemy.eliteTier ? tierFlashColors[enemy.eliteTier] ?? '#ffffff' : '#ffffff';
+          triggerFlash({ color: flashColor, intensity: 0.8, decayRate: 4.0 });
+          // 엘리트 슬로모
+          if (gameSpeedRef && slowmoTimerRef) {
+            gameSpeedRef.current = 0.2;
+            slowmoTimerRef.current = 0.3;
+          }
+        } else if (enemy.isBoss && triggerFlash) {
+          // 보스: 흰색 플래시 (강하게)
+          triggerFlash({ color: '#ffffff', intensity: 0.8, decayRate: 3.0 });
+          // 보스 슬로모
+          if (gameSpeedRef && slowmoTimerRef) {
+            gameSpeedRef.current = 0.2;
+            slowmoTimerRef.current = 0.3;
           }
         }
-        // --- 새로 사망한 적: dying 전환 ---
-        else if (enemy.health <= 0) {
-          enemy.state = 'dying';
-          enemy.deathTimer = DEATH_ANIM_DURATION;
-          enemy.deathScale = 1.0;
 
-          const kdx = enemy.position.x - player.position.x;
-          const kdy = enemy.position.y - player.position.y;
-          const kDistSq = kdx * kdx + kdy * kdy;
-          const deathForce = 25 / (enemy.mass || 1);
-          if (kDistSq > 0.01) {
-            const kDist = Math.sqrt(kDistSq);
-            enemy.deathVelocity = {
-              x: (kdx / kDist) * deathForce,
-              y: (kdy / kDist) * deathForce,
-            };
-          } else {
-            const angle = Math.random() * Math.PI * 2;
-            enemy.deathVelocity = {
-              x: Math.cos(angle) * deathForce,
-              y: Math.sin(angle) * deathForce,
-            };
-          }
-
-          soundManager.playDeathSound();
-
-          deathEventsRef.current.push({
-            position: { x: enemy.position.x, y: enemy.position.y },
-            color: enemy.color || (enemy.isBoss ? '#ff4444' : '#44aaff'),
-            isBoss: enemy.isBoss,
-            isElite: enemy.isElite,
-            eliteTier: enemy.eliteTier,
-          });
-
-          const gemValue = enemy.isElite
-            ? (enemy.eliteTier === 'diamond' ? 300 : enemy.eliteTier === 'gold' ? 150 : 80)
-            : enemy.isBoss ? 50 : (enemy.enemyType === 'whale' || enemy.enemyType === 'bot' ? 20 : 10);
-          refs.gems.current.push({
-            id: `gem-drop-${Date.now()}-${Math.random()}`,
-            position: { x: enemy.position.x, y: enemy.position.y },
-            value: gemValue,
-            color: enemy.isElite ? '#00FFFF' : enemy.isBoss ? '#ffdd00' : '#44ff88',
-            isCollected: false,
-          });
-
-          player.score += gemValue;
-          hitFlashMapRef.current.delete(enemy.id);
-          refs.screenShakeTimer.current = Math.max(refs.screenShakeTimer.current, enemy.isElite ? 0.5 : enemy.isBoss ? 0.3 : 0.1);
-          refs.screenShakeIntensity.current = Math.max(refs.screenShakeIntensity.current, enemy.isElite ? 0.7 : enemy.isBoss ? 0.4 : 0.15);
-
-          if (enemy.isElite && triggerFlash) {
-            const tierFlashColors: Record<string, string> = {
-              silver: '#C0C0C0',
-              gold: '#FFD700',
-              diamond: '#00FFFF',
-            };
-            const flashColor = enemy.eliteTier ? tierFlashColors[enemy.eliteTier] ?? '#ffffff' : '#ffffff';
-            triggerFlash({ color: flashColor, intensity: 0.8, decayRate: 4.0 });
-            if (gameSpeedRef && slowmoTimerRef) {
-              gameSpeedRef.current = 0.2;
-              slowmoTimerRef.current = 0.3;
-            }
-          } else if (enemy.isBoss && triggerFlash) {
-            triggerFlash({ color: '#ffffff', intensity: 0.8, decayRate: 3.0 });
-            if (gameSpeedRef && slowmoTimerRef) {
-              gameSpeedRef.current = 0.2;
-              slowmoTimerRef.current = 0.3;
+        // v42 Phase 4: 엘리트 처치 시 특수 드롭 (pickup)
+        if (enemy.isElite && enemy.eliteTier) {
+          const eliteCfg = ELITE_CONFIGS.find(c => c.tier === enemy.eliteTier);
+          if (eliteCfg) {
+            for (const dropType of eliteCfg.drops) {
+              refs.pickups.current.push({
+                id: `elite-drop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+                type: dropType,
+                position: {
+                  x: enemy.position.x + (Math.random() - 0.5) * 3,
+                  y: enemy.position.y + (Math.random() - 0.5) * 3,
+                },
+                life: 15,
+                radius: 1,
+              } as any);
             }
           }
-
-          if (enemy.isElite && enemy.eliteTier) {
-            const eliteCfg = ELITE_CONFIGS.find(c => c.tier === enemy.eliteTier);
-            if (eliteCfg) {
-              for (const dropType of eliteCfg.drops) {
-                refs.pickups.current.push({
-                  id: `elite-drop-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-                  type: dropType,
-                  position: {
-                    x: enemy.position.x + (Math.random() - 0.5) * 3,
-                    y: enemy.position.y + (Math.random() - 0.5) * 3,
-                  },
-                  life: 15,
-                  radius: 1,
-                } as any);
-              }
-            }
-          }
-
-          onEnemyKill?.(enemy);
-          // keep = true: dying 유지
         }
 
-        if (keep) {
-          enemies[writeIdx++] = enemy;
-        }
+        // v42 Phase 3: 적 처치 콜백 (콤보/XP 처리)
+        onEnemyKill?.(enemy);
+
+        return false;
       }
-      enemies.length = writeIdx;
-    }
+      return true;
+    });
 
     // === 적 hit flash 타이머 감소 ===
     for (const [id, timer] of hitFlashMapRef.current.entries()) {
@@ -852,7 +795,6 @@ function GameLogic({
         if (pdist < ENEMY_PROJ_HIT_RANGE) {
           player.health = Math.max(0, player.health - proj.damage);
           player.hitFlashTimer = 0.15;
-          soundManager.playHitSound();
           player.invulnerabilityTimer = INVULNERABILITY_DURATION;
 
           // 넉백 (투사체 방향)
@@ -882,8 +824,6 @@ function GameLogic({
 
     // 적 AI: behaviorType 분기 (v44: chase/ranged/charge)
     for (const enemy of refs.enemies.current) {
-      // dying 상태 적은 AI 스킵 (넉백 슬라이드만 진행)
-      if (enemy.state === 'dying') continue;
       const ex = enemy.position.x - player.position.x;
       const ey = enemy.position.y - player.position.y;
       const dist = Math.sqrt(ex * ex + ey * ey);
@@ -992,7 +932,6 @@ function GameLogic({
                     player.health = Math.max(0, player.health - enemy.damage);
                     player.hitFlashTimer = 0.15;
                     player.invulnerabilityTimer = INVULNERABILITY_DURATION;
-                    soundManager.playHitSound();
                     if (dist > 0.1) {
                       player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
                       player.knockback.y = (ey / dist) * ENEMY_KNOCKBACK_FORCE;
@@ -1044,7 +983,6 @@ function GameLogic({
                 player.health = Math.max(0, player.health - enemy.damage * 1.5);
                 player.hitFlashTimer = 0.2;
                 player.invulnerabilityTimer = INVULNERABILITY_DURATION;
-                soundManager.playSFX('hit', { volume: 1.2 });
                 if (dist > 0.1) {
                   player.knockback.x = dir.x * ENEMY_KNOCKBACK_FORCE * 2;
                   player.knockback.y = dir.y * ENEMY_KNOCKBACK_FORCE * 2;
@@ -1134,7 +1072,6 @@ function GameLogic({
                 player.health = Math.max(0, player.health - enemy.damage);
                 player.hitFlashTimer = 0.15;
                 player.invulnerabilityTimer = INVULNERABILITY_DURATION;
-                soundManager.playHitSound();
 
                 if (dist > 0.1) {
                   player.knockback.x = (ex / dist) * ENEMY_KNOCKBACK_FORCE;
@@ -1186,86 +1123,75 @@ function GameLogic({
       refs.screenShakeIntensity.current *= 0.82;
     }
 
-    // magnet 타이머 감소
-    if (magnetTimerRef.current > 0) {
-      magnetTimerRef.current -= dt;
-    }
-
-    // 잼 수집 (자동 흡수: 모든 젬이 플레이어에게 날아옴, in-place)
+    // 잼 자석 수집 (v42 Phase 4: 콤보 XP 배율 적용)
     const xpMultiplier = comboXpMultiplierRef?.current ?? 1.0;
-    {
-      const gems = refs.gems.current;
-      let gw = 0;
-      for (let gi = 0; gi < gems.length; gi++) {
-        const gem = gems[gi];
-        if (gem.isCollected) continue; // 제거
-        const gdx = gem.position.x - player.position.x;
-        const gdy = gem.position.y - player.position.y;
-        const gdSq = gdx * gdx + gdy * gdy;
-        // 수집 범위 안이면 즉시 수집 (sqrt 생략: distSq vs rangeSq)
-        if (gdSq < GEM_COLLECT_RANGE_SQ) {
-          player.xp += Math.floor(gem.value * xpMultiplier);
-          player.score += gem.value;
-          continue; // 제거
-        }
-        // 자동 흡수 이동 (sqrt는 방향 벡터에만 필요)
-        if (gdSq > 0.25) { // 0.5^2
-          const gd = Math.sqrt(gdSq);
-          const t = 1 - Math.min(gd / 30, 1);
-          const speed = AUTO_ABSORB_SPEED * (1 + t * t * 3);
-          gem.position.x -= (gdx / gd) * speed * dt;
-          gem.position.y -= (gdy / gd) * speed * dt;
-        }
-        gems[gw++] = gem;
+    refs.gems.current = refs.gems.current.filter(gem => {
+      if (gem.isCollected) return false;
+      const gdx = gem.position.x - player.position.x;
+      const gdy = gem.position.y - player.position.y;
+      const gd = Math.sqrt(gdx * gdx + gdy * gdy);
+      if (gd < GEM_COLLECT_RANGE) {
+        const xpGain = Math.floor(gem.value * xpMultiplier);
+        player.xp += xpGain;
+        player.score += gem.value;
+        return false;
       }
-      gems.length = gw;
-    }
+      if (gd < GEM_MAGNET_RANGE && gd > 0.5) {
+        gem.position.x -= (gdx / gd) * 12 * dt; // MC 스케일 자석 속도
+        gem.position.y -= (gdy / gd) * 12 * dt;
+      }
+      return true;
+    });
 
-    // === v46: Pickup 아이템 수집 + 수명 감소 (in-place) ===
-    {
-      const pickups = refs.pickups.current;
-      let pw = 0;
-      for (let pi = 0; pi < pickups.length; pi++) {
-        const pickup = pickups[pi];
-        pickup.life -= dt;
-        if (pickup.life <= 0) continue; // 제거
+    // === v46: Pickup 아이템 수집 + 수명 감소 ===
+    refs.pickups.current = refs.pickups.current.filter(pickup => {
+      // 수명 감소
+      pickup.life -= dt;
+      if (pickup.life <= 0) return false;
 
-        const pdx = pickup.position.x - player.position.x;
-        const pdy = pickup.position.y - player.position.y;
-        const pdSq = pdx * pdx + pdy * pdy;
+      // 거리 체크
+      const pdx = pickup.position.x - player.position.x;
+      const pdy = pickup.position.y - player.position.y;
+      const pd = Math.sqrt(pdx * pdx + pdy * pdy);
 
-        if (pdSq < PICKUP_COLLECT_RANGE_SQ) {
-          switch (pickup.type) {
-            case 'chicken':
-              player.health = Math.min(player.health + PICKUP_HEAL_AMOUNT, player.maxHealth);
-              break;
-            case 'bomb':
-              for (const enemy of refs.enemies.current) {
-                const edx = enemy.position.x - pickup.position.x;
-                const edy = enemy.position.y - pickup.position.y;
-                const eDistSq = edx * edx + edy * edy;
-                if (eDistSq < PICKUP_BOMB_RANGE_SQ && enemy.hp !== undefined) {
-                  enemy.hp -= PICKUP_BOMB_DAMAGE;
-                }
+      if (pd < PICKUP_COLLECT_RANGE) {
+        // 타입별 효과 적용
+        switch (pickup.type) {
+          case 'chicken':
+            player.health = Math.min(player.health + PICKUP_HEAL_AMOUNT, player.maxHealth);
+            break;
+          case 'bomb':
+            // 범위 내 모든 적에게 데미지
+            for (const enemy of refs.enemies.current) {
+              const edx = enemy.position.x - pickup.position.x;
+              const edy = enemy.position.y - pickup.position.y;
+              const eDist = Math.sqrt(edx * edx + edy * edy);
+              if (eDist < PICKUP_BOMB_RANGE && enemy.hp !== undefined) {
+                enemy.hp -= PICKUP_BOMB_DAMAGE;
               }
-              break;
-            case 'magnet':
-              magnetTimerRef.current = PICKUP_MAGNET_DURATION;
-              break;
-            case 'chest':
-              player.xp += 50;
-              player.score += 100;
-              break;
-            case 'upgrade_material':
-              player.score += 200;
-              break;
-          }
-          continue; // 수집됨 → 제거
+            }
+            break;
+          case 'magnet':
+            // 모든 젬을 플레이어에게 끌어당기기 (즉시)
+            for (const gem of refs.gems.current) {
+              gem.position.x = player.position.x + (Math.random() - 0.5) * 2;
+              gem.position.y = player.position.y + (Math.random() - 0.5) * 2;
+            }
+            break;
+          case 'chest':
+            // 보물 상자: 보너스 XP
+            player.xp += 50;
+            player.score += 100;
+            break;
+          case 'upgrade_material':
+            // 업그레이드 재료: 보너스 스코어
+            player.score += 200;
+            break;
         }
-        pickups[pw++] = pickup;
+        return false; // 수집됨 → 제거
       }
-      pickups.length = pw;
-    }
+      return true;
+    });
 
     // === v42 Phase 3: XP 임계값 체크 → 레벨업 ===
     if (onLevelUp && player.xp >= player.nextLevelXp) {
@@ -1318,13 +1244,11 @@ export function MatrixScene({ gameRefs, blockWeaponsTick: externalTick, pausedRe
   const playerAttackTimerRef = useRef(0);
   const respawnTimerRef = useRef(0);
   const deathRespawnTimerRef = useRef(0);
-  const magnetTimerRef = useRef(0); // magnet 아이템 활성 타이머 (0이면 비활성)
 
   // === v44: 슬로모 시스템 refs ===
   const gameSpeedRef = useRef(1.0);
   const slowmoTimerRef = useRef(0);
-  // v47: 히트스탑 ref (근접 무기 40ms 프레임 정지)
-  const hitStopTimerRef = useRef(0);
+  const hitStopTimerRef = useRef(0); // v47: 히트스탑
 
   // 3인칭 모드: WASD는 MCGameCamera가 직접 관리
   const containerRef = useRef<HTMLDivElement>(null);
@@ -1506,10 +1430,12 @@ export function MatrixScene({ gameRefs, blockWeaponsTick: externalTick, pausedRe
           triggerFlash={triggerFlash}
           gameSpeedRef={gameSpeedRef}
           slowmoTimerRef={slowmoTimerRef}
-          magnetTimerRef={magnetTimerRef}
           hitStopTimerRef={hitStopTimerRef}
         />
       </Canvas>
+
+      {/* Phase 5: Screen Flash Overlay (S33) — DOM 기반 */}
+      <ScreenFlashOverlay flashRef={flashRef} />
 
       {/* Phase 4: HUD Overlay — DOM 기반 HUD 컴포넌트 통합 */}
       <div

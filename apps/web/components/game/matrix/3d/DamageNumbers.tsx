@@ -53,7 +53,7 @@ const baseStyle: React.CSSProperties = {
   pointerEvents: 'none',
   userSelect: 'none',
   whiteSpace: 'nowrap',
-  fontFamily: '"Rajdhani", sans-serif',
+  fontFamily: 'monospace',
   fontWeight: 'bold',
   textShadow: '0 0 4px rgba(0,0,0,0.8), 0 2px 4px rgba(0,0,0,0.6)',
   lineHeight: 1,

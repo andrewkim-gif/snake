@@ -336,10 +336,8 @@ export interface EnemyRendererProps {
 // EnemyRenderer Component
 // ============================================
 
-/** Hit flash 지속 시간 (초) — v46: 0.12→0.25 강화 */
-const ENEMY_HIT_FLASH_DURATION = 0.25;
-/** v46: hit flash 스케일 펀치 최대 배율 */
-const HIT_SCALE_PUNCH = 1.15;
+/** Hit flash 지속 시간 (초) */
+const ENEMY_HIT_FLASH_DURATION = 0.12;
 
 /** v44: 적 투사체 InstancedMesh 최대 수 */
 const MAX_ENEMY_PROJECTILE_INSTANCES = 50;
@@ -508,9 +506,6 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
     // 이번 프레임에 살아있는 적 ID 수집 (stale 엔트리 정리용)
     const aliveIds = new Set<string>();
 
-    // v46: 현재 프레임 최대 hit flash 강도 (emissive 펄스용)
-    let maxHitFlash = 0;
-
     // template별 index 카운터 리셋
     const templateCounters = new Map<EnemyTemplateId, number>();
     for (const pool of templatePools) {
@@ -568,21 +563,14 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
 
       const colors = getEnemyColors(enemy.enemyType);
 
-      // v46: hit flash 강도 계산 (0.25초, emissive + scale punch)
+      // v39 Phase 3: hit flash 강도 계산
       let hitFlashIntensity = 0;
       if (hitFlashMapRef) {
         const flashTimer = hitFlashMapRef.current.get(enemy.id);
         if (flashTimer !== undefined && flashTimer > 0) {
           hitFlashIntensity = flashTimer / ENEMY_HIT_FLASH_DURATION;
-          if (hitFlashIntensity > maxHitFlash) maxHitFlash = hitFlashIntensity;
         }
       }
-
-      // v46: hit 시 스케일 펀치 (타격감 강화)
-      const hitScaleMult = hitFlashIntensity > 0
-        ? 1 + (HIT_SCALE_PUNCH - 1) * hitFlashIntensity
-        : 1;
-      const punchedScale = scale * hitScaleMult;
 
       if (lod === 'LOW') {
         // LOW LOD: 단일 큐브
@@ -590,17 +578,17 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
 
         // v47: dying 축소 + 바닥 침하
         const lowDeathScale = isDying ? (enemy.deathScale ?? 0.3) : 1.0;
-        const lowDeathSink = isDying ? (1 - lowDeathScale) * 0.8 : 0;
+        const lowDeathSink = isDying ? (1 - lowDeathScale) * 0.8 : 0; // 죽으면서 바닥으로 침하
 
         _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1 + LOW_LOD_CUBE_SIZE / 2 - lowDeathSink, z3d);
-        _tempScale.set(punchedScale * lowDeathScale, punchedScale * lowDeathScale, punchedScale * lowDeathScale);
+        _tempScale.set(scale * lowDeathScale, scale * lowDeathScale, scale * lowDeathScale);
         _tempMatrix.compose(_tempPosition, _tempQuaternion.identity(), _tempScale);
 
         lowLodPool.mesh.setMatrixAt(lowLodCount, _tempMatrix);
         _tempColor.copy(colors.primary);
-        // v46: hit flash — 흰색으로 강하게 블렌드 + emissive 급등
+        // v39: hit flash — 흰색으로 블렌드
         if (hitFlashIntensity > 0) {
-          _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity * 0.9);
+          _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity);
         }
         // v47: dying 적 색상 어둡게 (fade 대신 darkening)
         if (isDying) {
@@ -619,18 +607,18 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
         if (idx >= MAX_INSTANCES_PER_TEMPLATE) continue;
 
         // MID LOD: 절반 스케일 Y (약간 납작하게)
-        const scaleY = lod === 'MID' ? punchedScale * 0.7 : punchedScale;
+        const scaleY = lod === 'MID' ? scale * 0.7 : scale;
 
         // v47: dying 적 축소 + 바닥 침하 + 색상 어둡게
         let deathScaleMult = 1.0;
         let deathSinkY = 0;
         if (isDying) {
           deathScaleMult = enemy.deathScale ?? 0.3;
-          deathSinkY = (1 - deathScaleMult) * 0.8;
+          deathSinkY = (1 - deathScaleMult) * 0.8; // 죽으면서 바닥으로 침하
         }
 
         _tempPosition.set(x3d, getMCTerrainHeight(x3d, z3d) + 1 - deathSinkY, z3d);
-        _tempScale.set(punchedScale * deathScaleMult, scaleY * deathScaleMult, punchedScale * deathScaleMult);
+        _tempScale.set(scale * deathScaleMult, scaleY * deathScaleMult, scale * deathScaleMult);
 
         // 8방향 facing (velocity 기반)
         const vx = enemy.velocity.x;
@@ -672,9 +660,9 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
 
         pool.mesh.setMatrixAt(idx, _tempMatrix);
         _tempColor.copy(colors.primary);
-        // v46: hit flash — 흰색으로 강하게 블렌드
+        // v39: hit flash — 흰색으로 블렌드
         if (hitFlashIntensity > 0) {
-          _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity * 0.9);
+          _tempColor.lerp(_WHITE_COLOR, hitFlashIntensity);
         }
         // v47: dying 적 색상 어둡게
         if (isDying) {
@@ -706,16 +694,6 @@ export function EnemyRenderer({ enemiesRef, playerRef, hitFlashMapRef, enemyProj
     if (lowLodCount > 0) {
       lowLodPool.mesh.instanceMatrix.needsUpdate = true;
       markColorNeedsUpdate(lowLodPool.mesh);
-    }
-
-    // v46: emissive intensity 펄스 — hit 시 밝게 빛남
-    const emissiveBase = 0.05;
-    const emissiveHit = 0.6;
-    const targetEmissive = maxHitFlash > 0
-      ? emissiveBase + (emissiveHit - emissiveBase) * maxHitFlash
-      : emissiveBase;
-    for (const pool of templatePools) {
-      pool.material.emissiveIntensity = targetEmissive;
     }
 
     // stale 보간 위치 정리 (죽거나 사라진 적)

@@ -24,7 +24,6 @@ import {
   earthVertexShader, earthFragmentShader,
   cloudsVertexShader, cloudsFragmentShader,
   atmoVertexShader, atmoFragmentShader,
-  dottedVertexShader, dottedFragmentShader,
 } from '@/lib/globe-shaders';
 // v33 Phase 3: SharedTickData for Starfield
 import type { SharedTickData } from '@/components/lobby/GlobeView';
@@ -132,47 +131,6 @@ function EarthSphere({ sunDirRef }: SunDirProp) {
 
   return (
     <mesh material={earthMat}>
-      <sphereGeometry args={[GLOBE_RADIUS, 64, 64]} />
-    </mesh>
-  );
-}
-
-// ─── DottedEarthSphere (COBE-style dotted globe) ───
-
-interface DottedEarthProps extends SunDirProp {}
-
-function DottedEarthSphere({ sunDirRef }: DottedEarthProps) {
-  // 기존 blue marble 텍스처를 land mask로 재활용 (luminance로 변환)
-  const landTexture = useLoader(THREE.TextureLoader, '/textures/earth-blue-marble.jpg');
-  landTexture.colorSpace = THREE.SRGBColorSpace;
-
-  const dottedMat = useMemo(() => {
-    return new THREE.ShaderMaterial({
-      uniforms: {
-        uLandMap: { value: landTexture },
-        uSunDir: { value: sunDirRef.current },
-        uDots: { value: 24000.0 },
-        uDotSize: { value: 0.0012 },           // 점 크기 (작을수록 작은 점, COBE 기본 0.008)
-        uDiffuse: { value: 1.2 },              // 라이팅 감쇠 (COBE 기본: 1.2)
-        uDotBrightness: { value: 6.0 },        // 점 밝기 (COBE 기본: 6)
-        uMapBaseBrightness: { value: 0.1 },    // 바다 최소 밝기
-        uBaseColor: { value: new THREE.Vector3(1.0, 1.0, 1.0) },
-        uDark: { value: 1.0 },                // 1=밝은 점, 0=어두운 배경
-      },
-      vertexShader: dottedVertexShader,
-      fragmentShader: dottedFragmentShader,
-      transparent: true,
-      depthWrite: false,
-    });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [landTexture]);
-
-  useEffect(() => {
-    return () => { dottedMat.dispose(); };
-  }, [dottedMat]);
-
-  return (
-    <mesh material={dottedMat}>
       <sphereGeometry args={[GLOBE_RADIUS, 64, 64]} />
     </mesh>
   );
@@ -419,23 +377,15 @@ interface EarthGroupProps {
   sunDirRef: React.RefObject<THREE.Vector3>;
   /** v33 Phase 5: 품질 프리셋 ref (LOW에서 구름 숨김) */
   qualityRef?: React.RefObject<import('@/hooks/useAdaptiveQuality').QualityPreset>;
-  /** v47: COBE 스타일 dotted globe 모드 */
-  dottedMode?: boolean;
 }
 
-export function EarthGroup({ sunDirRef, qualityRef, dottedMode }: EarthGroupProps) {
+export function EarthGroup({ sunDirRef, qualityRef }: EarthGroupProps) {
   return (
     <>
-      {dottedMode ? (
-        <DottedEarthSphere sunDirRef={sunDirRef} />
-      ) : (
-        <>
-          <EarthSphere sunDirRef={sunDirRef} />
-          {/* v33 Phase 5: LOW 품질에서 구름 opacity 제어 */}
-          <EarthClouds sunDirRef={sunDirRef} qualityRef={qualityRef} />
-          <AtmosphereGlow sunDirRef={sunDirRef} />
-        </>
-      )}
+      <EarthSphere sunDirRef={sunDirRef} />
+      {/* v33 Phase 5: LOW 품질에서 구름 opacity 제어 */}
+      <EarthClouds sunDirRef={sunDirRef} qualityRef={qualityRef} />
+      <AtmosphereGlow sunDirRef={sunDirRef} />
     </>
   );
 }

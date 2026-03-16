@@ -1,1 +1,0 @@
-{"type":"Topology","arcs":[[[92,102],[33,-102],[-65,39],[-55,-24],[-5,73],[92,14]]],"transform":{"scale":[0.0017399088560000565,0.0008716458627449641],"translate":[-2.2420141269999476,49.17133209800005]},"objects":{"JEY_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

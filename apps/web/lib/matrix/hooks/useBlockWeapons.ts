@@ -66,11 +66,6 @@ export interface UseBlockWeaponsProps {
   }>>;
   /** v42 Phase 4: 콤보 데미지 배율 ref (1.0 = 기본, combo.getMultipliers().damage) */
   comboDamageMultiplierRef?: React.MutableRefObject<number>;
-  /** v47: 카메라 쉐이크 refs (근접 무기 타격감) */
-  screenShakeTimerRef?: React.MutableRefObject<number>;
-  screenShakeIntensityRef?: React.MutableRefObject<number>;
-  /** v47: 히트스탑 ref (근접 무기 프레임 정지) */
-  hitStopTimerRef?: React.MutableRefObject<number>;
 }
 
 export interface UseBlockWeaponsReturn {
@@ -135,9 +130,6 @@ export function useBlockWeapons({
   hitFlashMapRef,
   attackEventsRef,
   comboDamageMultiplierRef,
-  screenShakeTimerRef,
-  screenShakeIntensityRef,
-  hitStopTimerRef,
 }: UseBlockWeaponsProps): UseBlockWeaponsReturn {
   /** 무기별 쿨다운 타이머 */
   const cooldownsRef = useRef<Partial<Record<WeaponType, number>>>({});
@@ -186,18 +178,6 @@ export function useBlockWeapons({
             projectiles,
             attackEventsRef.current
           );
-
-          // v47: 근접 무기 카메라 쉐이크 + 히트스탑 (발사 = 즉발 히트)
-          const isMeleeWeapon = weaponType === 'whip' || weaponType === 'punch' || weaponType === 'sword' || weaponType === 'bible';
-          if (isMeleeWeapon) {
-            if (screenShakeTimerRef && screenShakeIntensityRef) {
-              screenShakeTimerRef.current = Math.max(screenShakeTimerRef.current, 0.08);
-              screenShakeIntensityRef.current = Math.max(screenShakeIntensityRef.current, 0.12);
-            }
-            if (hitStopTimerRef && (weaponType === 'whip' || weaponType === 'punch' || weaponType === 'sword')) {
-              hitStopTimerRef.current = Math.max(hitStopTimerRef.current, 0.04);
-            }
-          }
         }
       }
     }
@@ -222,7 +202,7 @@ export function useBlockWeapons({
     // ============================================
     enforceProjectileLimit(projectiles);
 
-  }, [playerRef, enemiesRef, projectilesRef, damageNumbersRef, hitFlashMapRef, attackEventsRef, comboDamageMultiplierRef, screenShakeTimerRef, screenShakeIntensityRef, hitStopTimerRef]);
+  }, [playerRef, enemiesRef, projectilesRef, damageNumbersRef, hitFlashMapRef, attackEventsRef, comboDamageMultiplierRef]);
 
   return { tick, cooldownsRef };
 }

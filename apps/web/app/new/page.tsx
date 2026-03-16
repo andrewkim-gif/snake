@@ -707,6 +707,36 @@ function Scene3DPage() {
       backgroundColor: '#000',
       position: 'relative',
     }}>
+      {/* 좌측 상단 정보 배지 */}
+      <div style={{
+        position: 'fixed',
+        top: 8,
+        left: 8,
+        zIndex: 9999,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 4,
+        padding: '6px 10px',
+        background: 'rgba(0,0,0,0.8)',
+        border: '1px solid #333',
+        borderLeft: '3px solid #CC9933',
+        backdropFilter: 'blur(4px)',
+        fontFamily: '"Rajdhani", sans-serif',
+        fontSize: 10,
+        color: '#888',
+        pointerEvents: 'none',
+      }}>
+        <span style={{
+          fontFamily: '"Black Ops One", cursive',
+          fontSize: 11,
+          color: '#CC9933',
+          letterSpacing: '0.08em',
+        }}>
+          3D VOXEL TEST
+        </span>
+        <span>Engine: <b style={{ color: '#E8E0D4' }}>Three.js R3F</b></span>
+        <span>Mode: <b style={{ color: '#10B981' }}>3D Enhanced</b></span>
+      </div>
 
       {/* 디버그 스킬 업그레이드 패널 (오른쪽 위) */}
       <DebugSkillPanel

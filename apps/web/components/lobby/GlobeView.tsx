@@ -169,8 +169,6 @@ interface GlobeViewProps {
   onReady?: () => void;
   /** v37: 인게임 중 Globe 렌더링 일시정지 (Canvas 유지, RAF 중지) */
   paused?: boolean;
-  /** v47: COBE 스타일 dotted globe 모드 */
-  dottedMode?: boolean;
 }
 
 // ─── AdaptiveOrbitControls ───
@@ -296,7 +294,6 @@ function GlobeScene({
   resources,
   spyOps,
   nukes,
-  dottedMode,
 }: {
   onCountryClick?: (iso3: string, name: string) => void;
   onHover?: (iso3: string | null, name: string | null) => void;
@@ -313,7 +310,6 @@ function GlobeScene({
   resources: ResourceData[];
   spyOps: SpyOpData[];
   nukes: NukeData[];
-  dottedMode?: boolean;
 }) {
   const [countries, setCountries] = useState<CountryGeo[]>([]);
   const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
@@ -420,10 +416,10 @@ function GlobeScene({
 
       {/* Globe group */}
       <group ref={globeGroupRef}>
-        {/* v33 Phase 5: LOW 품질에서 구름 숨김 | v47: dotted mode */}
-        <EarthGroup sunDirRef={sunDirRef} qualityRef={qualityRef} dottedMode={dottedMode} />
+        {/* v33 Phase 5: LOW 품질에서 구름 숨김 */}
+        <EarthGroup sunDirRef={sunDirRef} qualityRef={qualityRef} />
         <GlobeTitle />
-        <CountryLayer countries={countries} dottedMode={dottedMode} />
+        <CountryLayer countries={countries} />
         <GlobeCountryNameLabels countries={countries} sharedTickRef={sharedTickRef} />
         <GlobeInteraction onCountryClick={onCountryClick} onHover={onHover} />
       </group>
@@ -622,7 +618,6 @@ export function GlobeView({
   nukes,
   onReady,
   paused,
-  dottedMode,
 }: GlobeViewProps) {
   const domStates = dominationStates ?? EMPTY_DOM_MAP;
   const warList = wars ?? EMPTY_ARRAY;
@@ -667,7 +662,6 @@ export function GlobeView({
             resources={resourceList}
             spyOps={spyOpList}
             nukes={nukeList}
-            dottedMode={dottedMode}
           />
         </SizeGate>
       </Canvas>
