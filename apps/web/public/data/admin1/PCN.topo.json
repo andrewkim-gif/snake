@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[8231,1458],[134,-81],[-32,-95],[-143,83],[41,93]]],"transform":{"scale":[0.00029342195307499293,0.0005104329352967357],"translate":[-130.74526933499993,-25.068291924999926]},"objects":{"PCN_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

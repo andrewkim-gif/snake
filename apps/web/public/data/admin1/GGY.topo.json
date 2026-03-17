@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[93,145],[82,30],[-34,-163],[-141,-12],[13,66],[80,79]]],"transform":{"scale":[0.0009572012514506744,0.0004323689482014566],"translate":[-2.6693416009999282,49.430894273000035]},"objects":{"GGY_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[59,100],[41,-58],[-69,-42],[-31,31],[59,69]]],"transform":{"scale":[0.0016752115899998899,0.0017765299500001677],"translate":[-169.95042883999992,-19.142754815999922]},"objects":{"NIU_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

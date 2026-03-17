@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[150,24],[-13,-24],[-76,45],[-60,63],[-1,42],[47,-58],[103,-68]]],"transform":{"scale":[0.002536349826666916,0.002322319880000047],"translate":[-69.16120357999995,12.043158270000049]},"objects":{"CUW_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

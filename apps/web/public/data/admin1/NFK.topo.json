@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[75,54],[-18,-54],[-57,75],[75,-21]]],"transform":{"scale":[0.0007682291600000704,0.0009526909733335743],"translate":[167.92652428500003,-29.06894296699994]},"objects":{"NFK_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

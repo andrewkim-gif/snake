@@ -107,6 +107,8 @@ export function WorldView({
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
   const [fallbackStates, setFallbackStates] = useState<Map<string, CountryClientState>>(new Map());
+  // v47: COBE 스타일 dotted globe 토글
+  const [dottedMode, setDottedMode] = useState(false);
 
   // 3D Globe 로딩 상태
   const [globeReady, setGlobeReady] = useState(false);
@@ -284,8 +286,51 @@ export function WorldView({
           nukes={nukes}
           onReady={handleGlobeReady}
           paused={paused}
+          dottedMode={dottedMode}
         />
       </div>
+
+      {/* v47: Dotted globe 토글 버튼 — 우상단 버튼 그룹(zIndex 70) 아래 배치 */}
+      <button
+        onClick={() => setDottedMode((prev) => !prev)}
+        style={{
+          position: 'absolute',
+          top: 56,
+          right: 16,
+          zIndex: 30,
+          width: 36,
+          height: 36,
+          borderRadius: 0,
+          border: `1px solid ${dottedMode ? 'rgba(99, 102, 241, 0.5)' : 'rgba(255, 255, 255, 0.1)'}`,
+          background: dottedMode ? 'rgba(99, 102, 241, 0.2)' : 'rgba(9, 9, 11, 0.6)',
+          backdropFilter: 'blur(8px)',
+          WebkitBackdropFilter: 'blur(8px)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          cursor: 'pointer',
+          transition: 'all 200ms ease',
+          color: dottedMode ? '#a5b4fc' : '#8B8D98',
+          fontSize: 18,
+          padding: 0,
+          boxShadow: dottedMode ? '0 0 12px rgba(99, 102, 241, 0.3)' : 'none',
+        }}
+        title={dottedMode ? 'Switch to Realistic' : 'Switch to Dotted'}
+        onMouseEnter={(e) => {
+          if (!dottedMode) {
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.25)';
+            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+          }
+        }}
+        onMouseLeave={(e) => {
+          if (!dottedMode) {
+            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            e.currentTarget.style.background = 'rgba(9, 9, 11, 0.6)';
+          }
+        }}
+      >
+        {dottedMode ? '●' : '◐'}
+      </button>
 
       {/* 3D 로딩 스크린 */}
       {!loadingDismissed && (

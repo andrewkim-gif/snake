@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[28,0],[-28,75],[75,-10],[-47,-65]]],"transform":{"scale":[0.0010091145866666315,0.0005121527733331277],"translate":[-62.86733964799993,17.881984768000052]},"objects":{"BLM_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

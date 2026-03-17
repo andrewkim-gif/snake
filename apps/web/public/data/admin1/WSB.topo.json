@@ -1,0 +1,1 @@
+{"type":"Topology","arcs":[[[109,79],[16,-79],[-96,0],[-29,105],[79,20],[30,-46]]],"transform":{"scale":[0.0009335937439996087,0.000838717408000207],"translate":[32.91358483200008,34.56854889500005]},"objects":{"WSB_clustered":{"type":"GeometryCollection","geometries":[{"arcs":[[0]],"type":"Polygon","properties":{"game_region_idx":0,"region_idx":0}}]}}}

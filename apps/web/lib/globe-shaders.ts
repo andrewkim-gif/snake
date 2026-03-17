@@ -206,3 +206,163 @@ export const atmoFragmentShader = /* glsl */ `
     gl_FragColor = vec4(color, alpha);
   }
 `;
+
+// ─── COBE-style Dotted Globe Shaders ───
+// Spherical Fibonacci lattice dot sampling + world map texture land detection
+// Inspired by github.com/shuding/cobe (MIT license)
+
+/** Dotted globe vertex shader — sphere geometry에서 world position + UV 전달 */
+export const dottedVertexShader = /* glsl */ `
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+
+  void main() {
+    vUv = uv;
+    vWorldNormal = normalize((modelMatrix * vec4(normal, 0.0)).xyz);
+    vWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;
+    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  }
+`;
+
+/** Dotted globe fragment shader — Spherical Fibonacci dot sampling
+ *  Closely follows COBE's original shader logic (github.com/shuding/cobe)
+ *  Adapted for R3F sphere geometry (normal = sphere direction, no raymarching needed)
+ */
+export const dottedFragmentShader = /* glsl */ `
+  precision highp float;
+
+  uniform sampler2D uLandMap;
+  uniform vec3 uSunDir;
+  uniform float uDots;
+  uniform float uDotSize;
+  uniform float uDiffuse;
+  uniform float uDotBrightness;
+  uniform vec3 uBaseColor;
+  uniform float uDark;
+  uniform float uMapBaseBrightness;
+
+  varying vec3 vWorldNormal;
+  varying vec3 vWorldPos;
+  varying vec2 vUv;
+
+  // Spherical Fibonacci constants (from COBE by Shu Ding)
+  const float sqrt5 = 2.23606797749979;
+  const float PI = 3.141592653589793;
+  const float kTau = 6.283185307179586;
+  const float kPhi = 1.618033988749895;
+  const float byLogPhiPlusOne = 0.7202100452062783;
+  const float twoPiOnPhi = 3.8832220774509327;
+  const float phiMinusOne = 0.618033988749895;
+
+  // Fibonacci lattice fractional value lookup (mantissa trick by @farteryhr)
+  float fibFrac(float idx) {
+    float tidx = idx;
+    float fracV = 0.0;
+    if (tidx >= 524288.0) { tidx -= 524288.0; fracV += 0.8038937048986554; }
+    if (tidx >= 262144.0) { tidx -= 262144.0; fracV += 0.9019468524493277; }
+    if (tidx >= 131072.0) { tidx -= 131072.0; fracV += 0.9509734262246639; }
+    if (tidx >= 65536.0)  { tidx -= 65536.0;  fracV += 0.4754867131123319; }
+    if (tidx >= 32768.0)  { tidx -= 32768.0;  fracV += 0.737743356556166;  }
+    if (tidx >= 16384.0)  { tidx -= 16384.0;  fracV += 0.868871678278083;  }
+    if (tidx >= 8192.0)   { tidx -= 8192.0;   fracV += 0.9344358391390415; }
+    if (tidx >= 4096.0)   { tidx -= 4096.0;   fracV += 0.46721791956952075;}
+    if (tidx >= 2048.0)   { tidx -= 2048.0;   fracV += 0.7336089597847604; }
+    if (tidx >= 1024.0)   { tidx -= 1024.0;   fracV += 0.8668044798923802; }
+    if (tidx >= 512.0)    { tidx -= 512.0;    fracV += 0.4334022399461901; }
+    if (tidx >= 256.0)    { tidx -= 256.0;    fracV += 0.21670111997309505;}
+    if (tidx >= 128.0)    { tidx -= 128.0;    fracV += 0.10835055998654752;}
+    if (tidx >= 64.0)     { tidx -= 64.0;     fracV += 0.5541752799932738; }
+    if (tidx >= 32.0)     { tidx -= 32.0;     fracV += 0.7770876399966369; }
+    if (tidx >= 16.0)     { tidx -= 16.0;     fracV += 0.8885438199983184; }
+    if (tidx >= 8.0)      { tidx -= 8.0;      fracV += 0.9442719099991592; }
+    if (tidx >= 4.0)      { tidx -= 4.0;      fracV += 0.4721359549995796; }
+    if (tidx >= 2.0)      { tidx -= 2.0;      fracV += 0.2360679774997898; }
+    if (tidx >= 1.0)      { tidx -= 1.0;      fracV += 0.6180339887498949; }
+    return fract(fracV);
+  }
+
+  // Inverse Spherical Fibonacci — find nearest lattice point
+  // Based on shadertoy.com/view/lllXz4 by @iquilezles
+  vec3 nearestFibLattice(vec3 p, out float dist) {
+    float byDots = 1.0 / uDots;
+    // COBE uses xzy swizzle for its coordinate system
+    p = p.xzy;
+
+    float k = max(2.0, floor(log2(sqrt5 * uDots * PI * (1.0 - p.z * p.z)) * byLogPhiPlusOne));
+    vec2 f = floor(pow(kPhi, k) / sqrt5 * vec2(1.0, kPhi) + 0.5);
+    vec2 br1 = fract((f + 1.0) * phiMinusOne) * kTau - twoPiOnPhi;
+    vec2 br2 = -2.0 * f;
+    vec2 sp = vec2(atan(p.y, p.x), p.z - 1.0);
+    vec2 c = floor(vec2(
+      br2.y * sp.x - br1.y * (sp.y * uDots + 1.0),
+      -br2.x * sp.x + br1.x * (sp.y * uDots + 1.0)
+    ) / (br1.x * br2.y - br2.x * br1.y));
+
+    float mindist = PI;
+    vec3 minip = vec3(0.0);
+
+    for (float s = 0.0; s < 4.0; s += 1.0) {
+      vec2 o = vec2(mod(s, 2.0), floor(s * 0.5));
+      float idx = dot(f, c + o);
+      if (idx > uDots) continue;
+
+      float theta = fibFrac(idx) * kTau;
+      float cosphi = 1.0 - 2.0 * idx * byDots;
+      float sinphi = sqrt(1.0 - cosphi * cosphi);
+      vec3 sam = vec3(cos(theta) * sinphi, sin(theta) * sinphi, cosphi);
+
+      float d = length(p - sam);
+      if (d < mindist) {
+        mindist = d;
+        minip = sam;
+      }
+    }
+
+    dist = mindist;
+    return minip.xzy; // swizzle back
+  }
+
+  void main() {
+    vec3 N = normalize(vWorldNormal);
+    vec3 viewDir = normalize(cameraPosition - vWorldPos);
+
+    // sphere geometry의 normal이 곧 구면 좌표 방향
+    vec3 p = N;
+
+    // Spherical Fibonacci 최근접점 탐색
+    float dis;
+    vec3 gP = nearestFibLattice(p, dis);
+
+    // 최근접점의 구면 좌표 → UV 변환 (세계 지도 텍스처 샘플링)
+    float gPhi = asin(clamp(gP.y, -1.0, 1.0));
+    float cosPhi = cos(gPhi);
+    float gTheta = (abs(cosPhi) > 0.001)
+      ? acos(clamp(-gP.x / cosPhi, -1.0, 1.0))
+      : 0.0;
+    if (gP.z < 0.0) gTheta = -gTheta;
+    vec2 mapUV = vec2((gTheta * 0.5) / PI, -(gPhi / PI + 0.5));
+
+    // 텍스처 샘플 — luminance 기반 (blue marble RGB → grayscale)
+    vec3 texRGB = texture2D(uLandMap, mapUV).rgb;
+    float mapColor = max(dot(texRGB, vec3(0.299, 0.587, 0.114)), uMapBaseBrightness);
+
+    // 점 가시성: smoothstep — dis가 uDotSize보다 작으면 점이 보임
+    float v = smoothstep(uDotSize, 0.0, dis);
+
+    // 점이 없는 곳은 완전 투명 (sphere geometry 위이므로 배경 비움)
+    if (v < 0.01) discard;
+
+    // 라이팅 — view 방향 기반 (COBE는 정면 라이트)
+    float dotNL = max(dot(p, viewDir), 0.0);
+    float lighting = pow(dotNL, uDiffuse) * uDotBrightness;
+
+    // 점 밝기 = 지도색 * 라이팅
+    float brightness = mapColor * lighting;
+
+    // 최종 색상: baseColor * 밝기, 최소 0.15 보장 (완전 검정 방지)
+    vec3 color = uBaseColor * max(brightness, 0.15);
+
+    gl_FragColor = vec4(color, v);
+  }
+`;

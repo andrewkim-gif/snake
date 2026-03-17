@@ -336,7 +336,7 @@ export function SafeZone3D({
             color: '#ff3333',
             fontSize: '16px',
             fontWeight: 'bold',
-            fontFamily: 'monospace',
+            fontFamily: '"Black Ops One", sans-serif',
             textShadow: '0 0 8px rgba(255, 0, 0, 0.8)',
             whiteSpace: 'nowrap',
             textAlign: 'center',

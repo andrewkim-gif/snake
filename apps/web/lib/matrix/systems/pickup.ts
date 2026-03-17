@@ -212,17 +212,8 @@ export const updateGems = (
         gem.position.y += (dy / dist) * collectSpeed * deltaTime;
       }
     } else {
-      // 마그넷 범위 내 체크
-      if (Math.abs(dx) < magnetRange && Math.abs(dy) < magnetRange) {
-        if (dx * dx + dy * dy < magnetRangeSq) {
-          gem.isCollected = true;
-        }
-      }
-
-      // 디스폰 체크
-      if (Math.abs(dx) > despawnRadius || Math.abs(dy) > despawnRadius) {
-        shouldKeep = false;
-      }
+      // 자동 흡수: 스폰 즉시 플레이어에게 이동 시작 (마그넷 불필요)
+      gem.isCollected = true;
     }
 
     if (shouldKeep) {

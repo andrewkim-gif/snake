@@ -5,9 +5,13 @@
     "packages/*",
     "apps/*"
   ],
+  "scripts": {
+    "build:admin1": "node scripts/build-admin1.mjs"
+  },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
     "@types/pako": "^2.0.4",
+    "mapshaper": "^0.6.113",
     "playwright": "^1.58.2"
   },
   "dependencies": {

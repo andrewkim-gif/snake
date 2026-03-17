@@ -19,6 +19,9 @@ export enum Biome {
   PLAINS = 'plains',
   DESERT = 'desert',
   FOREST = 'forest',
+  TUNDRA = 'tundra',
+  MOUNTAINS = 'mountains',
+  SWAMP = 'swamp',
 }
 
 // ---------------------------------------------------------------------------
@@ -183,6 +186,9 @@ export class MCNoise {
   biomeGap = 60
   biomeAmp = 3
 
+  // v47: moisture 축 (2축 바이옴)
+  moistureSeed: number
+
   constructor(seed?: number) {
     this.seed = seed ?? Math.floor(Math.random() * 100000)
     this.noise = new ImprovedNoise(this.seed)
@@ -192,6 +198,7 @@ export class MCNoise {
     this.treeSeed = this.seed * 0.7
     this.leafSeed = this.seed * 0.8
     this.biomeSeed = this.seed * 0.3
+    this.moistureSeed = this.seed * 0.9
   }
 
   get(x: number, y: number, z: number): number {
@@ -261,14 +268,25 @@ export class MCNoise {
   }
 
   // ---------------------------------------------------------------------------
-  // getBiome(x, z) — 바이옴 판단
+  // getBiome(x, z) — 2축 noise 바이옴 판단 (v47: temperature × moisture → 6종)
   // ---------------------------------------------------------------------------
   getBiome(x: number, z: number): Biome {
-    const val = this.get(x / this.biomeGap, z / this.biomeGap, this.biomeSeed) * this.biomeAmp
+    // 전투 구역 강제 PLAINS
+    if (this.isInFlatZone(x, z)) return Biome.PLAINS
 
-    if (val < -0.8) return Biome.DESERT
-    if (val > 0.8) return Biome.FOREST
-    return Biome.PLAINS
+    const temp = this.get(x / this.biomeGap, z / this.biomeGap, this.biomeSeed) * this.biomeAmp
+    const moisture = this.get(x / this.biomeGap, z / this.biomeGap, this.moistureSeed) * this.biomeAmp
+
+    if (temp < -0.5) {
+      // 추운 지역
+      return moisture > 0.3 ? Biome.TUNDRA : Biome.MOUNTAINS
+    } else if (temp > 0.5) {
+      // 더운 지역
+      return moisture > 0.3 ? Biome.SWAMP : Biome.DESERT
+    } else {
+      // 온대
+      return moisture > 0.5 ? Biome.FOREST : Biome.PLAINS
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -322,7 +340,7 @@ export class MCNoise {
           blocks.push({ x, y, z, type })
         }
 
-        // --- 지표면 ---
+        // --- 지표면 (v47: 바이옴별 surface block) ---
         {
           const key = blockKey(x, surfaceY, z)
           if (!idMap.has(key)) {
@@ -330,6 +348,15 @@ export class MCNoise {
             switch (biome) {
               case Biome.DESERT:
                 surfaceType = BlockType.sand
+                break
+              case Biome.TUNDRA:
+                surfaceType = BlockType.snow
+                break
+              case Biome.MOUNTAINS:
+                surfaceType = BlockType.stone
+                break
+              case Biome.SWAMP:
+                surfaceType = BlockType.gravel_with_grass
                 break
               case Biome.FOREST:
               case Biome.PLAINS:
@@ -342,26 +369,73 @@ export class MCNoise {
           }
         }
 
-        // --- 나무 (forest/plains biome에서 확률적 생성, 전투 구역 내 억제) ---
-        // v45: 바이옴별 나무 종류 분기 (oak/birch/spruce)
-        if ((biome === Biome.FOREST || biome === Biome.PLAINS) && !this.isInFlatZone(x, z)) {
+        // --- 지표면 바로 아래 sub-surface (v47: 바이옴별 1~3블록) ---
+        {
+          let subType: BlockType | null = null
+          let subDepth = 3
+          switch (biome) {
+            case Biome.DESERT:
+              subType = BlockType.sand_dark
+              subDepth = 2
+              break
+            case Biome.TUNDRA:
+              subType = BlockType.dirt_with_snow
+              subDepth = 2
+              break
+            case Biome.MOUNTAINS:
+              subType = BlockType.stone_dark
+              subDepth = 3
+              break
+            case Biome.SWAMP:
+              subType = BlockType.gravel
+              subDepth = 2
+              break
+            default:
+              break // PLAINS/FOREST: stone으로 유지 (기존)
+          }
+          if (subType !== null) {
+            for (let sy = surfaceY - 1; sy >= Math.max(1, surfaceY - subDepth); sy--) {
+              const sk = blockKey(x, sy, z)
+              if (idMap.has(sk)) {
+                // 기존 stone을 덮어씀
+                const existIdx = idMap.get(sk)!
+                blocks[existIdx] = { x, y: sy, z, type: subType }
+              }
+            }
+          }
+        }
+
+        // --- 나무 (v47: 바이옴별 나무 종류 분기, DESERT/MOUNTAINS 나무 없음) ---
+        const hasTreesBiome = biome === Biome.FOREST || biome === Biome.PLAINS ||
+          biome === Biome.TUNDRA || biome === Biome.SWAMP
+        if (hasTreesBiome && !this.isInFlatZone(x, z)) {
           const treeOffset = this.getTreeOffset(x, z)
           const stoneOffset = this.getStoneOffset(x, z)
           const surfaceOffset = this.getSurfaceOffset(x, z)
 
+          // SWAMP: 나무 밀도 낮음 (threshold 높임)
+          const treeThresh = biome === Biome.SWAMP ? this.treeThreshold + 1.0 : this.treeThreshold
+
           if (
-            treeOffset > this.treeThreshold &&
+            treeOffset > treeThresh &&
             surfaceOffset >= -3 &&
             stoneOffset <= this.stoneThreshold
           ) {
-            // v45: 좌표 해시 기반 나무 종류 결정 (결정적)
             const treeHash = ((x * 73856093) ^ (z * 19349663)) >>> 0
             const treeRoll = treeHash % 100
 
             let trunkType: BlockType
             let leafType: BlockType
 
-            if (biome === Biome.FOREST) {
+            if (biome === Biome.TUNDRA) {
+              // TUNDRA: spruce 100%
+              trunkType = BlockType.spruce_tree
+              leafType = BlockType.spruce_leaf
+            } else if (biome === Biome.SWAMP) {
+              // SWAMP: oak 100%
+              trunkType = BlockType.tree
+              leafType = BlockType.leaf
+            } else if (biome === Biome.FOREST) {
               // FOREST: oak 60% + birch 40%
               if (treeRoll < 60) {
                 trunkType = BlockType.tree

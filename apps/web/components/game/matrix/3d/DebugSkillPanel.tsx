@@ -54,7 +54,7 @@ export default function DebugSkillPanel({ playerSkills, onUpgrade, maxLevel = 20
           alignItems: 'center',
           justifyContent: 'center',
           backdropFilter: 'blur(4px)',
-          fontFamily: 'monospace',
+          fontFamily: '"Rajdhani", sans-serif',
           fontWeight: 900,
           transition: 'background 0.15s, color 0.15s',
         }}
@@ -78,7 +78,7 @@ export default function DebugSkillPanel({ playerSkills, onUpgrade, maxLevel = 20
             borderRadius: 8,
             padding: '12px 10px',
             backdropFilter: 'blur(8px)',
-            fontFamily: '"Rajdhani", monospace, sans-serif',
+            fontFamily: '"Rajdhani", sans-serif',
             fontSize: 12,
             color: '#ccc',
           }}

@@ -29,49 +29,28 @@ import WalletConnectButton from '@/components/blockchain/WalletConnectButton';
 import { KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 import CountryRegionMap from './CountryRegionMap';
 import { useMatrixSocket, type RegionListEntry, type RegionListResponse, type RegionJoinedPayload } from '@/hooks/useMatrixSocket';
+import { getRegionsForCountry } from '@/lib/matrix/data/region-data';
 
-// ─── Mock Region Generator (소켓 미연결 시 fallback) ───
-
-const REGION_TEMPLATES: Record<string, { types: string[]; resources: string[] }> = {
-  S: { types: ['capital', 'industrial', 'port', 'military', 'resource', 'cultural', 'agricultural'], resources: ['tech', 'minerals', 'gold', 'oil', 'influence', 'food', 'tech'] },
-  A: { types: ['capital', 'industrial', 'port', 'military', 'resource'], resources: ['tech', 'minerals', 'gold', 'oil', 'food'] },
-  B: { types: ['capital', 'industrial', 'port', 'agricultural'], resources: ['minerals', 'gold', 'food', 'oil'] },
-  C: { types: ['capital', 'industrial', 'agricultural'], resources: ['food', 'minerals', 'gold'] },
-  D: { types: ['capital', 'agricultural'], resources: ['food', 'minerals'] },
-};
-
-const REGION_NAME_TEMPLATES: Record<string, string[]> = {
-  capital: ['Capital District', 'Central Province', 'Metropolitan Zone'],
-  industrial: ['Industrial Zone', 'Manufacturing Hub', 'Factory District'],
-  port: ['Harbor Region', 'Coastal Zone', 'Port District'],
-  military: ['Military Zone', 'Defense Sector', 'Garrison Province'],
-  resource: ['Mining Region', 'Resource Basin', 'Extraction Zone'],
-  cultural: ['Cultural District', 'Heritage Zone', 'Arts Province'],
-  agricultural: ['Farmland Region', 'Agricultural Basin', 'Grain Province'],
-};
-
-function generateMockRegions(countryCode: string, countryName: string, tier: string): RegionListEntry[] {
-  const template = REGION_TEMPLATES[tier] || REGION_TEMPLATES.D;
-  return template.types.map((type, i) => {
-    const names = REGION_NAME_TEMPLATES[type] || ['Region'];
-    return {
-      regionId: `${countryCode.toLowerCase()}-${type}-${i}`,
-      name: `${countryName} ${i + 1}지역`,
-      nameEn: names[i % names.length],
-      type,
-      arenaSize: 3000 + i * 500,
-      maxPlayers: tier === 'S' ? 50 : tier === 'A' ? 40 : 30,
-      currentPlayers: Math.floor(Math.random() * 5),
-      state: 'idle' as const,
-      controllingFactionId: undefined,
-      controllingFactionColor: undefined,
-      controlStreak: 0,
-      primaryResource: template.resources[i] || 'food',
-      specialtyResource: '',
-      biome: 'temperate',
-      specialEffect: '',
-    };
-  });
+/** region-data.ts의 IRegionDef → RegionListEntry 변환 (즉시 로딩용) */
+function toRegionListEntries(iso3: string): RegionListEntry[] {
+  const defs = getRegionsForCountry(iso3);
+  return defs.map(r => ({
+    regionId: r.id,
+    name: r.name,
+    nameEn: r.nameEn,
+    type: r.type,
+    arenaSize: r.arenaSize,
+    maxPlayers: r.maxPlayers,
+    currentPlayers: 0,
+    state: 'idle',
+    controllingFactionId: undefined,
+    controllingFactionColor: undefined,
+    controlStreak: 0,
+    primaryResource: r.primaryResource,
+    specialtyResource: r.specialtyResource,
+    biome: r.biome,
+    specialEffect: r.specialEffect,
+  }));
 }
 
 // ─── Types ───────────────────────────────────────────────
@@ -851,53 +830,39 @@ export function CountryPanel({
     }, []),
   });
 
-  // v41: 패널 open 시 소켓 connect, 닫을 때 disconnect
-  // + 3초 타임아웃: 소켓 연결 실패 시 mock region 데이터로 fallback
+  // v41→v47: 패널 open 시 즉시 로컬 region-data로 로드 + 소켓 연결 시도
   const connectedRef = useRef(false);
-  const fallbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // 패널 열릴 때 즉시 로컬 데이터 로드 (3초 대기 없이)
+  useEffect(() => {
+    if (open && countryCode) {
+      const localEntries = toRegionListEntries(countryCode);
+      if (localEntries.length > 0) {
+        setRegions(localEntries);
+        setRegionLoading(false);
+      }
+    }
+  }, [open, countryCode]);
+
+  // 소켓 연결 (서버 데이터 실시간 갱신용, 실패해도 로컬 데이터가 이미 표시됨)
   useEffect(() => {
     if (open && !connectedRef.current) {
       connectedRef.current = true;
       connect(serverUrl);
-
-      // 3초 후 소켓 미연결이면 mock 데이터로 fallback
-      fallbackTimerRef.current = setTimeout(() => {
-        setRegions(prev => {
-          if (prev.length > 0) return prev; // 이미 데이터가 있으면 유지
-          const mockRegions = generateMockRegions(
-            countryCode,
-            country?.name || 'Unknown',
-            country?.tier || 'D',
-          );
-          setRegionLoading(false);
-          return mockRegions;
-        });
-      }, 3000);
     }
     return () => {
       if (connectedRef.current) {
         disconnect();
         connectedRef.current = false;
       }
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  // v41: 연결 완료 후 지역 목록 요청
+  // v41: 연결 완료 후 서버에서 실시간 지역 목록 요청 (서버 데이터로 교체)
   useEffect(() => {
     if (connectionState === 'connected' && countryCode) {
-      setRegionLoading(true);
       requestRegionList(countryCode);
-      // 서버 연결 성공 — fallback 타이머 취소
-      if (fallbackTimerRef.current) {
-        clearTimeout(fallbackTimerRef.current);
-        fallbackTimerRef.current = null;
-      }
     }
   }, [connectionState, countryCode, requestRegionList]);
 
@@ -1091,8 +1056,8 @@ export function CountryPanel({
   const regionMapPanel = (
     <div style={{
       flex: 1,
-      minWidth: isMobile ? 'auto' : '400px',
-      padding: isMobile ? '16px' : '24px',
+      minWidth: isMobile ? 'auto' : '360px',
+      padding: isMobile ? '12px' : '20px',
       display: 'flex',
       flexDirection: 'column',
       borderLeft: isMobile ? 'none' : `1px solid ${SK.border}`,
@@ -1130,12 +1095,12 @@ export function CountryPanel({
             borderRadius: '50%',
             background: connectionState === 'connected' ? SK.green : SK.textMuted,
           }} />
-          {connectionState === 'connected' ? 'LIVE' : connectionState === 'connecting' ? 'CONNECTING...' : regions.length > 0 ? 'PREVIEW' : 'OFFLINE'}
+          {connectionState === 'connected' ? 'LIVE' : connectionState === 'connecting' ? 'CONNECTING...' : regions.length > 0 ? 'LOCAL' : 'OFFLINE'}
         </div>
       </div>
 
       {/* CountryRegionMap (SVG 기반 지역 지도) */}
-      <div style={{ flex: 1, minHeight: '400px' }}>
+      <div style={{ flex: 1, minHeight: '300px' }}>
         <CountryRegionMap
           regions={regions}
           loading={regionLoading && regions.length === 0}
