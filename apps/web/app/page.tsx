@@ -10,7 +10,7 @@
 
 import { useState, useCallback, useEffect, useMemo, useRef } from 'react';
 import dynamic from 'next/dynamic';
-import { useSearchParams } from 'next/navigation';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import type { CubelingAppearance } from '@agent-survivor/shared';
 import { createDefaultAppearance, packAppearance } from '@agent-survivor/shared';
@@ -203,6 +203,7 @@ function MatrixLoadingOverlay({ countryName, onComplete }: { countryName: string
 export default function Home() {
   const tLobby = useTranslations('lobby');
   const searchParams = useSearchParams();
+  const router = useRouter();
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso' | 'matrix'>('lobby');
   // v26: 아이소메트릭 국가 관리 대상 (Phase 8: spectating 플래그 추가)
   const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string; spectating?: boolean } | null>(null);
@@ -450,16 +451,13 @@ export default function Home() {
   // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
-  // v41: 지역 선택 → 즉시 Matrix 진입 (CountryPanel 내부에서 지역 클릭 시 호출)
+  // v41: 지역 선택 → /new 페이지로 이동 (CountryPanel 내부에서 지역 클릭 시 호출)
   const handleRegionSelect = useCallback((regionId: string, countryIso3: string, countryName: string) => {
-    setMatrixCountry({ iso3: countryIso3, name: countryName });
-    setMatrixLoading(true);
     setFadeOut(true);
     setTimeout(() => {
-      setMode('matrix');
-      setFadeOut(false);
+      router.push(`/new?country=${countryIso3}&region=${regionId}`);
     }, 300);
-  }, []);
+  }, [router]);
 
 
   // v26: Iso → Globe 복귀
