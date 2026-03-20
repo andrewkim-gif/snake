@@ -46,7 +46,8 @@ export function GlobeTitle() {
   });
 
   // 텍스처 비율에 맞춰 plane 크기 설정
-  const aspect = texture.image ? texture.image.width / texture.image.height : 4;
+  const img = texture.image as { width: number; height: number } | undefined;
+  const aspect = img ? img.width / img.height : 4;
   const planeHeight = 9;
   const planeWidth = planeHeight * aspect;
 

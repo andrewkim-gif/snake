@@ -116,7 +116,7 @@ export function createBiomeAtlasTexture(): THREE.CanvasTexture {
 
   // SSR 안전: document 없으면 빈 텍스처 반환
   if (typeof document === 'undefined') {
-    return new THREE.CanvasTexture(new OffscreenCanvas(width, height));
+    return new THREE.CanvasTexture(new OffscreenCanvas(width, height) as unknown as HTMLCanvasElement);
   }
 
   const canvas = document.createElement('canvas');
