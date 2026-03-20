@@ -3,8 +3,11 @@
  * 경매 자동 생성 및 종료 처리
  *
  * Phase 2: S15 구현
- * - 소유자 없는 건물 중 5~10개 랜덤 선택하여 경매 생성
- * - 일반 경매 4시간 주기
+ * Phase 5: S23 확장 — 프리미엄/레전더리 경매 스케줄링 추가
+ *
+ * - 소유자 없는 건물 중 5~10개 랜덤 선택하여 일반 경매 생성 (4시간 주기)
+ * - 프리미엄 경매: 매일 1회, Epic 건물, 12시간 (Phase 5)
+ * - 레전더리 경매: 매주 1회, Legendary 건물, 24시간 (Phase 5)
  * - 경매 종료 처리 (낙찰/유찰)
  * - 유찰 시 시작가 -10% 후 재등록
  *
@@ -25,17 +28,25 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 const SUPABASE_URL = Deno.env.get('SUPABASE_URL') ?? '';
 const SUPABASE_SERVICE_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
 
-// 경매 설정 상수
+// 경매 설정 상수 — 일반
 const AUCTION_DURATION_MS = 4 * 60 * 60 * 1000; // 4시간
 const MIN_AUCTIONS = 5;
 const MAX_AUCTIONS = 10;
-const STARTING_BID_MIN_PCT = 0.3; // fair value의 30%
-const STARTING_BID_MAX_PCT = 0.5; // fair value의 50%
-const FAILED_DISCOUNT = 0.10; // 유찰 할인 10%
+const STARTING_BID_MIN_PCT = 0.3;
+const STARTING_BID_MAX_PCT = 0.5;
+const FAILED_DISCOUNT = 0.10;
 const NPC_MIN = 2;
 const NPC_MAX = 5;
 const NPC_FAIR_VALUE_MIN = 0.6;
 const NPC_FAIR_VALUE_MAX = 0.8;
+
+// Phase 5 (S23): 프리미엄/레전더리 경매 상수
+const PREMIUM_DURATION_MS = 12 * 60 * 60 * 1000;  // 12시간
+const LEGENDARY_DURATION_MS = 24 * 60 * 60 * 1000; // 24시간
+const PREMIUM_STARTING_BID_MIN = 0.4;
+const PREMIUM_STARTING_BID_MAX = 0.6;
+const LEGENDARY_STARTING_BID_MIN = 0.5;
+const LEGENDARY_STARTING_BID_MAX = 0.7;
 
 // 등급별 가치 배수
 const RARITY_VALUE_MULT: Record<string, number> = {
@@ -202,11 +213,92 @@ serve(async (req: Request) => {
       // 여기서는 경매 생성만 담당
     }
 
+    // ─── Step 4 (Phase 5): 프리미엄/레전더리 경매 ────────
+
+    let premiumCreated = 0;
+    let legendaryCreated = 0;
+
+    // 프리미엄 경매: 24시간 내 활성 프리미엄 없으면 1개 생성
+    const { count: activePremiumCount } = await supabase
+      .from('tycoon_auctions')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'active')
+      .eq('type', 'premium');
+
+    if ((activePremiumCount ?? 0) === 0) {
+      // Epic 건물 중 소유자 없는 것 조회
+      const { data: epicBuildings } = await supabase
+        .from('tycoon_buildings')
+        .select('id, base_income, rarity, level')
+        .eq('rarity', 'epic')
+        .eq('is_active', true)
+        .limit(5);
+
+      if (epicBuildings && epicBuildings.length > 0) {
+        const epicPick = epicBuildings[Math.floor(Math.random() * epicBuildings.length)];
+        const epicFairValue = calculateFairValue(epicPick);
+        const epicStartingBid = Math.round(
+          epicFairValue * randomRange(PREMIUM_STARTING_BID_MIN, PREMIUM_STARTING_BID_MAX)
+        );
+        const premiumEndAt = new Date(Date.now() + PREMIUM_DURATION_MS).toISOString();
+
+        await supabase.from('tycoon_auctions').insert({
+          building_id: epicPick.id,
+          type: 'premium',
+          status: 'active',
+          starting_bid: epicStartingBid,
+          current_bid: 0,
+          start_at: now,
+          end_at: premiumEndAt,
+        });
+        premiumCreated = 1;
+      }
+    }
+
+    // 레전더리 경매: 7일 내 활성 레전더리 없으면 1개 생성
+    const { count: activeLegendaryCount } = await supabase
+      .from('tycoon_auctions')
+      .select('id', { count: 'exact', head: true })
+      .eq('status', 'active')
+      .eq('type', 'legendary');
+
+    if ((activeLegendaryCount ?? 0) === 0) {
+      // Legendary 건물 중 소유자 없는 것 조회
+      const { data: legendaryBuildings } = await supabase
+        .from('tycoon_buildings')
+        .select('id, base_income, rarity, level')
+        .eq('rarity', 'legendary')
+        .eq('is_active', true)
+        .limit(3);
+
+      if (legendaryBuildings && legendaryBuildings.length > 0) {
+        const legendPick = legendaryBuildings[Math.floor(Math.random() * legendaryBuildings.length)];
+        const legendFairValue = calculateFairValue(legendPick);
+        const legendStartingBid = Math.round(
+          legendFairValue * randomRange(LEGENDARY_STARTING_BID_MIN, LEGENDARY_STARTING_BID_MAX)
+        );
+        const legendaryEndAt = new Date(Date.now() + LEGENDARY_DURATION_MS).toISOString();
+
+        await supabase.from('tycoon_auctions').insert({
+          building_id: legendPick.id,
+          type: 'legendary',
+          status: 'active',
+          starting_bid: legendStartingBid,
+          current_bid: 0,
+          start_at: now,
+          end_at: legendaryEndAt,
+        });
+        legendaryCreated = 1;
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         settled: settlements.length,
-        created: toCreate,
+        regularCreated: toCreate,
+        premiumCreated,
+        legendaryCreated,
         timestamp: now,
       }),
       {
