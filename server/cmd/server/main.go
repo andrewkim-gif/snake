@@ -120,6 +120,47 @@ func main() {
 	// pgDB is used in section 7d for Store wiring
 
 	// ================================================================
+	// 4c. PostgreSQL Direct Pool (for Tycoon engines — optional)
+	// ================================================================
+	var tycoonMgr *game.TycoonManager
+	if dbURL := os.Getenv("DATABASE_URL"); dbURL != "" {
+		pgPool, pgPoolErr := db.NewPGPool(context.Background(), dbURL)
+		if pgPoolErr != nil {
+			slog.Warn("DATABASE_URL set but PGPool failed — tycoon engines disabled",
+				"error", pgPoolErr,
+			)
+		} else {
+			defer pgPool.Close()
+
+			// 마이그레이션 실행
+			if migErr := db.RunMigrations(context.Background(), pgPool.Pool, "data/migrations"); migErr != nil {
+				slog.Warn("tycoon migrations failed — continuing without",
+					"error", migErr,
+				)
+			} else {
+				slog.Info("tycoon migrations applied")
+			}
+
+			// 타이쿤 매니저 초기화
+			tycoonMgr = game.NewTycoonManager(pgPool.Pool)
+			slog.Info("TycoonManager initialized",
+				"engines", 9,
+				"buildings", "ready",
+				"territory", "ready",
+				"auction", "ready",
+				"income", "ready",
+				"military", "ready",
+				"battle", "ready",
+				"trade", "ready",
+				"merge", "ready",
+				"diplomacy", "ready",
+			)
+		}
+	} else {
+		slog.Info("DATABASE_URL not set — tycoon engines disabled (classic mode)")
+	}
+
+	// ================================================================
 	// 5. v11 Core: WebSocket Hub (RoomManager replaced by WorldManager)
 	// ================================================================
 	hub := ws.NewHub()
@@ -772,6 +813,11 @@ func main() {
 	registerRegionEventHandlers(eventRouter, hub, regionManager)
 
 	// ================================================================
+	// 9.7. Phase 6: Tycoon Event Handlers
+	// ================================================================
+	registerTycoonEventHandlers(eventRouter, hub, tycoonMgr)
+
+	// ================================================================
 	// 10. HTTP Router (all routes)
 	// ================================================================
 	router := newRouter(cfg, hub, eventRouter, worldManager, &RouterDeps{
@@ -989,6 +1035,11 @@ func main() {
 		}
 	})
 
+	// --- Tycoon engines (optional — only if DATABASE_URL is set) ---
+	if tycoonMgr != nil {
+		tycoonMgr.Start(gCtx)
+	}
+
 	// --- Observability: metrics reporter (logs summary every 60s) ---
 	g.Go(func() error {
 		metrics.StartReporter(gCtx)
@@ -1037,6 +1088,12 @@ func main() {
 		// v30 Task 1-2: DefenseOracle graceful shutdown
 		if defenseOracle != nil {
 			defenseOracle.Stop()
+		}
+
+		// Tycoon engines (optional)
+		if tycoonMgr != nil {
+			slog.Info("stopping tycoon engines...")
+			tycoonMgr.Stop()
 		}
 
 		slog.Info("stopping v11 engines...")
