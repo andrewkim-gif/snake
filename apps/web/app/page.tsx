@@ -1213,6 +1213,7 @@ export default function Home() {
             }}
             regionName={matrixCountry?.name ?? 'Unknown Region'}
             regionCode={matrixCountry?.iso3 ?? 'unknown'}
+            tycoon={tycoon}
           />
           {matrixLoading && (
             <MatrixLoadingOverlay

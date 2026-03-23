@@ -44,8 +44,7 @@ export default function TycoonNewsFeed({ news }: ITycoonNewsFeedProps) {
 
   return (
     <div
-      className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden
-        bg-gray-900/90 backdrop-blur-sm border-t border-gray-700"
+      className="fixed bottom-0 left-0 right-0 z-50 overflow-hidden bg-gray-900/90 backdrop-blur-sm border-t border-gray-700"
       style={{ height: '36px' }}
     >
       {/* 마키 컨테이너 */}
