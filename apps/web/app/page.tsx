@@ -51,9 +51,14 @@ const IsoCanvas = dynamic(
   () => import('@/components/game/iso/IsoCanvas').then(m => ({ default: m.IsoCanvas })),
   { ssr: false },
 );
-// v29: MatrixApp 오케스트레이터 (게임 훅 + MatrixCanvas + 오버레이 통합)
+// MatrixApp 오케스트레이터 (게임 훅 + MatrixCanvas + 오버레이 통합) — old combat
 const MatrixApp = dynamic(
   () => import('@/components/game/matrix/MatrixApp').then(m => ({ default: m.MatrixApp })),
+  { ssr: false },
+);
+// Git City Tycoon — 부동산 타이쿤 인게임 뷰 (TycoonModeWrapper로 래핑)
+const TycoonModeWrapper = dynamic(
+  () => import('@/components/tycoon/TycoonModeWrapper').then(m => ({ default: m.TycoonModeWrapper })),
   { ssr: false },
 );
 
@@ -61,10 +66,10 @@ const NEWS_FEED_HEIGHT = 36;
 
 /* ── Matrix 게임 로딩 오버레이 (GlobeLoadingScreen 스타일) ── */
 const MATRIX_LOADING_TEXTS = [
-  'DEPLOYING COMBAT AGENTS',
-  'LOADING BATTLEFIELD',
-  'INITIALIZING WEAPONS SYSTEM',
-  'ESTABLISHING BATTLE LINK',
+  'LOADING CITY DATA',
+  'INITIALIZING TYCOON ENGINE',
+  'GENERATING BUILDINGS',
+  'ESTABLISHING MARKET LINK',
 ];
 
 function MatrixLoadingOverlay({ countryName, onComplete }: { countryName: string; onComplete: () => void }) {
@@ -138,7 +143,7 @@ function MatrixLoadingOverlay({ countryName, onComplete }: { countryName: string
           textAlign: 'center',
           textTransform: 'uppercase',
         }}>
-          BATTLE FOR {countryName.toUpperCase()}
+          ENTERING {countryName.toUpperCase()}
         </div>
 
         {/* 프로그레스 바 트랙 */}
@@ -204,6 +209,7 @@ export default function Home() {
   const tLobby = useTranslations('lobby');
   const searchParams = useSearchParams();
   const router = useRouter();
+
   const [mode, setMode] = useState<'lobby' | 'transitioning' | 'playing' | 'iso' | 'matrix'>('lobby');
   // v26: 아이소메트릭 국가 관리 대상 (Phase 8: spectating 플래그 추가)
   const [isoCountry, setIsoCountry] = useState<{ iso3: string; name: string; spectating?: boolean } | null>(null);
@@ -223,6 +229,8 @@ export default function Home() {
   const [introPhase, setIntroPhase] = useState<IntroPhase>('done');
   // v29b: Matrix 게임 로딩 상태
   const [matrixLoading, setMatrixLoading] = useState(false);
+  // 타이쿤 모드 Market Cap (로컬 세션)
+  const [tycoonMarketCap, setTycoonMarketCap] = useState(100000);
   const [introComplete, setIntroComplete] = useState(true);
   const [introActive, setIntroActive] = useState(false);
   const [clientReady, setClientReady] = useState(false);
@@ -237,6 +245,19 @@ export default function Home() {
     }
     setClientReady(true);
   }, []);
+
+  // URL 지역 파라미터 연동: 새로고침 시 파라미터가 있으면 시티 진입
+  useEffect(() => {
+    if (!clientReady) return;
+    const region = searchParams.get('region');
+    const name = searchParams.get('name');
+    if (region && mode === 'lobby') {
+      setMatrixCountry({ iso3: region, name: name || region });
+      setMatrixLoading(true);
+      setMode('matrix');
+      setIntroActive(false); // 즉시 뷰 전환
+    }
+  }, [searchParams, clientReady, mode]);
 
   // 인트로 중에는 UI 요소 숨김 (staggered reveal)
   // clientReady 전에는 모두 false → SSR 깜빡임 방지
@@ -451,11 +472,15 @@ export default function Home() {
   // v19: ESC 키 핸들러 제거 — GameCanvas3D의 PauseMenu가 ESC 토글 담당
   // (이전: ESC 즉시 로비 퇴장 → 수정: PauseMenu → "Exit to Lobby" 클릭 시에만 퇴장)
 
-  // v41: 지역 선택 → /new 페이지로 이동 (CountryPanel 내부에서 지역 클릭 시 호출)
+  // 지역 선택 → 인게임(Matrix) 모드 진입 (CountryPanel 내부에서 지역 클릭 시 호출)
   const handleRegionSelect = useCallback((regionId: string, countryIso3: string, countryName: string) => {
     setFadeOut(true);
     setTimeout(() => {
-      router.push(`/new?country=${countryIso3}&region=${regionId}`);
+      router.push(`/?region=${countryIso3}&name=${encodeURIComponent(countryName)}`);
+      setMatrixCountry({ iso3: countryIso3, name: countryName });
+      setMatrixLoading(true);
+      setMode('matrix');
+      setFadeOut(false);
     }, 300);
   }, [router]);
 
@@ -1154,7 +1179,7 @@ export default function Home() {
         </div>
       )}
 
-      {/* === 오버레이: Matrix 인게임 === */}
+      {/* === 오버레이: 타이쿤 인게임 (TycoonModeWrapper) === */}
       {mode === 'matrix' && (
         <div style={{
           position: 'fixed',
@@ -1163,18 +1188,21 @@ export default function Home() {
           opacity: fadeOut ? 0 : 1,
           transition: 'opacity 300ms ease',
         }}>
-          <MatrixApp
-            countryIso3={matrixCountry?.iso3}
-            countryName={matrixCountry?.name}
+          <TycoonModeWrapper
+            marketCap={tycoonMarketCap}
+            onMarketCapChange={(delta) => setTycoonMarketCap(prev => Math.max(0, prev + delta))}
             onExitToLobby={() => {
               setFadeOut(true);
               setTimeout(() => {
+                router.push('/');
                 setMode('lobby');
                 setMatrixCountry(null);
                 setMatrixLoading(false);
                 setFadeOut(false);
               }, 300);
             }}
+            regionName={matrixCountry?.name ?? 'Unknown Region'}
+            regionCode={matrixCountry?.iso3 ?? 'unknown'}
           />
           {matrixLoading && (
             <MatrixLoadingOverlay
