@@ -126,22 +126,21 @@ export function TycoonModeWrapper({
         </div>
       </div>
 
-      {/* ── CityTycoonView (3D 배경) ── */}
-      <Suspense fallback={
-        <div style={{
-          position: 'absolute', inset: 0, display: 'flex',
-          alignItems: 'center', justifyContent: 'center',
-          background: '#0a0a0a', color: '#fff',
-        }}>Loading City...</div>
-      }>
-        <CityTycoonView
-          marketCap={displayBalance}
-          onMarketCapChange={onMarketCapChange}
-          onExitToLobby={onExitToLobby}
-          regionName={regionName}
-          regionCode={regionCode}
-        />
-      </Suspense>
+      {/* ── CityTycoonView (3D 배경) — 상단 48px 여백 ── */}
+      <div style={{ position: 'absolute', top: 48, left: 0, right: 0, bottom: 0 }}>
+        <Suspense fallback={
+          <div style={{
+            position: 'absolute', inset: 0, display: 'flex',
+            alignItems: 'center', justifyContent: 'center',
+            background: '#0a0a0a', color: '#fff',
+          }}>Loading City...</div>
+        }>
+          <CityTycoonView
+            marketCap={displayBalance}
+            onMarketCapChange={onMarketCapChange}
+          />
+        </Suspense>
+      </div>
 
       {/* ── 슬라이드 패널들 ── */}
 
