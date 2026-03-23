@@ -62,7 +62,6 @@ type RouterDeps struct {
 	QuestStore        *game.QuestStore
 	GlobalLeaderboard *game.GlobalLeaderboard
 	AgentRouter       *api.AgentRouter
-	AgentStreamHub    *ws.AgentStreamHub
 
 	// v11 world modules
 	WorldManager      *world.WorldManager
@@ -485,13 +484,6 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 			r.Use(auth.DualAuth(apiKeyValidator))
 			r.Mount("/", d.AgentRouter.Routes())
 		})
-	}
-
-	// ==============================================================
-	// Agent WebSocket Live Stream (S25, Phase 5)
-	// ==============================================================
-	if d.AgentStreamHub != nil {
-		r.Get("/ws/agents/live", d.AgentStreamHub.HandleAgentStream)
 	}
 
 	// ==============================================================

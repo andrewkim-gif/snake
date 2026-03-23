@@ -125,7 +125,6 @@ func main() {
 	hub := ws.NewHub()
 
 	// v10 Agent subsystems
-	agentCmdRouter := game.NewAgentCommandRouter()
 	trainingStore := game.NewTrainingStore("data")
 	memoryStore := game.NewMemoryStore("data")
 	progressionStore := game.NewProgressionStore("data")
@@ -730,16 +729,15 @@ func main() {
 	}
 
 	// ================================================================
-	// 8. Agent REST API (S24) + Agent WebSocket Stream (S25)
+	// 8. Agent REST API (S24)
 	// ================================================================
 	agentRouter := api.NewAgentRouter()
-	agentStreamHub := ws.NewAgentStreamHub()
 
 	// ================================================================
 	// 9. Event Router (client→server WebSocket events)
 	// ================================================================
 	eventRouter := ws.NewEventRouter()
-	registerEventHandlers(eventRouter, hub, worldManager, agentCmdRouter, &V14Systems{
+	registerEventHandlers(eventRouter, hub, worldManager, &V14Systems{
 		ArenaManager:    v14ArenaManager,
 		AccountLevelMgr: v14AccountLevelMgr,
 		ChallengeMgr:    v14ChallengeMgr,
@@ -783,7 +781,6 @@ func main() {
 		QuestStore:        questStore,
 		GlobalLeaderboard: globalLeaderboard,
 		AgentRouter:       agentRouter,
-		AgentStreamHub:    agentStreamHub,
 		// v11 modules for route mounting
 		WorldManager:      worldManager,
 		FactionManager:    factionManager,
@@ -903,13 +900,6 @@ func main() {
 	g.Go(func() error {
 		slog.Info("v11 EventEngine starting")
 		eventEngine.Start(gCtx)
-		return nil
-	})
-
-	// --- v11 Agent Stream Hub ---
-	g.Go(func() error {
-		slog.Info("v11 AgentStreamHub starting")
-		agentStreamHub.Run()
 		return nil
 	})
 
@@ -1143,7 +1133,7 @@ type V14Systems struct {
 // registerEventHandlers sets up all client→server event handlers.
 // v11: Routes through WorldManager (195 countries) instead of v10 RoomManager (5 rooms).
 // v14: Adds select_nationality, join_country_arena, switch_arena, daily challenges, achievements.
-func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldManager, agentCmdRouter *game.AgentCommandRouter, v14 *V14Systems) {
+func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldManager, v14 *V14Systems) {
 	// Ping/Pong
 	router.On(ws.EventPing, func(client *ws.Client, data json.RawMessage) {
 		var payload ws.PingPayload
@@ -1334,50 +1324,6 @@ func registerEventHandlers(router *ws.EventRouter, hub *ws.Hub, wm *world.WorldM
 		}
 
 		wm.RouteChooseUpgrade(client.ID, payload.ChoiceIndex)
-	})
-
-	// Agent Commander Mode Command
-	router.On(ws.EventAgentCommand, func(client *ws.Client, data json.RawMessage) {
-		if !client.IsAgent {
-			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
-				Code:    "not_agent",
-				Message: "agent_command requires agent authentication",
-			})
-			client.Send(errFrame)
-			return
-		}
-
-		var payload ws.AgentCommandPayload
-		if err := json.Unmarshal(data, &payload); err != nil {
-			return
-		}
-
-		countryISO := wm.GetPlayerCountry(client.ID)
-		if countryISO == "" {
-			return
-		}
-		arena := wm.GetActiveArena(countryISO)
-		if arena == nil {
-			return
-		}
-
-		agent, ok := arena.GetArena().GetAgent(client.ID)
-		if !ok || !agent.Alive {
-			return
-		}
-
-		if err := agentCmdRouter.ExecuteCommand(client.ID, agent, arena.GetArena(), payload.Cmd, payload.Data); err != nil {
-			slog.Warn("agent command failed",
-				"agentId", client.AgentID,
-				"cmd", payload.Cmd,
-				"error", err,
-			)
-			errFrame, _ := ws.EncodeFrame(ws.EventError, ws.ErrorPayload{
-				Code:    "command_failed",
-				Message: err.Error(),
-			})
-			client.Send(errFrame)
-		}
 	})
 
 	// Agent Observe Game

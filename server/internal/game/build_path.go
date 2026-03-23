@@ -8,6 +8,40 @@ import (
 )
 
 // ============================================================
+// Combat Style Types (moved from agent_api.go)
+// ============================================================
+
+// CombatStyle defines the agent's overall combat behavior.
+type CombatStyle string
+
+const (
+	CombatStyleAggressive CombatStyle = "aggressive"
+	CombatStyleDefensive  CombatStyle = "defensive"
+	CombatStyleBalanced   CombatStyle = "balanced"
+	CombatStyleXPRush     CombatStyle = "xp_rush"
+	CombatStyleEndgame    CombatStyle = "endgame"
+)
+
+// GetCombatStyleWeights returns behavior weights for a combat style.
+// Returns: hunt%, survive%, gather%, wander%
+func GetCombatStyleWeights(style CombatStyle) (hunt, survive, gather, wander float64) {
+	switch style {
+	case CombatStyleAggressive:
+		return 0.80, 0.05, 0.10, 0.05
+	case CombatStyleDefensive:
+		return 0.10, 0.60, 0.20, 0.10
+	case CombatStyleBalanced:
+		return 0.35, 0.25, 0.25, 0.15
+	case CombatStyleXPRush:
+		return 0.05, 0.20, 0.65, 0.10
+	case CombatStyleEndgame:
+		return 0.30, 0.40, 0.15, 0.15
+	default:
+		return 0.35, 0.25, 0.25, 0.15 // balanced fallback
+	}
+}
+
+// ============================================================
 // Build Path System (S48)
 // Pre-defined build strategies for agents and bots
 // ============================================================

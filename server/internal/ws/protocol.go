@@ -30,6 +30,20 @@ const (
 	EventAgentCommand       = "agent_command"
 	EventAgentChooseUpgrade = "agent_choose_upgrade"
 	EventAgentObserveReq    = "observe_game" // agent requests game observation
+
+	// === World War Tycoon Events (Client → Server) ===
+	EventBuildingPurchase  = "building_purchase"       // 건물 구매 요청
+	EventBuildingBid       = "building_bid"            // 경매 입찰
+	EventAttackOrder       = "attack_order"            // 공격 명령
+	EventUnitProduce       = "unit_produce"            // 유닛 생산 요청
+	EventDefenseBuild      = "defense_build"           // 방어시설 건설
+	EventMergeRequest      = "merge_request"           // 건물 합병 요청
+	EventTradeOrder        = "trade_order"             // 거래소 주문
+	EventAllianceAction    = "alliance_action"         // 동맹 액션 (생성/가입/탈퇴)
+	EventWarDeclare        = "war_declare"             // 전쟁 선포
+	EventCitySubscribeTycoon   = "city_subscribe_tycoon"   // 도시 상세 구독
+	EventCityUnsubscribeTycoon = "city_unsubscribe_tycoon" // 도시 구독 해제
+	EventIncomeCollect     = "income_collect"          // 수익 수확
 )
 
 // --- Event names (server → client) ---
@@ -127,6 +141,22 @@ const (
 	EventRegionJoined       = "region_joined"        // region join result
 	EventRegionList         = "region_list"           // region list response
 	EventRegionState        = "region_state"          // region state broadcast (2Hz)
+
+	// === World War Tycoon Events (Server → Client) ===
+	EventTerritoryUpdate  = "territory_update"   // 영토 지배 상태 변경 (1Hz broadcast)
+	EventBuildingUpdate   = "building_update"    // 건물 소유권/상태 변경
+	EventAuctionUpdate    = "auction_update"     // 경매 상태 업데이트
+	EventBattleStart      = "battle_start"       // 전투 시작 알림
+	EventBattleResult     = "battle_result"      // 전투 결과
+	EventArmyMarch        = "army_march"         // 군대 이동 시작 (Globe 표시용)
+	EventArmyArrival      = "army_arrival"       // 군대 도착
+	EventIncomeSettled    = "income_settled"      // 수익 정산 완료
+	EventTradeMatch       = "trade_match"        // 거래 체결
+	EventWarUpdate        = "war_update"         // 전쟁 상태 변경
+	EventAllianceUpdate   = "alliance_update"    // 동맹 상태 변경
+	EventGlobalNews       = "global_news"        // 글로벌 뉴스 이벤트
+	EventUnderAttack      = "under_attack"       // 공격 받고 있음 (긴급 알림)
+	EventTycoonError      = "tycoon_error"       // 타이쿤 오류
 )
 
 // Frame is the JSON wire format: {"e":"event_name","d":{...}}
@@ -430,4 +460,138 @@ type TradeRouteUpdateMsg struct {
 	Type     string `json:"type"`     // "sea" | "land"
 	Volume   int64  `json:"volume"`   // trade quantity
 	Resource string `json:"resource"` // "oil" | "minerals" | "food" | "tech" | "manpower"
+}
+
+// --- World War Tycoon payload types (Client → Server) ---
+
+// BuildingPurchasePayload — 건물 구매 요청
+type BuildingPurchasePayload struct {
+	BuildingID string `json:"building_id"`
+}
+
+// BuildingBidPayload — 경매 입찰
+type BuildingBidPayload struct {
+	AuctionID string `json:"auction_id"`
+	Amount    int64  `json:"amount"`
+}
+
+// AttackOrderPayload — 공격 명령
+type AttackOrderPayload struct {
+	TargetRegion string   `json:"target_region"`
+	ArmyIDs      []string `json:"army_ids"`
+}
+
+// UnitProducePayload — 유닛 생산
+type UnitProducePayload struct {
+	UnitType string `json:"unit_type"` // infantry, armor, air, special
+	Count    int    `json:"count"`
+	Region   string `json:"region"` // 생산 지역
+}
+
+// DefenseBuildPayload — 방어시설 건설
+type DefenseBuildPayload struct {
+	Type       string `json:"type"`        // bunker, turret, antiair, wall, hq
+	BuildingID string `json:"building_id"` // 방어시설 부착할 건물
+}
+
+// MergeRequestPayload — 건물 합병
+type MergeRequestPayload struct {
+	BuildingIDs []string `json:"building_ids"`
+}
+
+// TradeOrderPayload — 거래소 주문
+type TradeOrderPayload struct {
+	BuildingID string `json:"building_id"`
+	OrderType  string `json:"order_type"` // sell, buy
+	Price      int64  `json:"price"`
+}
+
+// AllianceActionPayload — 동맹 액션
+type AllianceActionPayload struct {
+	Action     string `json:"action"`                // create, join, leave, invite
+	AllianceID string `json:"alliance_id,omitempty"`
+	TargetID   string `json:"target_id,omitempty"`
+	Name       string `json:"name,omitempty"`
+}
+
+// WarDeclarePayload — 전쟁 선포
+type WarDeclarePayload struct {
+	TargetNation string   `json:"target_nation"`
+	Coalition    []string `json:"coalition,omitempty"`
+}
+
+// CitySubscribeTycoonPayload — 도시 구독
+type CitySubscribeTycoonPayload struct {
+	CityCode string `json:"city_code"` // e.g. "seoul", "tokyo"
+}
+
+// IncomeCollectPayload — 수익 수확 (빈 페이로드 가능)
+type IncomeCollectPayload struct{}
+
+// --- World War Tycoon payload types (Server → Client) ---
+
+// TerritoryUpdatePayload — 영토 상태 브로드캐스트
+type TerritoryUpdatePayload struct {
+	Regions []RegionTerritoryPayload `json:"regions"`
+}
+
+// RegionTerritoryPayload — 개별 지역 영토 데이터
+type RegionTerritoryPayload struct {
+	RegionCode       string  `json:"region_code"`
+	ControllerID     string  `json:"controller_id,omitempty"`
+	ControllerName   string  `json:"controller_name,omitempty"`
+	ControlPct       float64 `json:"control_pct"`
+	SovereigntyLevel string  `json:"sovereignty_level"`
+}
+
+// BattleResultPayload — 전투 결과
+type BattleResultPayload struct {
+	BattleID          string   `json:"battle_id"`
+	AttackerID        string   `json:"attacker_id"`
+	DefenderID        string   `json:"defender_id"`
+	TargetRegion      string   `json:"target_region"`
+	Result            string   `json:"result"` // attacker_win, defender_win, draw
+	MCLooted          int64    `json:"mc_looted"`
+	BuildingsCaptured []string `json:"buildings_captured,omitempty"`
+	HasReplay         bool     `json:"has_replay"`
+}
+
+// ArmyMarchPayload — 군대 이동 (Globe 표시용)
+type ArmyMarchPayload struct {
+	ArmyID     string `json:"army_id"`
+	OwnerID    string `json:"owner_id"`
+	FromRegion string `json:"from_region"`
+	ToRegion   string `json:"to_region"`
+	UnitType   string `json:"unit_type"`
+	Count      int    `json:"count"`
+	ArrivalAt  int64  `json:"arrival_at"` // Unix timestamp ms
+}
+
+// IncomeSettledPayload — 수익 정산 결과
+type IncomeSettledPayload struct {
+	TotalEarned   int64 `json:"total_earned"`
+	BuildingCount int   `json:"building_count"`
+	NewBalance    int64 `json:"new_balance"`
+}
+
+// UnderAttackPayload — 공격 받는 중 알림
+type UnderAttackPayload struct {
+	AttackerID   string `json:"attacker_id"`
+	AttackerName string `json:"attacker_name"`
+	TargetRegion string `json:"target_region"`
+	ArrivalAt    int64  `json:"arrival_at"` // Unix timestamp ms
+	UnitCount    int    `json:"unit_count"`
+}
+
+// GlobalNewsPayload — 글로벌 뉴스
+type GlobalNewsPayload struct {
+	Type    string          `json:"type"`           // territory_change, war_declared, battle_result, auction_won, alliance_formed
+	Message string          `json:"message"`
+	Data    json.RawMessage `json:"data,omitempty"`
+}
+
+// TycoonErrorPayload — 에러
+type TycoonErrorPayload struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
 }
