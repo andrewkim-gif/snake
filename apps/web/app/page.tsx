@@ -38,6 +38,10 @@ import { ChevronRight, Minus, Settings, Globe, TrendingUp, Swords, Landmark, Tro
 import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 import type { TradeRouteData } from '@/hooks/useSocket';
 
+// 타이쿬 소켓 + 영토 시각화 훅
+import { useTycoonSocket } from '@/hooks/useTycoonSocket';
+import { useTerritoryVisualization } from '@/hooks/useTerritoryVisualization';
+
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
   { ssr: false },
@@ -313,7 +317,12 @@ export default function Home() {
     dataRef, uiState, joinRoom, joinCountryArena, leaveRoom, sendInput, sendInputV16,
     respawn, chooseUpgrade, dismissSynergyPopup, setGameMode, switchArena,
     arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice,
+    socketRef,
   } = useSocketContext();
+
+  // ── 타이쿬 소켓 + 영토 시각화 ──
+  const tycoon = useTycoonSocket(socketRef.current);
+  const { dominationStates: tycoonDominationStates } = useTerritoryVisualization(tycoon.territories);
 
   // ─── DEV: 테스트용 더미 전쟁/교역 (1분 주기) ───
   const [testWars, setTestWars] = useState<WarEffectData[]>([]);
@@ -594,6 +603,7 @@ export default function Home() {
         spyOps={[]}
         nukes={[]}
         paused={isOverlayMode}
+        tycoonDominationStates={tycoonDominationStates}
       />
 
       {/* 우상단: ONLINE 인디케이터 + 명예의전당 + 설정 버튼 */}

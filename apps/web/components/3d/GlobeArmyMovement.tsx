@@ -10,7 +10,7 @@ import { ARC_HEIGHT, RENDER_ORDER } from '@/lib/effect-constants';
 
 // ── 인터페이스 ──
 
-interface IArmyMovement {
+export interface IArmyMovement {
   id: string;
   from: { lat: number; lng: number };
   to: { lat: number; lng: number };

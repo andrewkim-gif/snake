@@ -33,6 +33,9 @@ import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
 import type { TradeRouteData } from '@/hooks/useSocket';
 import type { GlobalEventData } from '@/components/3d/GlobeEventPulse';
 
+// Tycoon: 군대 이동 시각화 타입
+import type { IArmyMovement } from '@/components/3d/GlobeArmyMovement';
+
 // v23 Phase 5: 신규 이벤트 타입
 import type { AllianceData } from '@/components/3d/GlobeAllianceBeam';
 import type { SanctionData } from '@/components/3d/GlobeSanctionBarrier';
@@ -80,6 +83,10 @@ interface WorldViewProps {
   nukes?: NukeData[];
   /** v37: 인게임 중 Globe 렌더링 일시정지 */
   paused?: boolean;
+  /** 타이쿬 영토 시각화 데이터 — 레거시 dominationStates 대체 */
+  tycoonDominationStates?: Map<string, CountryDominationState>;
+  /** 타이쿬 군대 이동 데이터 */
+  tycoonArmyMovements?: IArmyMovement[];
 }
 
 export function WorldView({
@@ -103,6 +110,8 @@ export function WorldView({
   spyOps,
   nukes,
   paused,
+  tycoonDominationStates,
+  tycoonArmyMovements,
 }: WorldViewProps) {
   const [selectedCountry, setSelectedCountry] = useState<string | null>(null);
   const [panelOpen, setPanelOpen] = useState(false);
@@ -287,6 +296,8 @@ export function WorldView({
           onReady={handleGlobeReady}
           paused={paused}
           dottedMode={dottedMode}
+          tycoonDominationStates={tycoonDominationStates}
+          tycoonArmyMovements={tycoonArmyMovements}
         />
       </div>
 

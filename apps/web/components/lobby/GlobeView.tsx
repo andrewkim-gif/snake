@@ -85,6 +85,10 @@ import { GlobeLandmarks } from '@/components/3d/GlobeLandmarks';
 // v17: Conflict indicators
 import { GlobeConflictIndicators } from '@/components/3d/GlobeConflictIndicators';
 
+// Tycoon: 군대 이동 시각화
+import GlobeArmyMovement from '@/components/3d/GlobeArmyMovement';
+import type { IArmyMovement } from '@/components/3d/GlobeArmyMovement';
+
 // v23 Phase 5: Event effects
 import { GlobeAllianceBeam } from '@/components/3d/GlobeAllianceBeam';
 import type { AllianceData } from '@/components/3d/GlobeAllianceBeam';
@@ -171,6 +175,10 @@ interface GlobeViewProps {
   paused?: boolean;
   /** v47: COBE 스타일 dotted globe 모드 */
   dottedMode?: boolean;
+  /** 타이쿬 영토 데이터 — 있으면 레거시 dominationStates 대신 사용 */
+  tycoonDominationStates?: Map<string, CountryDominationState>;
+  /** 타이쿬 군대 이동 시각화 데이터 */
+  tycoonArmyMovements?: IArmyMovement[];
 }
 
 // ─── AdaptiveOrbitControls ───
@@ -297,6 +305,8 @@ function GlobeScene({
   spyOps,
   nukes,
   dottedMode,
+  tycoonDominationStates,
+  tycoonArmyMovements,
 }: {
   onCountryClick?: (iso3: string, name: string) => void;
   onHover?: (iso3: string | null, name: string | null) => void;
@@ -314,6 +324,8 @@ function GlobeScene({
   spyOps: SpyOpData[];
   nukes: NukeData[];
   dottedMode?: boolean;
+  tycoonDominationStates?: Map<string, CountryDominationState>;
+  tycoonArmyMovements?: IArmyMovement[];
 }) {
   const [countries, setCountries] = useState<CountryGeo[]>([]);
   const [flagAtlas, setFlagAtlas] = useState<FlagAtlasResult | null>(null);
@@ -400,6 +412,26 @@ function GlobeScene({
     shockwaveRef.current?.trigger(position);
   }, []);
 
+  // ── 타이쿬 데이터 병합: tycoonDominationStates가 있으면 우선, 없으면 레거시 fallback ──
+  const mergedDominationStates = useMemo(() => {
+    if (tycoonDominationStates && tycoonDominationStates.size > 0) {
+      // 타이쿬 데이터 우선, 레거시 데이터로 나머지 채움
+      if (dominationStates.size === 0) return tycoonDominationStates;
+      const merged = new Map(dominationStates);
+      for (const [iso3, state] of tycoonDominationStates) {
+        merged.set(iso3, state);
+      }
+      return merged;
+    }
+    return dominationStates;
+  }, [dominationStates, tycoonDominationStates]);
+
+  // ── 타이쿬 모드 판별: tycoon 데이터가 유의미하게 존재하면 레거시 전쟁 이펙트 비활성화 ──
+  const tycoonMode = !!(tycoonDominationStates && tycoonDominationStates.size > 0);
+
+  // 군대 이동 데이터 (빈 배열 fallback)
+  const armyMovements = tycoonArmyMovements ?? EMPTY_ARRAY;
+
   return (
     <AdaptiveQualityContext.Provider value={qualityRef}>
     <SharedTickContext.Provider value={sharedTickRef}>
@@ -439,17 +471,17 @@ function GlobeScene({
         globeRadius={GLOBE_RADIUS}
       />
 
-      {/* Domination overlay */}
-      {dominationStates.size > 0 && (
+      {/* Domination overlay — 타이쿬 데이터 우선, 레거시 fallback */}
+      {mergedDominationStates.size > 0 && (
         <GlobeDominationLayer
-          dominationStates={dominationStates}
+          dominationStates={mergedDominationStates}
           countryGeometries={countryGeoMap}
           globeRadius={GLOBE_RADIUS}
         />
       )}
 
-      {/* War effects */}
-      {wars.length > 0 && (
+      {/* War effects — tycoonMode에서는 레거시 전쟁 이펙트 비활성화 */}
+      {!tycoonMode && wars.length > 0 && (
         <GlobeWarEffects
           wars={wars}
           countryCentroids={centroidsMap}
@@ -459,8 +491,8 @@ function GlobeScene({
         />
       )}
 
-      {/* Missiles */}
-      {wars.length > 0 && centroidsMap.size > 0 && (
+      {/* Missiles — tycoonMode에서는 비활성화 (서버가 더 이상 미사일 데이터를 보내지 않음) */}
+      {!tycoonMode && wars.length > 0 && centroidsMap.size > 0 && (
         <GlobeMissileEffect
           wars={wars}
           countryCentroids={centroidsMap}
@@ -470,8 +502,16 @@ function GlobeScene({
         />
       )}
 
-      {/* Shockwave */}
-      {lodConfig.enableShockwave && (
+      {/* 타이쿬 군대 이동 시각화 */}
+      {armyMovements.length > 0 && (
+        <GlobeArmyMovement
+          movements={armyMovements}
+          globeRadius={GLOBE_RADIUS}
+        />
+      )}
+
+      {/* Shockwave — tycoonMode에서는 비활성화 */}
+      {!tycoonMode && lodConfig.enableShockwave && (
         <GlobeShockwave ref={shockwaveRef} globeRadius={GLOBE_RADIUS} />
       )}
 
@@ -551,8 +591,8 @@ function GlobeScene({
         />
       )}
 
-      {/* Sanction barriers */}
-      {lodConfig.enableSanctionBarrier && sanctions.length > 0 && centroidsMap.size > 0 && (
+      {/* Sanction barriers — tycoonMode에서는 비활성화 */}
+      {!tycoonMode && lodConfig.enableSanctionBarrier && sanctions.length > 0 && centroidsMap.size > 0 && (
         <GlobeSanctionBarrier
           sanctions={sanctions}
           centroidsMap={centroidsMap}
@@ -573,8 +613,8 @@ function GlobeScene({
         />
       )}
 
-      {/* Spy trails */}
-      {lodConfig.enableSpyTrail && spyOps.length > 0 && centroidsMap.size > 0 && (
+      {/* Spy trails — tycoonMode에서는 비활성화 */}
+      {!tycoonMode && lodConfig.enableSpyTrail && spyOps.length > 0 && centroidsMap.size > 0 && (
         <GlobeSpyTrail
           spyOps={spyOps}
           centroidsMap={centroidsMap}
@@ -584,8 +624,8 @@ function GlobeScene({
         />
       )}
 
-      {/* Nuke effects */}
-      {lodConfig.enableNukeEffect && nukes.length > 0 && centroidsMap.size > 0 && (
+      {/* Nuke effects — tycoonMode에서는 비활성화 */}
+      {!tycoonMode && lodConfig.enableNukeEffect && nukes.length > 0 && centroidsMap.size > 0 && (
         <GlobeNukeEffect
           nukes={nukes}
           centroidsMap={centroidsMap}
@@ -623,6 +663,8 @@ export function GlobeView({
   onReady,
   paused,
   dottedMode,
+  tycoonDominationStates,
+  tycoonArmyMovements,
 }: GlobeViewProps) {
   const domStates = dominationStates ?? EMPTY_DOM_MAP;
   const warList = wars ?? EMPTY_ARRAY;
@@ -668,6 +710,8 @@ export function GlobeView({
             spyOps={spyOpList}
             nukes={nukeList}
             dottedMode={dottedMode}
+            tycoonDominationStates={tycoonDominationStates}
+            tycoonArmyMovements={tycoonArmyMovements}
           />
         </SizeGate>
       </Canvas>

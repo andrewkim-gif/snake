@@ -1324,5 +1324,7 @@ export function useSocket() {
     sendARChoice,
     // v19 Phase 5: Classic bridge skip control
     arBridgeSkipRef,
+    // 타이쿬 소켓 연동용: raw GameSocket ref 노출
+    socketRef,
   };
 }

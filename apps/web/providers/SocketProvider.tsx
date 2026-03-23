@@ -23,6 +23,7 @@ import {
 import { useRouter, usePathname } from 'next/navigation';
 import { useSocket } from '@/hooks/useSocket';
 import type { GameData, UiState, ARUiState, AREvent } from '@/hooks/useSocket';
+import type { GameSocket } from '@/hooks/useWebSocket';
 import type { CountryClientState } from '@/lib/globe-data';
 import type { ARState } from '@/lib/3d/ar-types';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
@@ -76,6 +77,8 @@ export interface SocketContextValue extends SocketStableContextValue {
   sendARChoice: (choice: ARChoice) => void;
   // v19 Phase 5: Classic bridge skip control
   arBridgeSkipRef: React.MutableRefObject<boolean>;
+  // 타이쿬 소켓 연동용: raw GameSocket ref
+  socketRef: React.MutableRefObject<GameSocket | null>;
 }
 
 // ─── Context 생성 ───
@@ -113,6 +116,8 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     sendARChoice,
     // v19 Phase 5: Classic bridge skip control
     arBridgeSkipRef,
+    // 타이쿬 소켓 연동용
+    socketRef,
   } = useSocket();
 
   // ─── 게임 모드 상태 (전역화) ───
@@ -209,8 +214,10 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
       sendARChoice,
       // v19 Phase 5: Classic bridge skip control
       arBridgeSkipRef,
+      // 타이쿬 소켓 연동용
+      socketRef,
     }),
-    [stableValue, dataRef, uiState, arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice, arBridgeSkipRef],
+    [stableValue, dataRef, uiState, arStateRef, arInterpRef, arEventQueueRef, arUiState, sendARChoice, arBridgeSkipRef, socketRef],
   );
 
   return (
