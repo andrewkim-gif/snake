@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -336,6 +337,9 @@ func (c *TycoonIncomeCalculator) StartPeriodicSettlement(ctx context.Context) {
 			slog.Info("tycoon-income: periodic settlement stopped")
 			return
 		case <-ticker.C:
+			if !debug.IsEnabled("tycoon") {
+				continue
+			}
 			settled, err := c.SettleAllPlayers(ctx)
 			if err != nil {
 				slog.Error("tycoon-income: periodic settlement failed",

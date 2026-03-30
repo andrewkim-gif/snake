@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -715,6 +716,9 @@ func (ds *TycoonDiplomacySystem) StartWarProcessor(ctx context.Context) {
 			slog.Info("tycoon-diplomacy: war processor stopped")
 			return
 		case <-ticker.C:
+			if !debug.IsEnabled("tycoon") {
+				continue
+			}
 			ds.processWarTransitions(ctx)
 		}
 	}

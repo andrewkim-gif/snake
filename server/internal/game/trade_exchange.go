@@ -7,6 +7,7 @@ import (
 	"math"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -566,6 +567,9 @@ func (te *TradeExchange) StartMatchingLoop(ctx context.Context) {
 			slog.Info("[TradeExchange] matching loop stopped")
 			return
 		case <-ticker.C:
+			if !debug.IsEnabled("tycoon") {
+				continue
+			}
 			te.runMatchCycle(ctx)
 		}
 	}

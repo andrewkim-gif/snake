@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
@@ -492,6 +493,9 @@ func (ms *MilitarySystem) StartArrivalChecker(ctx context.Context) {
 			slog.Info("[MilitarySystem] arrival checker stopped")
 			return
 		case <-ticker.C:
+			if !debug.IsEnabled("tycoon") {
+				continue
+			}
 			ms.processArrivals(ctx)
 		}
 	}

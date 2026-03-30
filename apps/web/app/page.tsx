@@ -35,8 +35,6 @@ import { SK, SKFont, headingFont, bodyFont } from '@/lib/sketch-ui';
 import { OVERLAY, KEYFRAMES_PULSE } from '@/lib/overlay-tokens';
 import type { MainTabKey } from '@/components/hub/PopupTabNav';
 import { ChevronRight, Minus, Settings, Globe, TrendingUp, Swords, Landmark, Trophy } from 'lucide-react';
-import type { WarEffectData } from '@/components/3d/GlobeWarEffects';
-import type { TradeRouteData } from '@/hooks/useSocket';
 
 // 타이쿬 소켓 + 영토 시각화 훅
 import { useTycoonSocket } from '@/hooks/useTycoonSocket';
@@ -327,65 +325,9 @@ export default function Home() {
   const tycoon = useTycoonSocket(socketRef.current);
   const { dominationStates: tycoonDominationStates } = useTerritoryVisualization(tycoon.territories);
 
-  // ─── DEV: 테스트용 더미 전쟁/교역 (1분 주기) ───
-  const [testWars, setTestWars] = useState<WarEffectData[]>([]);
-  const [testTrades, setTestTrades] = useState<TradeRouteData[]>([]);
-
-  useEffect(() => {
-    const SAMPLE_COUNTRIES = [
-      'USA', 'CHN', 'RUS', 'KOR', 'JPN', 'DEU', 'GBR', 'FRA', 'BRA', 'IND',
-      'AUS', 'CAN', 'MEX', 'ARG', 'EGY', 'NGA', 'ZAF', 'TUR', 'SAU', 'IDN',
-    ];
-    const pick = () => {
-      const a = SAMPLE_COUNTRIES[Math.floor(Math.random() * SAMPLE_COUNTRIES.length)];
-      let b = a;
-      while (b === a) b = SAMPLE_COUNTRIES[Math.floor(Math.random() * SAMPLE_COUNTRIES.length)];
-      return [a, b] as const;
-    };
-    const generate = () => {
-      const now = Date.now();
-
-      // 1~2개 전쟁
-      const warCount = 1 + Math.floor(Math.random() * 2);
-      const wars: WarEffectData[] = [];
-      for (let i = 0; i < warCount; i++) {
-        const [att, def] = pick();
-        wars.push({
-          warId: `test-war-${now}-${i}`,
-          state: Math.random() > 0.3 ? 'active' : 'preparation',
-          attacker: att,
-          defender: def,
-          attackerScore: Math.floor(Math.random() * 100),
-          defenderScore: Math.floor(Math.random() * 100),
-        });
-      }
-      setTestWars(wars);
-
-      // 2~4개 교역 루트
-      const tradeCount = 2 + Math.floor(Math.random() * 3);
-      const trades: TradeRouteData[] = [];
-      for (let i = 0; i < tradeCount; i++) {
-        const [from, to] = pick();
-        trades.push({
-          from,
-          to,
-          type: Math.random() > 0.5 ? 'sea' : 'land',
-          volume: 10 + Math.floor(Math.random() * 90),
-          resource: ['oil', 'tech', 'food', 'metal'][Math.floor(Math.random() * 4)],
-          timestamp: now,
-        });
-      }
-      setTestTrades(trades);
-    };
-
-    generate(); // 즉시 1회 실행
-    const interval = setInterval(generate, 60_000); // 1분마다 갱신
-    return () => clearInterval(interval);
-  }, []);
-
-  // 서버 데이터가 있으면 서버 데이터, 없으면 테스트 데이터
-  const activeWars = uiState.wars.length > 0 ? uiState.wars : testWars;
-  const activeTrades = uiState.tradeRoutes.length > 0 ? uiState.tradeRoutes : testTrades;
+  // 서버 데이터만 사용 (dev 모드에서 서버 시스템 OFF 시 빈 상태 유지)
+  const activeWars = uiState.wars;
+  const activeTrades = uiState.tradeRoutes;
 
   // 뉴스 피드 데이터 안정화 (매 렌더 .map() 재생성 방지)
   const newsItems = useMemo(() =>

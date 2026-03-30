@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -628,6 +629,9 @@ func (e *TycoonTerritoryEngine) StartPeriodicRefresh(ctx context.Context) {
 			slog.Info("tycoon-territory: periodic refresh stopped")
 			return
 		case <-ticker.C:
+			if !debug.IsEnabled("tycoon") {
+				continue
+			}
 			if err := e.RefreshTerritoryState(ctx); err != nil {
 				slog.Error("tycoon-territory: periodic refresh failed",
 					"error", err,
