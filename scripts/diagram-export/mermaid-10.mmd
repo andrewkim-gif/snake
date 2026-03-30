@@ -1,0 +1,12 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    L1["Brain / 에이전트\nAI SDK + LLM"]
+    L2["Swords / 전투\n매트릭스 엔진"]
+    L3["Globe / 메타게임\n195국 x 3~7 지역"]
+
+    L1 -->|"전투 명령"| L2
+    L2 -->|"전투 결과"| L3
+
+    style L1 fill:#fff,stroke:#999,color:#333
+    style L2 fill:#fff,stroke:#777,color:#222
+    style L3 fill:#fff,stroke:#999,color:#333

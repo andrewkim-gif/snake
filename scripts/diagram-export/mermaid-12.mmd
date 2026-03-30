@@ -1,0 +1,26 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    GO["Server / Go 서버\n20Hz 틱"]
+    CRM["Globe / CountryRegionManager\n195국"]
+    RGN["Map / Region\n3~7 지역/국가"]
+    RA["Swords / RegionArena\n30명 상한"]
+    RE["Clock / RoundEngine\n3페이즈 15분"]
+    FC["Users / FactionCombat\n팩션 데미지 매트릭스"]
+    RS["Pickaxe / ResourceSpawner\n30~50 노드"]
+    TE["Crown / TerritoryEngine\n일일 정산"]
+
+    GO --> CRM --> RGN
+    RGN --> RA
+    RA --> RE
+    RA --> FC
+    RA --> RS
+    CRM --> TE
+
+    style GO fill:#fff,stroke:#888,color:#333
+    style CRM fill:#fff,stroke:#999,color:#333
+    style RGN fill:#fff,stroke:#999,color:#333
+    style RA fill:#fff,stroke:#888,color:#333
+    style RE fill:#fff,stroke:#999,color:#333
+    style FC fill:#fff,stroke:#999,color:#333
+    style RS fill:#fff,stroke:#999,color:#333
+    style TE fill:#fff,stroke:#888,color:#333

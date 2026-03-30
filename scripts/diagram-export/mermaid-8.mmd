@@ -1,0 +1,16 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    T0["CircleDashed / Tier 0\n미지배"]
+    T1["Flag / Tier 1\nActive Domination\n1일 지배"]
+    T2["Shield / Tier 2\nSovereignty\n3일 연속"]
+    T3["Crown / Tier 3\nHegemony\n14일 연속"]
+
+    T0 -->|"일일 정산 확정"| T1
+    T1 -->|"3일 연속"| T2
+    T2 -->|"14일 연속"| T3
+    T3 -->|"지배 교체"| T0
+
+    style T0 fill:#fff,stroke:#bbb,color:#555
+    style T1 fill:#fff,stroke:#999,color:#333
+    style T2 fill:#fff,stroke:#888,color:#333
+    style T3 fill:#fff,stroke:#777,color:#222

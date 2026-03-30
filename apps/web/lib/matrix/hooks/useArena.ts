@@ -21,6 +21,7 @@ import { loadSpriteSheet } from '../sprites';
 import type { KillFeedEntry } from '../rendering/ui/chatBubble';
 import { triggerFallbackChat } from '../systems/agent-chat';
 import { getAgentWeaponRange } from '../systems/agent-combat';
+import { useAgentDebugStore } from '@/stores/agent-debug-store';
 
 // 기본 Arena 설정
 const DEFAULT_ARENA_CONFIG: ArenaConfig = {
@@ -356,7 +357,8 @@ export function useArena(): UseArenaReturn {
         }
 
         // AI 에이전트만 자동 이동 (로컬 플레이어는 제외)
-        if (!updatedAgent.isLocalPlayer && updatedAgent.isAlive) {
+        // 디버그 패널 가드: 봇 AI 비활성 시 이동/전략 업데이트 스킵
+        if (!updatedAgent.isLocalPlayer && updatedAgent.isAlive && useAgentDebugStore.getState().arenaBotsEnabled) {
           const agentId = updatedAgent.agentId;
 
           // 실제 플레이어 월드 좌표 사용 (파라미터로 전달받음)

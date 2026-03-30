@@ -1,0 +1,13 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    PP["FileText / 발의"]
+    DB["MessageSquare / 토론\n48h"]
+    VT["Vote / 투표\n24h"]
+    EF["Gavel / 시행"]
+
+    PP --> DB --> VT --> EF
+
+    style PP fill:#fff,stroke:#bbb,color:#555
+    style DB fill:#fff,stroke:#999,color:#333
+    style VT fill:#fff,stroke:#888,color:#333
+    style EF fill:#fff,stroke:#999,color:#333

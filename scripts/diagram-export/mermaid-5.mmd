@@ -1,0 +1,13 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    PVE["Pickaxe / PvE 페이즈\n10분 (600초)"]
+    BR["Swords / 배틀로얄\n5분 (300초)"]
+    ST["Flag / 정산\n15초"]
+
+    PVE -->|"카운트다운"| BR
+    BR -->|"생존 팩션 확정"| ST
+    ST -->|"다음 라운드"| PVE
+
+    style PVE fill:#fff,stroke:#999,color:#333
+    style BR fill:#fff,stroke:#777,color:#222
+    style ST fill:#fff,stroke:#999,color:#333

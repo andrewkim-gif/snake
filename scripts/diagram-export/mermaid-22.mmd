@@ -1,0 +1,23 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    WD["Flame / 전쟁 선포\nOil 500 + Influence 300"]
+    IV["Navigation / 침공\n적 지역 아레나 진입"]
+    PVP["Swords / 크로스아레나 PvP"]
+    CAP["Shield / 수도 방어"]
+    SUP["Truck / 보급전"]
+    RES["BarChart / 결과\nRP 2배 획득"]
+
+    WD --> IV
+    IV --> PVP
+    IV --> CAP
+    IV --> SUP
+    PVP --> RES
+    CAP --> RES
+    SUP --> RES
+
+    style WD fill:#fff,stroke:#777,color:#222
+    style IV fill:#fff,stroke:#888,color:#333
+    style PVP fill:#fff,stroke:#999,color:#333
+    style CAP fill:#fff,stroke:#999,color:#333
+    style SUP fill:#fff,stroke:#999,color:#333
+    style RES fill:#fff,stroke:#888,color:#333

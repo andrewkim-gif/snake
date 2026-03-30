@@ -1,0 +1,11 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    GO["Server / Go 서버\n20Hz, 100+ HTTP"]
+    WS["Radio / WebSocket\nC→S + S→C"]
+    BC["Link / CROSS 체인\n$AWW + 195 국가토큰"]
+
+    GO --> WS --> BC
+
+    style GO fill:#fff,stroke:#999,color:#333
+    style WS fill:#fff,stroke:#999,color:#333
+    style BC fill:#fff,stroke:#888,color:#333

@@ -10,7 +10,7 @@ const nextConfig: NextConfig = {
   // R3F Canvas가 StrictMode 이중 마운트로 WebGL context를 2개 생성→둘 다 lost 되는 문제 방지
   reactStrictMode: false,
   // R3F 공식 문서: Next.js에서 three를 transpilePackages에 포함해야 함
-  transpilePackages: ["@agent-survivor/shared", "three", "three-globe"],
+  transpilePackages: ["@agent-survivor/shared", "three", "three-globe", "@app-ingame"],
 
   // S40: Image optimization — WebP/AVIF auto-conversion, aggressive caching
   images: {
@@ -66,6 +66,14 @@ const nextConfig: NextConfig = {
       // subpath imports도 단일 패키지에서 resolve
       "three/addons": path.join(threePath, "examples/jsm"),
       "three/tsl": path.join(threePath, "src/nodes/TSL.js"),
+      // app_ingame 타이쿤 코드 접근
+      "@app-ingame": path.resolve(__dirname, "../../app_ingame"),
+      // app_ingame의 node_modules 대신 루트의 R3F/drei를 강제 사용
+      // (app_ingame이 별도 node_modules를 가지고 있어 react-reconciler 누락 문제 발생)
+      "@react-three/fiber": path.resolve(__dirname, "../../node_modules/@react-three/fiber"),
+      "@react-three/drei": path.resolve(__dirname, "../../node_modules/@react-three/drei"),
+      "@react-three/postprocessing": path.resolve(__dirname, "../../node_modules/@react-three/postprocessing"),
+      "postprocessing": path.resolve(__dirname, "../../node_modules/postprocessing"),
     };
     return config;
   },

@@ -1,0 +1,24 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    A["Globe / 지구본"]
+    B["Flag / 국가 선택"]
+    C["Map / 지역 선택"]
+    D["Pickaxe / PvE 파밍\n10분"]
+    E["Swords / 배틀로얄\n5분"]
+    F["BarChart / 정산\n15초"]
+    G["Coins / 보상"]
+    H["Crown / 영토 지배"]
+
+    A --> B --> C
+    C --> D --> E --> F
+    F --> G --> H
+    H -->|"루프"| C
+
+    style A fill:#fff,stroke:#999,color:#333
+    style B fill:#fff,stroke:#999,color:#333
+    style C fill:#fff,stroke:#888,color:#333
+    style D fill:#fff,stroke:#999,color:#333
+    style E fill:#fff,stroke:#777,color:#222
+    style F fill:#fff,stroke:#999,color:#333
+    style G fill:#fff,stroke:#999,color:#333
+    style H fill:#fff,stroke:#888,color:#333

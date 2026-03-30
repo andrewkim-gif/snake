@@ -1,0 +1,21 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    T1["Tier 1\nLv 1-3"]
+    T2["Tier 2\nLv 4-6"]
+    T3["Tier 3\nLv 7-10"]
+    T4A["분기 A\nLv 11-19"]
+    T4B["분기 B\nLv 11-19"]
+    ULT["궁극기\nLv 20"]
+
+    T1 --> T2 --> T3
+    T3 -->|"A"| T4A
+    T3 -->|"B"| T4B
+    T4A --> ULT
+    T4B --> ULT
+
+    style T1 fill:#fff,stroke:#bbb,color:#555
+    style T2 fill:#fff,stroke:#999,color:#333
+    style T3 fill:#fff,stroke:#999,color:#333
+    style T4A fill:#fff,stroke:#888,color:#333
+    style T4B fill:#fff,stroke:#888,color:#333
+    style ULT fill:#fff,stroke:#666,color:#111

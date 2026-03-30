@@ -1,0 +1,18 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    ND["MapPin / 자원 노드\n30~50개/맵"]
+    GT["Pickaxe / 채취\n3~8초"]
+    IV["Package / 개인 인벤토리\n최대 50"]
+    RD["Coins / 라운드 정산"]
+    FK["Landmark / 팩션 국고"]
+
+    ND --> GT --> IV
+    IV -->|"생존 시"| RD --> FK
+    IV -->|"사망 시"| DR["Skull / 드롭\nPvE 50% BR 100%"]
+
+    style ND fill:#fff,stroke:#999,color:#333
+    style GT fill:#fff,stroke:#888,color:#333
+    style IV fill:#fff,stroke:#999,color:#333
+    style RD fill:#fff,stroke:#999,color:#333
+    style FK fill:#fff,stroke:#888,color:#333
+    style DR fill:#fff,stroke:#bbb,color:#555

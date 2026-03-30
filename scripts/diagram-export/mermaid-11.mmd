@@ -1,0 +1,24 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    M1["Globe / 지구본"]
+    M2["Flag / 국가 선택"]
+    M3["Map / 지역 선택"]
+    M4["Pickaxe / PvE 파밍"]
+    M5["Swords / 배틀로얄"]
+    M6["BarChart / 정산"]
+    M7["Coins / 보상+RP"]
+    M8["Flame / 소각+투자"]
+
+    M1 --> M2 --> M3
+    M3 --> M4 --> M5 --> M6
+    M6 --> M7 --> M8
+    M8 -->|"루프"| M3
+
+    style M1 fill:#fff,stroke:#999,color:#333
+    style M2 fill:#fff,stroke:#999,color:#333
+    style M3 fill:#fff,stroke:#888,color:#333
+    style M4 fill:#fff,stroke:#999,color:#333
+    style M5 fill:#fff,stroke:#777,color:#222
+    style M6 fill:#fff,stroke:#999,color:#333
+    style M7 fill:#fff,stroke:#999,color:#333
+    style M8 fill:#fff,stroke:#bbb,color:#555

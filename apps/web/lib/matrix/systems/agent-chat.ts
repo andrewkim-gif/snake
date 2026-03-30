@@ -14,6 +14,7 @@ import {
   CHAT_BUBBLE_CONFIG,
   PERSONALITY_WEIGHTS,
 } from '../config/arena-agents.config';
+import { useAgentDebugStore } from '@/stores/agent-debug-store';
 
 // OpenRouter API 설정
 const OPENROUTER_API_URL = 'https://openrouter.ai/api/v1/chat/completions';
@@ -212,6 +213,9 @@ export async function triggerAgentChat(
   trigger: ChatTrigger,
   details: Record<string, unknown> = {}
 ): Promise<ChatMessage | null> {
+  // 디버그 패널 가드
+  if (!useAgentDebugStore.getState().llmChatEnabled) return null;
+
   // Rate limit 체크
   if (!canChat(agent.agentId)) {
     return null;
@@ -319,6 +323,9 @@ export function triggerFallbackChat(
   agent: Agent,
   trigger: ChatTrigger
 ): ChatMessage | null {
+  // 디버그 패널 가드
+  if (!useAgentDebugStore.getState().llmChatEnabled) return null;
+
   if (!canChat(agent.agentId)) return null;
   if (!shouldChat(agent, trigger)) return null;
 

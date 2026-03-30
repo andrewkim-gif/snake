@@ -1,0 +1,20 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    GR["Pickaxe / 자원 채취\n맵 내 노드"]
+    INV["Package / 개인 보관"]
+    FK["Landmark / 팩션 국고"]
+    WAR["Swords / 전쟁 비용\nOil + Influence"]
+    TRD["ArrowRightLeft / 교역\n특산 자원 매매"]
+    BLD["Hammer / 건설\nMinerals + Tech"]
+
+    GR --> INV --> FK
+    FK --> WAR
+    FK --> TRD
+    FK --> BLD
+
+    style GR fill:#fff,stroke:#999,color:#333
+    style INV fill:#fff,stroke:#bbb,color:#555
+    style FK fill:#fff,stroke:#888,color:#333
+    style WAR fill:#fff,stroke:#999,color:#333
+    style TRD fill:#fff,stroke:#999,color:#333
+    style BLD fill:#fff,stroke:#999,color:#333

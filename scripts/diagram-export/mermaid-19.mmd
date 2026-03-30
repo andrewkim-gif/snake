@@ -1,0 +1,14 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    OB["Eye / 관찰\n상태 수집"]
+    AN["Brain / 분석\nLLM 추론"]
+    DC["GitBranch / 결정\n행동 선택"]
+    EX["Play / 실행\nAPI 호출"]
+
+    OB --> AN --> DC --> EX
+    EX -->|"30초"| OB
+
+    style OB fill:#fff,stroke:#999,color:#333
+    style AN fill:#fff,stroke:#888,color:#333
+    style DC fill:#fff,stroke:#999,color:#333
+    style EX fill:#fff,stroke:#999,color:#333

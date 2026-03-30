@@ -1,0 +1,15 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    RD["Swords / 라운드 생존\n15분"]
+    RP["Star / Region Point\n+3/+1/+0"]
+    DS["Calculator / 일일 정산\nUTC 00:00"]
+    RG["MapPin / 지역 지배\n10% 격차"]
+    NS["Crown / 국가 주권\n전 지역 통일"]
+
+    RD --> RP --> DS --> RG --> NS
+
+    style RD fill:#fff,stroke:#999,color:#333
+    style RP fill:#fff,stroke:#888,color:#333
+    style DS fill:#fff,stroke:#999,color:#333
+    style RG fill:#fff,stroke:#888,color:#333
+    style NS fill:#fff,stroke:#777,color:#222

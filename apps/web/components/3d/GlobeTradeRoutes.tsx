@@ -377,14 +377,25 @@ export function GlobeTradeRoutes({
       }
       cargo.visible = true;
 
-      // 화물 위치: 루트를 따라 이동하는 t (0->1 반복)
       const ageSec = (now - routeData.timestamp) / 1000;
       const t = (ageSec * CARGO_SPEED) % 1;
-      const ptsLen = routeData.points.length;
+      const ptsLen = routeData.points?.length || 0;
+      
+      if (ptsLen < 2) {
+        cargo.visible = false;
+        continue;
+      }
+
       const idx = Math.floor(t * (ptsLen - 1));
       const frac = t * (ptsLen - 1) - idx;
-      const p0 = routeData.points[Math.min(idx, ptsLen - 1)];
-      const p1 = routeData.points[Math.min(idx + 1, ptsLen - 1)];
+      const p0 = routeData.points[Math.min(Math.max(0, idx), ptsLen - 1)];
+      const p1 = routeData.points[Math.min(Math.max(0, idx + 1), ptsLen - 1)];
+
+      if (!p0 || !p1) {
+        cargo.visible = false;
+        continue;
+      }
+
       cargo.position.lerpVectors(p0, p1, frac);
 
       // v23: 접선 방향 정렬 (화물이 진행 방향을 향하도록)

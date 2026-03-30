@@ -1,0 +1,19 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    K["Swords / 적 처치"]
+    G["Gem / XP 수집"]
+    X["BarChart / XP 누적"]
+    L["Star / 레벨 업"]
+    S["Wrench / 스킬"]
+    P["TrendingUp / 강화"]
+
+    K --> G --> X
+    X --> L --> S
+    S --> P --> K
+
+    style K fill:#fff,stroke:#999,color:#333
+    style G fill:#fff,stroke:#999,color:#333
+    style X fill:#fff,stroke:#999,color:#333
+    style L fill:#fff,stroke:#999,color:#333
+    style S fill:#fff,stroke:#999,color:#333
+    style P fill:#fff,stroke:#999,color:#333

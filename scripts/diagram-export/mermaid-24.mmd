@@ -1,0 +1,15 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    CL["Crown / 연맹\n3~5개 팩션"]
+    FA["Users / 리더 팩션"]
+    FB["Users / 멤버 팩션"]
+    FC["Users / 멤버 팩션"]
+
+    CL --> FA
+    CL --> FB
+    CL --> FC
+
+    style CL fill:#fff,stroke:#888,color:#333
+    style FA fill:#fff,stroke:#999,color:#333
+    style FB fill:#fff,stroke:#bbb,color:#555
+    style FC fill:#fff,stroke:#bbb,color:#555

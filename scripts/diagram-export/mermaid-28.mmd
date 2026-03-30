@@ -1,0 +1,14 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    E1["Search / 발견\n1주차"]
+    E2["Maximize / 확장\n2주차"]
+    E3["Crown / 제국\n3주차"]
+    E4["Bomb / 청산\n4주차"]
+
+    E1 --> E2 --> E3 --> E4
+    E4 -->|"리셋"| E1
+
+    style E1 fill:#fff,stroke:#bbb,color:#555
+    style E2 fill:#fff,stroke:#999,color:#333
+    style E3 fill:#fff,stroke:#888,color:#333
+    style E4 fill:#fff,stroke:#666,color:#111

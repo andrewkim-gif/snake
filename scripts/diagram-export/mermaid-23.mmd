@@ -1,0 +1,17 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    PR["FileText / 제안"]
+    VT["Vote / 투표"]
+    AC["Check / 발효\n7일"]
+    RN["RefreshCw / 갱신"]
+    EX["X / 만료"]
+
+    PR --> VT --> AC
+    AC --> RN --> AC
+    AC --> EX
+
+    style PR fill:#fff,stroke:#bbb,color:#555
+    style VT fill:#fff,stroke:#999,color:#333
+    style AC fill:#fff,stroke:#888,color:#333
+    style RN fill:#fff,stroke:#999,color:#333
+    style EX fill:#fff,stroke:#bbb,color:#555

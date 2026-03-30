@@ -1,0 +1,31 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    FC["Users / 팩션"]
+    DP["Handshake / 외교"]
+    WR["Swords / 전쟁"]
+    TR["MapPin / 영토"]
+    EC["TrendingUp / 경제"]
+    IN["Eye / 인텔"]
+    GV["Scale / 거버넌스"]
+    RS["Pickaxe / 자원"]
+
+    FC -->|"조약"| DP
+    DP -->|"선전포고"| WR
+    WR -->|"지역 쟁탈"| TR
+    TR -->|"보상"| EC
+    EC -->|"자원"| IN
+    EC -->|"자원"| RS
+    IN -->|"정보"| WR
+    GV -->|"규칙"| DP
+    GV -->|"결의안"| WR
+    FC -->|"국고"| EC
+    RS -->|"채취"| FC
+
+    style FC fill:#fff,stroke:#999,color:#333
+    style DP fill:#fff,stroke:#999,color:#333
+    style WR fill:#fff,stroke:#777,color:#222
+    style TR fill:#fff,stroke:#888,color:#333
+    style EC fill:#fff,stroke:#999,color:#333
+    style IN fill:#fff,stroke:#bbb,color:#555
+    style GV fill:#fff,stroke:#999,color:#333
+    style RS fill:#fff,stroke:#999,color:#333

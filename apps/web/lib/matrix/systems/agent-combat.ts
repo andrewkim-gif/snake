@@ -19,6 +19,7 @@ import {
 } from '../types';
 import { fireWeapon, WeaponFireContext } from './weapons';
 import { PERSONALITY_WEIGHTS } from '../config/arena-agents.config';
+import { useAgentDebugStore } from '@/stores/agent-debug-store';
 
 // PvP 데미지 배율 (몬스터 대비)
 const PVP_DAMAGE_MULTIPLIER = 0.5; // 50% 데미지
@@ -521,6 +522,9 @@ export function updateAllAgentsCombat(
   canvasSize: { width: number; height: number },
   damageEnemyFn: WeaponFireContext['damageEnemy']
 ): void {
+  // 디버그 패널 가드
+  if (!useAgentDebugStore.getState().combatAiEnabled) return;
+
   for (const agent of agents) {
     if (agent.isLocalPlayer) continue;
     updateAgentCombat(agent, agents, enemies, deltaTime, refs, canvasSize, damageEnemyFn);

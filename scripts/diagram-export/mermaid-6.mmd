@@ -1,0 +1,11 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    S1["Circle / 1차 수축\n0:00~1:30\n4000→3000px"]
+    S2["CircleDot / 2차 수축\n1:30~3:00\n3000→1500px"]
+    S3["Target / 3차 수축\n3:00~5:00\n1500→500px"]
+
+    S1 --> S2 --> S3
+
+    style S1 fill:#fff,stroke:#bbb,color:#555
+    style S2 fill:#fff,stroke:#999,color:#333
+    style S3 fill:#fff,stroke:#777,color:#222

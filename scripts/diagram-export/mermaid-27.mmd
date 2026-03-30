@@ -1,0 +1,13 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    OP["Bell / 공고\n48h 전"]
+    BD["Gavel / 입찰\n$AWW"]
+    WN["Trophy / 낙찰"]
+    BN["Flame / 소각\n80%"]
+
+    OP --> BD --> WN --> BN
+
+    style OP fill:#fff,stroke:#bbb,color:#555
+    style BD fill:#fff,stroke:#999,color:#333
+    style WN fill:#fff,stroke:#888,color:#333
+    style BN fill:#fff,stroke:#666,color:#111

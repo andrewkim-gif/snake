@@ -1,0 +1,12 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    S1["Code / 전략 계층\nLLM 의사결정"]
+    S2["Cpu / 전술 계층\n스킬빌드+배치"]
+    S3["Gamepad / 실행 계층\n48 API 호출"]
+
+    S1 --> S2 --> S3
+    S3 -->|"결과"| S1
+
+    style S1 fill:#fff,stroke:#999,color:#333
+    style S2 fill:#fff,stroke:#999,color:#333
+    style S3 fill:#fff,stroke:#888,color:#333

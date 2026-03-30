@@ -19,6 +19,9 @@
       "@/*": [
         "./*"
       ],
+      "@app-ingame/*": [
+        "../../app_ingame/*"
+      ],
       "@agent-survivor/shared": [
         "../../packages/shared/src"
       ],

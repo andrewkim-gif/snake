@@ -624,9 +624,11 @@ export function LandmarkMeshes({
       const ageAttr = runtime.ageAttrRef.current;
       const { biomeIndices, ageSeeds, finalScales, yRotations } = runtime.instanceData;
 
+      // 그룹 landmarks와 instanceData 길이 불일치 방지 (props 변경 → 재렌더 사이 useFrame 실행)
+      const maxCount = Math.min(group.landmarks.length, yRotations.length);
       let visibleCount = 0;
 
-      for (let i = 0; i < group.landmarks.length; i++) {
+      for (let i = 0; i < maxCount; i++) {
         const pos = group.positions[i];
         const normal = group.normals[i];
 

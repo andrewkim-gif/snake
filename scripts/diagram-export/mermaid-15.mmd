@@ -1,0 +1,18 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    PS["Calculator / 개인 보상\n0.01 x NationScore"]
+    FS["Users / 팩션 보상\n1위 x2.0, 2위 x1.2"]
+    TS["MapPin / 영토 보상\n지배 지역 x 50/일"]
+    SS["Crown / 주권 보상\n국가 주권 200 $AWW/일"]
+    TK["Coins / 최종 토큰"]
+
+    PS --> TK
+    FS --> TK
+    TS --> TK
+    SS --> TK
+
+    style PS fill:#fff,stroke:#999,color:#333
+    style FS fill:#fff,stroke:#999,color:#333
+    style TS fill:#fff,stroke:#999,color:#333
+    style SS fill:#fff,stroke:#888,color:#333
+    style TK fill:#fff,stroke:#777,color:#222

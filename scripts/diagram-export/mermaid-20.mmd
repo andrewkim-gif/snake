@@ -1,0 +1,15 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    L1["Swords / Layer 1\n배틀로얄 (상시)"]
+    L2["Flame / Layer 2\n전쟁 선포 (전략)"]
+
+    L1D["매 라운드 BR\n팩션 간 PvP"]
+    L2D["72시간 전쟁\n크로스아레나 침공"]
+
+    L1 --> L1D
+    L2 --> L2D
+
+    style L1 fill:#fff,stroke:#888,color:#333
+    style L2 fill:#fff,stroke:#777,color:#222
+    style L1D fill:#fff,stroke:#bbb,color:#555
+    style L2D fill:#fff,stroke:#bbb,color:#555

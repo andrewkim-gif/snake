@@ -1,0 +1,14 @@
+%%{ init: { 'theme': 'base', 'themeVariables': { 'fontSize': '11px' }, 'flowchart': { 'curve': 'linear' } } }%%
+flowchart TB
+    PD["Factory / 생산\nGDP 산출"]
+    TX["Receipt / 세금\n5% 징수"]
+    IV["Wallet / 투자\n인프라/기술"]
+    GR["TrendingUp / 성장\nGDP 증가"]
+
+    PD --> TX --> IV --> GR
+    GR -->|"루프"| PD
+
+    style PD fill:#fff,stroke:#999,color:#333
+    style TX fill:#fff,stroke:#bbb,color:#555
+    style IV fill:#fff,stroke:#999,color:#333
+    style GR fill:#fff,stroke:#888,color:#333
