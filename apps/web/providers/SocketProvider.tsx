@@ -28,6 +28,7 @@ import type { CountryClientState } from '@/lib/globe-data';
 import type { ARState } from '@/lib/3d/ar-types';
 import type { ARInterpolationState } from '@/lib/3d/ar-interpolation';
 import type { ARChoice } from '@/lib/3d/ar-types';
+import { useAgentDebugStore } from '@/stores/agent-debug-store';
 
 // ─── 게임 모드 타입 ───
 export type GameMode = 'idle' | 'lobby' | 'transitioning' | 'playing' | 'iso' | 'matrix';
@@ -123,7 +124,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
   // ─── 게임 모드 상태 (전역화) ───
   const [gameMode, setGameMode] = useState<GameMode>('idle');
 
-  // connected 상태에 따른 gameMode 자동 전환
+  // connected 상태에 따른 gameMode 자동 전환 + 디버그 스토어 동기화
   useEffect(() => {
     if (uiState.connected && gameMode === 'idle') {
       setGameMode('lobby');
@@ -131,6 +132,7 @@ export function SocketProvider({ children }: { children: React.ReactNode }) {
     if (!uiState.connected && gameMode !== 'idle') {
       setGameMode('idle');
     }
+    useAgentDebugStore.getState().setWsConnected(uiState.connected);
   }, [uiState.connected, gameMode]);
 
   // ─── Ref Layer (60fps 읽기용) ───

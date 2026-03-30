@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -256,6 +257,11 @@ func (ee *EventEngine) eventLoop(ctx context.Context) {
 
 // Tick processes one event cycle: expire old events, roll for new ones.
 func (ee *EventEngine) Tick() {
+	// 디버그 토글: events 시스템이 비활성화되면 이벤트 처리 건너뜀
+	if !debug.IsEnabled("events") {
+		return
+	}
+
 	ee.expireEvents()
 	ee.rollNewEvents()
 }

@@ -3,6 +3,8 @@ package city
 import (
 	"log/slog"
 	"math/rand"
+
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 )
 
 // NationalAI provides rule-based autonomous management for AI-controlled cities.
@@ -42,6 +44,11 @@ func (ai *NationalAI) Tick(
 	atWar bool,
 	mapSize int,
 ) {
+	// 디버그 토글: national_ai 시스템이 비활성화되면 AI 결정 건너뜀
+	if !debug.IsEnabled("national_ai") {
+		return
+	}
+
 	// Decrement cooldowns
 	if ai.buildCooldown > 0 {
 		ai.buildCooldown--

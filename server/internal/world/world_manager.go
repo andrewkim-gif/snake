@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/andrewkim-gif/snake/server/internal/cache"
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/andrewkim-gif/snake/server/internal/game"
 )
 
@@ -931,6 +932,12 @@ func (wm *WorldManager) emitEvents(events []WorldEvent) {
 // autoStartBattles selects random countries and starts bot-only battles.
 // Battles are staggered over the first 3 minutes so they don't all start at once.
 func (wm *WorldManager) autoStartBattles(ctx context.Context) {
+	// 디버그 토글: war 시스템이 비활성화되면 자동 전투를 시작하지 않음
+	if !debug.IsEnabled("war") {
+		slog.Info("autoStartBattles skipped (war system disabled)")
+		return
+	}
+
 	// Wait a bit for all systems to initialize
 	select {
 	case <-ctx.Done():

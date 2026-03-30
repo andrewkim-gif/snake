@@ -10,6 +10,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 )
@@ -427,6 +428,10 @@ func (se *SeasonEngine) tickLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case now := <-ticker.C:
+			// 디버그 토글: season 시스템이 비활성화되면 시즌 전환 건너뜀
+			if !debug.IsEnabled("season") {
+				continue
+			}
 			se.mu.Lock()
 			se.checkAndTransitionEra(now)
 			se.mu.Unlock()

@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/andrewkim-gif/snake/server/internal/blockchain"
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 )
 
 // ResourceType enumerates the 6 resource types in the economy.
@@ -544,6 +545,11 @@ func (ee *EconomyEngine) tickLoop(ctx context.Context) {
 // Tick processes one economy cycle for all countries.
 // This is the main entry point called by the background worker every hour.
 func (ee *EconomyEngine) Tick() EconomyTickSummary {
+	// 디버그 토글: economy 시스템이 비활성화되면 빈 요약 반환
+	if !debug.IsEnabled("economy") {
+		return EconomyTickSummary{}
+	}
+
 	ee.mu.Lock()
 	defer ee.mu.Unlock()
 

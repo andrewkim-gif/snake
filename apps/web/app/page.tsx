@@ -42,6 +42,9 @@ import type { TradeRouteData } from '@/hooks/useSocket';
 import { useTycoonSocket } from '@/hooks/useTycoonSocket';
 import { useTerritoryVisualization } from '@/hooks/useTerritoryVisualization';
 
+// 디버그 패널 (dev only)
+import AgentDebugPanel from '@/components/debug/AgentDebugPanel';
+
 const WorldView = dynamic(
   () => import('@/components/world/WorldView').then(m => ({ default: m.WorldView })),
   { ssr: false },
@@ -645,6 +648,13 @@ export default function Home() {
             {uiState.connected ? tLobby('online') : tLobby('offline')}
           </span>
         </div>
+
+        {/* 에이전트 디버그 패널 (dev only) */}
+        {process.env.NODE_ENV === 'development' && (
+          <div style={{ position: 'relative' }}>
+            <AgentDebugPanel />
+          </div>
+        )}
 
         {/* v31 Phase 3: 명예의전당 버튼 (네모) */}
         <button

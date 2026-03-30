@@ -7,10 +7,23 @@
  * 각 에이전트 시스템을 개별적으로 켜고/끌 수 있다.
  */
 
-import { memo, useCallback, useEffect } from 'react';
+import { memo, useCallback, useEffect, useRef } from 'react';
 import { useAgentDebugStore } from '@/stores/agent-debug-store';
+import type { IServerSystem } from '@/stores/agent-debug-store';
 import { SK, bodyFont, sketchBorder, sketchShadow } from '@/lib/sketch-ui';
 import { resetChatSystem } from '@/lib/matrix/systems/agent-chat';
+
+// ─── 서버 시스템 아이콘 맵 ───
+
+const SERVER_ICON_MAP: Record<string, { icon: string; color: string }> = {
+  war: { icon: '⚔️', color: '#EF4444' },
+  economy: { icon: '💰', color: '#F59E0B' },
+  events: { icon: '🎲', color: '#8B5CF6' },
+  season: { icon: '📅', color: '#6366F1' },
+  national_ai: { icon: '🏙️', color: '#10B981' },
+  arena: { icon: '🎮', color: '#3B82F6' },
+  tycoon: { icon: '🏗️', color: '#F97316' },
+};
 
 // ─── 타입별 설정 ───
 
@@ -179,6 +192,45 @@ function ActionButton({
   );
 }
 
+// ─── 서버 시스템 행 ───
+
+function ServerSystemRow({
+  system,
+  onToggle,
+}: {
+  system: IServerSystem;
+  onToggle: (id: string) => void;
+}) {
+  const meta = SERVER_ICON_MAP[system.id] || { icon: '⚙️', color: SK.textMuted };
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        padding: '5px 10px',
+        borderBottom: `1px dashed rgba(239, 68, 68, 0.15)`,
+      }}
+    >
+      <span style={{ fontSize: 12, width: 20, textAlign: 'center' }}>{meta.icon}</span>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            fontFamily: bodyFont,
+            fontSize: 11,
+            fontWeight: 600,
+            color: system.enabled ? SK.textPrimary : SK.textMuted,
+            letterSpacing: '0.5px',
+          }}
+        >
+          {system.label}
+        </div>
+      </div>
+      <ToggleSwitch active={system.enabled} onToggle={() => onToggle(system.id)} />
+    </div>
+  );
+}
+
 // ─── 메인 패널 ───
 
 function AgentDebugPanelInner({
@@ -187,6 +239,7 @@ function AgentDebugPanelInner({
   onKillAllBots?: () => void;
 }) {
   const store = useAgentDebugStore();
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // F2 키보드 토글
   useEffect(() => {
@@ -199,6 +252,28 @@ function AgentDebugPanelInner({
     window.addEventListener('keydown', handler);
     return () => window.removeEventListener('keydown', handler);
   }, [store.togglePanel]);
+
+  // 패널이 열려있을 때만 서버 상태 폴링 (3초)
+  useEffect(() => {
+    if (!store.panelOpen) {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+    // 즉시 fetch + 3초 폴링
+    store.fetchServerSystems();
+    pollRef.current = setInterval(() => {
+      store.fetchServerSystems();
+    }, 3000);
+    return () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+  }, [store.panelOpen]);
 
   // 토글 버튼 (항상 표시)
   const toggleBtn = (
@@ -250,6 +325,10 @@ function AgentDebugPanelInner({
   const botStat = `bots: ${store.activeBotCount}`;
   const wsStat = `ping: ${store.wsLatency}ms`;
 
+  // 서버 시스템 활성 개수
+  const serverEnabledCount = store.serverSystems.filter((s) => s.enabled).length;
+  const serverTotalCount = store.serverSystems.length;
+
   return (
     <>
       {toggleBtn}
@@ -260,14 +339,15 @@ function AgentDebugPanelInner({
           position: 'absolute',
           top: 44,
           right: 0,
-          width: 220,
+          width: 240,
+          maxHeight: 'calc(100vh - 120px)',
+          overflowY: 'auto',
           background: SK.glassBg,
           border: sketchBorder(),
           backdropFilter: 'blur(12px)',
           WebkitBackdropFilter: 'blur(12px)',
           boxShadow: sketchShadow('lg'),
           zIndex: 150,
-          overflow: 'hidden',
         }}
       >
         {/* 헤더 */}
@@ -295,7 +375,21 @@ function AgentDebugPanelInner({
           </span>
         </div>
 
-        {/* 에이전트 행 — 토글 가능 */}
+        {/* ─── CLIENT 섹션 ─── */}
+        <div
+          style={{
+            padding: '4px 10px 2px',
+            fontFamily: bodyFont,
+            fontSize: 9,
+            fontWeight: 700,
+            color: SK.textMuted,
+            letterSpacing: '1.5px',
+            textTransform: 'uppercase',
+          }}
+        >
+          CLIENT
+        </div>
+
         <AgentRow
           row={AGENT_ROWS[0]}
           active={store.llmChatEnabled}
@@ -325,19 +419,127 @@ function AgentDebugPanelInner({
           stat={store.nationAgentStatus}
         />
 
-        {/* 액션 버튼 */}
-        <div style={{ display: 'flex', gap: 4, padding: '8px 10px' }}>
-          {onKillAllBots && (
-            <ActionButton label="KILL BOTS" color={SK.red} onClick={onKillAllBots} />
-          )}
-          <ActionButton
-            label="RESET CHAT"
-            color={SK.blue}
-            onClick={() => {
-              resetChatSystem();
-              store.setChatMessageCount(0);
+        {/* ─── SERVER 섹션 ─── */}
+        <div
+          style={{
+            margin: '4px 0 0',
+            borderTop: `1px solid ${SK.accent}30`,
+          }}
+        >
+          <div
+            style={{
+              padding: '6px 10px 2px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
             }}
-          />
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ fontSize: 10 }}>⚡</span>
+              <span
+                style={{
+                  fontFamily: bodyFont,
+                  fontSize: 9,
+                  fontWeight: 700,
+                  color: store.serverOnline ? '#F59E0B' : SK.textMuted,
+                  letterSpacing: '1.5px',
+                  textTransform: 'uppercase',
+                }}
+              >
+                SERVER
+              </span>
+              {/* 연결 상태 인디케이터 */}
+              <div
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: 0,
+                  background: store.serverOnline ? SK.green : SK.red,
+                  boxShadow: store.serverOnline
+                    ? `0 0 4px ${SK.green}`
+                    : `0 0 4px ${SK.red}`,
+                }}
+              />
+            </div>
+            {store.serverOnline && (
+              <span
+                style={{
+                  fontFamily: bodyFont,
+                  fontSize: 9,
+                  color: SK.textMuted,
+                }}
+              >
+                {serverEnabledCount}/{serverTotalCount}
+              </span>
+            )}
+          </div>
+
+          {!store.serverOnline ? (
+            <div
+              style={{
+                padding: '8px 10px',
+                fontFamily: bodyFont,
+                fontSize: 10,
+                color: SK.red,
+                textAlign: 'center',
+                letterSpacing: '0.5px',
+              }}
+            >
+              {store.serverLoading ? 'CONNECTING...' : 'SERVER OFFLINE'}
+            </div>
+          ) : (
+            <>
+              {store.serverSystems.map((sys) => (
+                <ServerSystemRow
+                  key={sys.id}
+                  system={sys}
+                  onToggle={store.toggleServerSystem}
+                />
+              ))}
+            </>
+          )}
+        </div>
+
+        {/* ─── 액션 버튼 ─── */}
+        <div
+          style={{
+            borderTop: `1px solid ${SK.accent}20`,
+            padding: '6px 10px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+          }}
+        >
+          {/* 서버 전체 ON/OFF */}
+          {store.serverOnline && (
+            <div style={{ display: 'flex', gap: 4 }}>
+              <ActionButton
+                label="ALL OFF"
+                color={SK.red}
+                onClick={() => store.toggleAllServerSystems(false)}
+              />
+              <ActionButton
+                label="ALL ON"
+                color={SK.green}
+                onClick={() => store.toggleAllServerSystems(true)}
+              />
+            </div>
+          )}
+
+          {/* 기존 액션 */}
+          <div style={{ display: 'flex', gap: 4 }}>
+            {onKillAllBots && (
+              <ActionButton label="KILL BOTS" color={SK.red} onClick={onKillAllBots} />
+            )}
+            <ActionButton
+              label="RESET CHAT"
+              color={SK.blue}
+              onClick={() => {
+                resetChatSystem();
+                store.setChatMessageCount(0);
+              }}
+            />
+          </div>
         </div>
       </div>
     </>

@@ -18,6 +18,7 @@ import (
 	"github.com/andrewkim-gif/snake/server/internal/blockchain/ramp"
 	"github.com/andrewkim-gif/snake/server/internal/cache"
 	"github.com/andrewkim-gif/snake/server/internal/db"
+	"github.com/andrewkim-gif/snake/server/internal/debug"
 	"github.com/andrewkim-gif/snake/server/internal/domain"
 	"github.com/andrewkim-gif/snake/server/internal/game"
 	"github.com/andrewkim-gif/snake/server/internal/meta"
@@ -57,6 +58,11 @@ func main() {
 	if cfg.Environment == "production" {
 		security.EnforceProductionSecrets()
 	}
+
+	// ================================================================
+	// 2b. Debug Toggle System (development: all OFF, production: all ON)
+	// ================================================================
+	debug.Init(cfg.Environment == "development")
 
 	// ================================================================
 	// 3. Observability (Prometheus metrics + /metrics endpoint)
@@ -925,6 +931,9 @@ func main() {
 			case <-gCtx.Done():
 				return nil
 			case <-ticker.C:
+				if !debug.IsEnabled("economy") {
+					continue
+				}
 				expired := tradeEngine.ExpireOldOrders()
 				if expired > 0 {
 					slog.Info("trade orders expired", "count", expired)
@@ -960,6 +969,9 @@ func main() {
 			case <-gCtx.Done():
 				return nil
 			case <-ticker.C:
+				if !debug.IsEnabled("arena") {
+					continue
+				}
 				epochTick++
 				v14ArenaManager.TickActiveArenas(epochTick)
 			}
@@ -983,6 +995,9 @@ func main() {
 			case <-gCtx.Done():
 				return nil
 			case <-ticker.C:
+				if !debug.IsEnabled("war") {
+					continue
+				}
 				v14WarSystem.Tick()
 			}
 		}

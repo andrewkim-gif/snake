@@ -182,6 +182,12 @@ func newRouter(cfg *config.Config, hub *ws.Hub, router *ws.EventRouter, wm *worl
 	}))
 
 	// ==============================================================
+	// Debug Toggle API (development only)
+	// ==============================================================
+	debugRouter := api.NewDebugRouter()
+	debugRouter.Routes(r)
+
+	// ==============================================================
 	// Health check (enhanced for v11)
 	// ==============================================================
 	r.Get("/health", func(w http.ResponseWriter, r *http.Request) {
